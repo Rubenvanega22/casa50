@@ -1,0 +1,8 @@
+{
+  "name": "casa50",
+  "version": "1.0.0",
+  "description": "Sistema Casa 50 Spa Motel",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
