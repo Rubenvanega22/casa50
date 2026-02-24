@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -521,7 +521,7 @@ function salir(){
 function startPoll(){
   clearInterval(pT);
   pT=setInterval(function(){
-    rpc('getRooms',null,function(d){if(d){rooms=d;renderRooms();if(sess&&sess.userRole==='MAID')renderMaid();}});
+    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||d;renderRooms();if(sess&&sess.userRole==='MAID')renderMaid();}});
   },10000);
   checkAlarms();clearInterval(aT);aT=setInterval(checkAlarms,30000);
 }
@@ -552,7 +552,7 @@ function checkAlarms(){
     try{var ctx=new(window.AudioContext||window.webkitAudioContext)();[0,300,600].forEach(function(dly){var o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.setValueAtTime(.15,ctx.currentTime+dly/1000);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+dly/1000+.15);o.start(ctx.currentTime+dly/1000);o.stop(ctx.currentTime+dly/1000+.2);});}catch(e){}
   }else box.classList.add('h');
 }
-function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d;checkAlarms();renderRooms();}});toast('Alarma silenciada','ok');});}
+function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||d;checkAlarms();renderRooms();}});toast('Alarma silenciada','ok');});}
 
 // ---- HABITACIONES ----
 function renderRooms(){
@@ -795,7 +795,7 @@ function doDisable(){var r=(document.getElementById('disR')||{}).value||'';if(r.
 function doEnable(){conf('Habilitar Hab. '+curRoom.roomId+'?',function(){rpc('setDisabled',{roomId:curRoom.roomId,enabled:false,reason:'',userRole:sess.userRole,userName:sess.userName},function(){toast('Habilitada.','ok');closeM('mRoom');refR();},function(e){toast(e.message||String(e),'err');});});}
 function doRef(){var a=Number((document.getElementById('refAmt')||{}).value||0),r=(document.getElementById('refR')||{}).value||'';if(!a||a<1){toast('Monto invalido.','err');return;}if(r.trim().length<3){toast('Motivo muy corto.','err');return;}conf('Devolucion de '+fmt(a)+'?',function(){rpc('refund',{roomId:curRoom.roomId,amount:a,refundReason:r,userRole:sess.userRole,userName:sess.userName},function(){toast('Devolucion: '+fmt(a),'ok');closeM('mRoom');},function(e){toast(e.message||String(e),'err');});});}
 function doTaxi(){conf('Registrar taxi $3.000?',function(){rpc('taxi',{userRole:sess.userRole,userName:sess.userName},function(){toast('Taxi registrado.','ok');closeM('mRoom');loadCuadre();},function(e){toast(e.message||String(e),'err');});});}
-function refR(){rpc('getRooms',null,function(d){if(d){rooms=d;renderRooms();}});}
+function refR(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||d;renderRooms();}});}
 
 // ---- CAMARERA ----
 function renderMaid(){
