@@ -1534,7 +1534,7 @@ function renderConfigHTML(pinsData, failData){
     pinsData.pins.forEach(p=>{
       h+='<div class="pin-user-row"><span>'+p.userName+'</span>';
       h+='<div style="display:flex;align-items:center;gap:8px;">';
-      h+='<span style="font-size:11px;color:'+(p.hasPin?'var(--green)':'var(--gray))+'">'+(p.hasPin?'✓ Con PIN':'Sin PIN')+'</span>';
+      h+='<span style="font-size:11px;color:'+(p.hasPin?'var(--green)':'var(--gray)')+';">'+(p.hasPin?'✓ Con PIN':'Sin PIN')+'</span>';
       h+='<button class="btn btn-xs btn-accent" onclick="openSetPin(\''+p.userName+'\')">Editar PIN</button>';
       h+='</div></div>';
     });
