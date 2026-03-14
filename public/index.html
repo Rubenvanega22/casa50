@@ -1200,7 +1200,8 @@ function printC(){
   w.document.write('<!DOCTYPE html><html><head><title>Cuadre Casa 50</title><style>body{font-family:Arial;padding:20px;font-size:12px;color:#000}h1{font-size:16px}.sale-row{border:1px solid #ccc;border-radius:4px;padding:6px;margin-bottom:4px}.sale-top{display:flex;justify-content:space-between;font-weight:bold}.sale-det{font-size:10px;color:#555;margin-top:2px}.badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;border:1px solid #999}.pay-row{display:flex;gap:10px;background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:8px}.pay-item{flex:1;text-align:center}.pay-lbl{font-size:10px;color:#666}.pay-val{font-size:14px;font-weight:bold}.li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee}</style></head><body>');
   w.document.write(el.innerHTML);
   w.document.write('</body></html>');
-  w.document.close();setTimeout(function(){w.print();},500);
+ w.document.close();setTimeout(function(){w.print();},500);
+}
 
 // ---- HORARIOS (recepcion) ----
 function loadHor(){var ws=getWS(new Date());rpc('getSchedule',{weekStart:ws},function(data){document.getElementById('horCont').innerHTML=renderSchedView(data.schedule||[],ws);});}
