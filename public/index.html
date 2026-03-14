@@ -1089,27 +1089,71 @@ function loadExtra(){
 function loadCuadre(){
   if(!sess)return;
   var el=document.getElementById('cuadreCont');el.innerHTML='<p style="color:#9ca3af">Calculando...</p>';
-  rpc('metrics',{businessDay:sess.businessDay,shiftId:sess.shiftId},function(m){
-    var t=m.totals||{},loans=m.loans||[],extras=m.extraStaff||[],sl=m.allSalesList||[];
-    var slTurno=sl.filter(function(s){return s.shiftId===sess.shiftId;});
+  var sn={SHIFT_1:'Turno 1 (6am - 2pm)',SHIFT_2:'Turno 2 (2pm - 10pm)',SHIFT_3:'Turno 3 (10pm - 6am)'};
+  Promise.all([
+    new Promise(function(res){rpc('metrics',{businessDay:sess.businessDay,shiftId:sess.shiftId},res,function(){res({});});}),
+    new Promise(function(res){rpc('getLoans',{businessDay:sess.businessDay},res,function(){res({loans:[]});});}),
+    new Promise(function(res){rpc('getExtraStaff',{businessDay:sess.businessDay},res,function(){res({extraStaff:[]});});})
+  ]).then(function(results){
+    var m=results[0]||{},loansData=results[1]||{},extraData=results[2]||{};
+    var t=m.totals||{};
+    var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===sess.shiftId;});
+    var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId;});
+    var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0;});
+    var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0;
+    sl.forEach(function(s){
+      var pm=s.payMethod||'EFECTIVO';
+      var tot=Number(s.total||0);
+      var extraP=Number(s.extraPeopleTotal||0);
+      var extraH=Number(s.extraHoursTotal||0);
+      var base=tot-extraP-extraH;if(base<0)base=tot;
+      if(pm==='TARJETA'){tj_hab+=base;tj_padd+=extraP;tj_hadd+=extraH;}
+      else{ef_hab+=base;ef_padd+=extraP;ef_hadd+=extraH;}
+    });
+    var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
+    var taxis=Number(t.taxi||0);
+    var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
+    var totalGastos=gastos_gen+taxis+turnos;
+    var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
+    var barSaved={};try{barSaved=JSON.parse(sessionStorage.getItem(barKey)||'{}');}catch(e){}
+    var barEf=barSaved.ef!==undefined?barSaved.ef:'';
+    var barTj=barSaved.tj!==undefined?barSaved.tj:'';
     var h='<div id="cuadreRep">';
-    var sn={SHIFT_1:'Turno 1 (6am - 2pm)',SHIFT_2:'Turno 2 (2pm - 9pm)',SHIFT_3:'Turno 3 (9pm - 6am)'};
-    h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px">';
+    h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="font-size:18px;font-weight:900;color:#a78bfa">CASA 50 — SPA MOTEL</div>';
-    h+='<div style="font-size:12px;color:#9ca3af;margin-top:3px">'+sess.businessDay+' | '+(sn[sess.shiftId]||sess.shiftId)+'</div>';
-    h+='<div style="font-size:12px;color:#9ca3af">Recepcionista: '+sess.userName+'</div>';
-    h+='<div style="font-size:11px;color:#9ca3af">Impreso: '+new Date().toLocaleString('es-CO')+'</div></div>';
-    var efT=0,taT=0,neT=0;
-    slTurno.forEach(function(s){if(s.payMethod==='EFECTIVO')efT+=s.total;else if(s.payMethod==='TARJETA')taT+=s.total;else if(s.payMethod==='NEQUI')neT+=s.total;});
-    h+='<div class="sec" style="margin-top:0">Ingresos del Turno</div>';
-    h+='<div class="pay-row"><div class="pay-item"><div class="pay-lbl">Efectivo</div><div class="pay-val" style="color:#22c55e">'+fmt(efT)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(taT)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Nequi</div><div class="pay-val" style="color:#a78bfa">'+fmt(neT)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Total</div><div class="pay-val" style="color:#22c55e">'+fmt(efT+taT+neT)+'</div></div></div>';
-    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+slTurno.length+' hab — '+(t.shiftPeople||0)+' personas</div>';
-    if(slTurno.length){
+    h+='<div style="font-size:12px;color:#9ca3af;margin-top:4px">Fecha: <b style="color:#e5e7eb">'+sess.businessDay+'</b></div>';
+    h+='<div style="font-size:12px;color:#9ca3af">Turno: <b style="color:#e5e7eb">'+(sn[sess.shiftId]||sess.shiftId)+'</b></div>';
+    h+='<div style="font-size:12px;color:#9ca3af">Recepcionista: <b style="color:#e5e7eb">'+sess.userName+'</b></div>';
+    h+='</div>';
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:10px;text-transform:uppercase">💳 Tarjeta</div>';
+    h+=_cRow('Habitaciones',tj_hab,'#3b82f6');
+    h+=_cRow('P. Adicional',tj_padd,'#3b82f6');
+    h+=_cRow('H. Adicional',tj_hadd,'#3b82f6');
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barTjInput" placeholder="0" min="0" value="'+barTj+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0))+'</span></div></div>';
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:10px;text-transform:uppercase">💵 Efectivo</div>';
+    h+=_cRow('Habitaciones',ef_hab,'#22c55e');
+    h+=_cRow('P. Adicional',ef_padd,'#22c55e');
+    h+=_cRow('H. Adicional',ef_hadd,'#22c55e');
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barEfInput" placeholder="0" min="0" value="'+barEf+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Efectivo</span><span style="font-weight:800;color:#22c55e" id="totalEfDisp">'+fmt(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))+'</span></div></div>';
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:10px;text-transform:uppercase">📤 Gastos</div>';
+    h+=_cRow('Gastos Generales',gastos_gen,'#ef4444');
+    h+=_cRow('Taxis',taxis,'#f59e0b');
+    h+=_cRow('Turnos',turnos,'#f97316');
+    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Gastos</span><span style="font-weight:800;color:#ef4444">'+fmt(totalGastos)+'</span></div></div>';
+    var entrega=(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))-totalGastos;
+    h+='<div style="background:#22222c;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px"><div style="font-size:11px;color:#9ca3af;text-transform:uppercase">💰 Entrega Diaria</div><div style="font-size:28px;font-weight:900;color:'+(entrega>=0?'#22c55e':'#ef4444')+'" id="entregaDisp">'+fmt(entrega)+'</div><div style="font-size:11px;color:#9ca3af;margin-top:4px">Total Efectivo − Total Gastos</div></div>';
+    h+='<input type="hidden" id="_ef_base" value="'+(ef_hab+ef_padd+ef_hadd)+'">';
+    h+='<input type="hidden" id="_tj_base" value="'+(tj_hab+tj_padd+tj_hadd)+'">';
+    h+='<input type="hidden" id="_tGastos" value="'+totalGastos+'">';
+    h+='<input type="hidden" id="_barKey" value="'+barKey+'">';
+    if(sl.length){
       h+='<div class="sec">Detalle Ventas del Turno</div>';
-      slTurno.forEach(function(s){
+      sl.forEach(function(s){
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne'}[s.payMethod]||'badge-ap';
         var arrB={'CAR':'badge-ca','TAXI':'badge-tx','MOTO':'badge-mo'}[s.arrivalType]||'badge-ap';
         var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
@@ -1117,27 +1161,35 @@ function loadCuadre(){
         h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span></div></div>';
       });
     }
-    h+='<div class="sec">Descuentos del Turno</div>';
-    var loansTurno=loans.filter(function(l){return l.shiftId===sess.shiftId;}),totPrest=0;
-    var extrasTurno=extras.filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0;}),totExtra=0;
-    if(t.taxi)h+='<div class="li"><span>Taxis</span><span style="color:#f59e0b;font-weight:800">- '+fmt(t.taxi||0)+'</span></div>';
-    loansTurno.forEach(function(l){totPrest+=Number(l.amount||0);h+='<div class="li"><div><b>Prestamo: '+esc(l.borrowerName)+'</b><span style="font-size:10px;color:#9ca3af;margin-left:6px">'+fT(Number(l.tsMs||0))+(l.note?' | '+esc(l.note):'')+'</span></div><span style="color:#ef4444;font-weight:800">- '+fmt(l.amount)+'</span></div>';});
-    extrasTurno.forEach(function(e){totExtra+=Number(e.payment||0);h+='<div class="li"><div><b>Extra: '+esc(e.personName)+'</b><span style="font-size:10px;color:#9ca3af;margin-left:6px">'+esc(e.area)+'</span></div><span style="color:#f97316;font-weight:800">- '+fmt(e.payment)+'</span></div>';});
-    if(!t.taxi&&!loansTurno.length&&!extrasTurno.length)h+='<p style="color:#9ca3af;font-size:12px">Sin descuentos.</p>';
-    var neto=(efT+taT+neT)-(Number(t.taxi||0))-totPrest-totExtra;
-    h+='<div style="background:#22222c;border-radius:10px;padding:12px;text-align:center;margin:10px 0"><div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px">Neto del Turno</div><div style="font-size:28px;font-weight:900;color:'+(neto>=0?'#22c55e':'#ef4444')+'">'+fmt(neto)+'</div></div>';
-    h+='<div class="sec">Cierre</div><label>Conteo de caja</label><input type="number" id="cashIn2" placeholder="Monto en efectivo" min="0"><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
-    h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div>';
-    h+='</div>';
+    h+='<div class="sec">Cierre de Turno</div><label>Conteo de caja</label><input type="number" id="cashIn2" placeholder="Monto en efectivo contado" min="0"><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
+    h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div></div>';
     el.innerHTML=h;
   });
 }
-
+function _cRow(label,val,color){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">'+label+'</span><span style="font-weight:700;color:'+color+'">'+fmt(val)+'</span></div>';}
+function updCuadre(){
+  var barEf=Number((document.getElementById('barEfInput')||{}).value||0);
+  var barTj=Number((document.getElementById('barTjInput')||{}).value||0);
+  var efBase=Number((document.getElementById('_ef_base')||{}).value||0);
+  var tjBase=Number((document.getElementById('_tj_base')||{}).value||0);
+  var tGastos=Number((document.getElementById('_tGastos')||{}).value||0);
+  var barKey=(document.getElementById('_barKey')||{}).value||'';
+  try{sessionStorage.setItem(barKey,JSON.stringify({ef:barEf,tj:barTj}));}catch(e){}
+  var elEf=document.getElementById('totalEfDisp');if(elEf)elEf.textContent=fmt(efBase+barEf);
+  var elTj=document.getElementById('totalTjDisp');if(elTj)elTj.textContent=fmt(tjBase+barTj);
+  var elEnt=document.getElementById('entregaDisp');
+  if(elEnt){var ent=(efBase+barEf)-tGastos;elEnt.textContent=fmt(ent);elEnt.style.color=ent>=0?'#22c55e':'#ef4444';}
+}
 function doCierre(){
-  var n=(document.getElementById('closeN2')||{}).value||'',ca=Number((document.getElementById('cashIn2')||{}).value||0);
+  var barEfEl=document.getElementById('barEfInput');
+  var barTjEl=document.getElementById('barTjInput');
+  if(!barEfEl||barEfEl.value===''){toast('Debes ingresar el Bar en Efectivo para cerrar el turno.','err');if(barEfEl)barEfEl.focus();return;}
+  if(!barTjEl||barTjEl.value===''){toast('Debes ingresar el Bar en Tarjeta para cerrar el turno.','err');if(barTjEl)barTjEl.focus();return;}
+  var n=(document.getElementById('closeN2')||{}).value||'';
+  var ca=Number((document.getElementById('cashIn2')||{}).value||0);
   conf('Confirmar cierre del turno?',function(){
-    rpc('closeShift',{notes:n,cashCount:ca,userRole:sess.userRole,userName:sess.userName},
-      function(res){toast('Turno cerrado — Neto: '+fmt(res.summary.net),'ok');},
+    rpc('closeShift',{notes:n,cashCount:ca,barEfectivo:Number(barEfEl.value||0),barTarjeta:Number(barTjEl.value||0),userRole:sess.userRole,userName:sess.userName},
+      function(res){toast('Turno cerrado — Neto: '+fmt((res.summary&&res.summary.net)||0),'ok');var bk=(document.getElementById('_barKey')||{}).value||'';try{sessionStorage.removeItem(bk);}catch(e){}},
       function(e){toast(e.message||String(e),'err');}
     );
   });
@@ -1149,7 +1201,6 @@ function printC(){
   w.document.write(el.innerHTML);
   w.document.write('</body></html>');
   w.document.close();setTimeout(function(){w.print();},500);
-}
 
 // ---- HORARIOS (recepcion) ----
 function loadHor(){var ws=getWS(new Date());rpc('getSchedule',{weekStart:ws},function(data){document.getElementById('horCont').innerHTML=renderSchedView(data.schedule||[],ws);});}
