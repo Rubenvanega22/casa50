@@ -1320,45 +1320,16 @@ function loadCuadreAdmin(){
       h+='<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;font-weight:800;color:'+(color||'#e5e7eb')+'">'+fmt(total)+'</td></tr>';
     }
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#3b82f6;border:1px solid #2e2e3a">💳 TARJETA</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#3b82f6');
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0)-Number(s.extraPeopleTotal||0)-Number(s.extraHoursTotal||0);},0);},'#3b82f6');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.extraPeopleTotal||0);},0);},'#3b82f6');
-    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.extraHoursTotal||0);},0);},'#3b82f6');dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
+    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.extraHoursTotal||0);},0);},'#3b82f6');
+    dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
     dataRow('Total Tarjeta',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');'Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
-1323
-1324
-1325
-1326
-1327
-1328
-1329
-1330
-1331
-1332
-1333
-1334
-1335
-1336
-1337
-1338
-1339
-1340
-1341
-1342
-1343
-1344
-1345
-1346
-1347
-1348
-1349
-1350
-1351
-ECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
-  dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.extraPeopleTotal||0);},0);},'#22c55e');
-    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.extraHoursTotal||0);},0);},'#22c55e');  
-  dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).barEfectivo||0);},'#22c55e');
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0)-Number(s.extraPeopleTotal||0)-Number(s.extraHoursTotal||0);},0);},'#22c55e');
+    dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.extraPeopleTotal||0);},0);},'#22c55e');
+    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.extraHoursTotal||0);},0);},'#22c55e');
+    dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).barEfectivo||0);},'#22c55e');
     dataRow('Total Efectivo',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);},'#22c55e');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
     dataRow('Gastos Generales',function(m,sl,ls){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0);},'#ef4444');
@@ -1372,6 +1343,8 @@ ECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
     el.innerHTML=h;
   });
 }
+
+// ---- METRICAS (admin) ----
 
 // ---- METRICAS (admin) ----
 function loadM(){
