@@ -312,6 +312,16 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="margin-bottom:8px"><textarea id="noteIn" placeholder="Escribe una nota para el turno..." rows="2"></textarea><button class="btn ba sm" onclick="sendNote()">Enviar Nota</button></div>
 <div id="notesCont"></div>
 </div>
+<!-- CUADRE ADMIN -->
+<div class="pnl" id="pnl-cuadre-admin">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+<h2 style="font-size:14px">Cuadre de Caja</h2>
+<input type="date" id="cuadreAdminDay" style="width:auto;margin:0">
+<button class="btn ba sm" onclick="loadCuadreAdmin()">Ver</button>
+</div>
+<div id="cuadreAdminCont"><p style="color:#9ca3af">Selecciona una fecha y presiona Ver.</p></div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
@@ -434,7 +444,7 @@ function buildTabs(){
   if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
   if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'horarios',l:'Horarios'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'});
   tabs.push({id:'notes',l:'Notas'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
@@ -450,6 +460,7 @@ function sw(id){
   var b=document.querySelector('[data-tab="'+id+'"]');if(b)b.classList.add('on');
   if(id==='notes')loadNotes();
   if(id==='maids')loadMP();
+  if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='config')loadCfg();
   if(id==='staff')loadStaff();
   if(id==='sched'){setDefWk();loadSched();}
@@ -1274,7 +1285,77 @@ function renderStaff(){
 function openAddStaff(){document.getElementById('sEditId').value='';document.getElementById('sName').value='';document.getElementById('sArea').value='';document.getElementById('sActive').value='true';document.getElementById('mStaffT').textContent='Agregar Personal';openM('mStaff');}
 function editStaff(id){var s=staffList.find(function(x){return String(x.id||'')===id;});if(!s)return;document.getElementById('sEditId').value=id;document.getElementById('sName').value=s.name||'';document.getElementById('sArea').value=s.area||'';document.getElementById('sActive').value=(s.active===false||s.active==='false')?'false':'true';document.getElementById('mStaffT').textContent='Editar: '+s.name;openM('mStaff');}
 function saveStaff(){var id=document.getElementById('sEditId').value,nm=(document.getElementById('sName').value||'').trim(),area=document.getElementById('sArea').value,active=document.getElementById('sActive').value==='true';if(!nm){toast('Nombre requerido.','err');return;}if(!area){toast('Area requerida.','err');return;}rpc('saveStaff',{id:id,name:nm,area:area,active:active,type:'nomina',userRole:sess.userRole},function(){toast('Guardado.','ok');closeM('mStaff');loadStaff();},function(e){toast(e.message||String(e),'err');});}
+// ---- CUADRE ADMIN ----
+function loadCuadreAdmin(){
+  var day=document.getElementById('cuadreAdminDay').value;
+  if(!day){toast('Selecciona una fecha.','err');return;}
+  var el=document.getElementById('cuadreAdminCont');el.innerHTML='<p style="color:#9ca3af">Calculando...</p>';
+  var sn={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-10pm)',SHIFT_3:'Turno 3 (10pm-6am)'};
+  Promise.all([
+    new Promise(function(res){rpc('metrics',{businessDay:day,shiftId:'SHIFT_1'},res,function(){res({});});}),
+    new Promise(function(res){rpc('metrics',{businessDay:day,shiftId:'SHIFT_2'},res,function(){res({});});}),
+    new Promise(function(res){rpc('metrics',{businessDay:day,shiftId:'SHIFT_3'},res,function(){res({});});}),
+    new Promise(function(res){rpc('getLoans',{businessDay:day},res,function(){res({loans:[]});});}),
+    new Promise(function(res){rpc('getExtraStaff',{businessDay:day},res,function(){res({extraStaff:[]});});})
+  ]).then(function(r){
+    var ms=[r[0]||{},r[1]||{},r[2]||{}];
+    var loans=r[3].loans||[];
+    var extras=r[4].extraStaff||[];
+    var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
+    var h='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">';
+    h+='<thead><tr><th style="text-align:left;padding:8px;background:#22222c;font-size:11px;color:#9ca3af;border:1px solid #2e2e3a">Concepto</th>';
+    shifts.forEach(function(sid,i){
+      var resp=(ms[i].shiftUsers&&ms[i].shiftUsers.length)?ms[i].shiftUsers[0].userName:'—';
+      h+='<th style="padding:8px;background:#22222c;font-size:11px;color:#a78bfa;border:1px solid #2e2e3a;text-align:center">'+sn[sid]+'<br><span style="color:#9ca3af;font-weight:400">'+resp+'</span></th>';
+    });
+    h+='<th style="padding:8px;background:#22222c;font-size:11px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">TOTAL</th></tr></thead><tbody>';
+    function dataRow(label,getter,color){
+      var vals=ms.map(function(m,i){
+        var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
+        return getter(m,sl,loans.filter(function(l){return l.shiftId===shifts[i];}),extras.filter(function(e){return e.shiftId===shifts[i]&&Number(e.payment||0)>0;}));
+      });
+      var total=vals.reduce(function(a,b){return a+b;},0);
+      h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;color:#9ca3af">'+label+'</td>';
+      vals.forEach(function(v){h+='<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;color:'+(color||'#e5e7eb')+'">'+fmt(v)+'</td>';});
+      h+='<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;font-weight:800;color:'+(color||'#e5e7eb')+'">'+fmt(total)+'</td></tr>';
+    }
+    // Tarjeta
+    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#3b82f6;border:1px solid #2e2e3a">💳 TARJETA</td></tr>';
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#3b82f6');
+    dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
+    dataRow('Total Tarjeta',function(m,sl){
+      var t=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0);
+      return t+Number((m.totals||{}).barTarjeta||0);
+    },'#3b82f6');
+    // Efectivo
+    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO</td></tr>';
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
+    dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).barEfectivo||0);},'#22c55e');
+    dataRow('Total Efectivo',function(m,sl){
+      var t=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);
+      return t+Number((m.totals||{}).barEfectivo||0);
+    },'#22c55e');
+    // Gastos
+    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
+    dataRow('Gastos Generales',function(m,sl,ls){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0);},'#ef4444');
+    dataRow('Taxis',function(m){return Number((m.totals||{}).taxi||0);},'#f59e0b');
+    dataRow('Turnos',function(m,sl,ls,ex){return ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#f97316');
+    dataRow('Total Gastos',function(m,sl,ls,ex){
+      return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).taxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);
+    },'#ef4444');
+    // Entrega
+    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
+    dataRow('Entrega Diaria',function(m,sl,ls,ex){
+      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);
+      var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).taxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);
+      return ef-gastos;
+    },'#22c55e');
+    h+='</tbody></table></div>';
+    el.innerHTML=h;
+  });
+}
 
+// ---- METRICAS (admin) ----
 // ---- METRICAS (admin) ----
 function loadM(){
   if(!sess)return;
