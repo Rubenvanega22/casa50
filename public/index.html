@@ -1325,7 +1325,7 @@ function loadCuadreAdmin(){
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.extraHoursTotal||0);},0);},'#3b82f6');dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
     dataRow('Total Tarjeta',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');'Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
 1323
 1324
 1325
