@@ -61,7 +61,7 @@ function ok(res, data) {
   res.status(200).json({ ok: true, ...data });
 }
 
-function err(res, msg, status = 400) {(res, msg, status = 400) {
+function err(res, msg, status = 400) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
   res.status(status).json({ ok: false, error: msg });
