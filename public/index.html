@@ -309,7 +309,22 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <!-- NOTAS -->
 <div class="pnl" id="pnl-notes">
-<div style="margin-bottom:8px"><textarea id="noteIn" placeholder="Escribe una nota para el turno..." rows="2"></textarea><button class="btn ba sm" onclick="sendNote()">Enviar Nota</button></div>
+<div style="margin-bottom:8px">
+<textarea id="noteIn" placeholder="Escribe una nota..." rows="2"></textarea>
+<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+<select id="noteTarget" style="width:auto;margin:0">
+<option value="ALL">Para todos</option>
+<option value="ADMIN">Solo Admin</option>
+<option value="MAID">Solo Camarera</option>
+</select>
+<button class="btn ba sm" onclick="sendNote()">Enviar Nota</button>
+</div>
+</div>
+<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+<input type="date" id="notesDay" style="width:auto;margin:0">
+<button class="btn bk sm" onclick="loadNotes()">Ver dia</button>
+<button class="btn bk sm" onclick="loadAllNotes()">Ver historial</button>
+</div>
 <div id="notesCont"></div>
 </div>
 <!-- CUADRE ADMIN -->
@@ -1459,23 +1474,115 @@ function renderMP(data){
 }
 
 // ---- NOTAS ----
-function sendNote(){var t=(document.getElementById('noteIn')||{}).value||'';if(!t.trim()){toast('Escribe algo.','err');return;}rpc('addShiftNote',{note:t.trim(),userName:sess.userName,userRole:sess.userRole},function(){document.getElementById('noteIn').value='';toast('Nota enviada.','ok');loadNotes();},function(e){toast(e.message||String(e),'err');});}
-function loadNotes(){if(!sess)return;rpc('getShiftNotes',{businessDay:sess.businessDay},function(data){var c=document.getElementById('notesCont');if(!data.notes||!data.notes.length){c.innerHTML='<p style="color:#9ca3af">Sin notas hoy.</p>';return;}var h='';data.notes.forEach(function(n){h+='<div class="ni"><div>'+esc(n.note)+'</div><div class="nm">'+esc(n.userName)+' ('+esc(n.userRole||'')+')'+(n.shiftId?' — '+{SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'}[n.shiftId]:'')+' — '+new Date(Number(n.tsMs||0)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'</div></div>';});c.innerHTML=h;});}
+// ---- NOTAS ----
+function sendNote(){
+  var t=(document.getElementById('noteIn')||{}).value||'';
+  var target=(document.getElementById('noteTarget')||{}).value||'ALL';
+  if(!t.trim()){toast('Escribe algo.','err');return;}
+  rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole},
+    function(){document.getElementById('noteIn').value='';toast('Nota enviada.','ok');loadNotes();updNoteBadge();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
 
-// ---- META / GOAL ----
-function openGoal(){document.getElementById('goalIn').value=Number((BS.settings||{}).DAILY_GOAL||0)||'';openM('mGoal');}
-function saveGoal(){var g=Number(document.getElementById('goalIn').value||0);rpc('setDailyGoal',{goal:g,userRole:sess.userRole},function(){BS.settings=BS.settings||{};BS.settings.DAILY_GOAL=String(g);toast('Meta: '+fmt(g),'ok');closeM('mGoal');loadM();},function(e){toast(e.message||String(e),'err');});}
-
-// ---- CONFIG ----
-function loadCfg(){
-  var el=document.getElementById('cfgCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
-  rpc('getReceptionPins',{userRole:sess.userRole},function(pd){
-    var h='<div class="cfg"><h3>PIN Administrador</h3><button class="btn br xs" onclick="openM(\'mChPin\')">Cambiar PIN Admin</button></div>';
-    h+='<div class="cfg"><h3>PINs Recepcionistas</h3>';
-    if(pd.pins&&pd.pins.length)pd.pins.forEach(function(p){h+='<div class="pr2"><span style="font-weight:600">'+esc(p.userName)+'</span><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:'+(p.hasPin?'#22c55e':'#6b7280')+'">'+(p.hasPin?'Con PIN':'Sin PIN')+'</span><button class="btn ba xs" onclick="openPin(\''+esc(p.userName)+'\')">Editar</button></div></div>';});
-    h+='<div style="margin-top:8px"><button class="btn ba xs" onclick="openPin(\'\')">+ Nueva Recepcionista</button></div></div>';
-    el.innerHTML=h;
+function loadNotes(){
+  if(!sess)return;
+  var day=(document.getElementById('notesDay')||{}).value||sess.businessDay;
+  rpc('getShiftNotes',{businessDay:day},function(data){
+    var c=document.getElementById('notesCont');
+    var notes=(data.notes||[]).filter(function(n){
+      var tg=n.target||'ALL';
+      return tg==='ALL'||tg===sess.userRole;
+    });
+    if(!notes.length){c.innerHTML='<p style="color:#9ca3af">Sin notas.</p>';return;}
+    var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    var tgColors={ALL:'#a78bfa',ADMIN:'#3b82f6',MAID:'#22c55e',RECEPTION:'#f59e0b'};
+    var tgLabels={ALL:'Todos',ADMIN:'Admin',MAID:'Camarera',RECEPTION:'Recepcion'};
+    var h='';
+    notes.forEach(function(n){
+      var seen=(n.seenBy||[]).indexOf(sess.userRole)>=0;
+      var tg=n.target||'ALL';
+      var col=tgColors[tg]||'#7c5cfc';
+      h+='<div class="ni" style="border-left-color:'+col+';opacity:'+(seen?'0.6':'1')+'">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">';
+      h+='<div>'+esc(n.note)+'</div>';
+      h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+      if(!seen)h+='<button class="btn bk xs" onclick="markSeen('+n.id+',this)">✓ Ver</button>';
+      if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteNote('+n.id+',this)">✕</button>';
+      h+='</div></div>';
+      h+='<div class="nm">'+esc(n.userName)+' ('+esc(n.userRole||'')+')';
+      h+=' — '+(sn[n.shiftId]||n.shiftId||'');
+      h+=' — '+new Date(Number(n.tsMs||0)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      h+=' — <span style="color:'+col+'">'+esc(tgLabels[tg]||tg)+'</span>';
+      if(seen)h+=' — <span style="color:#22c55e">✓ Vista</span>';
+      h+='</div></div>';
+    });
+    c.innerHTML=h;
+    updNoteBadge(notes);
   });
+}
+
+function loadAllNotes(){
+  if(!sess)return;
+  var c=document.getElementById('notesCont');
+  c.innerHTML='<p style="color:#9ca3af">Cargando historial...</p>';
+  rpc('getAllNotes',{limit:100},function(data){
+    var notes=(data.notes||[]).filter(function(n){
+      var tg=n.target||'ALL';
+      return tg==='ALL'||tg===sess.userRole;
+    });
+    if(!notes.length){c.innerHTML='<p style="color:#9ca3af">Sin notas.</p>';return;}
+    var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    var tgColors={ALL:'#a78bfa',ADMIN:'#3b82f6',MAID:'#22c55e',RECEPTION:'#f59e0b'};
+    var tgLabels={ALL:'Todos',ADMIN:'Admin',MAID:'Camarera',RECEPTION:'Recepcion'};
+    var byDay={};
+    notes.forEach(function(n){var d=n.businessDay||'';if(!byDay[d])byDay[d]=[];byDay[d].push(n);});
+    var h='';
+    Object.keys(byDay).sort().reverse().forEach(function(day){
+      h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin:10px 0 5px;border-bottom:1px solid #2e2e3a;padding-bottom:3px">'+day+'</div>';
+      byDay[day].forEach(function(n){
+        var seen=(n.seenBy||[]).indexOf(sess.userRole)>=0;
+        var tg=n.target||'ALL';
+        var col=tgColors[tg]||'#7c5cfc';
+        h+='<div class="ni" style="border-left-color:'+col+';opacity:'+(seen?'0.6':'1')+'">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">';
+        h+='<div>'+esc(n.note)+'</div>';
+        h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+        if(!seen)h+='<button class="btn bk xs" onclick="markSeen('+n.id+',this)">✓ Ver</button>';
+        if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteNote('+n.id+',this)">✕</button>';
+        h+='</div></div>';
+        h+='<div class="nm">'+esc(n.userName)+' — '+(sn[n.shiftId]||'')+' — '+new Date(Number(n.tsMs||0)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' — <span style="color:'+col+'">'+esc(tgLabels[tg]||tg)+'</span>'+(seen?' — <span style="color:#22c55e">✓ Vista</span>':'')+'</div>';
+        h+='</div>';
+      });
+    });
+    c.innerHTML=h;
+  });
+}
+
+function markSeen(id,btn){
+  rpc('markNoteSeen',{noteId:id,userRole:sess.userRole,userName:sess.userName},
+    function(){if(btn){btn.textContent='✓ Vista';btn.disabled=true;}loadNotes();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+
+function deleteNote(id,btn){
+  conf('Borrar esta nota?',function(){
+    rpc('deleteNote',{noteId:id,userRole:sess.userRole,userName:sess.userName},
+      function(){toast('Nota borrada.','ok');loadNotes();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+
+function updNoteBadge(notes){
+  if(!sess)return;
+  var tab=document.querySelector('[data-tab="notes"]');
+  if(!tab)return;
+  if(!notes){tab.textContent='Notas';return;}
+  var unseen=notes.filter(function(n){return (n.seenBy||[]).indexOf(sess.userRole)<0;}).length;
+  tab.textContent='Notas'+(unseen>0?' ('+unseen+')':'');
+  tab.style.color=unseen>0?'#ef4444':'';
 }
 function openPin(nm){document.getElementById('pName').value=nm||'';document.getElementById('pVal').value='';openM('mPin');}
 function savePin(){var nm=(document.getElementById('pName').value||'').trim(),pin=(document.getElementById('pVal').value||'').trim();if(!nm){toast('Nombre requerido.','err');return;}rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},function(){toast('PIN guardado.','ok');closeM('mPin');loadCfg();},function(e){toast(e.message||String(e),'err');});}
