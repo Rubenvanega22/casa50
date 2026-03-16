@@ -1548,7 +1548,7 @@ function loadAllNotes(){
         h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">';
         h+='<div>'+esc(n.note)+'</div>';
         h+='<div style="display:flex;gap:4px;flex-shrink:0">';
-        if(!seen)h+='<button class="btn bk xs" onclick="markSeen('+n.id+',this)">✓ Ver</button>';
+        if(!seen)h+='<button class="btn bk xs" onclick="markSeen('+(n.id||0)+',this)">✓ Ver</button>';
         if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteNote('+n.id+',this)">✕</button>';
         h+='</div></div>';
         h+='<div class="nm">'+esc(n.userName)+' — '+(sn[n.shiftId]||'')+' — '+new Date(Number(n.tsMs||0)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' — <span style="color:'+col+'">'+esc(tgLabels[tg]||tg)+'</span>'+(seen?' — <span style="color:#22c55e">✓ Vista</span>':'')+'</div>';
