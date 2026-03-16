@@ -46,7 +46,22 @@ function currentShiftId(ms) {
   if (h >= 14 && h < 21) return 'SHIFT_2';
   return 'SHIFT_3';
 }
-function err(res, msg, status = 400) {
+
+function calcPrice(durationHrs, cfg) {
+  if (durationHrs === 3)  return Number(cfg.h3  || 0);
+  if (durationHrs === 6)  return Number(cfg.h6  || 0);
+  if (durationHrs === 8)  return Number(cfg.h8  || 0);
+  if (durationHrs === 12) return Number(cfg.h12 || 0);
+  return 0;
+}
+
+function ok(res, data) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json({ ok: true, ...data });
+}
+
+function err(res, msg, status = 400) {(res, msg, status = 400) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
   res.status(status).json({ ok: false, error: msg });
