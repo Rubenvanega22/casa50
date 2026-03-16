@@ -155,10 +155,9 @@ module.exports = async function handler(req, res) {
       case 'setReceptionPin':   return await apiSetPin(payload, res);
       case 'getReceptionPins':  return await apiGetPins(payload, res);
       case 'changeAdminPin':    return await apiChangeAdminPin(payload, res);
-      case 'roomHistory':        return await apiRoomHistory(payload, res);
-      // ---- NUEVOS v3 ----
-        case 'markNoteSeen':   return await apiMarkNoteSeen(payload, res);
-case 'getAllNotes':     return await apiGetAllNotes(payload, res);
+     case 'roomHistory':        return await apiRoomHistory(payload, res);
+      case 'markNoteSeen':       return await apiMarkNoteSeen(payload, res);
+      case 'getAllNotes':         return await apiGetAllNotes(payload, res);
       case 'getNoteHistory':     return await apiGetNoteHistory(payload, res);
       case 'deleteNote':         return await apiDeleteNote(payload, res);
       case 'addBarSale':         return await apiAddBarSale(payload, res);
