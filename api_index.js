@@ -1,5 +1,5 @@
 // ============================================================
-// CASA 50 - SPA MOTEL | API Backend v3
+// CASA 50 - SPA MOTEL | API Backend v3.1
 // api/index.js - Vercel Serverless (Node.js)
 // Cambios v3:
 //  - bar_sales + general_expenses (nuevas tablas)
