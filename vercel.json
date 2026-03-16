@@ -5,7 +5,13 @@
     { "src": "public/index.html", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/api(.*)", "dest": "/api/index.js" },
+    { "src": "/api/index.js", "dest": "/api/index.js" },
+    { "src": "/api", "dest": "/api/index.js" },
     { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }
+```
+
+Commit y dígame qué URL usa el frontend para llamar al API — busque en `index.html`:
+```
+var API_URL
