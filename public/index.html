@@ -360,7 +360,7 @@ var MP={
 };
 
 // ---- UTILS ----
-var API_URL=window.location.origin+'/api';
+var API_URL=window.location.origin+'/api/index.js';
 function rpc(fn,p,ok,er){
   fetch(API_URL+'?fn='+fn,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p||{})})
   .then(function(r){return r.json();})
