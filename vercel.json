@@ -10,8 +10,3 @@
     { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }
-```
-
-Commit y dígame qué URL usa el frontend para llamar al API — busque en `index.html`:
-```
-var API_URL
