@@ -24,7 +24,7 @@ const MASTER_PRICING = {
 // ==================== HELPERS ====================
 // Business day: cambia a las 6AM (0-5AM = dia anterior)
 function businessDay(ms) {
-  const d = new Date(ms || Date.now());
+  const d = new Date(new Date(ms || Date.now()).toLocaleString('en-US', {timeZone: 'America/Bogota'}));
   if (d.getHours() < 6) d.setDate(d.getDate() - 1);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -40,12 +40,7 @@ function businessDayRange(bDay) {
   return { start, end };
 }
 
-function currentShiftId(ms) {
-  const h = new Date(ms || Date.now()).getHours();
-  if (h >= 6 && h < 14) return 'SHIFT_1';
-  if (h >= 14 && h < 21) return 'SHIFT_2';
-  return 'SHIFT_3';
-}
+const h = new Date(new Date(ms || Date.now()).toLocaleString('en-US', {timeZone: 'America/Bogota'})).getHours();
 
 function calcPrice(durationHrs, cfg) {
   if (durationHrs === 3)  return Number(cfg.h3  || 0);
