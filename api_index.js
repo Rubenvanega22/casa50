@@ -157,6 +157,8 @@ module.exports = async function handler(req, res) {
       case 'changeAdminPin':    return await apiChangeAdminPin(payload, res);
       case 'roomHistory':        return await apiRoomHistory(payload, res);
       // ---- NUEVOS v3 ----
+        case 'markNoteSeen':   return await apiMarkNoteSeen(payload, res);
+case 'getAllNotes':     return await apiGetAllNotes(payload, res);
       case 'getNoteHistory':     return await apiGetNoteHistory(payload, res);
       case 'deleteNote':         return await apiDeleteNote(payload, res);
       case 'addBarSale':         return await apiAddBarSale(payload, res);
@@ -708,12 +710,14 @@ async function apiAddNote(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
+  const target = String(p.target || 'ALL').toUpperCase();
   await supabase.from('shift_notes').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: String(p.userRole || ''), user_name: String(p.userName || ''),
-    note: String(p.note || ''), is_deleted: false, deleted_by: '', deleted_ms: 0
+    note: String(p.note || ''), target,
+    seen_by: '[]', is_deleted: false
   });
-  return ok(res, { tsMs: now });
+  return ok(res, {});
 }
 
 async function apiGetNotes(p, res) {
@@ -721,7 +725,47 @@ async function apiGetNotes(p, res) {
   const { data } = await supabase.from('shift_notes').select('*')
     .eq('business_day', bDay).eq('is_deleted', false)
     .order('ts_ms', { ascending: false }).limit(100);
-  return ok(res, { notes: (data || []).map(r => ({ id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id, userRole: r.user_role, userName: r.user_name, note: r.note })) });
+  return ok(res, { notes: (data || []).map(r => ({
+    id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id,
+    userRole: r.user_role, userName: r.user_name, note: r.note,
+    target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
+    businessDay: r.business_day
+  })) });
+}
+
+async function apiMarkNoteSeen(p, res) {
+  const noteId = Number(p.noteId || 0);
+  const userRole = String(p.userRole || '').toUpperCase();
+  if (!noteId) return err(res, 'noteId requerido');
+  const { data } = await supabase.from('shift_notes').select('seen_by').eq('id', noteId).single();
+  if (!data) return err(res, 'Nota no encontrada');
+  let seenBy = [];
+  try { seenBy = JSON.parse(data.seen_by || '[]'); } catch(e) {}
+  if (!seenBy.includes(userRole)) seenBy.push(userRole);
+  await supabase.from('shift_notes').update({ seen_by: JSON.stringify(seenBy) }).eq('id', noteId);
+  return ok(res, { noteId, seenBy });
+}
+
+async function apiDeleteNote(p, res) {
+  if (String(p.userRole || '').toUpperCase() !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const noteId = Number(p.noteId || 0);
+  if (!noteId) return err(res, 'noteId requerido');
+  await supabase.from('shift_notes').update({ is_deleted: true }).eq('id', noteId);
+  return ok(res, { noteId });
+}
+
+async function apiGetAllNotes(p, res) {
+  const limit = Math.min(200, Number(p.limit || 100));
+  const fromDate = String(p.fromDate || '');
+  let query = supabase.from('shift_notes').select('*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
+  if (fromDate) query = query.gte('business_day', fromDate);
+  const { data } = await query;
+  return ok(res, { notes: (data || []).map(r => ({
+    id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id,
+    userRole: r.user_role, userName: r.user_name, note: r.note,
+    target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
+    businessDay: r.business_day
+  })) });
 }
 
 // v3: historial de notas de todos los dias
@@ -734,14 +778,7 @@ async function apiGetNoteHistory(p, res) {
   return ok(res, { notes: (data || []).map(r => ({ id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id, userRole: r.user_role, userName: r.user_name, note: r.note })) });
 }
 
-// v3: borrado logico (solo admin)
-async function apiDeleteNote(p, res) {
-  if (String(p.userRole||'').toUpperCase() !== 'ADMIN') return err(res, 'Solo ADMIN puede borrar notas');
-  const noteId = Number(p.noteId || 0);
-  if (!noteId) return err(res, 'noteId requerido');
-  await supabase.from('shift_notes').update({ is_deleted: true, deleted_by: String(p.userName||''), deleted_ms: Date.now() }).eq('id', noteId);
-  return ok(res, { noteId });
-}
+
 
 // ==================== CIERRE DE TURNO ====================
 async function apiCloseShift(p, res) {
