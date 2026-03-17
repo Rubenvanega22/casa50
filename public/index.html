@@ -1516,12 +1516,22 @@ function loadMo(){var ym=document.getElementById('moPick').value;if(!ym){var n=n
 function renderMo(data){var mt=data.monthTotals||{};var h='<div class="mg"><div class="mc2"><div class="ml">Ventas Mes</div><div class="mv g">'+fmt(mt.sales||0)+'</div></div><div class="mc2"><div class="ml">Neto</div><div class="mv '+(mt.net>=0?'g':'r')+'">'+fmt(mt.net||0)+'</div></div><div class="mc2"><div class="ml">Hab.</div><div class="mv a">'+mt.roomsSold+'</div></div><div class="mc2"><div class="ml">Personas</div><div class="mv a">'+mt.people+'</div></div></div>';if(data.days&&data.days.length){var mx=Math.max.apply(null,data.days.map(function(d){return d.sales||0;}));if(mx<1)mx=1;h+='<div class="chart-wrap"><div class="chart-title">Ventas por dia</div><div class="bc" style="height:75px">';data.days.forEach(function(d){var p=Math.round(((d.sales||0)/mx)*100),dn=d.day.split('-')[2];h+='<div class="bco"><div class="bf" style="height:'+p+'%;background:'+(d.sales>0?'#7c5cfc':'#2e2e3a')+'"></div><div class="bl">'+Number(dn)+'</div></div>';});h+='</div></div><table><thead><tr><th>Dia</th><th>Ventas</th><th>Hab.</th><th>Neto</th></tr></thead><tbody>';data.days.forEach(function(d){h+='<tr><td><b>'+d.day+'</b></td><td>'+fmt(d.sales)+'</td><td>'+d.roomsSold+'</td><td style="color:'+(d.net>=0?'#22c55e':'#ef4444')+'">'+fmt(d.net)+'</td></tr>';});h+='</tbody></table>';}return h;}
 
 // ---- PANEL CAMARERAS (admin) ----
+function clearMaidLog(){
+  var day=document.getElementById('mdDay').value||sess.businessDay;
+  conf('Borrar TODO el registro de camareras del dia '+day+'?',function(){
+    rpc('clearMaidLog',{businessDay:day,userRole:sess.userRole,userName:sess.userName},
+      function(){toast('Registro borrado.','ok');loadMP();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
 function loadMP(){
   if(!sess)return;
   var date=document.getElementById('mdDay').value||sess.businessDay;
   var el=document.getElementById('mpCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
   rpc('maidPanel',{userRole:sess.userRole,businessDay:date},function(data){el.innerHTML=renderMP(data);},function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
 }
+
 function renderMP(data){
   var sn={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-9pm)',SHIFT_3:'Turno 3 (9pm-6am)'};
   var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="sec" style="margin-top:0;margin-bottom:0">Camareras activas hoy</div><button class="btn br xs" onclick="clearMaidLog()">🗑 Borrar registro</button></div>';
