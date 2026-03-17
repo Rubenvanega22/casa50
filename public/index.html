@@ -519,7 +519,7 @@ function doMaidRefresh(){
 function startPoll(){
   clearInterval(pT);
  pT=setInterval(function(){
-    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();if(sess&&sess.userRole==='MAID')renderMaid();}});
+    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
     loadNotes();
   },10000);
   checkAlarms();clearInterval(aT);aT=setInterval(checkAlarms,30000);
