@@ -169,6 +169,7 @@ module.exports = async function handler(req, res) {
       case 'getDailyCuadre':     return await apiGetDailyCuadre(payload, res);
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
+        case 'clearMaidLog': return await apiClearMaidLog(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1225,4 +1226,10 @@ async function apiUpdateArrivalPlate(p, res) {
   if(room.arrival_type==='CAR'&&!plate)return err(res,'Placa obligatoria para CAR');
   await supabase.from('rooms').update({arrival_plate:plate,updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,plate});
+}
+async function apiClearMaidLog(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const bDay=String(p.businessDay||businessDay(Date.now()));
+  await supabase.from('maid_log').delete().eq('business_day',bDay);
+  return ok(res,{businessDay:bDay});
 }
