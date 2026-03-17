@@ -934,13 +934,15 @@ function renderMaid(){
       var since=isDirty?Number(r.lastCheckoutMs||0):Number(r.contaminatedSinceMs||r.stateSinceMs||0);
       var mins=since?Math.round((now-since)/60000):0;
       var col=isDirty?'#f59e0b':'#3b82f6';
-      h+='<div style="background:#18181f;border:1px solid '+col+';border-left:4px solid '+col+';border-radius:8px;padding:10px;margin-bottom:7px">';
+      h+='<div style="background:#18181f;border:1px solid '+col+';border-left:4px solid '+col+';border-radius:8px;padding:10px;margin-bottom:7px;cursor:pointer" onclick="togglePendCard(\''+r.roomId+'\')">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
       h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
       h+='<span style="font-size:11px;color:'+col+';font-weight:700">'+mins+' min</span>';
       h+='</div>';
       h+='<div style="font-size:11px;color:#9ca3af;margin-top:3px">'+(isDirty?'Salio: '+fT(r.lastCheckoutMs):'Contaminada desde: '+fT(since))+'</div>';
-      h+='<button class="btn by sm" style="margin-top:8px;width:100%" onclick="doMaidTakeInline(\''+r.roomId+'\',this)">Empezar Limpieza</button>';
+      h+='<div id="pendPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
+      h+='<button class="btn by sm" style="width:100%" onclick="event.stopPropagation();doMaidTakeInline(\''+r.roomId+'\',this)">Empezar Limpieza</button>';
+      h+='</div>';
       h+='</div>';
     });
   }
@@ -975,7 +977,10 @@ function renderMaid(){
   document.getElementById('maidCont').innerHTML=h;
   loadMaidLogInline();
 }
-
+function togglePendCard(rid){
+  var panel=document.getElementById('pendPanel_'+rid);
+  if(panel)panel.style.display=panel.style.display==='none'?'block':'none';
+}
 function toggleInpCard(rid){
   var panel=document.getElementById('inpPanel_'+rid);
   if(panel)panel.style.display=panel.style.display==='none'?'block':'none';
