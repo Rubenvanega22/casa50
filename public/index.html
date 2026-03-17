@@ -812,12 +812,10 @@ function doCI(){
 function doCheckOut(){
   if(!curRoom)return;
   var obs=(document.getElementById('coObs')||{}).value||'';
-  conf('Confirmar salida de Hab '+curRoom.roomId+'?',function(){
-    rpc('checkOut',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,checkoutObs:obs},
-      function(){toast('Salida registrada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
-      function(e){toast(e.message||String(e),'err');}
-    );
-  });
+  rpc('checkOut',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,checkoutObs:obs,force:true},
+    function(){toast('Salida registrada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+    function(e){toast(e.message||String(e),'err');}
+  );
 }
 function doExt(){
   if(!curRoom)return;
