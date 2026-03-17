@@ -1524,7 +1524,7 @@ function loadMP(){
 }
 function renderMP(data){
   var sn={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-9pm)',SHIFT_3:'Turno 3 (9pm-6am)'};
-  var h='<div class="sec" style="margin-top:0">Camareras activas hoy</div>';
+  var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="sec" style="margin-top:0;margin-bottom:0">Camareras activas hoy</div><button class="btn br xs" onclick="clearMaidLog()">🗑 Borrar registro</button></div>';
   if(data.activeMaids&&data.activeMaids.length)data.activeMaids.forEach(function(m){h+='<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px 10px;margin-bottom:4px;display:flex;justify-content:space-between"><b>'+esc(m.userName)+'</b><span style="font-size:11px;color:#9ca3af">'+(sn[m.shiftId]||m.shiftId||'')+' | Login: '+fT(m.loginMs)+'</span></div>';});
   else h+='<p style="color:#9ca3af;font-size:13px;margin-bottom:8px">Ninguna camarera activa hoy.</p>';
 
