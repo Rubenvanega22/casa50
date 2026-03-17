@@ -518,19 +518,25 @@ await supabase.from('rooms').update({
   });
 
   // Actualizar el registro START con finished_ms o insertar nuevo registro FINISH
-  if (openLog && openLog.length) {
-    await supabase.from('maid_log').update({
-      action: 'FINISH', finished_ms: now, state_to: resultState,
-      note: p.note || ''
-    }).eq('id', openLog[0].id);
+ if (openLog && openLog.length) {
+    if(resultState === 'CONTAMINATED'){
+      // No cerrar el log — la habitacion sigue en proceso
+    } else {
+      await supabase.from('maid_log').update({
+        action: 'FINISH', finished_ms: now, state_to: resultState,
+        note: p.note || ''
+      }).eq('id', openLog[0].id);
+    }
   } else {
-    await supabase.from('maid_log').insert({
-      ts_ms: now, business_day: bDay, shift_id: shift,
-      maid_name: maidName, room_id: roomId,
-      action: 'FINISH', state: resultState, note: p.note || '',
-      started_ms: startedMs, finished_ms: now,
-      state_from: room.state, state_to: resultState
-    });
+    if(resultState !== 'CONTAMINATED'){
+      await supabase.from('maid_log').insert({
+        ts_ms: now, business_day: bDay, shift_id: shift,
+        maid_name: maidName, room_id: roomId,
+        action: 'FINISH', state: resultState, note: p.note || '',
+        started_ms: startedMs, finished_ms: now,
+        state_from: room.state, state_to: resultState
+      });
+    }
   }
 
   return ok(res, { roomId, dirtyMins, cleanMins, startedMs, finishedMs: now });
