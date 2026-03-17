@@ -700,7 +700,7 @@ function buildRoomB(r){
   }
 
   h+='<hr>';
-  h+='<button class="btn bk xs" onclick="openHist(\''+r.roomId+'\')">Ver historial</button>';
+  if(sess&&sess.userRole!=='MAID')h+='<button class="btn bk xs" onclick="openHist(\''+r.roomId+'\')">Ver historial</button>';
 
   if(isR||isA){
     if(r.noteMinor){
