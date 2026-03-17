@@ -957,10 +957,16 @@ function renderMaid(){
       var logKey='maidStart_'+r.roomId;
       var startMs=Number(sessionStorage.getItem(logKey)||0)||now;
       var elapsed=Math.round((now-startMs)/60000);
-      h+='<div style="background:#18181f;border:1px solid #a78bfa;border-left:4px solid #a78bfa;border-radius:8px;padding:10px;margin-bottom:7px" id="inpCard_'+r.roomId+'">';
+      var inpCol=r.state==='CONTAMINATED'?'#3b82f6':'#a78bfa';
+      h+='<div style="background:#18181f;border:1px solid '+inpCol+';border-left:4px solid '+inpCol+';border-radius:8px;padding:10px;margin-bottom:7px" id="inpCard_'+r.roomId+'">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleInpCard(\''+r.roomId+'\')">';
       h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
-      h+='<span style="font-size:12px;color:#a78bfa;font-weight:700;animation:pulse 1s infinite">⚡ '+elapsed+' min</span>';
+      h+='<span style="font-size:12px;color:'+inpCol+';font-weight:700;animation:pulse 1s infinite">'+(r.state==='CONTAMINATED'?'🔵':'⚡')+' '+elapsed+' min</span>';
+```
+
+Luego busque en `loadMaidLogInline` la línea:
+```
+var col='#22c55e';
       h+='</div>';
       h+='<div id="inpPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
       h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Tiempo en limpieza: <b style="color:#a78bfa">'+elapsed+' min</b></div>';
