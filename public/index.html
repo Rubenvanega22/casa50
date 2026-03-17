@@ -647,17 +647,18 @@ function buildRoomB(r){
     }
   }
 
-  // --- SUCIA ---
+ // --- SUCIA ---
   if(eff==='DI'){
     var mD=r.lastCheckoutMs?Math.round((now-Number(r.lastCheckoutMs))/60000):0;
     h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
+    if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora de entrada</span><b>'+fT(r.checkInMs)+'</b></div>';
     h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora de salida</span><b>'+fT(r.lastCheckoutMs)+'</b></div>';
     h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo sucia</span><b style="color:#f59e0b">'+mD+' minutos</b></div>';
     if(r.checkoutObs)h+='<div style="margin-top:5px;color:#f59e0b;font-size:11px">Obs: '+esc(r.checkoutObs)+'</div>';
     h+='</div>';
     if(sess&&sess.userRole==='MAID'){
-      h+='<div class="row"><button class="btn by sm" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
-      h+='<div style="margin-top:8px"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button>&nbsp;<button class="btn bo xs" onclick="doMaidFinish(\''+r.roomId+'\',\'CONTAMINATED\')">Contaminada</button></div>';
+      h+='<div class="row"><button class="btn by sm" id="btnTake_'+r.roomId+'" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
+      h+='<div style="margin-top:8px;display:none" id="btnsDone_'+r.roomId+'"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button>&nbsp;<button class="btn bo xs" onclick="doMaidFinish(\''+r.roomId+'\',\'CONTAMINATED\')">Contaminada</button></div>';
     }
   }
 
@@ -670,11 +671,9 @@ function buildRoomB(r){
     h+='</div>';
     if(isR)h+='<div class="row"><button class="btn bg sm" onclick="doClear()">Marcar Disponible</button></div>';
     if(sess&&sess.userRole==='MAID'){
-      h+='<div class="row"><button class="btn by sm" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
-      h+='<div style="margin-top:8px"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button></div>';
+      h+='<div class="row"><button class="btn by sm" id="btnTake_'+r.roomId+'" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
+      h+='<div style="margin-top:8px;display:none" id="btnsDone_'+r.roomId+'"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button></div>';
     }
-  }
-
   // --- DISPONIBLE: FORMULARIO CHECK-IN ---
   if(eff==='AV'&&isR){
     var durs=cfg.h6>0?[3,6,8,12]:[3,8,12];
