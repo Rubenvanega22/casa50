@@ -100,7 +100,9 @@ function mapRoom(r) {
     checkoutObs: r.checkout_obs || '',
     contaminatedSinceMs: Number(r.contaminated_since_ms || 0),
     lastMaidName: r.last_maid_name || '',
-    lastMaidDoneMs: Number(r.last_maid_done_ms || 0)
+    lastMaidDoneMs: Number(r.last_maid_done_ms || 0),
+    maidInProgress: !!r.maid_in_progress,
+    maidNameProgress: r.maid_name_progress || ''
   };
 }
 
