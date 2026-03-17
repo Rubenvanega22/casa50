@@ -674,7 +674,8 @@ function buildRoomB(r){
       h+='<div class="row"><button class="btn by sm" id="btnTake_'+r.roomId+'" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
       h+='<div style="margin-top:8px;display:none" id="btnsDone_'+r.roomId+'"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button></div>';
     }
-  // --- DISPONIBLE: FORMULARIO CHECK-IN ---
+  }
+  // --- DISPONIBLE FORMULARIO CHECK-IN ---
   if(eff==='AV'&&isR){
     var durs=cfg.h6>0?[3,6,8,12]:[3,8,12];
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Duracion:</div>';
