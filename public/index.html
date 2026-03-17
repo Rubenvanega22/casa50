@@ -922,49 +922,110 @@ function doTaxi(){
 function renderMaid(){
   if(!sess||sess.userRole!=='MAID')return;
   var now=Date.now();
-  var dirty=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&!r.maidInProgress;})
+  var pending=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&!r.maidInProgress;});
+  var inProgress=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&r.maidInProgress&&r.maidNameProgress===sess.userName;});
   var h='';
-  if(!dirty.length){h='<p style="color:#9ca3af;padding:10px 0">No hay habitaciones sucias. ✓</p>';}
-  else{
-    dirty.forEach(function(r){
-      var isDirty=r.state==='DIRTY',since=isDirty?Number(r.lastCheckoutMs||0):Number(r.contaminatedSinceMs||r.stateSinceMs||0);
+
+  // ---- SECCIÓN 1: PARA LIMPIAR ----
+  h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">🧹 Habitaciones para limpiar ('+pending.length+')</div>';
+  if(!pending.length){
+    h+='<p style="color:#9ca3af;font-size:12px;margin-bottom:12px">No hay habitaciones pendientes ✓</p>';
+  } else {
+    pending.forEach(function(r){
+      var isDirty=r.state==='DIRTY';
+      var since=isDirty?Number(r.lastCheckoutMs||0):Number(r.contaminatedSinceMs||r.stateSinceMs||0);
       var mins=since?Math.round((now-since)/60000):0;
       var col=isDirty?'#f59e0b':'#3b82f6';
-      h+='<div style="background:#18181f;border:1px solid '+col+';border-left:4px solid '+col+';border-radius:8px;padding:10px;margin-bottom:7px;cursor:pointer" onclick="openRoom(\''+r.roomId+'\')">';
+      h+='<div style="background:#18181f;border:1px solid '+col+';border-left:4px solid '+col+';border-radius:8px;padding:10px;margin-bottom:7px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
       h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
       h+='<span style="font-size:11px;color:'+col+';font-weight:700">'+mins+' min</span>';
       h+='</div>';
-      h+='<div style="font-size:11px;color:#9ca3af;margin-top:4px">'+(isDirty?'Sucia desde: '+fT(since):'Contaminada desde: '+fT(since))+'</div>';
+      h+='<div style="font-size:11px;color:#9ca3af;margin-top:3px">'+(isDirty?'Salio: '+fT(r.lastCheckoutMs):'Contaminada desde: '+fT(since))+'</div>';
+      h+='<button class="btn by sm" style="margin-top:8px;width:100%" onclick="doMaidTakeInline(\''+r.roomId+'\',this)">Empezar Limpieza</button>';
       h+='</div>';
     });
   }
+
+  // ---- SECCIÓN 2: EN PROCESO ----
+  h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">⚡ En proceso ('+inProgress.length+')</div>';
+  if(!inProgress.length){
+    h+='<p style="color:#9ca3af;font-size:12px;margin-bottom:12px">Ninguna en proceso.</p>';
+  } else {
+    inProgress.forEach(function(r){
+      var logKey='maidStart_'+r.roomId;
+      var startMs=Number(sessionStorage.getItem(logKey)||0)||now;
+      var elapsed=Math.round((now-startMs)/60000);
+      h+='<div style="background:#18181f;border:1px solid #a78bfa;border-left:4px solid #a78bfa;border-radius:8px;padding:10px;margin-bottom:7px" id="inpCard_'+r.roomId+'">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleInpCard(\''+r.roomId+'\')">';
+      h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
+      h+='<span style="font-size:12px;color:#a78bfa;font-weight:700;animation:pulse 1s infinite">⚡ '+elapsed+' min</span>';
+      h+='</div>';
+      h+='<div id="inpPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
+      h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Tiempo en limpieza: <b style="color:#a78bfa">'+elapsed+' min</b></div>';
+      h+='<div style="display:flex;gap:6px">';
+      h+='<button class="btn bg" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'AVAILABLE\')">✓ Marcar Lista</button>';
+      h+='<button class="btn bo" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'CONTAMINATED\')">⚠ Contaminada</button>';
+      h+='</div></div></div>';
+    });
+  }
+
+  // ---- SECCIÓN 3: REGISTRO DE HOY ----
+  h+='<div style="font-size:11px;font-weight:700;color:#22c55e;text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">✓ Mi registro de hoy</div>';
+  h+='<div id="maidLogCont2"></div>';
+
   document.getElementById('maidCont').innerHTML=h;
+  loadMaidLogInline();
 }
 
-function loadMaidLog(){
+function toggleInpCard(rid){
+  var panel=document.getElementById('inpPanel_'+rid);
+  if(panel)panel.style.display=panel.style.display==='none'?'block':'none';
+}
+
+function doMaidTakeInline(rid,btn){
+  if(btn){btn.disabled=true;btn.textContent='Iniciando...';}
+  var startMs=Date.now();
+  try{sessionStorage.setItem('maidStart_'+rid,startMs);}catch(e){}
+  rpc('maidTake',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole},
+    function(res){
+      toast('Limpieza iniciada Hab '+rid,'ok');
+      rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});
+    },
+    function(e){toast(e.message||String(e),'err');if(btn){btn.disabled=false;btn.textContent='Empezar Limpieza';}}
+  );
+}
+
+function doMaidFinishInline(rid,state){
+  conf('Marcar Hab '+rid+(state==='CONTAMINATED'?' como CONTAMINADA':' como LISTA')+'?',function(){
+    rpc('maidFinish',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole,resultState:state},
+      function(res){
+        toast('Hab '+rid+' — '+res.cleanMins+' min','ok');
+        try{sessionStorage.removeItem('maidStart_'+rid);}catch(e){}
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});
+      },
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+
+function loadMaidLogInline(){
   if(!sess)return;
   rpc('getMaidLog',{businessDay:sess.businessDay},function(data){
-    var logs=(data.logs||[]).filter(function(l){return l.maidName===sess.userName;});
+    var logs=(data.logs||[]).filter(function(l){return l.maidName===sess.userName&&Number(l.finishedMs||0)>0;});
+    var c=document.getElementById('maidLogCont2');if(!c)return;
+    if(!logs.length){c.innerHTML='<p style="color:#9ca3af;font-size:12px">Sin registros terminados hoy.</p>';return;}
     var h='';
-    if(!logs.length){h='<p style="color:#9ca3af">Sin registros hoy.</p>';}
-    else{
-      var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-      logs.forEach(function(l){
-        var isFinished=Number(l.finishedMs||0)>0;
-        var cleanMins=isFinished?Math.round((Number(l.finishedMs)-Number(l.startedMs))/60000):null;
-        h+='<div style="background:#22222c;border-radius:8px;padding:8px 10px;margin-bottom:5px;border-left:3px solid '+(isFinished?'#22c55e':'#f59e0b')+'">';
-        h+='<div style="display:flex;justify-content:space-between;align-items:center"><b>Hab '+esc(l.roomId)+'</b><span style="font-size:10px;color:#9ca3af">'+(sn[l.shiftId]||l.shiftId||'')+'</span></div>';
-        h+='<div style="font-size:11px;color:#9ca3af;margin-top:2px">';
-        h+='Inicio: <b>'+fT(Number(l.startedMs||0))+'</b>';
-        if(isFinished)h+=' | Fin: <b>'+fT(Number(l.finishedMs))+'</b>';
-        else h+=' | <span style="color:#f59e0b">En progreso</span>';
-        if(cleanMins!==null)h+=' | <span style="color:#22c55e">'+cleanMins+' min</span>';
-        if(l.stateTo)h+=' → '+esc(l.stateTo);
-        h+='</div></div>';
-      });
-    }
-    document.getElementById('maidLogCont').innerHTML=h;
+    logs.forEach(function(l){
+      var cleanMins=Math.round((Number(l.finishedMs)-Number(l.startedMs))/60000);
+      var isDone=l.stateTo==='AVAILABLE';
+      var col=isDone?'#22c55e':'#3b82f6';
+      h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
+      h+='<div><b>Hab '+esc(l.roomId)+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(l.category||'')+'</span></div>';
+      h+='<div style="text-align:right"><div style="font-size:11px;color:'+col+';font-weight:700">'+(isDone?'✓ Lista':'⚠ Contaminada')+'</div><div style="font-size:10px;color:#9ca3af">'+cleanMins+' min</div></div>';
+      h+='</div>';
+    });
+    c.innerHTML=h;
   });
 }
 
