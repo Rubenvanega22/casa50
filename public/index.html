@@ -920,8 +920,9 @@ function doTaxi(){
 function renderMaid(){
   if(!sess||sess.userRole!=='MAID')return;
   var now=Date.now();
-  var pending=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&!r.maidInProgress;});
-  var inProgress=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&r.maidInProgress&&r.maidNameProgress===sess.userName;});
+  var pending=rooms.filter(function(r){return r.state==='DIRTY'&&!r.maidInProgress;});
+ var inProgress=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&(r.maidInProgress&&r.maidNameProgress===sess.userName||r.state==='CONTAMINATED'&&!r.maidInProgress);});
+ 
   var h='';
 
   // ---- SECCIÓN 1: PARA LIMPIAR ----
@@ -964,8 +965,12 @@ function renderMaid(){
       h+='<div id="inpPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
       h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Tiempo en limpieza: <b style="color:#a78bfa">'+elapsed+' min</b></div>';
       h+='<div style="display:flex;gap:6px">';
-      h+='<button class="btn bg" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'AVAILABLE\')">✓ Marcar Lista</button>';
-      h+='<button class="btn bo" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'CONTAMINATED\')">⚠ Contaminada</button>';
+      if(r.state==='CONTAMINATED'){
+        h+='<button class="btn bb" style="width:100%" onclick="doMaidClearInline(\''+r.roomId+'\')">✓ Habilitar Habitacion</button>';
+      }else{
+        h+='<button class="btn bg" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'AVAILABLE\')">✓ Marcar Lista</button>';
+        h+='<button class="btn bo" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'CONTAMINATED\')">⚠ Contaminada</button>';
+      }
       h+='</div></div></div>';
     });
   }
