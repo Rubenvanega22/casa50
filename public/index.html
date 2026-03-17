@@ -848,7 +848,13 @@ function doClear(){
 }
 function doMaidTake(rid){
   rpc('maidTake',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole},
-    function(res){toast('Limpieza iniciada Hab '+rid+' a las '+fT(res.startedMs),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});},
+    function(res){
+      toast('Limpieza iniciada Hab '+rid+' a las '+fT(res.startedMs),'ok');
+      var btnTake=document.getElementById('btnTake_'+rid);
+      var btnsDone=document.getElementById('btnsDone_'+rid);
+      if(btnTake)btnTake.style.display='none';
+      if(btnsDone)btnsDone.style.display='block';
+    },
     function(e){toast(e.message||String(e),'err');}
   );
 }
