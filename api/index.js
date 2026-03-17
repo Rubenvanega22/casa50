@@ -100,7 +100,9 @@ function mapRoom(r) {
     checkoutObs: r.checkout_obs || '',
     contaminatedSinceMs: Number(r.contaminated_since_ms || 0),
     lastMaidName: r.last_maid_name || '',
-    lastMaidDoneMs: Number(r.last_maid_done_ms || 0)
+    lastMaidDoneMs: Number(r.last_maid_done_ms || 0),
+    maidInProgress: !!r.maid_in_progress,
+    maidNameProgress: r.maid_name_progress || ''
   };
 }
 
@@ -442,7 +444,6 @@ async function apiSilenceAlarm(p, res) {
 }
 
 // ==================== CAMARERA: TOMAR HABITACION ====================
-// Registra started_ms cuando la camarera toma la habitacion
 async function apiMaidTake(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -455,7 +456,6 @@ async function apiMaidTake(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED') return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
 
-  // Insertar registro con started_ms = now, finished_ms = 0
   await supabase.from('maid_log').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: roomId,
@@ -463,6 +463,12 @@ async function apiMaidTake(p, res) {
     started_ms: now, finished_ms: 0,
     state_from: room.state, state_to: ''
   });
+
+  await supabase.from('rooms').update({
+    maid_in_progress: true,
+    maid_name_progress: maidName,
+    updated_at: new Date().toISOString()
+  }).eq('room_id', roomId);
 
   return ok(res, { roomId, maidName, startedMs: now });
 }
@@ -498,9 +504,11 @@ async function apiMaidFinish(p, res) {
   await supabase.from('rooms').update({
     state: resultState, state_since_ms: now,
     last_maid_name: maidName, last_maid_done_ms: now,
-    contaminated_since_ms: contaminatedSinceMs, updated_at: new Date().toISOString()
+    contaminated_since_ms: contaminatedSinceMs,
+    maid_in_progress: false,
+    maid_name_progress: '',
+    updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
-
   await supabase.from('state_history').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'MAID', user_name: maidName, room_id: roomId,
