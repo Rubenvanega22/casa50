@@ -574,30 +574,52 @@ async function apiGetMaidLog(p, res) {
 }
 
 // ==================== ACCIONES HABITACION ====================
+
+
 async function apiClearContaminated(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
+  const userName = String(p.userName || '').trim();
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'CONTAMINATED') return err(res, 'Solo si CONTAMINADA');
-  await supabase.from('rooms').update({ state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('state_history').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: String(p.userName || ''), room_id: roomId, from_state: 'CONTAMINATED', to_state: 'AVAILABLE', people: 0, meta_json: '{"action":"clearContaminated"}' });
-  return ok(res, { roomId });
-}
 
-async function apiSetMinorNote(p, res) {
-  const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = currentShiftId(now);
-  const roomId = String(p.roomId || '').trim();
-  const enabled = !!p.enabled;
-  const text = String(p.text || '').trim();
-  const room = await getRoom(roomId);
-  if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({ note_minor: enabled, note_minor_date_ms: enabled ? now : 0, note_minor_text: enabled ? text : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('maintenance').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: String(p.userRole || 'RECEPTION'), user_name: String(p.userName || ''), room_id: roomId, type: enabled ? 'MINOR' : 'RESOLVE_MINOR', text: enabled ? text : 'RESUELTO' });
+  await supabase.from('rooms').update({ 
+    state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0, 
+    maid_in_progress: false, maid_name_progress: '', 
+    updated_at: new Date().toISOString() 
+  }).eq('room_id', roomId);
+
+  await supabase.from('state_history').insert({ 
+    ts_ms: now, business_day: bDay, shift_id: shift, 
+    user_role: p.userRole||'RECEPTION', user_name: userName, room_id: roomId, 
+    from_state: 'CONTAMINATED', to_state: 'AVAILABLE', people: 0, 
+    meta_json: JSON.stringify({action:'clearContaminated', maidName: userName}) 
+  });
+
+  // Buscar log abierto y cerrarlo
+  const { data: openLog } = await supabase.from('maid_log')
+    .select('id, started_ms')
+    .eq('room_id', roomId).eq('business_day', bDay)
+    .eq('action', 'START').eq('finished_ms', 0)
+    .order('ts_ms', { ascending: false }).limit(1);
+
+  if (openLog && openLog.length) {
+    await supabase.from('maid_log').update({
+      action: 'FINISH', finished_ms: now, state_to: 'AVAILABLE'
+    }).eq('id', openLog[0].id);
+  } else {
+    await supabase.from('maid_log').insert({
+      ts_ms: now, business_day: bDay, shift_id: shift,
+      maid_name: userName, room_id: roomId,
+      action: 'FINISH', state: 'AVAILABLE', note: '',
+      started_ms: now, finished_ms: now,
+      state_from: 'CONTAMINATED', state_to: 'AVAILABLE'
+    });
+  }
+
   return ok(res, { roomId });
 }
 
