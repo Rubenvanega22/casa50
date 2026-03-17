@@ -135,6 +135,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .ext-tabs{display:flex;gap:4px;margin-bottom:8px}
 .ext-tab{flex:1;padding:7px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;cursor:pointer;font-size:11px;font-weight:700}
 .ext-tab.on{border-color:#7c5cfc;background:rgba(124,92,252,.1);color:#a78bfa}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 </style>
 </head>
 <body>
@@ -578,7 +579,7 @@ function mkCard(r){
       h+='<div class="ri">'+r.people+'p '+esc(arrLabel)+'</div>';
     }
   }
-  if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs))/60000);h+='<div class="ri">Salio: <b>'+fT(r.lastCheckoutMs)+'</b></div><div class="ri warn">'+mD+' min sucia</div>';}
+if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs))/60000);h+='<div class="ri">Salio: <b>'+fT(r.lastCheckoutMs)+'</b></div><div class="ri warn">'+mD+' min sucia'+(r.maidInProgress?' — <span style="color:#a78bfa;animation:pulse 1s infinite">🧹 '+esc(r.maidNameProgress||'')+'</span>':'')+'</div>';}
   if(eff==='CO'){var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0);if(since){var mC=Math.round((now-since)/60000);h+='<div class="ri">Desde: <b>'+fT(since)+'</b></div><div class="ri" style="color:#3b82f6">'+mC+' min</div>';}}
   if(r.noteMinor)h+='<div style="font-size:9px;color:#f59e0b;margin-top:2px">nota</div>';
   card.innerHTML=h;
@@ -921,7 +922,7 @@ function doTaxi(){
 function renderMaid(){
   if(!sess||sess.userRole!=='MAID')return;
   var now=Date.now();
-  var dirty=rooms.filter(function(r){return r.state==='DIRTY'||r.state==='CONTAMINATED';}).sort(function(a,b){return Number(a.lastCheckoutMs||0)-Number(b.lastCheckoutMs||0);});
+  var dirty=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&!r.maidInProgress;})
   var h='';
   if(!dirty.length){h='<p style="color:#9ca3af;padding:10px 0">No hay habitaciones sucias. ✓</p>';}
   else{
