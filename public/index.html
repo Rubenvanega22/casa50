@@ -450,7 +450,7 @@ function startApp(){
     setDefWk();loadM();loadMP();loadStaff();
   }
   if(sess.userRole==='RECEPTION'){loadExtra();loadLoans();loadCuadre();loadVentas();setDefWk();loadHor();}
-  if(sess.userRole==='MAID'){renderMaid();loadMaidLog();}
+  if(sess.userRole==='MAID'){renderMaid();}
   loadNotes();
 }
 
@@ -484,7 +484,8 @@ function sw(id){
   if(id==='loans')loadLoans();
   if(id==='cuadre')loadCuadre();
   if(id==='horarios')loadHor();
-  if(id==='maid'){renderMaid();loadMaidLog();}
+  if(id==='maid'){renderMaid();}
+
   if(id==='metrics')loadM();
   if(id==='ventas')loadVentas();
 }
@@ -511,7 +512,7 @@ function doRefresh(){
 }
 function doMaidRefresh(){
   rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});
-  loadMaidLog();
+
   toast('Actualizado','ok');
 }
 
