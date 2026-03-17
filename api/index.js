@@ -502,12 +502,12 @@ async function apiMaidFinish(p, res) {
   const cleanMins = Math.max(0, Math.round((now - startedMs) / 60000));
   const contaminatedSinceMs = resultState === 'CONTAMINATED' ? now : 0;
 
-  await supabase.from('rooms').update({
+await supabase.from('rooms').update({
     state: resultState, state_since_ms: now,
     last_maid_name: maidName, last_maid_done_ms: now,
-    contaminated_since_ms: contaminatedSinceMs,
-    maid_in_progress: false,
-    maid_name_progress: '',
+    contaminated_since_ms: resultState === 'CONTAMINATED' ? now : 0,
+    maid_in_progress: resultState === 'CONTAMINATED' ? true : false,
+    maid_name_progress: resultState === 'CONTAMINATED' ? maidName : '',
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
   await supabase.from('state_history').insert({
@@ -587,7 +587,7 @@ async function apiClearContaminated(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'CONTAMINATED') return err(res, 'Solo si CONTAMINADA');
 
-  await supabase.from('rooms').update({ 
+ await supabase.from('rooms').update({ 
     state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0, 
     maid_in_progress: false, maid_name_progress: '', 
     updated_at: new Date().toISOString() 
