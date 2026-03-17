@@ -948,7 +948,7 @@ function renderMaid(){
     });
   }
 
-  // ---- SECCIÓN 2: EN PROCESO ----
+ // ---- SECCIÓN 2: EN PROCESO ----
   h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">⚡ En proceso ('+inProgress.length+')</div>';
   if(!inProgress.length){
     h+='<p style="color:#9ca3af;font-size:12px;margin-bottom:12px">Ninguna en proceso.</p>';
@@ -962,14 +962,9 @@ function renderMaid(){
       h+='<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleInpCard(\''+r.roomId+'\')">';
       h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
       h+='<span style="font-size:12px;color:'+inpCol+';font-weight:700;animation:pulse 1s infinite">'+(r.state==='CONTAMINATED'?'🔵':'⚡')+' '+elapsed+' min</span>';
-```
-
-Luego busque en `loadMaidLogInline` la línea:
-```
-var col='#22c55e';
       h+='</div>';
       h+='<div id="inpPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
-      h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Tiempo en limpieza: <b style="color:#a78bfa">'+elapsed+' min</b></div>';
+      h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Tiempo en limpieza: <b style="color:'+inpCol+'">'+elapsed+' min</b></div>';
       h+='<div style="display:flex;gap:6px">';
       if(r.state==='CONTAMINATED'){
         h+='<button class="btn bb" style="width:100%" onclick="doMaidClearInline(\''+r.roomId+'\')">✓ Habilitar Habitacion</button>';
@@ -980,7 +975,6 @@ var col='#22c55e';
       h+='</div></div></div>';
     });
   }
-
   // ---- SECCIÓN 3: REGISTRO DE HOY ----
   h+='<div style="font-size:11px;font-weight:700;color:#22c55e;text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">✓ Mi registro de hoy</div>';
   h+='<div id="maidLogCont2"></div>';
