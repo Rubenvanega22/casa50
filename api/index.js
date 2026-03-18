@@ -1272,7 +1272,7 @@ async function apiGetProyeccion(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const anio=Number(p.anio||new Date().getFullYear());
   const[tareasRes,mesesRes]=await Promise.all([
-    supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes').order('area'),
+   supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes',{ascending:true}),
     supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
   ]);
   return ok(res,{
