@@ -1520,7 +1520,19 @@ function renderProyeccion(){
   var pendientes=tareas.filter(function(t){return t.estado==='pendiente';}).length;
   var pct=total>0?Math.round((realizadas/total)*100):0;
 
+  // Alerta tareas del mes actual pendientes
+  var mesHoy=new Date().getMonth()+1;
+  var pendientesEsteMes=tareas.filter(function(t){return t.mes===mesHoy&&t.estado==='pendiente';});
   var h='';
+  if(pendientesEsteMes.length){
+    h+='<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;animation:pulse 1s infinite">';
+    h+='<span style="font-size:16px">⚠️</span>';
+    h+='<div><b style="color:#ef4444">'+pendientesEsteMes.length+' tarea(s) pendientes este mes</b>';
+    h+='<div style="font-size:11px;color:#9ca3af">Márcalas "En proceso" o "Cancelada" para desactivar esta alerta</div></div>';
+    h+='</div>';
+  }
+
+  // ---- HEADER ----
 
   // ---- HEADER ----
   h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
@@ -1568,11 +1580,15 @@ function renderProyeccion(){
         if(t.responsable)h+='<span style="color:#9ca3af">👤 '+esc(t.responsable)+'</span>';
         h+='<span style="color:'+prCol+'">● '+t.prioridad+'</span>';
         h+='<span style="color:'+stCol+'">'+t.estado.replace('_',' ')+'</span>';
+        if(t.fechaEstado)h+='<span style="color:#6b7280">📅 '+t.fechaEstado+'</span>';
         h+='</div></div>';
-        h+='<div style="display:flex;gap:4px;flex-shrink:0">';
-        if(t.estado!=='realizado')h+='<button class="btn bg xs" onclick="quickDone('+t.id+')">✓</button>';
+        h+='<div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap">';
+        if(t.estado!=='realizado')h+='<button class="btn bg xs" onclick="quickEstado('+t.id+',\'realizado\')" title="Realizada">✓</button>';
+        if(t.estado!=='en_proceso')h+='<button class="btn by xs" onclick="quickEstado('+t.id+',\'en_proceso\')" title="En proceso">▶</button>';
+        if(t.estado!=='pausado')h+='<button class="btn bb xs" onclick="quickEstado('+t.id+',\'pausado\')" title="Pausado">⏸</button>';
+        if(t.estado!=='cancelado')h+='<button class="btn br xs" onclick="quickEstado('+t.id+',\'cancelado\')" title="Cancelado">✕</button>';
         h+='<button class="btn bk xs" onclick="editTarea('+t.id+')">✏</button>';
-        h+='<button class="btn br xs" onclick="delTarea('+t.id+')">✕</button>';
+        h+='<button class="btn br xs" onclick="delTarea('+t.id+')">🗑</button>';
         h+='</div></div></div>';
       });
       h+='</div>';
@@ -1628,13 +1644,19 @@ function toggleProyArea(area){
   proyAreaOpen[area]=!proyAreaOpen[area];
   renderProyeccion();
 }
-function quickDone(id){
+function quickEstado(id,estado){
   var t=getTareaById(id);
-  rpc('updateTarea',{id:id,userRole:sess.userRole,nombre:t.nombre,descripcion:t.descripcion,area:t.area,mes:t.mes,responsable:t.responsable,prioridad:t.prioridad,estado:'realizado',observaciones:t.observaciones,anio:proyAnio},
-    function(){loadProyeccion();toast('✓ Marcada como realizada','ok');},
+  var hoy=new Date().toISOString().split('T')[0];
+  rpc('updateTarea',{id:id,userRole:sess.userRole,nombre:t.nombre,descripcion:t.descripcion,area:t.area,mes:t.mes,responsable:t.responsable,prioridad:t.prioridad,estado:estado,observaciones:t.observaciones,anio:proyAnio,fechaEstado:hoy},
+    function(){loadProyeccion();toast('Estado: '+estado.replace('_',' '),'ok');},
     function(e){toast(e.message,'err');}
   );
 }
+function quickDone(id){
+  quickEstado(id,'realizado');
+}
+ 
+ 
 function getTareaById(id){
   return proyData.tareas.find(function(x){return x.id===id;})||{};
 }
