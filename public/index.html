@@ -1604,7 +1604,7 @@ function renderProyeccion(){
   h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">✏</th>';
   h+='</tr></thead><tbody>';
   for(var mi=1;mi<=12;mi++){
-    var md=meses.find(function(m){return m.mes===mi;})||{mes:mi,ventasAnterior:0,ventasActual:0,gastos:0};
+    var md=meses.find(function(m){return m.mes===mi;})||{mes:mi,ventasAnterior:0,ventasActual:0,gastos:0,gastosAnterior:0};
     var util=md.ventasActual-md.gastos;
     var utilAnt=md.ventasAnterior-(md.gastosAnterior||0);
     var crec=utilAnt>0?((util-utilAnt)/utilAnt*100).toFixed(1):(md.ventasAnterior>0?((md.ventasActual-md.ventasAnterior)/md.ventasAnterior*100).toFixed(1):'-');
@@ -1681,7 +1681,7 @@ function saveTareaModal(){
   else{rpc('saveTarea',data,function(){closeM('mTarea');loadProyeccion();toast('Tarea creada','ok');},function(e){toast(e.message,'err');});}
 }
 function editMesProyeccion(mes){
-  var md=(proyData.meses||[]).find(function(m){return m.mes===mes;})||{mes:mes,ventasAnterior:0,ventasActual:0,gastos:0,meta:0,presupuesto:0,observaciones:''};
+  var md=(proyData.meses||[]).find(function(m){return m.mes===mes;})||{mes:mes,ventasAnterior:0,ventasActual:0,gastos:0,gastosAnterior:0,meta:0,presupuesto:0,observaciones:''};
   var h='<div class="mh"><div class="mt">'+MESES_N[mes-1]+' '+proyAnio+'</div><button class="mc" onclick="closeM(\'mMesProy\')">✕</button></div>';
   h+='<label>Ventas año anterior</label><input type="number" id="mpAnt" value="'+(md.ventasAnterior||0)+'" min="0">';
   h+='<label>Ventas año actual</label><input type="number" id="mpAct" value="'+(md.ventasActual||0)+'" min="0">';
