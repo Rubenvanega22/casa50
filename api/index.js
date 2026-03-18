@@ -95,7 +95,7 @@ function mapRoom(r) {
     people: Number(r.people || 0), checkInMs: Number(r.check_in_ms || 0),
     dueMs: Number(r.due_ms || 0), lastCheckoutMs: Number(r.last_checkout_ms || 0),
     noteMinor: !!r.note_minor, noteMinorText: r.note_minor_text || '',
-    disabled: !!r.disabled, disabledReason: r.disabled_reason || '',
+    disabled: !!r.disabled, disabledReason: r.disabled_reason || '', disabledDateMs: Number(r.disabled_date_ms || 0),
     arrivalType: r.arrival_type || '', arrivalPlate: r.arrival_plate || '',
     alarmSilencedMs: Number(r.alarm_silenced_ms || 0),
     alarmSilencedForDueMs: Number(r.alarm_silenced_for_due_ms || 0),
