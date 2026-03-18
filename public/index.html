@@ -156,7 +156,20 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label>Hora de salida</label><input type="time" id="exExitTime">
 <label>Pago</label><input type="number" id="exPay" min="0" placeholder="Valor a pagar">
 <button class="btn bg full" style="margin-top:8px" onclick="saveExCo()">Registrar Salida y Pago</button></div></div>
-<div class="ov" id="mStaff"><div class="modal"><div class="mh"><div class="mt" id="mStaffT">Personal</div><button class="mc" onclick="closeM('mStaff')">✕</button></div><input type="hidden" id="sEditId"><label>Nombre</label><input type="text" id="sName"><label>Area</label><select id="sArea"><option value="">Selecciona</option><option>Recepcion</option><option>Camarera</option><option>Patiero</option><option>Mantenimiento</option><option>Administrador</option></select><label>Estado</label><select id="sActive"><option value="true">Activo</option><option value="false">Inactivo</option></select><button class="btn ba full" style="margin-top:8px" onclick="saveStaff()">Guardar</button></div></div>
+<div class="ov" id="mStaff"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt" id="mStaffT">Personal</div><button class="mc" onclick="closeM('mStaff')">✕</button></div>
+<input type="hidden" id="sEditId">
+<label>Nombre completo</label><input type="text" id="sName" placeholder="Nombre completo">
+<label>Cédula</label><input type="text" id="sCedula" placeholder="Número de cédula">
+<label>Celular</label><input type="text" id="sCelular" placeholder="Número de celular">
+<label>Área</label><select id="sArea"><option value="">Selecciona</option><option>Recepcion</option><option>Camarera</option><option>Patiero</option><option>Mantenimiento</option><option>Administrador</option></select>
+<label>Estado</label><select id="sActive"><option value="true">Activo</option><option value="false">Inactivo</option></select>
+<label>Fecha de nacimiento</label><input type="date" id="sFechaNac" onchange="updEdad()">
+<div id="edadDisp" style="font-size:11px;color:#a78bfa;margin-bottom:6px"></div>
+<label>Fecha de ingreso</label><input type="date" id="sFechaIngreso" onchange="updFechaSalida()">
+<div id="fechaSalidaDisp" style="font-size:11px;color:#22c55e;margin-bottom:6px"></div>
+<label>Contacto de emergencia</label><input type="text" id="sContacto" placeholder="Nombre del contacto">
+<button class="btn ba full" style="margin-top:8px" onclick="saveStaff()">Guardar</button>
+</div></div>
 <div class="ov" id="mGoal"><div class="modal"><div class="mh"><div class="mt">Meta del Dia</div><button class="mc" onclick="closeM('mGoal')">✕</button></div><label>Meta en COP</label><input type="number" id="goalIn" min="0"><button class="btn ba full" style="margin-top:8px" onclick="saveGoal()">Guardar Meta</button></div></div>
 <div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt">PIN Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><label>Nombre</label><input type="text" id="pName"><label>PIN</label><input type="password" id="pVal" maxlength="10"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
 <div class="ov" id="mChPin"><div class="modal"><div class="mh"><div class="mt">Cambiar PIN Admin</div><button class="mc" onclick="closeM('mChPin')">✕</button></div><label>PIN actual</label><input type="password" id="cpCur"><label>Nuevo PIN</label><input type="password" id="cpNew"><button class="btn br full" style="margin-top:8px" onclick="doChPin()">Cambiar</button></div></div>
@@ -1437,18 +1450,149 @@ function getWS(d){var day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1),mon=new
 function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});}
 function renderStaff(){
   var areas=['Recepcion','Camarera','Patiero','Mantenimiento','Administrador'];
+  var hoy=new Date();
+  var mesActual=hoy.getMonth()+1;
+  var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  // --- Bloque cumpleaños del mes ---
+  var cumples=staffList.filter(function(s){
+    if(!s.fechaNacimiento)return false;
+    var mes=Number(s.fechaNacimiento.split('-')[1]);
+    return mes===mesActual;
+  }).sort(function(a,b){
+    return Number(a.fechaNacimiento.split('-')[2])-Number(b.fechaNacimiento.split('-')[2]);
+  });
+
   var h='';
+  if(cumples.length){
+    h+='<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px;margin-bottom:14px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#f59e0b;margin-bottom:8px">🎂 Cumpleaños en '+meses[mesActual-1]+'</div>';
+    cumples.forEach(function(s){
+      var nac=new Date(s.fechaNacimiento);
+      var edad=hoy.getFullYear()-nac.getFullYear();
+      var m=hoy.getMonth()-nac.getMonth();
+      if(m<0||(m===0&&hoy.getDate()<nac.getDate()))edad--;
+      var dia=s.fechaNacimiento.split('-')[2];
+      var esHoy=Number(dia)===hoy.getDate()&&mesActual===hoy.getMonth()+1;
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(245,158,11,.2)">';
+      h+='<div><b style="'+(esHoy?'color:#f59e0b':'')+'">'+esc(s.name)+(esHoy?' 🎉 HOY':'')+'</b>';
+      h+='<span style="font-size:10px;color:#9ca3af;margin-left:6px">'+esc(s.area)+'</span></div>';
+      h+='<div style="font-size:11px;color:#f59e0b">Día '+Number(dia)+' — cumple '+edad+' años</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+
+  // --- Listado por área ---
   areas.forEach(function(area){
-    var members=staffList.filter(function(s){return String(s.area||'')===area;});if(!members.length)return;
+    var members=staffList.filter(function(s){return String(s.area||'')===area;});
+    if(!members.length)return;
     h+='<div class="cfg"><h3>'+area+'</h3>';
-    members.forEach(function(s){var active=s.active!=='false'&&s.active!==false&&String(s.active||'')!=='0';h+='<div class="pr2"><div style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;'+(active?'':'opacity:.5;text-decoration:line-through')+'">'+esc(s.name)+'</span><span style="font-size:10px;color:'+(active?'#22c55e':'#ef4444')+'">'+(active?'Activo':'Inactivo')+'</span></div><button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button></div>';});
+    members.forEach(function(s){
+      var active=s.active!=='false'&&s.active!==false&&String(s.active||'')!=='0';
+      // Calcular edad
+      var edadStr='';
+      if(s.fechaNacimiento){
+        var nac=new Date(s.fechaNacimiento);
+        var edad=hoy.getFullYear()-nac.getFullYear();
+        var mv=hoy.getMonth()-nac.getMonth();
+        if(mv<0||(mv===0&&hoy.getDate()<nac.getDate()))edad--;
+        edadStr=edad+' años';
+      }
+      // Calcular fecha salida
+      var salidaStr='';
+      if(s.fechaIngreso){
+        var sal=new Date(s.fechaIngreso);sal.setFullYear(sal.getFullYear()+1);
+        salidaStr=sal.getFullYear()+'-'+String(sal.getMonth()+1).padStart(2,'0')+'-'+String(sal.getDate()).padStart(2,'0');
+      }
+      h+='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:7px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+      h+='<div><span style="font-weight:700;font-size:13px;'+(active?'':'opacity:.5;text-decoration:line-through')+'">'+esc(s.name)+'</span>';
+      h+='<span style="font-size:10px;color:'+(active?'#22c55e':'#ef4444')+';margin-left:6px">'+(active?'Activo':'Inactivo')+'</span></div>';
+      h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button></div>';
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
+      if(s.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(s.cedula)+'</b></span>';
+      if(s.celular)h+='<span>📱 <b style="color:#e5e7eb">'+esc(s.celular)+'</b></span>';
+      if(edadStr)h+='<span>Edad: <b style="color:#a78bfa">'+edadStr+'</b></span>';
+      if(s.fechaNacimiento)h+='<span>Nac: <b style="color:#e5e7eb">'+esc(s.fechaNacimiento)+'</b></span>';
+      if(s.fechaIngreso)h+='<span>Ingreso: <b style="color:#e5e7eb">'+esc(s.fechaIngreso)+'</b></span>';
+      if(salidaStr)h+='<span>Sal. tentativa: <b style="color:#22c55e">'+salidaStr+'</b></span>';
+      if(s.contactoEmergencia)h+='<span style="grid-column:span 2">🚨 Emergencia: <b style="color:#f59e0b">'+esc(s.contactoEmergencia)+'</b></span>';
+      h+='</div></div>';
+    });
     h+='</div>';
   });
   document.getElementById('staffCont').innerHTML=h||'<p style="color:#9ca3af">Sin personal registrado.</p>';
 }
-function openAddStaff(){document.getElementById('sEditId').value='';document.getElementById('sName').value='';document.getElementById('sArea').value='';document.getElementById('sActive').value='true';document.getElementById('mStaffT').textContent='Agregar Personal';openM('mStaff');}
-function editStaff(id){var s=staffList.find(function(x){return String(x.id||'')===id;});if(!s)return;document.getElementById('sEditId').value=id;document.getElementById('sName').value=s.name||'';document.getElementById('sArea').value=s.area||'';document.getElementById('sActive').value=(s.active===false||s.active==='false')?'false':'true';document.getElementById('mStaffT').textContent='Editar: '+s.name;openM('mStaff');}
-function saveStaff(){var id=document.getElementById('sEditId').value,nm=(document.getElementById('sName').value||'').trim(),area=document.getElementById('sArea').value,active=document.getElementById('sActive').value==='true';if(!nm){toast('Nombre requerido.','err');return;}if(!area){toast('Area requerida.','err');return;}rpc('saveStaff',{id:id,name:nm,area:area,active:active,type:'nomina',userRole:sess.userRole},function(){toast('Guardado.','ok');closeM('mStaff');loadStaff();},function(e){toast(e.message||String(e),'err');});}
+function updEdad(){
+  var fn=document.getElementById('sFechaNac').value;
+  var el=document.getElementById('edadDisp');
+  if(!fn){el.textContent='';return;}
+  var hoy=new Date(),nac=new Date(fn);
+  var edad=hoy.getFullYear()-nac.getFullYear();
+  var m=hoy.getMonth()-nac.getMonth();
+  if(m<0||(m===0&&hoy.getDate()<nac.getDate()))edad--;
+  el.textContent='Edad: '+edad+' años';
+}
+function updFechaSalida(){
+  var fi=document.getElementById('sFechaIngreso').value;
+  var el=document.getElementById('fechaSalidaDisp');
+  if(!fi){el.textContent='';return;}
+  var salida=new Date(fi);salida.setFullYear(salida.getFullYear()+1);
+  var y=salida.getFullYear(),m=String(salida.getMonth()+1).padStart(2,'0'),d=String(salida.getDate()).padStart(2,'0');
+  el.textContent='Fecha tentativa de salida: '+y+'-'+m+'-'+d;
+}
+function openAddStaff(){
+  document.getElementById('sEditId').value='';
+  document.getElementById('sName').value='';
+  document.getElementById('sCedula').value='';
+  document.getElementById('sCelular').value='';
+  document.getElementById('sArea').value='';
+  document.getElementById('sActive').value='true';
+  document.getElementById('sFechaNac').value='';
+  document.getElementById('sFechaIngreso').value='';
+  document.getElementById('sContacto').value='';
+  document.getElementById('edadDisp').textContent='';
+  document.getElementById('fechaSalidaDisp').textContent='';
+  document.getElementById('mStaffT').textContent='Agregar Personal';
+  openM('mStaff');
+}
+function editStaff(id){
+  var s=staffList.find(function(x){return String(x.id||'')===id;});
+  if(!s)return;
+  document.getElementById('sEditId').value=id;
+  document.getElementById('sName').value=s.name||'';
+  document.getElementById('sCedula').value=s.cedula||'';
+  document.getElementById('sCelular').value=s.celular||'';
+  document.getElementById('sArea').value=s.area||'';
+  document.getElementById('sActive').value=(s.active===false||s.active==='false')?'false':'true';
+  document.getElementById('sFechaNac').value=s.fechaNacimiento||'';
+  document.getElementById('sFechaIngreso').value=s.fechaIngreso||'';
+  document.getElementById('sContacto').value=s.contactoEmergencia||'';
+  document.getElementById('mStaffT').textContent='Editar: '+s.name;
+  updEdad();updFechaSalida();
+  openM('mStaff');
+}
+
+function saveStaff(){
+  var id=document.getElementById('sEditId').value,
+      nm=(document.getElementById('sName').value||'').trim(),
+      area=document.getElementById('sArea').value,
+      active=document.getElementById('sActive').value==='true',
+      cedula=(document.getElementById('sCedula').value||'').trim(),
+      celular=(document.getElementById('sCelular').value||'').trim(),
+      fechaNac=document.getElementById('sFechaNac').value||'',
+      fechaIngreso=document.getElementById('sFechaIngreso').value||'',
+      contacto=(document.getElementById('sContacto').value||'').trim();
+  if(!nm){toast('Nombre requerido.','err');return;}
+  if(!area){toast('Area requerida.','err');return;}
+  rpc('saveStaff',{id:id,name:nm,area:area,active:active,cedula:cedula,celular:celular,
+    fechaNacimiento:fechaNac,fechaIngreso:fechaIngreso,contactoEmergencia:contacto,
+    type:'nomina',userRole:sess.userRole},
+    function(){toast('Guardado.','ok');closeM('mStaff');loadStaff();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
 // ---- CUADRE ADMIN ----
 function loadCuadreAdmin(){
   var day=document.getElementById('cuadreAdminDay').value;
