@@ -367,6 +367,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="maintCont"><p style="color:#9ca3af">Selecciona un rango de fechas y presiona Ver.</p></div>
 </div>
+ <!-- PROYECCION (admin) -->
+<div class="pnl" id="pnl-proyeccion">
+<div id="proyCont"><p style="color:#9ca3af">Cargando...</p></div>
+</div>
 <!-- CONFIG (admin) -->
 <div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
@@ -489,7 +493,7 @@ function buildTabs(){
   if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
   if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'horarios',l:'Horarios'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'});
   tabs.push({id:'notes',l:'Notas'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
@@ -1494,6 +1498,204 @@ function saveSched(){
   );
 }
 function getWS(d){var day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1),mon=new Date(d.setDate(diff));return mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');}
+// ---- PROYECCION (admin) ----
+var proyData={tareas:[],meses:[]},proyAnio=new Date().getFullYear(),proyAreaOpen={},proyEditTarea=null;
+var PROY_AREAS=['Infraestructura','Habitaciones','Lenceria','Pasillos','Lavanderia','Recepcion','Camaras','Marketing','Personal','Sistemas'];
+var MESES_N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function loadProyeccion(){
+  rpc('getProyeccion',{anio:proyAnio,userRole:sess.userRole},function(data){
+    proyData=data;
+    renderProyeccion();
+  },function(e){toast(e.message||String(e),'err');});
+}
+
+function renderProyeccion(){
+  var tareas=proyData.tareas||[];
+  var meses=proyData.meses||[];
+  var total=tareas.length;
+  var realizadas=tareas.filter(function(t){return t.estado==='realizado';}).length;
+  var enProceso=tareas.filter(function(t){return t.estado==='en_proceso';}).length;
+  var pendientes=tareas.filter(function(t){return t.estado==='pendiente';}).length;
+  var pct=total>0?Math.round((realizadas/total)*100):0;
+
+  var h='';
+
+  // ---- HEADER ----
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+  h+='<div style="display:flex;align-items:center;gap:8px"><button class="btn bk xs" onclick="proyAnio--;loadProyeccion()">◀</button>';
+  h+='<b style="font-size:16px;color:#a78bfa">'+proyAnio+'</b>';
+  h+='<button class="btn bk xs" onclick="proyAnio++;loadProyeccion()">▶</button></div>';
+  h+='<button class="btn ba sm" onclick="openNewTarea()">+ Nueva Tarea</button></div>';
+
+  // ---- RESUMEN ----
+  h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:12px">';
+  h+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#9ca3af;margin-bottom:6px"><span>Avance total '+proyAnio+'</span><span style="color:#a78bfa;font-weight:800">'+pct+'%</span></div>';
+  h+='<div style="background:#22222c;border-radius:20px;height:8px;margin-bottom:10px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:#7c5cfc;border-radius:20px;transition:width .5s"></div></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;text-align:center">';
+  h+='<div><div style="font-size:18px;font-weight:800;color:#e5e7eb">'+total+'</div><div style="font-size:9px;color:#9ca3af">Total</div></div>';
+  h+='<div><div style="font-size:18px;font-weight:800;color:#22c55e">'+realizadas+'</div><div style="font-size:9px;color:#9ca3af">Realizadas</div></div>';
+  h+='<div><div style="font-size:18px;font-weight:800;color:#f59e0b">'+enProceso+'</div><div style="font-size:9px;color:#9ca3af">En Proceso</div></div>';
+  h+='<div><div style="font-size:18px;font-weight:800;color:#6b7280">'+pendientes+'</div><div style="font-size:9px;color:#9ca3af">Pendientes</div></div>';
+  h+='</div></div>';
+
+  // ---- AREAS ----
+  h+='<div class="sec">Plan Operativo por Área</div>';
+  PROY_AREAS.forEach(function(area){
+    var areaTareas=tareas.filter(function(t){return t.area===area;});
+    var areaReal=areaTareas.filter(function(t){return t.estado==='realizado';}).length;
+    var areaPct=areaTareas.length>0?Math.round((areaReal/areaTareas.length)*100):0;
+    var isOpen=proyAreaOpen[area];
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;margin-bottom:6px;overflow:hidden">';
+    h+='<div onclick="toggleProyArea(\''+area+'\')" style="padding:10px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">';
+    h+='<div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px">'+area+'</b><span style="font-size:10px;color:#9ca3af">'+areaTareas.length+' tareas</span></div>';
+    h+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:#a78bfa">'+areaPct+'%</span><span style="color:#9ca3af">'+(isOpen?'▲':'▼')+'</span></div>';
+    h+='</div>';
+    if(isOpen){
+      h+='<div style="padding:0 12px 10px">';
+      h+='<button class="btn ba xs" style="margin-bottom:8px" onclick="openNewTareaArea(\''+area+'\')">+ Agregar tarea</button>';
+      if(!areaTareas.length){h+='<p style="font-size:12px;color:#6b7280">Sin tareas en esta área.</p>';}
+      areaTareas.sort(function(a,b){return a.mes-b.mes;}).forEach(function(t){
+        var stCol={pendiente:'#6b7280',en_proceso:'#f59e0b',realizado:'#22c55e',pausado:'#3b82f6',cancelado:'#ef4444'}[t.estado]||'#6b7280';
+        var prCol={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'}[t.prioridad]||'#9ca3af';
+        h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:6px;border-left:3px solid '+stCol+'">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px">';
+        h+='<div style="flex:1"><div style="font-weight:700;font-size:12px">'+esc(t.nombre)+'</div>';
+        if(t.descripcion)h+='<div style="font-size:11px;color:#9ca3af;margin-top:2px">'+esc(t.descripcion)+'</div>';
+        h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:10px">';
+        h+='<span style="color:#9ca3af">📅 '+MESES_N[t.mes-1]+'</span>';
+        if(t.responsable)h+='<span style="color:#9ca3af">👤 '+esc(t.responsable)+'</span>';
+        h+='<span style="color:'+prCol+'">● '+t.prioridad+'</span>';
+        h+='<span style="color:'+stCol+'">'+t.estado.replace('_',' ')+'</span>';
+        h+='</div></div>';
+        h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+        if(t.estado!=='realizado')h+='<button class="btn bg xs" onclick="quickDone('+t.id+')">✓</button>';
+        h+='<button class="btn bk xs" onclick="editTarea('+t.id+')">✏</button>';
+        h+='<button class="btn br xs" onclick="delTarea('+t.id+')">✕</button>';
+        h+='</div></div></div>';
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+
+  // ---- SECCION B: OBJETIVOS ----
+  h+='<div class="sec" style="margin-top:16px">Objetivos de Crecimiento</div>';
+  var totAnt=0,totAct=0,totGas=0;
+  meses.forEach(function(m){totAnt+=m.ventasAnterior;totAct+=m.ventasActual;totGas+=m.gastos;});
+  var crecTotal=totAnt>0?((totAct-totAnt)/totAnt*100).toFixed(1):0;
+  var utilTotal=totAct-totGas;
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-bottom:12px">';
+  h+='<div class="mc2"><div class="ml">Crecimiento año</div><div class="mv '+(crecTotal>=0?'g':'r')+'">'+crecTotal+'%</div></div>';
+  h+='<div class="mc2"><div class="ml">Ventas actuales</div><div class="mv g">'+fmt(totAct)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Ventas anteriores</div><div class="mv b">'+fmt(totAnt)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Utilidad total</div><div class="mv '+(utilTotal>=0?'g':'r')+'">'+fmt(utilTotal)+'</div></div>';
+  h+='</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:500px">';
+  h+='<thead><tr>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">Mes</th>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#3b82f6;border:1px solid #2e2e3a">V. Anterior</th>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#22c55e;border:1px solid #2e2e3a">V. Actual</th>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#ef4444;border:1px solid #2e2e3a">Gastos</th>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#a78bfa;border:1px solid #2e2e3a">Utilidad</th>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#f59e0b;border:1px solid #2e2e3a">Crec %</th>';
+  h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">✏</th>';
+  h+='</tr></thead><tbody>';
+  for(var mi=1;mi<=12;mi++){
+    var md=meses.find(function(m){return m.mes===mi;})||{mes:mi,ventasAnterior:0,ventasActual:0,gastos:0};
+    var util=md.ventasActual-md.gastos;
+    var crec=md.ventasAnterior>0?((md.ventasActual-md.ventasAnterior)/md.ventasAnterior*100).toFixed(1):'-';
+    var crecCol=crec==='-'?'#9ca3af':Number(crec)>0?'#22c55e':Number(crec)<0?'#ef4444':'#f59e0b';
+    h+='<tr>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;font-weight:700">'+MESES_N[mi-1]+'</td>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#3b82f6;text-align:right">'+fmt(md.ventasAnterior)+'</td>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#22c55e;text-align:right">'+fmt(md.ventasActual)+'</td>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#ef4444;text-align:right">'+fmt(md.gastos)+'</td>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#a78bfa;text-align:right">'+fmt(util)+'</td>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;font-weight:700;color:'+crecCol+';text-align:right">'+(crec==='-'?'-':crec+'%')+'</td>';
+    h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;text-align:center"><button class="btn bk xs" onclick="editMesProyeccion('+mi+')">✏</button></td>';
+    h+='</tr>';
+  }
+  h+='</tbody></table></div>';
+  document.getElementById('proyCont').innerHTML=h;
+}
+
+function toggleProyArea(area){
+  proyAreaOpen[area]=!proyAreaOpen[area];
+  renderProyeccion();
+}
+function quickDone(id){
+  var t=getTareaById(id);
+  rpc('updateTarea',{id:id,userRole:sess.userRole,nombre:t.nombre,descripcion:t.descripcion,area:t.area,mes:t.mes,responsable:t.responsable,prioridad:t.prioridad,estado:'realizado',observaciones:t.observaciones,anio:proyAnio},
+    function(){loadProyeccion();toast('✓ Marcada como realizada','ok');},
+    function(e){toast(e.message,'err');}
+  );
+}
+function getTareaById(id){
+  return proyData.tareas.find(function(x){return x.id===id;})||{};
+}
+function delTarea(id){
+  conf('¿Borrar esta tarea?',function(){
+    rpc('deleteTarea',{id:id,userRole:sess.userRole},
+      function(){loadProyeccion();toast('Tarea borrada','ok');},
+      function(e){toast(e.message,'err');}
+    );
+  });
+}
+function editTarea(id){proyEditTarea=getTareaById(id);openTareaModal(proyEditTarea);}
+function openNewTarea(){proyEditTarea=null;openTareaModal({});}
+function openNewTareaArea(area){proyEditTarea=null;openTareaModal({area:area});}
+function openTareaModal(t){
+  var areas=PROY_AREAS.concat(['Otra']);
+  var h='<div class="mh"><div class="mt">'+(t.id?'Editar Tarea':'Nueva Tarea')+'</div><button class="mc" onclick="closeM(\'mTarea\')">✕</button></div>';
+  h+='<label>Nombre</label><input type="text" id="tNombre" value="'+esc(t.nombre||'')+'" placeholder="Nombre de la tarea">';
+  h+='<label>Descripción</label><input type="text" id="tDesc" value="'+esc(t.descripcion||'')+'" placeholder="Descripción corta">';
+  h+='<label>Área</label><select id="tArea">';
+  areas.forEach(function(a){h+='<option value="'+a+'"'+(t.area===a?' selected':'')+'>'+a+'</option>';});
+  h+='</select>';
+  h+='<label>Mes</label><select id="tMes">';
+  MESES_N.forEach(function(m,i){h+='<option value="'+(i+1)+'"'+((t.mes===i+1)||(i===0&&!t.mes)?' selected':'')+'>'+m+'</option>';});
+  h+='</select>';
+  h+='<label>Responsable</label><input type="text" id="tResp" value="'+esc(t.responsable||'')+'" placeholder="Nombre del responsable">';
+  h+='<label>Prioridad</label><select id="tPrior">';
+  ['alta','media','baja'].forEach(function(p){h+='<option value="'+p+'"'+(t.prioridad===p?' selected':'')+'>'+p+'</option>';});
+  h+='</select>';
+  h+='<label>Estado</label><select id="tEstado">';
+  [['pendiente','Pendiente'],['en_proceso','En proceso'],['realizado','Realizado'],['pausado','Pausado'],['cancelado','Cancelado']].forEach(function(s){h+='<option value="'+s[0]+'"'+(t.estado===s[0]?' selected':'')+'>'+s[1]+'</option>';});
+  h+='</select>';
+  h+='<label>Observaciones</label><textarea id="tObs" rows="2" placeholder="Observaciones...">'+esc(t.observaciones||'')+'</textarea>';
+  h+='<button class="btn ba full" style="margin-top:8px" onclick="saveTareaModal()">Guardar</button>';
+  var modal=document.getElementById('mTarea');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mTarea';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mTareaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mTarea');});document.body.appendChild(div);}
+  document.getElementById('mTareaB').innerHTML=h;
+  openM('mTarea');
+}
+function saveTareaModal(){
+  var data={nombre:(document.getElementById('tNombre').value||'').trim(),descripcion:(document.getElementById('tDesc').value||'').trim(),area:document.getElementById('tArea').value,mes:Number(document.getElementById('tMes').value),responsable:(document.getElementById('tResp').value||'').trim(),prioridad:document.getElementById('tPrior').value,estado:document.getElementById('tEstado').value,observaciones:(document.getElementById('tObs').value||'').trim(),anio:proyAnio,userRole:sess.userRole};
+  if(!data.nombre){toast('Nombre requerido.','err');return;}
+  if(proyEditTarea&&proyEditTarea.id){data.id=proyEditTarea.id;rpc('updateTarea',data,function(){closeM('mTarea');loadProyeccion();toast('Tarea actualizada','ok');},function(e){toast(e.message,'err');});}
+  else{rpc('saveTarea',data,function(){closeM('mTarea');loadProyeccion();toast('Tarea creada','ok');},function(e){toast(e.message,'err');});}
+}
+function editMesProyeccion(mes){
+  var md=(proyData.meses||[]).find(function(m){return m.mes===mes;})||{mes:mes,ventasAnterior:0,ventasActual:0,gastos:0,meta:0,presupuesto:0,observaciones:''};
+  var h='<div class="mh"><div class="mt">'+MESES_N[mes-1]+' '+proyAnio+'</div><button class="mc" onclick="closeM(\'mMesProy\')">✕</button></div>';
+  h+='<label>Ventas año anterior</label><input type="number" id="mpAnt" value="'+(md.ventasAnterior||0)+'" min="0">';
+  h+='<label>Ventas año actual</label><input type="number" id="mpAct" value="'+(md.ventasActual||0)+'" min="0">';
+  h+='<label>Gastos del mes</label><input type="number" id="mpGas" value="'+(md.gastos||0)+'" min="0">';
+  h+='<label>Meta del mes</label><input type="number" id="mpMeta" value="'+(md.meta||0)+'" min="0">';
+  h+='<label>Presupuesto</label><input type="number" id="mpPres" value="'+(md.presupuesto||0)+'" min="0">';
+  h+='<label>Observaciones</label><textarea id="mpObs" rows="2">'+esc(md.observaciones||'')+'</textarea>';
+  h+='<button class="btn ba full" style="margin-top:8px" onclick="saveMesProy('+mes+')">Guardar</button>';
+  var modal=document.getElementById('mMesProy');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mMesProy';div.innerHTML='<div class="modal"><div id="mMesProyB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mMesProy');});document.body.appendChild(div);}
+  document.getElementById('mMesProyB').innerHTML=h;
+  openM('mMesProy');
+}
+function saveMesProy(mes){
+  rpc('saveMesProyeccion',{anio:proyAnio,mes:mes,userRole:sess.userRole,ventasAnterior:Number(document.getElementById('mpAnt').value||0),ventasActual:Number(document.getElementById('mpAct').value||0),gastos:Number(document.getElementById('mpGas').value||0),meta:Number(document.getElementById('mpMeta').value||0),presupuesto:Number(document.getElementById('mpPres').value||0),observaciones:(document.getElementById('mpObs').value||'').trim()},
+  function(){closeM('mMesProy');loadProyeccion();toast('Guardado','ok');},
+  function(e){toast(e.message,'err');});
+}
 // ---- MANTENIMIENTO (admin) ----
 function loadMaintMonth(){
   var now=new Date();
