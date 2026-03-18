@@ -1504,6 +1504,7 @@ var PROY_AREAS=['Infraestructura','Habitaciones','Lenceria','Pasillos','Lavander
 var MESES_N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 function loadProyeccion(){
+  toast('Role: '+(sess?sess.userRole:'sin sesion'),'ok');
   rpc('getProyeccion',{anio:proyAnio,userRole:sess.userRole},function(data){
     proyData=data;
     renderProyeccion();
