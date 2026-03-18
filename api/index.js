@@ -1319,6 +1319,9 @@ async function apiSaveMesProyeccion(p, res) {
     anio,mes,meta:Number(p.meta||0),presupuesto:Number(p.presupuesto||0),
     observaciones:String(p.observaciones||'').trim(),
     ventas_anterior:Number(p.ventasAnterior||0),
+    ventas_actual:Number(p.ventasActual||0),
+    gastos:Number(p.gastos||0),
+    gastos_anterior:Number(p.gastosAnterior||0)
   },{onConflict:'anio,mes'});
   return ok(res,{anio,mes});
 }
