@@ -636,7 +636,7 @@ async function apiClearContaminated(p, res) {
 async function apiSetDisabled(p, res) {
   const userRole = String(p.userRole || '').toUpperCase();
   const disableFlag = !!p.enabled;
-  if (!disableFlag && userRole !== 'ADMIN') return err(res, 'Solo ADMIN puede habilitar habitaciones');
+ 
   if (userRole !== 'ADMIN' && userRole !== 'RECEPTION') return err(res, 'Solo ADMIN o RECEPTION');
   const now = Date.now();
   const bDay = businessDay(now);
