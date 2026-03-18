@@ -173,6 +173,10 @@ module.exports = async function handler(req, res) {
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
+        case 'getRoomIssues':    return await apiGetRoomIssues(payload, res);
+case 'addRoomIssue':     return await apiAddRoomIssue(payload, res);
+case 'resolveRoomIssue': return await apiResolveRoomIssue(payload, res);
+case 'deleteRoomIssue':  return await apiDeleteRoomIssue(payload, res);
         case 'getProyeccion':    return await apiGetProyeccion(payload, res);
 case 'saveTarea':        return await apiSaveTarea(payload, res);
 case 'updateTarea':      return await apiUpdateTarea(payload, res);
@@ -1326,6 +1330,36 @@ async function apiSaveMesProyeccion(p, res) {
     gastos_anterior:Number(p.gastosAnterior||0)
   },{onConflict:'anio,mes'});
   return ok(res,{anio,mes});
+}
+async function apiGetRoomIssues(p, res) {
+  const roomId=String(p.roomId||'').trim();
+  const{data}=await supabase.from('room_issues').select('*').eq('room_id',roomId).order('created_at',{ascending:false});
+  return ok(res,{issues:(data||[]).map(r=>({id:r.id,roomId:r.room_id,type:r.type,description:r.description,resolved:!!r.resolved,resolvedAt:r.resolved_at||'',resolvedBy:r.resolved_by||'',createdAt:r.created_at||'',createdBy:r.created_by||''}))});
+}
+async function apiAddRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const roomId=String(p.roomId||'').trim();
+  const type=String(p.type||'dano').trim();
+  const description=String(p.description||'').trim();
+  if(!roomId)return err(res,'roomId requerido');
+  if(!description)return err(res,'Descripcion requerida');
+  await supabase.from('room_issues').insert({room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
+  return ok(res,{});
+}
+async function apiResolveRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const id=Number(p.id||0);
+  if(!id)return err(res,'id requerido');
+  const hoy=new Date().toISOString().split('T')[0];
+  await supabase.from('room_issues').update({resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
+  return ok(res,{});
+}
+async function apiDeleteRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id=Number(p.id||0);
+  if(!id)return err(res,'id requerido');
+  await supabase.from('room_issues').delete().eq('id',id);
+  return ok(res,{});
 }
 async function apiClearMaintHistory(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
