@@ -1277,7 +1277,7 @@ async function apiGetProyeccion(p, res) {
     supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
   ]);
   return ok(res,{
-    tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||''})),
+    tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||'',fechaEstado:r.fecha_estado||''})),
     meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0),gastosAnterior:Number(r.gastos_anterior||0)}))
  });
   } catch(e) { return err(res, 'Error proyeccion: '+e.message); }
@@ -1301,7 +1301,9 @@ async function apiUpdateTarea(p, res) {
     nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
     area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
     prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
-    observaciones:String(p.observaciones||'').trim(),updated_at:new Date().toISOString()
+    observaciones:String(p.observaciones||'').trim(),
+    fecha_estado:p.fechaEstado||new Date().toISOString().split('T')[0],
+    updated_at:new Date().toISOString()
   }).eq('id',id);
   return ok(res,{id});
 }
