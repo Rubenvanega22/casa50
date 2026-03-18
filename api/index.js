@@ -173,6 +173,11 @@ module.exports = async function handler(req, res) {
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
+        case 'getProyeccion':    return await apiGetProyeccion(payload, res);
+case 'saveTarea':        return await apiSaveTarea(payload, res);
+case 'updateTarea':      return await apiUpdateTarea(payload, res);
+case 'deleteTarea':      return await apiDeleteTarea(payload, res);
+case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
         case 'clearMaidLog': return await apiClearMaidLog(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
@@ -1262,6 +1267,60 @@ async function apiGetMaintHistory(p, res) {
     repairDesc:r.repair_desc||'', repairCost:Number(r.repair_cost||0),
     userName:r.user_name||'', userRole:r.user_role||''
   }))});
+}
+async function apiGetProyeccion(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const anio=Number(p.anio||new Date().getFullYear());
+  const[tareasRes,mesesRes]=await Promise.all([
+    supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes').order('area'),
+    supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
+  ]);
+  return ok(res,{
+    tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||''})),
+    meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0)}))
+  });
+}
+async function apiSaveTarea(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const anio=Number(p.anio||new Date().getFullYear());
+  const{data}=await supabase.from('proyeccion_tareas').insert({
+    anio,nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
+    area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
+    prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
+    observaciones:String(p.observaciones||'').trim(),updated_at:new Date().toISOString()
+  }).select().single();
+  return ok(res,{id:data.id});
+}
+async function apiUpdateTarea(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id=Number(p.id||0);
+  if(!id) return err(res,'id requerido');
+  await supabase.from('proyeccion_tareas').update({
+    nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
+    area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
+    prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
+    observaciones:String(p.observaciones||'').trim(),updated_at:new Date().toISOString()
+  }).eq('id',id);
+  return ok(res,{id});
+}
+async function apiDeleteTarea(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id=Number(p.id||0);
+  if(!id) return err(res,'id requerido');
+  await supabase.from('proyeccion_tareas').delete().eq('id',id);
+  return ok(res,{id});
+}
+async function apiSaveMesProyeccion(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const anio=Number(p.anio||new Date().getFullYear()),mes=Number(p.mes||1);
+  await supabase.from('proyeccion_meses').upsert({
+    anio,mes,meta:Number(p.meta||0),presupuesto:Number(p.presupuesto||0),
+    observaciones:String(p.observaciones||'').trim(),
+    ventas_anterior:Number(p.ventasAnterior||0),
+    ventas_actual:Number(p.ventasActual||0),
+    gastos:Number(p.gastos||0)
+  },{onConflict:'anio,mes'});
+  return ok(res,{anio,mes});
 }
 async function apiClearMaintHistory(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
