@@ -733,12 +733,20 @@ function buildRoomB(r){
     if(r.disabled)h+='<button class="btn bg xs" onclick="doEnable()">Habilitar Habitacion</button>';
     else h+='<label>Deshabilitar — motivo</label><input type="text" id="disR" placeholder="Motivo (min 3 letras)"><button class="btn br xs" style="margin-top:4px" onclick="doDisable()">Deshabilitar</button>';
   }
-
+if(isR){
+    h+='<hr>';
+    if(r.disabled){
+      h+='<button class="btn bg xs" onclick="doEnable()">Habilitar Habitacion</button>';
+    } else {
+      h+='<label>Deshabilitar — motivo</label><input type="text" id="disR2" placeholder="Motivo (min 3 letras)"><button class="btn br xs" style="margin-top:4px" onclick="doDisableR()">Deshabilitar</button>';
+    }
+  }
   if(isR){
     h+='<hr><label>Devolucion — monto</label><input type="number" id="refAmt" placeholder="Monto"><label>Motivo</label><input type="text" id="refR" placeholder="Motivo"><button class="btn br xs" style="margin-top:4px" onclick="doRef()">Registrar Devolucion</button>';
     h+='<hr><button class="btn bb xs" onclick="doTaxi()">Taxi ($3.000)</button>';
   }
-
+ 
+ 
   document.getElementById('mRoomB').innerHTML=h;
   updExtraPeopleInfo(r.category);
 }
@@ -897,6 +905,16 @@ function doResolveNote(){
 }
 function doDisable(){
   var r=(document.getElementById('disR')||{}).value||'';
+  if(r.trim().length<3){toast('Motivo debe tener minimo 3 caracteres.','err');return;}
+  conf('Deshabilitar Hab '+curRoom.roomId+'?',function(){
+    rpc('setDisabled',{roomId:curRoom.roomId,enabled:true,reason:r,userName:sess.userName,userRole:sess.userRole},
+      function(){toast('Deshabilitada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+ function doDisableR(){
+  var r=(document.getElementById('disR2')||{}).value||'';
   if(r.trim().length<3){toast('Motivo debe tener minimo 3 caracteres.','err');return;}
   conf('Deshabilitar Hab '+curRoom.roomId+'?',function(){
     rpc('setDisabled',{roomId:curRoom.roomId,enabled:true,reason:r,userName:sess.userName,userRole:sess.userRole},
