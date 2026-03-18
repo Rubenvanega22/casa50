@@ -50,7 +50,9 @@ function businessDayRange(bDay) {
 }
 
 function currentShiftId(ms) {
-  const h = new Date(ms || Date.now()).getHours();
+  const bogota = new Date((ms || Date.now()) + (-5 * 60 * 60 * 1000));
+  // Ajuste manual UTC-5 (Colombia no tiene horario de verano)
+  const h = bogota.getUTCHours();
   if (h >= 6 && h < 14) return 'SHIFT_1';
   if (h >= 14 && h < 21) return 'SHIFT_2';
   return 'SHIFT_3';
