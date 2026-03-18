@@ -1527,12 +1527,19 @@ function loadM(){
 function renderMet(m,hourly){
   if(!m||!m.totals){return '<p style="color:#ef4444">Error cargando metricas</p>';}
   var t=m.totals||{};
-  var h='<div class="mg"><div class="mc2"><div class="ml">Ventas Dia</div><div class="mv g">'+fmt(t.sales||0)+'</div></div>';
-  h+='<div class="mc2"><div class="ml">Neto</div><div class="mv '+(t.net>=0?'g':'r')+'">'+fmt(t.net||0)+'</div></div>';
-  h+='<div class="mc2"><div class="ml">Efectivo</div><div class="mv g">'+fmt(t.totalEfectivo||0)+'</div></div>';
-  h+='<div class="mc2"><div class="ml">Tarjeta</div><div class="mv b">'+fmt(t.totalTarjeta||0)+'</div></div>';
-  h+='<div class="mc2"><div class="ml">Nequi</div><div class="mv a">'+fmt(t.totalNequi||0)+'</div></div>';
-  h+='<div class="mc2"><div class="ml">Hab. Vendidas</div><div class="mv a">'+(t.shiftRoomsSold||0)+'</div></div></div>';
+  var sh=document.getElementById('mSh').value;
+  var ventas=sh?(t.shiftSales||0):(t.sales||0);
+  var neto=sh?(t.shiftNet||0):(t.net||0);
+  var efectivo=sh?(t.shiftEfectivo||0):(t.totalEfectivo||0);
+  var tarjeta=sh?(t.shiftTarjeta||0):(t.totalTarjeta||0);
+  var nequi=sh?(t.shiftNequi||0):(t.totalNequi||0);
+  var habs=t.shiftRoomsSold||0;
+  var h='<div class="mg"><div class="mc2"><div class="ml">Ventas '+(sh?'Turno':'Dia')+'</div><div class="mv g">'+fmt(ventas)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Neto</div><div class="mv '+(neto>=0?'g':'r')+'">'+fmt(neto)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Efectivo</div><div class="mv g">'+fmt(efectivo)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Tarjeta</div><div class="mv b">'+fmt(tarjeta)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Nequi</div><div class="mv a">'+fmt(nequi)+'</div></div>';
+  h+='<div class="mc2"><div class="ml">Hab. Vendidas</div><div class="mv a">'+habs+'</div></div></div>';
 
   if(m.goalProgress!=null){
     var pct=Math.min(100,m.goalProgress);
