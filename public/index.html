@@ -484,6 +484,7 @@ function startApp(){
     document.getElementById('mDay').value=sess.businessDay||'';
     document.getElementById('mdDay').value=sess.businessDay||'';
     setDefWk();loadM();loadMP();loadStaff();
+    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];}});
   }
   if(sess.userRole==='RECEPTION'){loadExtra();loadLoans();loadCuadre();loadVentas();setDefWk();loadHor();}
   if(sess.userRole==='MAID'){renderMaid();}
@@ -513,7 +514,7 @@ function sw(id){
   if(id==='notes')loadNotes();
   if(id==='maids')loadMP();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
- if(id==='maint'){loadMaintMonth();}
+ if(id==='maint'){loadMaintMonth();if(roomIssuesOpen)loadRoomIssuesGrid();}
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
   if(id==='sched'){setDefWk();loadSched();}
