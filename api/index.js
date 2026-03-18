@@ -172,6 +172,7 @@ module.exports = async function handler(req, res) {
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
+        case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
         case 'clearMaidLog': return await apiClearMaidLog(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
@@ -1261,6 +1262,14 @@ async function apiGetMaintHistory(p, res) {
     repairDesc:r.repair_desc||'', repairCost:Number(r.repair_cost||0),
     userName:r.user_name||'', userRole:r.user_role||''
   }))});
+}
+async function apiClearMaintHistory(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const from=String(p.from||'');
+  const to=String(p.to||'');
+  if(!from||!to) return err(res,'Fechas requeridas');
+  await supabase.from('maintenance').delete().gte('business_day',from).lte('business_day',to);
+  return ok(res,{});
 }
 async function apiClearMaidLog(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
