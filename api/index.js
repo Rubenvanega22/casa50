@@ -1269,6 +1269,7 @@ async function apiGetMaintHistory(p, res) {
   }))});
 }
 async function apiGetProyeccion(p, res) {
+  try {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const anio=Number(p.anio||new Date().getFullYear());
   const[tareasRes,mesesRes]=await Promise.all([
@@ -1278,7 +1279,8 @@ async function apiGetProyeccion(p, res) {
   return ok(res,{
     tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||''})),
     meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0)}))
-  });
+ });
+  } catch(e) { return err(res, 'Error proyeccion: '+e.message); }
 }
 async function apiSaveTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
