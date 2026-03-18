@@ -171,6 +171,12 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label>Contacto de emergencia</label><input type="text" id="sContacto" placeholder="Nombre del contacto">
 <button class="btn ba full" style="margin-top:8px" onclick="saveStaff()">Guardar</button>
 </div></div>
+ <div class="ov" id="mEnable"><div class="modal"><div class="mh"><div class="mt">Habilitar Habitacion</div><button class="mc" onclick="closeM('mEnable')">✕</button></div>
+<div id="mEnableInfo" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
+<label>Descripcion del arreglo (opcional)</label><input type="text" id="enableDesc" placeholder="Ej: Se cambio la chapa">
+<label>Costo del arreglo (opcional)</label><input type="number" id="enableCost" min="0" placeholder="0">
+<button class="btn bg full" style="margin-top:8px" onclick="doEnableConfirm()">Habilitar</button>
+</div></div>
 <div class="ov" id="mGoal"><div class="modal"><div class="mh"><div class="mt">Meta del Dia</div><button class="mc" onclick="closeM('mGoal')">✕</button></div><label>Meta en COP</label><input type="number" id="goalIn" min="0"><button class="btn ba full" style="margin-top:8px" onclick="saveGoal()">Guardar Meta</button></div></div>
 <div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt">PIN Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><label>Nombre</label><input type="text" id="pName"><label>PIN</label><input type="password" id="pVal" maxlength="10"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
 <div class="ov" id="mChPin"><div class="modal"><div class="mh"><div class="mt">Cambiar PIN Admin</div><button class="mc" onclick="closeM('mChPin')">✕</button></div><label>PIN actual</label><input type="password" id="cpCur"><label>Nuevo PIN</label><input type="password" id="cpNew"><button class="btn br full" style="margin-top:8px" onclick="doChPin()">Cambiar</button></div></div>
@@ -932,12 +938,18 @@ function doDisable(){
   });
 }
 function doEnable(){
-  conf('Habilitar Hab '+curRoom.roomId+'?',function(){
-    rpc('setDisabled',{roomId:curRoom.roomId,enabled:false,reason:'',userName:sess.userName,userRole:sess.userRole},
-      function(){toast('Habilitada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
-      function(e){toast(e.message||String(e),'err');}
-    );
-  });
+  document.getElementById('mEnableInfo').textContent='Habitacion '+curRoom.roomId+' — '+esc(curRoom.disabledReason||'');
+  document.getElementById('enableDesc').value='';
+  document.getElementById('enableCost').value='';
+  openM('mEnable');
+}
+function doEnableConfirm(){
+  var desc=(document.getElementById('enableDesc').value||'').trim();
+  var cost=Number(document.getElementById('enableCost').value||0);
+  rpc('setDisabled',{roomId:curRoom.roomId,enabled:false,reason:'',repairDesc:desc,repairCost:cost,userName:sess.userName,userRole:sess.userRole},
+    function(){toast('Habilitada.','ok');closeM('mEnable');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+    function(e){toast(e.message||String(e),'err');}
+  );
 }
 function doRef(){
   var amt=Number((document.getElementById('refAmt')||{}).value||0),reason=(document.getElementById('refR')||{}).value||'';
