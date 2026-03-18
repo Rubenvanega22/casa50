@@ -357,7 +357,16 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="cuadreAdminCont"><p style="color:#9ca3af">Selecciona una fecha y presiona Ver.</p></div>
 </div>
-
+<!-- MANTENIMIENTO (admin) -->
+<div class="pnl" id="pnl-maint">
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+<input type="date" id="maintFrom" style="width:auto;margin:0">
+<input type="date" id="maintTo" style="width:auto;margin:0">
+<button class="btn ba sm" onclick="loadMaint()">Ver</button>
+<button class="btn bk sm" onclick="loadMaintMonth()">Este mes</button>
+</div>
+<div id="maintCont"><p style="color:#9ca3af">Selecciona un rango de fechas y presiona Ver.</p></div>
+</div>
 <!-- CONFIG (admin) -->
 <div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
@@ -480,7 +489,7 @@ function buildTabs(){
   if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
   if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'horarios',l:'Horarios'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'});
   tabs.push({id:'notes',l:'Notas'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
@@ -497,6 +506,7 @@ function sw(id){
   if(id==='notes')loadNotes();
   if(id==='maids')loadMP();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
+ if(id==='maint'){loadMaintMonth();}
   if(id==='config')loadCfg();
   if(id==='staff')loadStaff();
   if(id==='sched'){setDefWk();loadSched();}
@@ -1484,7 +1494,50 @@ function saveSched(){
   );
 }
 function getWS(d){var day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1),mon=new Date(d.setDate(diff));return mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');}
-
+// ---- MANTENIMIENTO (admin) ----
+function loadMaintMonth(){
+  var now=new Date();
+  var from=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+  var last=new Date(now.getFullYear(),now.getMonth()+1,0);
+  var to=last.getFullYear()+'-'+String(last.getMonth()+1).padStart(2,'0')+'-'+String(last.getDate()).padStart(2,'0');
+  document.getElementById('maintFrom').value=from;
+  document.getElementById('maintTo').value=to;
+  loadMaint();
+}
+function loadMaint(){
+  var from=document.getElementById('maintFrom').value;
+  var to=document.getElementById('maintTo').value;
+  if(!from||!to){toast('Selecciona rango de fechas.','err');return;}
+  var el=document.getElementById('maintCont');
+  el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
+  rpc('getMaintHistory',{from:from,to:to,userRole:sess.userRole},function(data){
+    var logs=data.logs||[];
+    if(!logs.length){el.innerHTML='<p style="color:#9ca3af">Sin registros en ese periodo.</p>';return;}
+    var h='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+logs.length+' registros del '+from+' al '+to+'</div>';
+    var byRoom={};
+    logs.forEach(function(l){if(!byRoom[l.roomId])byRoom[l.roomId]=[];byRoom[l.roomId].push(l);});
+    Object.keys(byRoom).sort().forEach(function(rid){
+      var items=byRoom[rid];
+      h+='<div class="sh-block"><div class="sh-hdr">Habitacion '+esc(rid)+'</div><div class="sh-body">';
+      items.forEach(function(l){
+        var isDisable=l.type==='DISABLE';
+        var col=isDisable?'#ef4444':'#22c55e';
+        h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:6px">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
+        h+='<b style="color:'+col+'">'+(isDisable?'🔴 Deshabilitada':'🟢 Habilitada')+'</b>';
+        h+='<span style="font-size:11px;color:#9ca3af">'+new Date(Number(l.tsMs)).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})+'</span>';
+        h+='</div>';
+        if(isDisable&&l.text)h+='<div style="font-size:11px;margin-top:4px">Motivo: <b style="color:#f59e0b">'+esc(l.text)+'</b></div>';
+        if(!isDisable&&l.repairDesc)h+='<div style="font-size:11px;margin-top:4px">Arreglo: <b style="color:#22c55e">'+esc(l.repairDesc)+'</b></div>';
+        if(!isDisable&&l.repairCost>0)h+='<div style="font-size:11px">Costo: <b style="color:#a78bfa">'+fmt(l.repairCost)+'</b></div>';
+        h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">Por: '+esc(l.userName)+'</div>';
+        h+='</div>';
+      });
+      h+='</div></div>';
+    });
+    el.innerHTML=h;
+  },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+}
 // ---- PERSONAL (admin) ----
 function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});}
 function renderStaff(){
