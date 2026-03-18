@@ -211,6 +211,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="brand">CASA 50</div>
 <div class="bdg" id="hsh">--</div>
 <div style="font-size:11px;color:#9ca3af" id="clk"></div>
+<div id="proyAlerta" style="display:none;font-size:11px;font-weight:700;color:#ef4444;animation:pulse 1s infinite;cursor:pointer" onclick="sw('proyeccion')"></div>
 </div>
 <div style="display:flex;gap:5px;align-items:center">
 <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">↻ Actualizar</button>
@@ -1504,10 +1505,10 @@ var PROY_AREAS=['Infraestructura','Habitaciones','Lenceria','Pasillos','Lavander
 var MESES_N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 function loadProyeccion(){
-  toast('Role: '+(sess?sess.userRole:'sin sesion'),'ok');
   rpc('getProyeccion',{anio:proyAnio,userRole:sess.userRole},function(data){
     proyData=data;
     renderProyeccion();
+    updProyAlerta();
   },function(e){toast(e.message||String(e),'err');document.getElementById('proyCont').innerHTML='<p style="color:#ef4444">Error: '+esc(e.message||String(e))+'</p>';});
 }
 
@@ -1639,7 +1640,19 @@ function renderProyeccion(){
   h+='</tbody></table></div>';
   document.getElementById('proyCont').innerHTML=h;
 }
-
+function updProyAlerta(){
+  var el=document.getElementById('proyAlerta');
+  if(!el)return;
+  var mesHoy=new Date().getMonth()+1;
+  var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var pendientes=(proyData.tareas||[]).filter(function(t){return t.mes===mesHoy&&t.estado==='pendiente';});
+  if(pendientes.length){
+    el.style.display='block';
+    el.textContent='⚠️ '+pendientes.length+' tarea(s) pendientes '+meses[mesHoy-1];
+  } else {
+    el.style.display='none';
+  }
+}
 function toggleProyArea(area){
   proyAreaOpen[area]=!proyAreaOpen[area];
   renderProyeccion();
