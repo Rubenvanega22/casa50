@@ -167,7 +167,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="card">
 <h1 id="logoTitle">CASA 50</h1>
 <div class="sub">SPA MOTEL</div>
-<div class="ps">SISTEMA DE RECEPCION V2</div>
+<div class="ps">SISTEMA DE RECEPCION</div>
 <div class="err h" id="lerr"></div>
 <label>Rol</label>
 <select id="lrol" onchange="onRol()">
@@ -862,7 +862,7 @@ function doMaidTake(rid){
 function doMaidFinish(rid,state){
   conf('Marcar Hab '+rid+(state==='CONTAMINATED'?' como CONTAMINADA':' como LISTA')+' ?',function(){
     rpc('maidFinish',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole,resultState:state},
-      function(res){toast('Hab '+rid+' — Tiempo limpieza: '+res.cleanMins+' min','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});},
+      function(res){toast('Hab '+rid+' — Tiempo limpieza: '+res.cleanMins+' min','ok');closeM('mRoom');loadMaidLog();rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});},
       function(e){toast(e.message||String(e),'err');}
     );
   });
@@ -1052,7 +1052,7 @@ function saveMaidLog(){
   var room=(document.getElementById('mlRoom').value||'').trim(),state=document.getElementById('mlState').value,note=(document.getElementById('mlNote').value||'').trim();
   if(!room){toast('Ingresa el numero de habitacion.','err');return;}
   rpc('maidLogAction',{roomId:room,action:'ENTRY',state:state,note:note,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole},
-    function(){toast('Registrado.','ok');closeM('mMaidLog');document.getElementById('mlRoom').value='';document.getElementById('mlNote').value='';},
+    function(){toast('Registrado.','ok');closeM('mMaidLog');loadMaidLog();document.getElementById('mlRoom').value='';document.getElementById('mlNote').value='';},
     function(e){toast(e.message||String(e),'err');}
   );
 }
@@ -1702,19 +1702,6 @@ function updNoteBadge(notes){
 function openPin(nm){document.getElementById('pName').value=nm||'';document.getElementById('pVal').value='';openM('mPin');}
 function savePin(){var nm=(document.getElementById('pName').value||'').trim(),pin=(document.getElementById('pVal').value||'').trim();if(!nm){toast('Nombre requerido.','err');return;}rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},function(){toast('PIN guardado.','ok');closeM('mPin');loadCfg();},function(e){toast(e.message||String(e),'err');});}
 function doChPin(){var cur=document.getElementById('cpCur').value||'',nw=document.getElementById('cpNew').value||'';rpc('changeAdminPin',{currentPin:cur,newPin:nw,userRole:sess.userRole},function(){toast('PIN actualizado.','ok');closeM('mChPin');},function(e){toast(e.message||String(e),'err');});}
-function loadCfg(){
-  var el=document.getElementById('cfgCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
-  rpc('getReceptionPins',{userRole:sess.userRole},function(pd){
-    var h='<div class="cfg"><h3>PIN Administrador</h3><button class="btn br xs" onclick="openM(\'mChPin\')">Cambiar PIN Admin</button></div>';
-    h+='<div class="cfg"><h3>PINs Recepcionistas</h3>';
-    if(pd.pins&&pd.pins.length)pd.pins.forEach(function(p){h+='<div class="pr2"><span style="font-weight:600">'+esc(p.userName)+'</span><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:'+(p.hasPin?'#22c55e':'#6b7280')+'">'+(p.hasPin?'Con PIN':'Sin PIN')+'</span><button class="btn ba xs" onclick="openPin(\''+esc(p.userName)+'\')">Editar</button></div></div>';});
-    h+='<div style="margin-top:8px"><button class="btn ba xs" onclick="openPin(\'\')">+ Nueva Recepcionista</button></div></div>';
-    el.innerHTML=h;
-  });
-}
-
-function openGoal(){document.getElementById('goalIn').value=Number((BS.settings||{}).DAILY_GOAL||0)||'';openM('mGoal');}
-function saveGoal(){var g=Number(document.getElementById('goalIn').value||0);rpc('setDailyGoal',{goal:g,userRole:sess.userRole},function(){BS.settings=BS.settings||{};BS.settings.DAILY_GOAL=String(g);toast('Meta: '+fmt(g),'ok');closeM('mGoal');loadM();},function(e){toast(e.message||String(e),'err');});}
 </script>
 </body>
 </html>
