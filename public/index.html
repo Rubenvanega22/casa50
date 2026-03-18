@@ -1513,30 +1513,83 @@ function loadMaint(){
   rpc('getMaintHistory',{from:from,to:to,userRole:sess.userRole},function(data){
     var logs=data.logs||[];
     if(!logs.length){el.innerHTML='<p style="color:#9ca3af">Sin registros en ese periodo.</p>';return;}
-    var h='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+logs.length+' registros del '+from+' al '+to+'</div>';
+    // Agrupar por habitacion
     var byRoom={};
     logs.forEach(function(l){if(!byRoom[l.roomId])byRoom[l.roomId]=[];byRoom[l.roomId].push(l);});
+    // Contar deshabilitaciones por habitacion para metrica
+    var counts=Object.keys(byRoom).map(function(rid){
+      return{roomId:rid,disables:byRoom[rid].filter(function(l){return l.type==='DISABLE';}).length};
+    }).sort(function(a,b){return b.disables-a.disables;});
+    var maxCount=counts.length?counts[0].disables:1;
+    // Metrica arriba
+    var h='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+    h+='<div style="font-size:11px;color:#9ca3af">'+logs.length+' registros del '+from+' al '+to+'</div>';
+    h+='<button class="btn br xs" onclick="clearMaintHistory()">🗑 Borrar registros</button>';
+    h+='</div>';
+    // Ranking habitaciones
+    if(counts.length>1){
+      h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:12px">';
+      h+='<div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:8px">🏆 Habitaciones que más se dañan</div>';
+      counts.slice(0,5).forEach(function(c,i){
+        var pct=Math.round((c.disables/maxCount)*100);
+        var col=i===0?'#ef4444':i===1?'#f59e0b':'#6b7280';
+        h+='<div style="margin-bottom:5px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span>Hab '+esc(c.roomId)+'</span><span style="color:'+col+'">'+c.disables+' veces</span></div>';
+        h+='<div style="background:#22222c;border-radius:20px;height:5px"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:20px"></div></div></div>';
+      });
+      h+='</div>';
+    }
+    // Casillas por habitacion
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px;margin-bottom:12px">';
     Object.keys(byRoom).sort().forEach(function(rid){
       var items=byRoom[rid];
-      h+='<div class="sh-block"><div class="sh-hdr">Habitacion '+esc(rid)+'</div><div class="sh-body">';
-      items.forEach(function(l){
+      var disables=items.filter(function(l){return l.type==='DISABLE';}).length;
+      var enables=items.filter(function(l){return l.type==='ENABLE';}).length;
+      var col=disables>2?'#ef4444':disables>1?'#f59e0b':'#6b7280';
+      h+='<div onclick="showMaintRoom(\''+esc(rid)+'\')" style="background:#18181f;border:1px solid #2e2e3a;border-top:3px solid '+col+';border-radius:10px;padding:9px;cursor:pointer">';
+      h+='<div style="font-size:15px;font-weight:800">'+esc(rid)+'</div>';
+      h+='<div style="font-size:9px;color:#9ca3af">'+items[0].roomId+'</div>';
+      h+='<div style="font-size:11px;color:'+col+';margin-top:3px">'+disables+' daños</div>';
+      h+='<div style="font-size:10px;color:#22c55e">'+enables+' arreglos</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+    // Detalle oculto por habitacion
+    Object.keys(byRoom).sort().forEach(function(rid){
+      h+='<div id="maint_'+rid+'" style="display:none;margin-bottom:10px">';
+      h+='<div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:6px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">Historial Hab '+esc(rid)+'</div>';
+      byRoom[rid].forEach(function(l){
         var isDisable=l.type==='DISABLE';
         var col=isDisable?'#ef4444':'#22c55e';
         h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:6px">';
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
+        h+='<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">';
         h+='<b style="color:'+col+'">'+(isDisable?'🔴 Deshabilitada':'🟢 Habilitada')+'</b>';
-        h+='<span style="font-size:11px;color:#9ca3af">'+new Date(Number(l.tsMs)).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})+'</span>';
+        h+='<span style="font-size:10px;color:#9ca3af">'+new Date(Number(l.tsMs)).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'})+'</span>';
         h+='</div>';
         if(isDisable&&l.text)h+='<div style="font-size:11px;margin-top:4px">Motivo: <b style="color:#f59e0b">'+esc(l.text)+'</b></div>';
         if(!isDisable&&l.repairDesc)h+='<div style="font-size:11px;margin-top:4px">Arreglo: <b style="color:#22c55e">'+esc(l.repairDesc)+'</b></div>';
-        if(!isDisable&&l.repairCost>0)h+='<div style="font-size:11px">Costo: <b style="color:#a78bfa">'+fmt(l.repairCost)+'</b></div>';
-        h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">Por: '+esc(l.userName)+'</div>';
+        if(!isDisable&&Number(l.repairCost)>0)h+='<div style="font-size:11px">Costo: <b style="color:#a78bfa">'+fmt(l.repairCost)+'</b></div>';
+        h+='<div style="font-size:10px;color:#9ca3af;margin-top:2px">Por: '+esc(l.userName)+'</div>';
         h+='</div>';
       });
-      h+='</div></div>';
+      h+='</div>';
     });
     el.innerHTML=h;
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+}
+function showMaintRoom(rid){
+  var el=document.getElementById('maint_'+rid);
+  if(!el)return;
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+function clearMaintHistory(){
+  var from=document.getElementById('maintFrom').value;
+  var to=document.getElementById('maintTo').value;
+  conf('Borrar todos los registros del '+from+' al '+to+'?',function(){
+    rpc('clearMaintHistory',{from:from,to:to,userRole:sess.userRole},
+      function(){toast('Registros borrados.','ok');loadMaint();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
 }
 // ---- PERSONAL (admin) ----
 function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});}
