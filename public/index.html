@@ -1052,7 +1052,7 @@ function saveMaidLog(){
   var room=(document.getElementById('mlRoom').value||'').trim(),state=document.getElementById('mlState').value,note=(document.getElementById('mlNote').value||'').trim();
   if(!room){toast('Ingresa el numero de habitacion.','err');return;}
   rpc('maidLogAction',{roomId:room,action:'ENTRY',state:state,note:note,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole},
-    function(){toast('Registrado.','ok');closeM('mMaidLog');loadMaidLog();document.getElementById('mlRoom').value='';document.getElementById('mlNote').value='';},
+    function(){toast('Registrado.','ok');closeM('mMaidLog');closeM('mRoom');rpc(('mlRoom').value='';document.getElementById('mlNote').value='';},
     function(e){toast(e.message||String(e),'err');}
   );
 }
