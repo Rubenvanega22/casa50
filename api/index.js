@@ -633,6 +633,19 @@ async function apiClearContaminated(p, res) {
 }
 
 // v3: RECEPTION puede bloquear, solo ADMIN puede desbloquear
+async function apiSetMinorNote(p, res) {
+  const roomId = String(p.roomId || '').trim();
+  const enabled = !!p.enabled;
+  const text = String(p.text || '').trim();
+  const room = await getRoom(roomId);
+  if (!room) return err(res, 'Habitacion no existe');
+  await supabase.from('rooms').update({
+    note_minor: enabled,
+    note_minor_text: enabled ? text : '',
+    updated_at: new Date().toISOString()
+  }).eq('room_id', roomId);
+  return ok(res, { roomId, noteMinor: enabled });
+}
 async function apiSetDisabled(p, res) {
   const userRole = String(p.userRole || '').toUpperCase();
   const disableFlag = !!p.enabled;
