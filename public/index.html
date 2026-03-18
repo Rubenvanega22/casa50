@@ -367,6 +367,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bk sm" onclick="loadMaintMonth()">Este mes</button>
 </div>
 <div id="maintCont"><p style="color:#9ca3af">Selecciona un rango de fechas y presiona Ver.</p></div>
+<div class="sec" style="cursor:pointer" onclick="toggleRoomIssues()">🏨 Estado de Habitaciones <span id="roomIssuesArrow">▼</span></div>
+<div id="roomIssuesCont" style="display:none"></div>
 </div>
  <!-- PROYECCION (admin) -->
 <div class="pnl" id="pnl-proyeccion">
@@ -1735,6 +1737,115 @@ function saveMesProy(mes){
   rpc('saveMesProyeccion',{anio:proyAnio,mes:mes,userRole:sess.userRole,ventasAnterior:Number(document.getElementById('mpAnt').value||0),ventasActual:Number(document.getElementById('mpAct').value||0),gastos:Number(document.getElementById('mpGas').value||0),gastosAnterior:Number(document.getElementById('mpGasAnt').value||0),meta:Number(document.getElementById('mpMeta').value||0),presupuesto:Number(document.getElementById('mpPres').value||0),observaciones:(document.getElementById('mpObs').value||'').trim()},
   function(){closeM('mMesProy');loadProyeccion();toast('Guardado','ok');},
   function(e){toast(e.message,'err');});
+}
+ // ---- ESTADO HABITACIONES ----
+var roomIssuesOpen=false;
+function toggleRoomIssues(){
+  roomIssuesOpen=!roomIssuesOpen;
+  var el=document.getElementById('roomIssuesCont');
+  var arrow=document.getElementById('roomIssuesArrow');
+  if(roomIssuesOpen){el.style.display='block';arrow.textContent='▲';loadRoomIssuesGrid();}
+  else{el.style.display='none';arrow.textContent='▼';}
+}
+function loadRoomIssuesGrid(){
+  var el=document.getElementById('roomIssuesCont');
+  el.innerHTML='<p style="color:#9ca3af;font-size:12px">Cargando...</p>';
+  // Cargar issues de todas las habitaciones
+  var roomIds=rooms.map(function(r){return r.roomId;});
+  if(!roomIds.length){el.innerHTML='<p style="color:#9ca3af">Sin habitaciones.</p>';return;}
+  // Cargar issues para cada habitacion
+  var allIssues={};var pending=roomIds.length;
+  roomIds.forEach(function(rid){
+    rpc('getRoomIssues',{roomId:rid},function(data){
+      allIssues[rid]=(data.issues||[]);
+      pending--;
+      if(pending===0)renderRoomIssuesGrid(allIssues);
+    },function(){pending--;if(pending===0)renderRoomIssuesGrid(allIssues);});
+  });
+}
+function renderRoomIssuesGrid(allIssues){
+  var el=document.getElementById('roomIssuesCont');
+  var h='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(60px,1fr));gap:6px;margin-bottom:10px">';
+  rooms.forEach(function(r){
+    var issues=allIssues[r.roomId]||[];
+    var pendientes=issues.filter(function(i){return !i.resolved;}).length;
+    var col=pendientes>0?'#ef4444':'#22c55e';
+    h+='<div onclick="openRoomIssueModal(\''+r.roomId+'\')" style="background:#18181f;border:2px solid '+col+';border-radius:8px;padding:8px;text-align:center;cursor:pointer">';
+    h+='<div style="font-size:14px;font-weight:800;color:'+col+'">'+r.roomId+'</div>';
+    if(pendientes>0)h+='<div style="font-size:9px;color:'+col+'">'+pendientes+' daño(s)</div>';
+    else h+='<div style="font-size:9px;color:#22c55e">OK</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  document.getElementById('roomIssuesCont').innerHTML=h;
+}
+function openRoomIssueModal(rid){
+  rpc('getRoomIssues',{roomId:rid},function(data){
+    var issues=data.issues||[];
+    var danos=issues.filter(function(i){return i.type==='dano';});
+    var mejoras=issues.filter(function(i){return i.type==='mejora';});
+    var h='<div class="mh"><div class="mt">Hab '+rid+'</div><button class="mc" onclick="closeM(\'mRoomIssue\')">✕</button></div>';
+    h+='<div style="display:flex;gap:6px;margin-bottom:10px">';
+    h+='<button class="btn br sm" onclick="addRoomIssue(\''+rid+'\',\'dano\')">+ Daño</button>';
+    h+='<button class="btn bb sm" onclick="addRoomIssue(\''+rid+'\',\'mejora\')">+ Mejora</button>';
+    h+='</div>';
+    // Daños
+    h+='<div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:6px;text-transform:uppercase">🔴 Daños ('+danos.length+')</div>';
+    if(!danos.length)h+='<p style="font-size:12px;color:#6b7280;margin-bottom:8px">Sin daños registrados ✓</p>';
+    danos.forEach(function(i){
+      var col=i.resolved?'#22c55e':'#ef4444';
+      h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:4px">';
+      h+='<div style="flex:1"><div style="font-size:12px;'+(i.resolved?'text-decoration:line-through;color:#6b7280':'')+'">'+esc(i.description)+'</div>';
+      if(i.resolved)h+='<div style="font-size:10px;color:#22c55e">✓ Reparado el '+i.resolvedAt+' por '+esc(i.resolvedBy)+'</div>';
+      h+='</div>';
+      h+='<div style="display:flex;gap:3px">';
+      if(!i.resolved)h+='<button class="btn bg xs" onclick="resolveIssue('+i.id+',\''+rid+'\')">✓</button>';
+      if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteIssue('+i.id+',\''+rid+'\')">✕</button>';
+      h+='</div></div></div>';
+    });
+    // Mejoras
+    h+='<div style="font-size:11px;font-weight:700;color:#3b82f6;margin-bottom:6px;text-transform:uppercase;margin-top:10px">🔵 Mejoras ('+mejoras.length+')</div>';
+    if(!mejoras.length)h+='<p style="font-size:12px;color:#6b7280;margin-bottom:8px">Sin mejoras registradas.</p>';
+    mejoras.forEach(function(i){
+      var col=i.resolved?'#22c55e':'#3b82f6';
+      h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:4px">';
+      h+='<div style="flex:1"><div style="font-size:12px;'+(i.resolved?'text-decoration:line-through;color:#6b7280':'')+'">'+esc(i.description)+'</div>';
+      if(i.resolved)h+='<div style="font-size:10px;color:#22c55e">✓ Hecho el '+i.resolvedAt+' por '+esc(i.resolvedBy)+'</div>';
+      h+='</div>';
+      h+='<div style="display:flex;gap:3px">';
+      if(!i.resolved)h+='<button class="btn bg xs" onclick="resolveIssue('+i.id+',\''+rid+'\')">✓</button>';
+      if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteIssue('+i.id+',\''+rid+'\')">✕</button>';
+      h+='</div></div></div>';
+    });
+    var modal=document.getElementById('mRoomIssue');
+    if(!modal){var div=document.createElement('div');div.className='ov';div.id='mRoomIssue';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mRoomIssueB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mRoomIssue');});document.body.appendChild(div);}
+    document.getElementById('mRoomIssueB').innerHTML=h;
+    openM('mRoomIssue');
+  });
+}
+function addRoomIssue(rid,type){
+  var desc=prompt((type==='dano'?'Descripción del daño:':'Descripción de la mejora:'));
+  if(!desc||!desc.trim())return;
+  rpc('addRoomIssue',{roomId:rid,type:type,description:desc.trim(),userName:sess.userName,userRole:sess.userRole},
+    function(){openRoomIssueModal(rid);loadRoomIssuesGrid();},
+    function(e){toast(e.message,'err');}
+  );
+}
+function resolveIssue(id,rid){
+  rpc('resolveRoomIssue',{id:id,userName:sess.userName,userRole:sess.userRole},
+    function(){openRoomIssueModal(rid);loadRoomIssuesGrid();toast('✓ Resuelto','ok');},
+    function(e){toast(e.message,'err');}
+  );
+}
+function deleteIssue(id,rid){
+  conf('¿Borrar este registro?',function(){
+    rpc('deleteRoomIssue',{id:id,userName:sess.userName,userRole:sess.userRole},
+      function(){openRoomIssueModal(rid);loadRoomIssuesGrid();toast('Borrado','ok');},
+      function(e){toast(e.message,'err');}
+    );
+  });
 }
 // ---- MANTENIMIENTO (admin) ----
 function loadMaintMonth(){
