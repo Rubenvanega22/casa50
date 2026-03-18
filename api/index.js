@@ -1278,7 +1278,7 @@ async function apiGetProyeccion(p, res) {
   ]);
   return ok(res,{
     tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||''})),
-    meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0)}))
+    meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0),gastosAnterior:Number(r.gastos_anterior||0)}))
  });
   } catch(e) { return err(res, 'Error proyeccion: '+e.message); }
 }
@@ -1319,8 +1319,6 @@ async function apiSaveMesProyeccion(p, res) {
     anio,mes,meta:Number(p.meta||0),presupuesto:Number(p.presupuesto||0),
     observaciones:String(p.observaciones||'').trim(),
     ventas_anterior:Number(p.ventasAnterior||0),
-    ventas_actual:Number(p.ventasActual||0),
-    gastos:Number(p.gastos||0)
   },{onConflict:'anio,mes'});
   return ok(res,{anio,mes});
 }
