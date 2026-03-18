@@ -626,6 +626,13 @@ function buildRoomB(r){
   var sc={AV:'#22c55e',OC:'#ef4444',DI:'#f59e0b',CO:'#3b82f6',BL:'#6b7280'};
   var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada'};
   var h='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>';
+  if(eff==='BL'){
+    var disMs=Number(r.disabledDateMs||0);
+    h+='<div style="background:rgba(107,114,128,.1);border:1px solid rgba(107,114,128,.4);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Motivo</span><b style="color:#f59e0b">'+esc(r.disabledReason||'Sin motivo')+'</b></div>';
+    if(disMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Deshabilitada</span><b>'+new Date(disMs).toLocaleString("es-CO",{dateStyle:"short",timeStyle:"short"})+'</b></div>';
+    h+='</div>';
+  }
 
   // --- OCUPADA ---
   if(eff==='OC'){
