@@ -511,7 +511,7 @@ function sw(id){
   if(id==='maids')loadMP();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
  if(id==='maint'){loadMaintMonth();}
-  if(id==='config')loadCfg();
+  if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
   if(id==='sched'){setDefWk();loadSched();}
   if(id==='extra')loadExtra();
@@ -2245,6 +2245,28 @@ function updNoteBadge(notes){
   var unseen=notes.filter(function(n){return (n.seenBy||[]).indexOf(sess.userRole)<0;}).length;
   tab.textContent='Notas'+(unseen>0?' ('+unseen+')':'');
   tab.style.color=unseen>0?'#ef4444':'';
+}
+ function loadCfg(){
+  rpc('getReceptionPins',{userRole:sess.userRole},function(data){
+    var pins=data.pins||[];
+    var h='<div class="cfg"><h3>PINs Recepcionistas</h3>';
+    pins.forEach(function(p){h+='<div class="pr2"><span>'+esc(p.userName)+'</span><div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px;color:'+(p.hasPin?'#22c55e':'#9ca3af')+'">'+(p.hasPin?'Con PIN':'Sin PIN')+'</span><button class="btn bk xs" onclick="openPin(\''+esc(p.userName)+'\')">Editar PIN</button></div></div>';});
+    h+='</div>';
+    h+='<div class="cfg"><h3>PIN Administrador</h3><button class="btn br sm" onclick="openM(\'mChPin\')">Cambiar PIN Admin</button></div>';
+    document.getElementById('cfgCont').innerHTML=h;
+  },function(e){document.getElementById('cfgCont').innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+}
+function openGoal(){
+  var el=document.getElementById('goalIn');
+  if(el)el.value='';
+  openM('mGoal');
+}
+function saveGoal(){
+  var g=Number(document.getElementById('goalIn').value||0);
+  rpc('setDailyGoal',{goal:g,userRole:sess.userRole},
+    function(){toast('Meta guardada.','ok');closeM('mGoal');loadM();},
+    function(e){toast(e.message||String(e),'err');}
+  );
 }
 function openPin(nm){document.getElementById('pName').value=nm||'';document.getElementById('pVal').value='';openM('mPin');}
 function savePin(){var nm=(document.getElementById('pName').value||'').trim(),pin=(document.getElementById('pVal').value||'').trim();if(!nm){toast('Nombre requerido.','err');return;}rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},function(){toast('PIN guardado.','ok');closeM('mPin');loadCfg();},function(e){toast(e.message||String(e),'err');});}
