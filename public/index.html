@@ -1596,6 +1596,7 @@ function renderProyeccion(){
   h+='<thead><tr>';
   h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">Mes</th>';
   h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#3b82f6;border:1px solid #2e2e3a">V. Anterior</th>';
+ h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#ef4444;border:1px solid #2e2e3a">G. Anterior</th>';
   h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#22c55e;border:1px solid #2e2e3a">V. Actual</th>';
   h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#ef4444;border:1px solid #2e2e3a">Gastos</th>';
   h+='<th style="padding:6px 8px;background:#22222c;font-size:10px;color:#a78bfa;border:1px solid #2e2e3a">Utilidad</th>';
@@ -1605,11 +1606,13 @@ function renderProyeccion(){
   for(var mi=1;mi<=12;mi++){
     var md=meses.find(function(m){return m.mes===mi;})||{mes:mi,ventasAnterior:0,ventasActual:0,gastos:0};
     var util=md.ventasActual-md.gastos;
-    var crec=md.ventasAnterior>0?((md.ventasActual-md.ventasAnterior)/md.ventasAnterior*100).toFixed(1):'-';
+    var utilAnt=md.ventasAnterior-(md.gastosAnterior||0);
+    var crec=utilAnt>0?((util-utilAnt)/utilAnt*100).toFixed(1):(md.ventasAnterior>0?((md.ventasActual-md.ventasAnterior)/md.ventasAnterior*100).toFixed(1):'-');
     var crecCol=crec==='-'?'#9ca3af':Number(crec)>0?'#22c55e':Number(crec)<0?'#ef4444':'#f59e0b';
     h+='<tr>';
     h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;font-weight:700">'+MESES_N[mi-1]+'</td>';
     h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#3b82f6;text-align:right">'+fmt(md.ventasAnterior)+'</td>';
+   h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#ef4444;text-align:right">'+fmt(md.gastosAnterior||0)+'</td>';
     h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#22c55e;text-align:right">'+fmt(md.ventasActual)+'</td>';
     h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#ef4444;text-align:right">'+fmt(md.gastos)+'</td>';
     h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;color:#a78bfa;text-align:right">'+fmt(util)+'</td>';
@@ -1682,7 +1685,8 @@ function editMesProyeccion(mes){
   var h='<div class="mh"><div class="mt">'+MESES_N[mes-1]+' '+proyAnio+'</div><button class="mc" onclick="closeM(\'mMesProy\')">✕</button></div>';
   h+='<label>Ventas año anterior</label><input type="number" id="mpAnt" value="'+(md.ventasAnterior||0)+'" min="0">';
   h+='<label>Ventas año actual</label><input type="number" id="mpAct" value="'+(md.ventasActual||0)+'" min="0">';
-  h+='<label>Gastos del mes</label><input type="number" id="mpGas" value="'+(md.gastos||0)+'" min="0">';
+  h+='<label>Gastos año anterior (mismo mes)</label><input type="number" id="mpGasAnt" value="'+(md.gastosAnterior||0)+'" min="0">';
+h+='<label>Gastos año actual</label><input type="number" id="mpGas" value="'+(md.gastos||0)+'" min="0">';
   h+='<label>Meta del mes</label><input type="number" id="mpMeta" value="'+(md.meta||0)+'" min="0">';
   h+='<label>Presupuesto</label><input type="number" id="mpPres" value="'+(md.presupuesto||0)+'" min="0">';
   h+='<label>Observaciones</label><textarea id="mpObs" rows="2">'+esc(md.observaciones||'')+'</textarea>';
@@ -1693,7 +1697,7 @@ function editMesProyeccion(mes){
   openM('mMesProy');
 }
 function saveMesProy(mes){
-  rpc('saveMesProyeccion',{anio:proyAnio,mes:mes,userRole:sess.userRole,ventasAnterior:Number(document.getElementById('mpAnt').value||0),ventasActual:Number(document.getElementById('mpAct').value||0),gastos:Number(document.getElementById('mpGas').value||0),meta:Number(document.getElementById('mpMeta').value||0),presupuesto:Number(document.getElementById('mpPres').value||0),observaciones:(document.getElementById('mpObs').value||'').trim()},
+  rpc('saveMesProyeccion',{anio:proyAnio,mes:mes,userRole:sess.userRole,ventasAnterior:Number(document.getElementById('mpAnt').value||0),ventasActual:Number(document.getElementById('mpAct').value||0),gastos:Number(document.getElementById('mpGas').value||0),gastosAnterior:Number(document.getElementById('mpGasAnt').value||0),meta:Number(document.getElementById('mpMeta').value||0),presupuesto:Number(document.getElementById('mpPres').value||0),observaciones:(document.getElementById('mpObs').value||'').trim()},
   function(){closeM('mMesProy');loadProyeccion();toast('Guardado','ok');},
   function(e){toast(e.message,'err');});
 }
