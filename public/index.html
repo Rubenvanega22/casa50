@@ -1507,7 +1507,7 @@ function loadProyeccion(){
   rpc('getProyeccion',{anio:proyAnio,userRole:sess.userRole},function(data){
     proyData=data;
     renderProyeccion();
-  },function(e){toast(e.message||String(e),'err');});
+  },function(e){toast(e.message||String(e),'err');document.getElementById('proyCont').innerHTML='<p style="color:#ef4444">Error: '+esc(e.message||String(e))+'</p>';});
 }
 
 function renderProyeccion(){
