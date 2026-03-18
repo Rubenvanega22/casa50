@@ -171,6 +171,7 @@ module.exports = async function handler(req, res) {
       case 'getDailyCuadre':     return await apiGetDailyCuadre(payload, res);
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
+        case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaidLog': return await apiClearMaidLog(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
@@ -1247,6 +1248,19 @@ async function apiUpdateArrivalPlate(p, res) {
   if(room.arrival_type==='CAR'&&!plate)return err(res,'Placa obligatoria para CAR');
   await supabase.from('rooms').update({arrival_plate:plate,updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,plate});
+}
+async function apiGetMaintHistory(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const from=String(p.from||'');
+  const to=String(p.to||'');
+  if(!from||!to) return err(res,'Fechas requeridas');
+  const{data}=await supabase.from('maintenance').select('*').gte('business_day',from).lte('business_day',to).order('ts_ms',{ascending:false});
+  return ok(res,{logs:(data||[]).map(r=>({
+    id:r.id, tsMs:Number(r.ts_ms), businessDay:r.business_day, shiftId:r.shift_id,
+    roomId:r.room_id, type:r.type, text:r.text||'',
+    repairDesc:r.repair_desc||'', repairCost:Number(r.repair_cost||0),
+    userName:r.user_name||'', userRole:r.user_role||''
+  }))});
 }
 async function apiClearMaidLog(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
