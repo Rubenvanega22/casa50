@@ -854,7 +854,7 @@ function updChg(cat){
 function doCI(){
   if(!curRoom)return;
   var plate=(document.getElementById('plIn')||{}).value||'';
-  if(selArr==='CAR'&&!plate.trim()){toast('Placa del carro es obligatoria.','err');return;}
+  // placa opcional
   var pw=Number((document.getElementById('paidWith')||{}).value||0);
   var cfg=MP[curRoom.category]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);
   conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
