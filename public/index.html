@@ -1810,7 +1810,8 @@ function openRoomIssueModal(rid){
       if(i.resolved)h+='<div style="font-size:10px;color:#22c55e">✓ Reparado el '+i.resolvedAt+' por '+esc(i.resolvedBy)+'</div>';
       h+='</div>';
       h+='<div style="display:flex;gap:3px">';
-      if(!i.resolved)h+='<button class="btn bg xs" onclick="resolveIssue('+i.id+',\''+rid+'\')">✓</button>';
+     if(!i.resolved)h+='<button class="btn bg xs" onclick="resolveIssue('+i.id+',\''+rid+'\')">✓</button>';
+      h+='<button class="btn bk xs" onclick="editIssue('+i.id+',\''+rid+'\',\''+i.type+'\')">✏</button>';
       if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteIssue('+i.id+',\''+rid+'\')">✕</button>';
       h+='</div></div></div>';
     });
@@ -1840,6 +1841,15 @@ function addRoomIssue(rid,type){
   if(!desc||!desc.trim())return;
   rpc('addRoomIssue',{roomId:rid,type:type,description:desc.trim(),userName:sess.userName,userRole:sess.userRole},
     function(){openRoomIssueModal(rid);loadRoomIssuesGrid();},
+    function(e){toast(e.message,'err');}
+  );
+}
+ function editIssue(id,rid,type){
+  var issues=(type==='dano'?document.querySelectorAll:null);
+  var newDesc=prompt('Editar descripción:');
+  if(!newDesc||!newDesc.trim())return;
+  rpc('editRoomIssue',{id:id,description:newDesc.trim(),userName:sess.userName,userRole:sess.userRole},
+    function(){openRoomIssueModal(rid);loadRoomIssuesGrid();toast('✓ Actualizado','ok');},
     function(e){toast(e.message,'err');}
   );
 }
