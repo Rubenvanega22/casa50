@@ -306,7 +306,7 @@ async function apiCheckIn(p, res) {
   const needsPlate = arrivalType === 'CAR';
   const plateOptional = arrivalType === 'MOTO';
   let arrivalPlate = String(p.arrivalPlate || '').toUpperCase().trim();
-  if (needsPlate && !arrivalPlate) return err(res, 'Placa obligatoria para vehiculo CAR');
+ // placa opcional
   if (!needsPlate && !plateOptional) arrivalPlate = '';
 
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
