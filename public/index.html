@@ -864,17 +864,67 @@ function doCI(){
     );
   });
 }
- function doAddPerson(){
+ var addPersonCount=1,addPersonPay='EFECTIVO';
+function doAddPerson(){
   if(!curRoom)return;
   var cfg=MP[curRoom.category]||MP['Junior'];
   var costo=cfg.extraPerson||0;
-  conf('Agregar 1 persona — '+fmt(costo)+'?',function(){
-    var pm=prompt('Método de pago (EFECTIVO/TARJETA/NEQUI):','EFECTIVO');
-    if(!pm)return;
-    rpc('addExtraPerson',{roomId:curRoom.roomId,payMethod:pm.toUpperCase(),userName:sess.userName,userRole:sess.userRole},
-      function(res){toast('Persona agregada — Total: '+res.newPeople+'p — '+fmt(res.extraPersonCost),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
-      function(e){toast(e.message||String(e),'err');}
-    );
+  addPersonCount=1;addPersonPay='EFECTIVO';
+  var h='<div class="mh"><div class="mt">+ Personas — Hab '+curRoom.roomId+'</div><button class="mc" onclick="closeM(\'mAddPerson\')">✕</button></div>';
+  h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Costo por persona: <b style="color:#a78bfa">'+fmt(costo)+'</b></div>';
+  h+='<label>Cantidad de personas a agregar</label>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  for(var i=1;i<=6;i++){
+    h+='<div onclick="selAddPerson('+i+','+costo+')" id="apCnt'+i+'" style="background:'+(i===1?'#7c5cfc':'#22222c')+';border:2px solid '+(i===1?'#7c5cfc':'#2e2e3a')+';border-radius:8px;padding:8px 14px;cursor:pointer;text-align:center;min-width:50px">';
+    h+='<div style="font-size:16px;font-weight:800;color:#e5e7eb">'+i+'</div>';
+    h+='<div style="font-size:10px;color:#9ca3af">'+fmt(i*costo)+'</div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<div class="tb"><div class="tl">Total a cobrar</div><div class="tv" id="apTotal">'+fmt(costo)+'</div></div>';
+  h+='<label>Método de pago</label>';
+  h+='<div class="pm" style="margin-bottom:12px"><div class="pmo on" id="apPmEFECTIVO" onclick="selAddPersonPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="apPmTARJETA" onclick="selAddPersonPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="apPmNEQUI" onclick="selAddPersonPm(\'NEQUI\')">Nequi</div></div>';
+  h+='<button class="btn bg full" onclick="confirmAddPerson()">Confirmar</button>';
+  var modal=document.getElementById('mAddPerson');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAddPerson';div.innerHTML='<div class="modal"><div id="mAddPersonB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAddPerson');});document.body.appendChild(div);}
+  document.getElementById('mAddPersonB').innerHTML=h;
+  openM('mAddPerson');
+}
+function selAddPerson(n,costo){
+  addPersonCount=n;
+  for(var i=1;i<=6;i++){
+    var el=document.getElementById('apCnt'+i);
+    if(el){el.style.background=i===n?'#7c5cfc':'#22222c';el.style.borderColor=i===n?'#7c5cfc':'#2e2e3a';}
+  }
+  var el=document.getElementById('apTotal');if(el)el.textContent=fmt(n*costo);
+}
+function selAddPersonPm(pm){
+  addPersonPay=pm;
+  ['EFECTIVO','TARJETA','NEQUI'].forEach(function(p){
+    var el=document.getElementById('apPm'+p);if(el)el.classList.toggle('on',p===pm);
+  });
+}
+function confirmAddPerson(){
+  if(!curRoom)return;
+  var cfg=MP[curRoom.category]||MP['Junior'];
+  var costo=cfg.extraPerson||0;
+  conf('Agregar '+addPersonCount+' persona(s) — '+fmt(addPersonCount*costo)+'?',function(){
+    var pending=addPersonCount;
+    var errors=0;
+    function next(){
+      if(pending<=0){
+        if(errors===0)toast('✓ '+addPersonCount+' persona(s) agregada(s)','ok');
+        closeM('mAddPerson');closeM('mRoom');
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+        return;
+      }
+      pending--;
+      rpc('addExtraPerson',{roomId:curRoom.roomId,payMethod:addPersonPay,userName:sess.userName,userRole:sess.userRole},
+        function(){next();},
+        function(e){errors++;toast(e.message||String(e),'err');next();}
+      );
+    }
+    next();
   });
 }
 function doCheckOut(){
