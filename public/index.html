@@ -1167,7 +1167,7 @@ function loadVentas(){
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne'}[s.payMethod]||'badge-ap';
         var arrB={'CAR':'badge-ca','TAXI':'badge-tx','MOTO':'badge-mo'}[s.arrivalType]||'badge-ap';
         var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
-        var taxiHab=taxis.filter(function(tx){return tx.roomId===s.roomId&&tx.shiftId===sess.shiftId;});
+        var taxiHab=taxiList.filter(function(tx){return tx.roomId===s.roomId;});
         var taxiTotal=taxiHab.reduce(function(a,tx){return a+tx.amount;},0);
         var totalReal=s.total-taxiTotal;
         h+='<div class="sale-row"><div class="sale-top"><b>Hab '+s.roomId+'</b> <span class="badge '+pmB+'">'+s.payMethod+'</span> <b style="color:#22c55e">'+fmt(s.total)+'</b>'+(taxiTotal>0?'<span style="color:#f59e0b;font-size:11px"> -taxi '+fmt(taxiTotal)+'</span>':'')+'</div>';
