@@ -1161,7 +1161,7 @@ function loadVentas(){
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+sl.length+' ventas hoy</div>';
     if(!sl.length){h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';}
     else{
-      var taxis=m.taxiList||[];
+      var taxis=taxiList||[];
       sl.forEach(function(s){
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne'}[s.payMethod]||'badge-ap';
         var arrB={'CAR':'badge-ca','TAXI':'badge-tx','MOTO':'badge-mo'}[s.arrivalType]||'badge-ap';
@@ -1298,7 +1298,7 @@ function loadCuadre(){
     });
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
     var taxis=Number(t.taxi||0);
-    var taxiList=(m.taxiList||[]);
+    var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId;});
     var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
     var totalGastos=gastos_gen+taxis+turnos;
     var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
@@ -1330,7 +1330,7 @@ function loadCuadre(){
     h+='<div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:10px;text-transform:uppercase">📤 Gastos</div>';
     h+=_cRow('Gastos Generales',gastos_gen,'#ef4444');
     loans.forEach(function(l){h+='<div style="display:flex;justify-content:space-between;padding:3px 0 3px 12px;font-size:11px;color:#9ca3af;border-bottom:1px solid rgba(46,46,58,.3)"><span>'+esc(l.borrowerName||'')+(l.note?' — '+esc(l.note):'')+'</span><span style="color:#ef4444">-'+fmt(l.amount)+'</span></div>';});
-    var taxisCount=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId;}).length;
+    var taxisCount=taxis>0?Math.round(taxis/3000):0;
     h+=_cRow('Taxis ('+taxisCount+')',taxis,'#f59e0b');
     h+=_cRow('Turnos',turnos,'#f97316');
     h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Gastos</span><span style="font-weight:800;color:#ef4444">'+fmt(totalGastos)+'</span></div></div>';
