@@ -923,7 +923,7 @@ async function apiMetrics(p, res) {
     if(type==='REFUND')dayRefunds+=t;
   });
   const taxiList=[];
-(taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftTaxi+=a;taxiList.push({tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a});});
+(taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftTaxi+=a;taxiList.push({tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a,businessDay:r.business_day||''});});
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0);dayBar+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftBar+=a;});
   (gastoRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayGastos+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftGastos+=a;});
   (loansRes.data||[]).forEach(r=>{dayLoans+=Number(r.amount||0);});
