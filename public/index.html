@@ -1506,7 +1506,7 @@ function saveSched(){
   var ws=(document.getElementById('swk').value||'').trim()||getWS(new Date());
   var inputs=document.querySelectorAll('#schedCont input[data-shift]'),entries=[];
   inputs.forEach(function(inp){var n=(inp.value||'').trim();if(n)entries.push({shiftId:inp.dataset.shift,area:inp.dataset.area,dayOfWeek:inp.dataset.day,personName:n,type:'nomina'});});
-  toast('Guardando '+entries.length+' entradas','ok');
+  
   var btn=document.getElementById('btnSaveSched');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   rpc('saveSchedule',{weekStart:ws,entries:entries,userRole:sess.userRole},
     function(res){if(btn){btn.disabled=false;btn.textContent='Guardar Horario';}toast('Horario guardado — '+res.saved+' entradas.','ok');},
