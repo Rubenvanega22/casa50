@@ -667,7 +667,7 @@ function buildRoomB(r){
     if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Llegada</span><b>'+esc(aLbl)+'</b></div>';}
     h+='</div>';
     if(isR){
-      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button></div>';
+      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button></div>';
       h+='<div id="coF" style="display:none;margin-top:9px"><label>Observacion salida (opcional)</label><input type="text" id="coObs" placeholder="Ej: dejo ropa sucia"><button class="btn br full sm" style="margin-top:6px" onclick="doCheckOut()">Confirmar Salida</button></div>';
       // Panel extender/renovar con tabs
       h+='<div id="extP" style="display:none;margin-top:9px">';
@@ -860,6 +860,19 @@ function doCI(){
   conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
     rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw},
       function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+ function doAddPerson(){
+  if(!curRoom)return;
+  var cfg=MP[curRoom.category]||MP['Junior'];
+  var costo=cfg.extraPerson||0;
+  conf('Agregar 1 persona — '+fmt(costo)+'?',function(){
+    var pm=prompt('Método de pago (EFECTIVO/TARJETA/NEQUI):','EFECTIVO');
+    if(!pm)return;
+    rpc('addExtraPerson',{roomId:curRoom.roomId,payMethod:pm.toUpperCase(),userName:sess.userName,userRole:sess.userRole},
+      function(res){toast('Persona agregada — Total: '+res.newPeople+'p — '+fmt(res.extraPersonCost),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
   });
