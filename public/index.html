@@ -1810,9 +1810,9 @@ function openRoomIssueModal(rid){
       if(i.resolved)h+='<div style="font-size:10px;color:#22c55e">✓ Reparado el '+i.resolvedAt+' por '+esc(i.resolvedBy)+'</div>';
       h+='</div>';
       h+='<div style="display:flex;gap:3px">';
-     if(!i.resolved)h+='<button class="btn bg xs" onclick="resolveIssue('+i.id+',\''+rid+'\')">✓</button>';
+     h+='<button class="btn bg xs" onclick="resolveIssue('+i.id+',\''+rid+'\')">✓</button>';
       h+='<button class="btn bk xs" onclick="editIssue('+i.id+',\''+rid+'\',\''+i.type+'\')">✏</button>';
-      if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteIssue('+i.id+',\''+rid+'\')">✕</button>';
+      h+='<button class="btn br xs" onclick="deleteIssue('+i.id+',\''+rid+'\')">✕</button>';
       h+='</div></div></div>';
     });
     // Mejoras
