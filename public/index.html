@@ -1156,6 +1156,8 @@ function loadVentas(){
   var el=document.getElementById('ventasCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
   rpc('metrics',{businessDay:sess.businessDay,shiftId:''},function(m){
     var taxiList=(m.taxiList||[]);
+    var t=m.totals||{};
+    var sl=m.allSalesList||[];
     var h='<div class="pay-row"><div class="pay-item"><div class="pay-lbl">Efectivo</div><div class="pay-val" style="color:#22c55e">'+fmt(t.totalEfectivo||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(t.totalTarjeta||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Nequi</div><div class="pay-val" style="color:#a78bfa">'+fmt(t.totalNequi||0)+'</div></div>';
