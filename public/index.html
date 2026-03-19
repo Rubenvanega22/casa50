@@ -1280,7 +1280,7 @@ function loadCuadre(){
   var el=document.getElementById('cuadreCont');el.innerHTML='<p style="color:#9ca3af">Calculando...</p>';
   var sn={SHIFT_1:'Turno 1 (6am - 2pm)',SHIFT_2:'Turno 2 (2pm - 10pm)',SHIFT_3:'Turno 3 (10pm - 6am)'};
   Promise.all([
-    new Promise(function(res){rpc('metrics',{businessDay:sess.businessDay,shiftId:sess.shiftId},res,function(){res({});});}),
+    new Promise(function(res){rpc('metrics',{businessDay:sess.businessDay,shiftId:sess.shiftId},res,function(e){toast('Error metrics: '+(e.message||'?'),'err');res({});});}),
     new Promise(function(res){rpc('getLoans',{businessDay:sess.businessDay},res,function(){res({loans:[]});});}),
     new Promise(function(res){rpc('getExtraStaff',{businessDay:sess.businessDay},res,function(){res({extraStaff:[]});});})
   ]).then(function(results){
