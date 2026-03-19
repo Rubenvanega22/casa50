@@ -664,7 +664,7 @@ function buildRoomB(r){
     if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora ingreso</span><b>'+fT(r.checkInMs)+'</b></div>';
     if(r.dueMs){var left=Number(r.dueMs)-now;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora salida</span><b>'+fT(r.dueMs)+'</b></div><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo</span><b style="color:'+(left>0?'#22c55e':'#ef4444')+'">'+(left>0?fDur(left):'VENCIDA +'+fDur(Math.abs(left)))+'</b></div>';}
     if(r.people)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Personas</span><b>'+r.people+'</b></div>';
-    if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Llegada</span><b>'+esc(aLbl)+'</b></div>';}
+    if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Llegada</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(aLbl)+'</b>'+(isR&&(r.arrivalType==='CAR'||r.arrivalType==='MOTO')?'<button class="btn bk xs" onclick="doEditPlate()">✏ Placa</button>':'')+'</div></div>';}
     h+='</div>';
     if(isR){
       h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button></div>';
@@ -865,6 +865,16 @@ function doCI(){
   });
 }
  var addPersonCount=1,addPersonPay='EFECTIVO';
+ function doEditPlate(){
+  if(!curRoom)return;
+  var cur=curRoom.arrivalPlate||'';
+  var nueva=prompt('Placa ('+(curRoom.arrivalType||'')+'):',cur);
+  if(nueva===null)return;
+  rpc('updateArrivalPlate',{roomId:curRoom.roomId,plate:nueva.trim().toUpperCase(),userName:sess.userName,userRole:sess.userRole},
+    function(){toast('Placa actualizada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
 function doAddPerson(){
   if(!curRoom)return;
   var cfg=MP[curRoom.category]||MP['Junior'];
