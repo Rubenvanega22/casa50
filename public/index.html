@@ -982,6 +982,7 @@ function doRef(){
 }
 function doTaxi(){
   var rid=curRoom?curRoom.roomId:'';
+  toast('Debug roomId: '+rid,'ok');
   rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
     function(){toast('Taxi $3.000 registrado.','ok');closeM('mConf');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
     function(e){toast(e.message||String(e),'err');}
