@@ -1287,7 +1287,7 @@ function loadCuadre(){
     new Promise(function(res){rpc('getExtraStaff',{businessDay:sess.businessDay},res,function(){res({extraStaff:[]});});})
   ]).then(function(results){
     var m=results[0]||{},loansData=results[1]||{},extraData=results[2]||{};
-toast('taxiList: '+(m.taxiList?m.taxiList.length:'undefined'),'ok');
+
     var t=m.totals||{};
     var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===sess.shiftId;});
     var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId;});
