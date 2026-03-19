@@ -556,11 +556,27 @@ function doMaidRefresh(){
 
 function startPoll(){
   clearInterval(pT);
- pT=setInterval(function(){
+  pT=setInterval(function(){
     rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
     loadNotes();
+    if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
   },10000);
   checkAlarms();clearInterval(aT);aT=setInterval(checkAlarms,30000);
+}
+function checkAutoHora(){
+  var now=Date.now();
+  rooms.forEach(function(r){
+    if(r.state!=='OCCUPIED'||!r.dueMs)return;
+    var vencida=now-Number(r.dueMs);
+    if(vencida<15*60*1000)return; // menos de 15 min vencida
+    var key='autoHora_'+r.roomId+'_'+r.dueMs;
+    if(sessionStorage.getItem(key))return; // ya se cobró
+    sessionStorage.setItem(key,'1');
+    rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO'},
+      function(res){toast('⏰ Hab '+r.roomId+' — Hora extra automática cobrada: '+fmt(res.extraCost),'ok');loadCuadre();},
+      function(e){toast('Error hora auto Hab '+r.roomId+': '+(e.message||''),'err');}
+    );
+  });
 }
 function startClock(){
   clearInterval(cT);
