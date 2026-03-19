@@ -1299,7 +1299,7 @@ function loadCuadre(){
     });
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
     var taxis=Number(t.taxi||0);
-    var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId;});
+    var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId&&tx.businessDay===sess.businessDay;});
     var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
     var totalGastos=gastos_gen+taxis+turnos;
     var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
