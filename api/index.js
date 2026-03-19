@@ -693,7 +693,8 @@ async function apiTaxi(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
-  await supabase.from('taxi_expenses').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: String(p.userName || ''), amount: 3000, note: 'Taxi fijo' });
+  const roomId = String(p.roomId || '').trim();
+  await supabase.from('taxi_expenses').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: String(p.userName || ''), amount: 3000, note: 'Taxi fijo', room_id: roomId });
   return ok(res, {});
 }
 
@@ -921,7 +922,8 @@ async function apiMetrics(p, res) {
     }
     if(type==='REFUND')dayRefunds+=t;
   });
-  (taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftTaxi+=a;});
+  const taxiList=[];
+(taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftTaxi+=a;taxiList.push({tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a});});
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0);dayBar+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftBar+=a;});
   (gastoRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayGastos+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftGastos+=a;});
   (loansRes.data||[]).forEach(r=>{dayLoans+=Number(r.amount||0);});
@@ -941,6 +943,7 @@ async function apiMetrics(p, res) {
     loans:(loansRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,borrowerName:r.borrower_name,amount:Number(r.amount),note:r.note})),
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
     allSalesList:allSalesList.sort((a,b)=>a.tsMs-b.tsMs),
+    taxiList,
     dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null
   });
 }
