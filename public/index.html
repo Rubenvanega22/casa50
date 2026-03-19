@@ -981,7 +981,8 @@ function doRef(){
   });
 }
 function doTaxi(){
-  rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:curRoom?curRoom.roomId:''},
+  var rid=curRoom?curRoom.roomId:'';
+  rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
     function(){toast('Taxi $3.000 registrado.','ok');closeM('mConf');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
     function(e){toast(e.message||String(e),'err');}
   );
@@ -1330,7 +1331,7 @@ function loadCuadre(){
     h+='<div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:10px;text-transform:uppercase">📤 Gastos</div>';
     h+=_cRow('Gastos Generales',gastos_gen,'#ef4444');
     loans.forEach(function(l){h+='<div style="display:flex;justify-content:space-between;padding:3px 0 3px 12px;font-size:11px;color:#9ca3af;border-bottom:1px solid rgba(46,46,58,.3)"><span>'+esc(l.borrowerName||'')+(l.note?' — '+esc(l.note):'')+'</span><span style="color:#ef4444">-'+fmt(l.amount)+'</span></div>';});
-    var taxisCount=taxis>0?Math.round(taxis/3000):0;
+    var taxisCount=taxiList.length;
     h+=_cRow('Taxis ('+taxisCount+')',taxis,'#f59e0b');
     h+=_cRow('Turnos',turnos,'#f97316');
     h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Gastos</span><span style="font-weight:800;color:#ef4444">'+fmt(totalGastos)+'</span></div></div>';
