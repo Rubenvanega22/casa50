@@ -175,6 +175,7 @@ module.exports = async function handler(req, res) {
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
         case 'getRoomIssues':    return await apiGetRoomIssues(payload, res);
 case 'addRoomIssue':     return await apiAddRoomIssue(payload, res);
+case 'editRoomIssue':    return await apiEditRoomIssue(payload, res);
 case 'resolveRoomIssue': return await apiResolveRoomIssue(payload, res);
 case 'deleteRoomIssue':  return await apiDeleteRoomIssue(payload, res);
         case 'getProyeccion':    return await apiGetProyeccion(payload, res);
@@ -1347,6 +1348,15 @@ async function apiAddRoomIssue(p, res) {
   if(!roomId)return err(res,'roomId requerido');
   if(!description)return err(res,'Descripcion requerida');
   await supabase.from('room_issues').insert({room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
+  return ok(res,{});
+}
+async function apiEditRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const id=Number(p.id||0);
+  const description=String(p.description||'').trim();
+  if(!id)return err(res,'id requerido');
+  if(!description)return err(res,'Descripcion requerida');
+  await supabase.from('room_issues').update({description}).eq('id',id);
   return ok(res,{});
 }
 async function apiResolveRoomIssue(p, res) {
