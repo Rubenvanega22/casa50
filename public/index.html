@@ -332,14 +332,14 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <!-- NOTAS -->
 <div class="pnl" id="pnl-notes">
 <div style="margin-bottom:8px">
-<textarea id="noteIn" placeholder="Escribe una nota..." rows="2"></textarea>
+<textarea id="noteIn" placeholder="Escribe un reporte..." rows="2"></textarea>
 <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
 <select id="noteTarget" style="width:auto;margin:0">
 <option value="ALL">Para todos</option>
 <option value="ADMIN">Solo Admin</option>
 <option value="MAID">Solo Camarera</option>
 </select>
-<button class="btn ba sm" onclick="sendNote()">Enviar Nota</button>
+<button class="btn ba sm" onclick="sendNote()">Enviar Reporte</button>
 </div>
 </div>
 <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
@@ -498,7 +498,7 @@ function buildTabs(){
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
   if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'horarios',l:'Horarios'});
   if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'});
-  tabs.push({id:'notes',l:'Notas'});
+  tabs.push({id:'notes',l:'Reportes'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';b.textContent=t.l;b.dataset.tab=t.id;
