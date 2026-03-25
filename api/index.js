@@ -902,11 +902,14 @@ async function apiMetrics(p, res) {
 
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
   const dailyGoal=Number(settings.DAILY_GOAL||0);
-
-  let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
+let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
   let dayEfe=0,dayTar=0,dayNeq=0;
   let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
   const allSalesList=[];
+  // Reset explícito
+  dayTotal=0;dayRefunds=0;dayTaxi=0;dayBar=0;dayGastos=0;dayLoans=0;dayExtraStaff=0;
+  dayEfe=0;dayTar=0;dayNeq=0;
+  shiftSales=0;shiftRooms=0;shiftPeople=0;shiftEfe=0;shiftTar=0;shiftNeq=0;shiftTaxi=0;shiftBar=0;shiftGastos=0;
 
   (salesRes.data||[]).forEach(r=>{
     const t=Number(r.total||0),type=r.type,pm=String(r.pay_method||'').toUpperCase(),sid=r.shift_id;
