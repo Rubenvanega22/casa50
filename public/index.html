@@ -309,6 +309,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <input type="date" id="mdDay" style="width:auto;margin:0">
 <button class="btn ba sm" onclick="loadMP()">Ver</button>
 <button class="refresh-btn" onclick="loadMP()">↻ Actualizar</button>
+<button id="btnMultiMaid" class="btn bk sm" onclick="toggleMultiMaid()">⚪ Multi-Camarera OFF</button>
 </div>
 <div id="mpCont"></div>
 </div>
@@ -487,7 +488,19 @@ function startApp(){
     rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];}});
   }
   if(sess.userRole==='RECEPTION'){loadExtra();loadLoans();loadCuadre();loadVentas();setDefWk();loadHor();}
-  if(sess.userRole==='MAID'){renderMaid();}
+  if(sess.userRole==='MAID'){
+    rpc('getMultiMaidMode',{},function(d){
+      multiMaidMode=d.multiMaidMode||false;
+      renderMaid();
+      checkMaidSelection();
+    });
+  }
+  if(sess.userRole==='ADMIN'){
+    rpc('getMultiMaidMode',{},function(d){
+      multiMaidMode=d.multiMaidMode||false;
+      renderMultiMaidBtn();
+    });
+  }
   loadNotes();
 }
 
@@ -1080,13 +1093,55 @@ function doTaxi(){
   );
 }
 // ---- PANEL CAMARERA ----
+ function checkMaidSelection(){
+  if(!multiMaidMode)return;
+  var ws=getWS(new Date());
+  rpc('getSchedule',{weekStart:ws},function(data){
+    var shift=sess.shiftId;
+    var maids=(data.schedule||[]).filter(function(e){return e.shiftId===shift&&e.area==='Camarera';});
+    var names=[...new Set(maids.map(function(e){return e.personName;}))];
+    if(names.length>=2){
+      if(!maidSelected)openMaidSelector(names);
+    }
+  });
+}
+function openMaidSelector(names){
+  var h='<div class="mh"><div class="mt">¿Quién eres?</div></div>';
+  h+='<p style="font-size:12px;color:#9ca3af;margin-bottom:10px">Selecciona tu nombre para registrar tu trabajo:</p>';
+  names.forEach(function(nm){
+    h+='<button class="btn ba full" style="margin-bottom:8px;font-size:14px" onclick="selectMaid(\''+esc(nm)+'\')">'+esc(nm)+'</button>';
+  });
+  var modal=document.getElementById('mMaidSel');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mMaidSel';div.innerHTML='<div class="modal"><div id="mMaidSelB"></div></div>';document.body.appendChild(div);}
+  document.getElementById('mMaidSelB').innerHTML=h;
+  openM('mMaidSel');
+}
+function selectMaid(nm){
+  maidSelected=nm;
+  sess.userName=nm;
+  saveSess(sess);
+  closeM('mMaidSel');
+  toast('Bienvenida '+nm,'ok');
+  renderMaid();
+}
 function renderMaid(){
   if(!sess||sess.userRole!=='MAID')return;
   var now=Date.now();
+  if(multiMaidMode&&!maidSelected){
+    document.getElementById('maidCont').innerHTML='<div style="text-align:center;padding:30px"><p style="color:#ef4444;font-weight:700;margin-bottom:12px">⚠️ Debes seleccionar tu nombre antes de continuar</p><button class="btn ba sm" onclick="checkMaidSelection()">¿Quién eres?</button></div>';
+    return;
+  }
   var pending=rooms.filter(function(r){return r.state==='DIRTY'&&!r.maidInProgress;});
  var inProgress=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&(r.maidInProgress&&r.maidNameProgress===sess.userName||r.state==='CONTAMINATED'&&!r.maidInProgress);});
  
   var h='';
+  if(multiMaidMode&&maidSelected){
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">';
+    h+='<span style="font-size:12px;color:#9ca3af">Registrando como: <b style="color:#a78bfa">'+esc(maidSelected)+'</b></span>';
+    h+='<button class="btn bk xs" onclick="maidSelected=\'\';renderMaid()">Cambiar</button>';
+    h+='</div>';
+  }
+
 
   // ---- SECCIÓN 1: PARA LIMPIAR ----
   h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">🧹 Habitaciones para limpiar ('+pending.length+')</div>';
@@ -2379,6 +2434,23 @@ function clearMaidLog(){
       function(e){toast(e.message||String(e),'err');}
     );
   });
+}
+ function toggleMultiMaid(){
+  multiMaidMode=!multiMaidMode;
+  rpc('setMultiMaidMode',{enabled:multiMaidMode,userRole:sess.userRole},
+    function(){
+      toast('Modo multi-camarera: '+(multiMaidMode?'ACTIVADO':'DESACTIVADO'),'ok');
+      renderMultiMaidBtn();
+      if(sess.userRole==='MAID')checkMaidSelection();
+    },
+    function(e){toast(e.message,'err');}
+  );
+}
+function renderMultiMaidBtn(){
+  var btn=document.getElementById('btnMultiMaid');
+  if(!btn)return;
+  btn.textContent=multiMaidMode?'🟢 Multi-Camarera ON':'⚪ Multi-Camarera OFF';
+  btn.style.background=multiMaidMode?'#22c55e':'#22222c';
 }
 function loadMP(){
   if(!sess)return;
