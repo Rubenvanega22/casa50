@@ -1098,7 +1098,8 @@ function doTaxi(){
   var ws=getWS(new Date());
   rpc('getSchedule',{weekStart:ws},function(data){
     var shift=sess.shiftId;
-    var maids=(data.schedule||[]).filter(function(e){return e.shiftId===shift&&e.area==='Camarera';});
+    var maids=(data.schedule||[]).filter(function(e){return e.shiftId===shift&&(e.area==='Camarera'||e.area==='camarera');});
+toast('Camareras encontradas: '+maids.length+' turno:'+shift,'ok');
     var names=[...new Set(maids.map(function(e){return e.personName;}))];
     if(names.length>=2){
       if(!maidSelected)openMaidSelector(names);
