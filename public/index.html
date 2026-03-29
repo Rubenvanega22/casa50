@@ -211,7 +211,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="brand">CASA 50</div>
 <div class="bdg" id="hsh">--</div>
 <div style="font-size:11px;color:#9ca3af" id="clk"></div>
-<div id="proyAlerta" style="display:none;font-size:11px;font-weight:700;color:#ef4444;animation:pulse 1s infinite;cursor:pointer" onclick="sw('proyeccion')"></div>
+<<div id="proyAlerta" style="display:none;font-size:11px;font-weight:700;color:#ef4444;animation:pulse 1s infinite;cursor:pointer" onclick="openAlertaProy()"></div>
 </div>
 <div style="display:flex;gap:5px;align-items:center">
 <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">↻ Actualizar</button>
@@ -1745,6 +1745,32 @@ function renderProyeccion(){
   }
   h+='</tbody></table></div>';
   document.getElementById('proyCont').innerHTML=h;
+}
+ function openAlertaProy(){
+  var mesHoy=new Date().getMonth()+1;
+  var pendientes=(proyData.tareas||[]).filter(function(t){return t.mes===mesHoy&&t.estado==='pendiente';});
+  var h='<div class="mh"><div class="mt">⚠️ Tareas pendientes '+MESES_N[mesHoy-1]+'</div><button class="mc" onclick="closeM(\'mAlertaProy\')">✕</button></div>';
+  if(!pendientes.length){h+='<p style="color:#9ca3af">Sin tareas pendientes este mes.</p>';}
+  else{
+    pendientes.forEach(function(t){
+      var prCol={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'}[t.prioridad]||'#9ca3af';
+      h+='<div style="background:#22222c;border-left:3px solid #ef4444;border-radius:0 7px 7px 0;padding:9px 10px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
+      h+='<div style="flex:1"><div style="font-weight:700;font-size:12px">'+esc(t.nombre)+'</div>';
+      if(t.descripcion)h+='<div style="font-size:11px;color:#9ca3af">'+esc(t.descripcion)+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+esc(t.area)+' — <span style="color:'+prCol+'">'+t.prioridad+'</span>'+(t.responsable?' — 👤 '+esc(t.responsable):'')+'</div>';
+      h+='</div>';
+      h+='<div style="display:flex;gap:4px">';
+      h+='<button class="btn by xs" onclick="quickEstado('+t.id+',\'en_proceso\');closeM(\'mAlertaProy\')">▶</button>';
+      h+='<button class="btn bg xs" onclick="quickEstado('+t.id+',\'realizado\');closeM(\'mAlertaProy\')">✓</button>';
+      h+='</div></div></div>';
+    });
+  }
+  h+='<button class="btn ba full" style="margin-top:10px" onclick="closeM(\'mAlertaProy\');sw(\'proyeccion\')">Ver todas las tareas</button>';
+  var modal=document.getElementById('mAlertaProy');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAlertaProy';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mAlertaProyB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAlertaProy');});document.body.appendChild(div);}
+  document.getElementById('mAlertaProyB').innerHTML=h;
+  openM('mAlertaProy');
 }
 function updProyAlerta(){
   var el=document.getElementById('proyAlerta');
