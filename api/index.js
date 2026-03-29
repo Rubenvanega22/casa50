@@ -155,6 +155,8 @@ module.exports = async function handler(req, res) {
       case 'saveStaff':         return await apiSaveStaff(payload, res);
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
+        case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
+case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
       case 'setReceptionPin':   return await apiSetPin(payload, res);
       case 'getReceptionPins':  return await apiGetPins(payload, res);
@@ -1097,6 +1099,17 @@ async function apiSaveSchedule(p, res) {
 }
 
 // ==================== CONFIG ====================
+async function apiSetMultiMaidMode(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const value=p.enabled?'true':'false';
+  await supabase.from('settings').upsert({key:'MULTI_MAID_MODE',value},{onConflict:'key'});
+  return ok(res,{multiMaidMode:p.enabled});
+}
+async function apiGetMultiMaidMode(p, res) {
+  const settings=await getSettings();
+  const enabled=String(settings.MULTI_MAID_MODE||'false')==='true';
+  return ok(res,{multiMaidMode:enabled});
+}
 async function apiSetGoal(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const goal=Number(p.goal||0);
