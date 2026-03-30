@@ -465,7 +465,7 @@ function entrar(){
   var btn=document.getElementById('lbtn');btn.disabled=true;btn.textContent='Verificando...';
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
-    if(res&&res.ok){sess=res.session;sess.shiftId=BS.currentShiftId;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
+    if(res&&res.ok){sess=res.session;sess.shiftId=BS.currentShiftId;sess.businessDay=BS.businessDay;saveSess(sess);toast('fromMs: '+(sess.fromMs||0),'ok');startApp();}
     else showLE('Error al ingresar.');
   },function(e){btn.disabled=false;btn.textContent='Ingresar';showLE(e.message||String(e));});
 }
