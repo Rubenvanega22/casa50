@@ -255,7 +255,11 @@ async function apiLogin(p, res) {
     }
     const { data: existing } = await supabase.from('shift_log').select('user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
     if (existing && existing.user_name.toLowerCase() !== userName.toLowerCase()) {
-      return err(res, 'Este turno ya tiene recepcionista: ' + existing.user_name);
+      // Verificar si el turno fue cerrado (LOGOUT)
+      const { data: logout } = await supabase.from('shift_log').select('id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
+      if (!logout || !logout.length) {
+        return err(res, 'Este turno ya tiene recepcionista: ' + existing.user_name);
+      }
     }
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now } });
@@ -852,6 +856,8 @@ async function apiCloseShift(p, res) {
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const userName = String(p.userName || '');
+  // Marcar turno como cerrado para liberar el acceso
+  await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: 'LOGOUT' });
 
   const [salesRes, taxiRes, loansRes, extraRes] = await Promise.all([
     supabase.from('sales').select('type,total,pay_method,people').eq('business_day', bDay).eq('shift_id', shift),
