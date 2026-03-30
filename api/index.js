@@ -248,6 +248,7 @@ async function apiLogin(p, res) {
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now, fromMs } });
   }
+  if (userRole === 'MAID') {
 
   if (userRole === 'RECEPTION') {
     const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
