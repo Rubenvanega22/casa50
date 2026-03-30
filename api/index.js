@@ -241,7 +241,9 @@ async function apiLogin(p, res) {
     if (String(p.adminCode || '') !== expected) {
       await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
       return err(res, 'PIN de administrador incorrecto.');
-   }
+    }
+    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: userName, action: 'LOGIN' });
+    return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, businessDay: bDay, serverNowMs: now } });
   }
   if (userRole === 'RECEPTION') {
     const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
