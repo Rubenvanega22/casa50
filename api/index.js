@@ -321,6 +321,7 @@ async function apiCheckIn(p, res) {
   const mixtoEf = Number(p.mixtoEf || 0);
   const mixtoTj = Number(p.mixtoTj || 0);
   const mixtoNq = Number(p.mixtoNq || 0);
+  console.log('MIXTO DEBUG:', payMethod, mixtoEf, mixtoTj, mixtoNq);
   await supabase.from('rooms').update({
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: now, due_ms: dueMs,
