@@ -918,7 +918,8 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
     mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
     if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
   }
-  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
+ toast('selPay: '+selPay,'ok'); 
+ conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
     rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
