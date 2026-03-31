@@ -773,7 +773,7 @@ function buildRoomB(r){
     h+='<div class="pm"><div class="pmo'+(selPay==='EFECTIVO'?' on':'')+'" id="pmEFECTIVO" onclick="selPm(\'EFECTIVO\')">Efectivo</div><div class="pmo'+(selPay==='TARJETA'?' on':'')+'" id="pmTARJETA" onclick="selPm(\'TARJETA\')">Tarjeta</div><div class="pmo'+(selPay==='NEQUI'?' on':'')+'" id="pmNEQUI" onclick="selPm(\'NEQUI\')">Nequi</div><div class="pmo'+(selPay==='MIXTO'?' on':'')+'" id="pmMIXTO" onclick="selPm(\'MIXTO\')">Mixto</div></div>';
 h+='<div id="mixtoDiv" class="'+(selPay==='MIXTO'?'':'h')+'" style="margin-top:6px">';
 h+='<label>Monto en Efectivo</label><input type="number" id="mixtoEf" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
-h+='<label>Monto en Tarjeta</label><input type="number" id="mixtoTj" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
+h+='<label>Monto en Tarjeta</label><input type="number" id="mixtotj" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<label>Monto en Nequi</label><input type="number" id="mixtoNq" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
 h+='</div>';
@@ -886,7 +886,7 @@ function updMixto(cat){
   var cfg=MP[cat]||MP['Junior'];
   var tot=calcTot(selDur,selPpl,cfg);
   var ef=Number((document.getElementById('mixtoEf')||{}).value||0);
-  var tj=Number((document.getElementById('mixtoTj')||{}).value||0);
+  var tj=Number((document.getElementById('mixtotj')||{}).value||0);
   var nq=Number((document.getElementById('mixtoNq')||{}).value||0);
   var sum=ef+tj+nq;
   var el=document.getElementById('mixtoCheck');
@@ -913,7 +913,7 @@ function doCI(){
 var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   if(selPay==='MIXTO'){
     mixtoEf=Number((document.getElementById('mixtoEf')||{}).value||0);
-    mixtoTj=Number((document.getElementById('mixtoTj')||{}).value||0);
+    mixtoTj=Number((document.getElementById('mixtotj')||{}).value||0);
     mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
     if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
   }
