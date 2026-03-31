@@ -768,8 +768,14 @@ function buildRoomB(r){
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Llegaron en:</div>';
     h+='<div class="ar"><div class="abtn2'+(selArr==='WALK'?' on':'')+'" id="aWALK" onclick="selAr(\'WALK\')">A pie</div><div class="abtn2'+(selArr==='TAXI'?' on':'')+'" id="aTAXI" onclick="selAr(\'TAXI\')">Taxi</div><div class="abtn2'+(selArr==='CAR'?' on':'')+'" id="aCAR" onclick="selAr(\'CAR\')">Carro</div><div class="abtn2'+(selArr==='MOTO'?' on':'')+'" id="aMOTO" onclick="selAr(\'MOTO\')">Moto</div></div>';
     h+='<div id="plW" class="'+(selArr==='CAR'||selArr==='MOTO'?'':'h')+'"><label>Placa <span id="plateReqLabel" style="color:'+(selArr==='CAR'?'#ef4444':'#9ca3af')+'">'+(selArr==='CAR'?'(obligatoria)':'(opcional)')+'</span></label><input type="text" id="plIn" placeholder="ABC123" maxlength="10" oninput="this.value=this.value.toUpperCase()"></div>';
+    
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Metodo de pago:</div>';
-    h+='<div class="pm"><div class="pmo'+(selPay==='EFECTIVO'?' on':'')+'" id="pmEFECTIVO" onclick="selPm(\'EFECTIVO\')">Efectivo</div><div class="pmo'+(selPay==='TARJETA'?' on':'')+'" id="pmTARJETA" onclick="selPm(\'TARJETA\')">Tarjeta</div><div class="pmo'+(selPay==='NEQUI'?' on':'')+'" id="pmNEQUI" onclick="selPm(\'NEQUI\')">Nequi</div></div>';
+    h+='<div class="pm"><div class="pmo'+(selPay==='EFECTIVO'?' on':'')+'" id="pmEFECTIVO" onclick="selPm(\'EFECTIVO\')">Efectivo</div><div class="pmo'+(selPay==='TARJETA'?' on':'')+'" id="pmTARJETA" onclick="selPm(\'TARJETA\')">Tarjeta</div><div class="pmo'+(selPay==='NEQUI'?' on':'')+'" id="pmNEQUI" onclick="selPm(\'NEQUI\')">Nequi</div><div class="pmo'+(selPay==='MIXTO'?' on':'')+'" id="pmMIXTO" onclick="selPm(\'MIXTO\')">Mixto</div></div>';
+h+='<div id="mixtoDiv" class="'+(selPay==='MIXTO'?'':'h')+'" style="margin-top:6px">';
+h+='<label>Monto en Efectivo</label><input type="number" id="mixtoEf" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
+h+='<label>Monto en Tarjeta</label><input type="number" id="mixtoTj" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
+h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
+h+='</div>';
     h+='<div id="cashDiv" class="'+(selPay==='EFECTIVO'?'':'h')+'"><label>Cliente paga con:</label><input type="number" id="paidWith" placeholder="Monto recibido" min="0" oninput="updChg(\''+r.category+'\')"></div>';
     h+='<div class="chg h" id="chgBox">Cambio: <span id="chgAmt">$0</span></div>';
     h+='<div class="tb"><div class="tl">Total a cobrar</div><div class="tv" id="totD">'+fmt(calcTot(selDur,selPpl,cfg))+'</div></div>';
@@ -869,12 +875,26 @@ function selPm(t){
   document.querySelectorAll('.pmo').forEach(function(e){e.classList.remove('on');});
   var el=document.getElementById('pm'+t);if(el)el.classList.add('on');
   tog('cashDiv',t==='EFECTIVO');
+  tog('mixtoDiv',t==='MIXTO');
   if(t!=='EFECTIVO')tog('chgBox',false);
 }
 function calcP(h,cfg){if(h===3)return cfg.h3||0;if(h===6)return cfg.h6||0;if(h===8)return cfg.h8||(Number(cfg.h6||0)+2*Number(cfg.extraHour||0));if(h===12)return cfg.h12||0;return 0;}
 function calcTot(h,ppl,cfg){var base=calcP(h,cfg),incl=Number(cfg.included||2),ex=Math.max(0,ppl-incl);return base+ex*Number(cfg.extraPerson||0);}
 function updTot(cat){var cfg=MP[cat]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);var el=document.getElementById('totD');if(el)el.textContent=fmt(tot);if(selPay==='EFECTIVO')updChg(cat);}
-function updChg(cat){
+function updMixto(cat){
+  var cfg=MP[cat]||MP['Junior'];
+  var tot=calcTot(selDur,selPpl,cfg);
+  var ef=Number((document.getElementById('mixtoEf')||{}).value||0);
+  var tj=Number((document.getElementById('mixtoTj')||{}).value||0);
+  var sum=ef+tj;
+  var el=document.getElementById('mixtoCheck');
+  if(el){
+    if(sum===tot)el.innerHTML='<span style="color:#22c55e">✓ Total correcto: '+fmt(tot)+'</span>';
+    else if(sum>tot)el.innerHTML='<span style="color:#ef4444">⚠ Excede por '+fmt(sum-tot)+'</span>';
+    else el.innerHTML='<span style="color:#f59e0b">Faltan '+fmt(tot-sum)+'</span>';
+  }
+}
+ function updChg(cat){
   var cfg=MP[cat||'Junior']||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);
   var pw=Number((document.getElementById('paidWith')||{}).value||0);
   if(pw>=tot){var chg=pw-tot;document.getElementById('chgAmt').textContent=fmt(chg);tog('chgBox',true);}
@@ -888,8 +908,14 @@ function doCI(){
   // placa opcional
   var pw=Number((document.getElementById('paidWith')||{}).value||0);
   var cfg=MP[curRoom.category]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);
+  var mixtoEf=0,mixtoTj=0;
+  if(selPay==='MIXTO'){
+    mixtoEf=Number((document.getElementById('mixtoEf')||{}).value||0);
+    mixtoTj=Number((document.getElementById('mixtoTj')||{}).value||0);
+    if(mixtoEf+mixtoTj!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
+  }
   conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
-    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw},
+    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj},
       function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
