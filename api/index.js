@@ -320,6 +320,7 @@ async function apiCheckIn(p, res) {
   const changeGiven = payMethod === 'EFECTIVO' && paidWith >= total ? Math.max(0, paidWith - total) : 0;
   const mixtoEf = Number(p.mixtoEf || 0);
   const mixtoTj = Number(p.mixtoTj || 0);
+  const mixtoNq = Number(p.mixtoNq || 0);
   await supabase.from('rooms').update({
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: now, due_ms: dueMs,
@@ -337,9 +338,10 @@ async function apiCheckIn(p, res) {
     extra_hours: 0, extra_hours_value: 0, total,
     arrival_type: arrivalType, arrival_plate: arrivalPlate,
     pay_method: payMethod, paid_with: paidWith, change_given: changeGiven,
-    pay_method_2: payMethod==='MIXTO'?'MIXTO_EF_TJ':'',
+    pay_method_2: payMethod==='MIXTO'?'MIXTO_EF_TJ_NQ':'',
     amount_1: payMethod==='MIXTO'?mixtoEf:total,
     amount_2: payMethod==='MIXTO'?mixtoTj:0,
+    amount_3: payMethod==='MIXTO'?mixtoNq:0,
     check_in_ms: now, due_ms: dueMs
   });
 
