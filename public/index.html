@@ -886,8 +886,7 @@ function updMixto(cat){
   var cfg=MP[cat]||MP['Junior'];
   var tot=calcTot(selDur,selPpl,cfg);
   var ef=Number((document.getElementById('mixtoEf')||{}).value||0);
-  var tj=Number((document.getElementById('mixtotj')||{}).value||0);
-  var nq=Number((document.getElementById('mixtoNq')||{}).value||0);
+var tj=Number((document.getElementById('mixtotj')||{}).value||0);  var nq=Number((document.getElementById('mixtoNq')||{}).value||0);
   var sum=ef+tj+nq;
   var el=document.getElementById('mixtoCheck');
   if(el){
