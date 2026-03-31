@@ -774,6 +774,7 @@ function buildRoomB(r){
 h+='<div id="mixtoDiv" class="'+(selPay==='MIXTO'?'':'h')+'" style="margin-top:6px">';
 h+='<label>Monto en Efectivo</label><input type="number" id="mixtoEf" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<label>Monto en Tarjeta</label><input type="number" id="mixtoTj" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
+h+='<label>Monto en Nequi</label><input type="number" id="mixtoNq" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
 h+='</div>';
     h+='<div id="cashDiv" class="'+(selPay==='EFECTIVO'?'':'h')+'"><label>Cliente paga con:</label><input type="number" id="paidWith" placeholder="Monto recibido" min="0" oninput="updChg(\''+r.category+'\')"></div>';
@@ -886,7 +887,8 @@ function updMixto(cat){
   var tot=calcTot(selDur,selPpl,cfg);
   var ef=Number((document.getElementById('mixtoEf')||{}).value||0);
   var tj=Number((document.getElementById('mixtoTj')||{}).value||0);
-  var sum=ef+tj;
+  var nq=Number((document.getElementById('mixtoNq')||{}).value||0);
+  var sum=ef+tj+nq;
   var el=document.getElementById('mixtoCheck');
   if(el){
     if(sum===tot)el.innerHTML='<span style="color:#22c55e">✓ Total correcto: '+fmt(tot)+'</span>';
@@ -908,14 +910,15 @@ function doCI(){
   // placa opcional
   var pw=Number((document.getElementById('paidWith')||{}).value||0);
   var cfg=MP[curRoom.category]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);
-  var mixtoEf=0,mixtoTj=0;
+var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   if(selPay==='MIXTO'){
     mixtoEf=Number((document.getElementById('mixtoEf')||{}).value||0);
     mixtoTj=Number((document.getElementById('mixtoTj')||{}).value||0);
-    if(mixtoEf+mixtoTj!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
+    mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
+    if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
   }
   conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
-    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj},
+    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
