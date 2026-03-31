@@ -914,6 +914,7 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   if(selPay==='MIXTO'){
     mixtoEf=Number((document.getElementById('mixtoEf')||{}).value||0);
     mixtoTj=Number((document.getElementById('mixtotj')||{}).value||0);
+    toast('mixtoTj val: '+mixtoTj,'ok');
     mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
     if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
   }
