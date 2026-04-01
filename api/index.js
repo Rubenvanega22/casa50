@@ -483,7 +483,12 @@ async function apiMaidTake(p, res) {
 
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED') return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
+  if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED' && !room.retoque) return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
+  // Si es retoque, habilitar directamente
+  if(room.retoque){
+    await supabase.from('rooms').update({retoque:false,state:'AVAILABLE',state_since_ms:now,updated_at:new Date().toISOString()}).eq('room_id',roomId);
+    return ok(res,{roomId,maidName,startedMs:now,retoque:true});
+  }
 
   await supabase.from('maid_log').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
