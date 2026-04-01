@@ -127,7 +127,8 @@ module.exports = async function handler(req, res) {
       case 'login':             return await apiLogin(payload, res);
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
-      case 'extendTime':        return await apiExtendTime(payload, res);
+         case 'extendTime':        return await apiExtendTime(payload, res);
+        case 'horaGratis':        return await apiHoraGratis(payload, res);
       case 'renewTime':         return await apiRenewTime(payload, res);
       case 'silenceAlarm':      return await apiSilenceAlarm(payload, res);
       case 'maidTake':          return await apiMaidTake(payload, res);
@@ -398,6 +399,16 @@ async function apiCheckOut(p, res) {
 }
 
 // ==================== EXTENDER TIEMPO (horas sueltas) ====================
+async function apiHoraGratis(p, res) {
+  const now = Date.now();
+  const roomId = String(p.roomId || '').trim();
+  const room = await getRoom(roomId);
+  if(!room) return err(res, 'Habitacion no existe');
+  if(room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
+  const newDueMs = Number(room.due_ms || now) + 3600000;
+  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  return ok(res, { roomId, newDueMs });
+}
 async function apiExtendTime(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
