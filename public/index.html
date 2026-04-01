@@ -928,11 +928,39 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
  var addPersonCount=1,addPersonPay='EFECTIVO';
  function doEditPlate(){
   if(!curRoom)return;
-  var cur=curRoom.arrivalPlate||'';
-  var nueva=prompt('Placa ('+(curRoom.arrivalType||'')+'):',cur);
-  if(nueva===null)return;
-  rpc('updateArrivalPlate',{roomId:curRoom.roomId,plate:nueva.trim().toUpperCase(),userName:sess.userName,userRole:sess.userRole},
-    function(){toast('Placa actualizada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+  var h='<div class="mh"><div class="mt">Editar Llegada — Hab '+curRoom.roomId+'</div><button class="mc" onclick="closeM(\'mEditPlate\')">✕</button></div>';
+  h+='<label>Tipo de llegada</label>';
+  h+='<div class="ar" style="margin-bottom:10px">';
+  ['WALK','TAXI','CAR','MOTO'].forEach(function(t){
+    var lbl={WALK:'A pie',TAXI:'Taxi',CAR:'Carro',MOTO:'Moto'}[t];
+    h+='<div class="abtn2'+(curRoom.arrivalType===t?' on':'')+'" id="epArr'+t+'" onclick="selEditArr(\''+t+'\')">'+lbl+'</div>';
+  });
+  h+='</div>';
+  h+='<div id="epPlateDiv" style="'+(curRoom.arrivalType==='CAR'||curRoom.arrivalType==='MOTO'?'':'display:none')+'">';
+  h+='<label>Placa</label><input type="text" id="epPlate" value="'+esc(curRoom.arrivalPlate||'')+'" placeholder="ABC123" maxlength="10" oninput="this.value=this.value.toUpperCase()">';
+  h+='</div>';
+  h+='<button class="btn bg full" style="margin-top:8px" onclick="confirmEditPlate()">Guardar</button>';
+  var modal=document.getElementById('mEditPlate');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mEditPlate';div.innerHTML='<div class="modal"><div id="mEditPlateB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mEditPlate');});document.body.appendChild(div);}
+  document.getElementById('mEditPlateB').innerHTML=h;
+  openM('mEditPlate');
+}
+var editArrType='';
+function selEditArr(t){
+  editArrType=t;
+  ['WALK','TAXI','CAR','MOTO'].forEach(function(a){
+    var el=document.getElementById('epArr'+a);
+    if(el)el.classList.toggle('on',a===t);
+  });
+  var pd=document.getElementById('epPlateDiv');
+  if(pd)pd.style.display=(t==='CAR'||t==='MOTO')?'block':'none';
+}
+function confirmEditPlate(){
+  if(!curRoom)return;
+  var plate=(document.getElementById('epPlate')||{}).value||'';
+  var arrType=editArrType||curRoom.arrivalType||'WALK';
+  rpc('updateArrivalPlate',{roomId:curRoom.roomId,plate:plate.trim().toUpperCase(),arrivalType:arrType,userName:sess.userName,userRole:sess.userRole},
+    function(){toast('Llegada actualizada.','ok');closeM('mEditPlate');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
     function(e){toast(e.message||String(e),'err');}
   );
 }
