@@ -104,7 +104,8 @@ function mapRoom(r) {
     lastMaidName: r.last_maid_name || '',
     lastMaidDoneMs: Number(r.last_maid_done_ms || 0),
     maidInProgress: !!r.maid_in_progress,
-    maidNameProgress: r.maid_name_progress || ''
+    maidNameProgress: r.maid_name_progress || '',
+    retoque: !!r.retoque
   };
 }
 
@@ -172,7 +173,7 @@ case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'getGeneralExpenses': return await apiGetGeneralExpenses(payload, res);
       case 'getDailyCuadre':     return await apiGetDailyCuadre(payload, res);
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
-      case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
+      case 'roomChange':         return await apiRoomChange(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
         case 'getRoomIssues':    return await apiGetRoomIssues(payload, res);
@@ -1280,7 +1281,84 @@ async function apiAddExtraPerson(p, res) {
   await supabase.from('sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
   return ok(res,{roomId,newPeople,extraPersonCost:cost});
 }
+async function apiRoomChange(p, res) {
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = currentShiftId(now);
+  const userName = String(p.userName || '').trim();
+  const fromRoomId = String(p.fromRoomId || '').trim();
+  const toRoomId = String(p.toRoomId || '').trim();
+  if(!fromRoomId || !toRoomId) return err(res, 'Habitaciones requeridas');
+  if(fromRoomId === toRoomId) return err(res, 'Debe seleccionar una habitacion diferente');
 
+  const fromRoom = await getRoom(fromRoomId);
+  const toRoom = await getRoom(toRoomId);
+  if(!fromRoom) return err(res, 'Habitacion origen no existe');
+  if(!toRoom) return err(res, 'Habitacion destino no existe');
+  if(fromRoom.state !== 'OCCUPIED') return err(res, 'Habitacion origen no esta ocupada');
+  if(toRoom.state !== 'AVAILABLE') return err(res, 'Habitacion destino no esta disponible');
+
+  // Calcular diferencia de precio
+  const fromCfg = MASTER_PRICING[fromRoom.category] || MASTER_PRICING['Junior'];
+  const toCfg = MASTER_PRICING[toRoom.category] || MASTER_PRICING['Junior'];
+  const durationHrs = Number(p.durationHrs || 3);
+  const people = Number(fromRoom.people || 2);
+  const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
+
+  function calcTotalPrice(cfg, hrs, ppl) {
+    let base = 0;
+    if(hrs===3)base=cfg.h3;else if(hrs===6)base=cfg.h6;else if(hrs===8)base=cfg.h8;else if(hrs===12)base=cfg.h12;
+    const incl = Number(cfg.included||2);
+    const extra = Math.max(0, ppl-incl);
+    return base + extra * Number(cfg.extraPerson||0);
+  }
+
+  const fromPrice = calcTotalPrice(fromCfg, durationHrs, people);
+  const toPrice = calcTotalPrice(toCfg, durationHrs, people);
+  const diff = toPrice - fromPrice;
+
+  // Marcar habitacion origen como RETOQUE
+  await supabase.from('rooms').update({
+    state: 'AVAILABLE', retoque: true, state_since_ms: now,
+    people: 0, due_ms: 0, last_checkout_ms: now,
+    arrival_type: '', arrival_plate: '',
+    checkout_obs: 'CAMBIO DE HABITACION a '+toRoomId,
+    updated_at: new Date().toISOString()
+  }).eq('room_id', fromRoomId);
+
+  // Check-in en habitacion destino
+  const newDueMs = now + durationHrs * 3600000;
+  await supabase.from('rooms').update({
+    state: 'OCCUPIED', state_since_ms: now, people,
+    check_in_ms: now, due_ms: newDueMs,
+    arrival_type: fromRoom.arrival_type || 'WALK',
+    arrival_plate: fromRoom.arrival_plate || '',
+    alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
+    checkout_obs: '', contaminated_since_ms: 0,
+    updated_at: new Date().toISOString()
+  }).eq('room_id', toRoomId);
+
+  // Registrar diferencia si la hay
+  if(diff > 0) {
+    await supabase.from('sales').insert({
+      ts_ms: now, business_day: bDay, shift_id: shift,
+      user_role: 'RECEPTION', user_name: userName, type: 'SALE',
+      room_id: toRoomId, category: toRoom.category, duration_hrs: durationHrs,
+      base_price: diff, people, total: diff,
+      pay_method: payMethod, check_in_ms: now, due_ms: newDueMs,
+      arrival_type: fromRoom.arrival_type||'WALK'
+    });
+  } else if(diff < 0) {
+    await supabase.from('sales').insert({
+      ts_ms: now, business_day: bDay, shift_id: shift,
+      user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
+      room_id: fromRoomId, category: fromRoom.category, total: diff,
+      pay_method: payMethod, refund_reason: 'CAMBIO DE HABITACION a '+toRoomId
+    });
+  }
+
+  return ok(res, { fromRoomId, toRoomId, diff, newDueMs });
+}
 async function apiUpdateArrivalPlate(p, res) {
   const roomId=String(p.roomId||'').trim(),plate=String(p.plate||'').toUpperCase().trim();
   const arrivalType=String(p.arrivalType||'').toUpperCase().trim();
