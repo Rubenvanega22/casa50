@@ -696,7 +696,7 @@ function buildRoomB(r){
     if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Llegada</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(aLbl)+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPlate()">✏ Llegada</button>':'')+'</div></div>';}
     h+='</div>';
     if(isR){
-      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
+      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button><button class="btn bg sm" onclick="doHoraGratis()">🎁 +1h Gratis</button></div>';
       h+='<div id="coF" style="display:none;margin-top:9px"><label>Observacion salida (opcional)</label><input type="text" id="coObs" placeholder="Ej: dejo ropa sucia"><button class="btn br full sm" style="margin-top:6px" onclick="doCheckOut()">Confirmar Salida</button></div>';
       // Panel extender/renovar con tabs
       h+='<div id="extP" style="display:none;margin-top:9px">';
