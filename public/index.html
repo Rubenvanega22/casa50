@@ -656,9 +656,9 @@ if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs)
 }
 
 function renderSM(){
-  var c={AV:0,OC:0,DI:0,CO:0,BL:0};
-  rooms.forEach(function(r){if(r.disabled){c.BL++;return;}var k=r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';c[k]++;});
-  document.getElementById('smBar').innerHTML=[['Disp',c.AV,'#22c55e'],['Ocup',c.OC,'#ef4444'],['Suci',c.DI,'#f59e0b'],['Cont',c.CO,'#3b82f6'],['Bloq',c.BL,'#6b7280']].map(function(x){return '<div class="chip"><b style="color:'+x[2]+'">'+x[1]+'</b><span style="color:#9ca3af">'+x[0]+'</span></div>';}).join('');
+  var c={AV:0,OC:0,DI:0,CO:0,BL:0,RT:0};
+  rooms.forEach(function(r){if(r.disabled){c.BL++;return;}if(r.retoque){c.RT++;return;}var k=r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';c[k]++;});
+  document.getElementById('smBar').innerHTML=[['Disp',c.AV,'#22c55e'],['Ocup',c.OC,'#ef4444'],['Suci',c.DI,'#f59e0b'],['Cont',c.CO,'#3b82f6'],['Bloq',c.BL,'#6b7280'],['Retoque',c.RT,'#e5e7eb']].map(function(x){return '<div class="chip"><b style="color:'+x[2]+'">'+x[1]+'</b><span style="color:#9ca3af">'+x[0]+'</span></div>';}).join('');
 }
 
 // ---- MODAL HABITACION ----
@@ -1276,9 +1276,10 @@ function renderMaid(){
   } else {
     pending.forEach(function(r){
       var isDirty=r.state==='DIRTY';
+      var isRetoque=r.retoque&&r.state==='AVAILABLE';
       var since=isDirty?Number(r.lastCheckoutMs||0):Number(r.contaminatedSinceMs||r.stateSinceMs||0);
       var mins=since?Math.round((now-since)/60000):0;
-      var col=isDirty?'#f59e0b':'#3b82f6';
+      var col=isRetoque?'#e5e7eb':isDirty?'#f59e0b':'#3b82f6';
       h+='<div style="background:#18181f;border:1px solid '+col+';border-left:4px solid '+col+';border-radius:8px;padding:10px;margin-bottom:7px;cursor:pointer" onclick="togglePendCard(\''+r.roomId+'\')">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
       h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
