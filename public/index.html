@@ -925,6 +925,15 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   });
 }
  var addPersonCount=1,addPersonPay='EFECTIVO';
+ function doHoraGratis(){
+  if(!curRoom)return;
+  conf('Agregar 1 hora gratis a Hab '+curRoom.roomId+'?',function(){
+    rpc('horaGratis',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole},
+      function(res){toast('✓ +1 hora gratis agregada','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
  function doRoomChange(){
   if(!curRoom)return;
   var available=rooms.filter(function(r){return r.state==='AVAILABLE'&&!r.disabled&&!r.retoque&&r.roomId!==curRoom.roomId;});
