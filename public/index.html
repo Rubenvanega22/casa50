@@ -43,7 +43,7 @@ hr{border:none;border-top:1px solid #2e2e3a;margin:10px 0}
 .rg{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:6px}
 .rc{background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:9px;cursor:pointer;border-top:3px solid #2e2e3a;transition:transform .1s}
 .rc:active{transform:scale(.97)}
-.rc.AV{border-top-color:#22c55e}.rc.OC{border-top-color:#ef4444}.rc.DI{border-top-color:#f59e0b}.rc.CO{border-top-color:#3b82f6}.rc.BL{border-top-color:#6b7280}
+.rc.AV{border-top-color:#22c55e}.rc.OC{border-top-color:#ef4444}.rc.DI{border-top-color:#f59e0b}.rc.CO{border-top-color:#3b82f6}h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';.rc.RT{border-top-color:#e5e7eb}
 .rn{font-size:15px;font-weight:800}.rcat{font-size:9px;color:#9ca3af}
 .rst{display:inline-block;margin-top:2px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:20px}
 .rst.AV{background:rgba(34,197,94,.15);color:#22c55e}.rst.OC{background:rgba(239,68,68,.15);color:#ef4444}
@@ -636,8 +636,8 @@ function renderRooms(){
 
 function mkCard(r){
   var now=Date.now();
-  var eff=r.disabled?'BL':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';
-  var lbl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada'};
+  var eff=r.disabled?'BL':r.retoque?'RT':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';
+  var lbl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
   var card=document.createElement('div');card.className='rc '+eff;
   var h='<div class="rn">'+r.roomId+'</div><div class="rcat">'+r.category+'</div><div class="rst '+eff+'">'+(lbl[eff]||eff)+'</div>';
   if(eff==='OC'){
@@ -674,11 +674,11 @@ function openRoom(rid){
 
 function buildRoomB(r){
   var now=Date.now();
-  var eff=r.disabled?'BL':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':'CO';
+  var eff=r.disabled?'BL':r.retoque?'RT':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':'CO';
   var isR=sess&&sess.userRole==='RECEPTION',isA=sess&&sess.userRole==='ADMIN';
   var cfg=MP[r.category]||MP['Junior'];
-  var sc={AV:'#22c55e',OC:'#ef4444',DI:'#f59e0b',CO:'#3b82f6',BL:'#6b7280'};
-  var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada'};
+  var sc={AV:'#22c55e',OC:'#ef4444',DI:'#f59e0b',CO:'#3b82f6',BL:'#6b7280',RT:'#e5e7eb'};
+  var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
   var h='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>';
   if(eff==='BL'){
     var disMs=Number(r.disabledDateMs||0);
@@ -926,6 +926,75 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   });
 }
  var addPersonCount=1,addPersonPay='EFECTIVO';
+ function doRoomChange(){
+  if(!curRoom)return;
+  var available=rooms.filter(function(r){return r.state==='AVAILABLE'&&!r.disabled&&!r.retoque&&r.roomId!==curRoom.roomId;});
+  if(!available.length){toast('No hay habitaciones disponibles.','err');return;}
+  var cfg=MP[curRoom.category]||MP['Junior'];
+  var durs=[3,6,8,12].filter(function(h){return calcP(h,cfg)>0;});
+  var h='<div class="mh"><div class="mt">Cambio de Habitación — Hab '+curRoom.roomId+'</div><button class="mc" onclick="closeM(\'mRoomChange\')">✕</button></div>';
+  h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:10px">Habitación actual: <b style="color:#a78bfa">'+curRoom.roomId+' — '+curRoom.category+'</b></div>';
+  h+='<label>Selecciona la nueva habitación</label>';
+  h+='<select id="rcToRoom" style="margin-bottom:10px" onchange="updRoomChangeDiff()">';
+  available.forEach(function(r){h+='<option value="'+r.roomId+'">'+r.roomId+' — '+r.category+'</option>';});
+  h+='</select>';
+  h+='<label>Duración</label>';
+  h+='<div class="pg" style="margin-bottom:10px">';
+  durs.forEach(function(hr){h+='<div class="po'+(hr===3?' on':'')+'" id="rcDur'+hr+'" onclick="selRCDur('+hr+')"><div class="ph">'+hr+'h</div></div>';});
+  h+='</div>';
+  h+='<label>Método de pago (si hay diferencia)</label>';
+  h+='<div class="pm" style="margin-bottom:10px"><div class="pmo on" id="rcPmEF" onclick="selRCPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="rcPmTA" onclick="selRCPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="rcPmNE" onclick="selRCPm(\'NEQUI\')">Nequi</div></div>';
+  h+='<div id="rcDiffBox" style="background:#22222c;border-radius:8px;padding:10px;text-align:center;margin-bottom:10px"></div>';
+  h+='<button class="btn bg full" onclick="confirmRoomChange()">Confirmar Cambio</button>';
+  var modal=document.getElementById('mRoomChange');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mRoomChange';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mRoomChangeB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mRoomChange');});document.body.appendChild(div);}
+  document.getElementById('mRoomChangeB').innerHTML=h;
+  openM('mRoomChange');
+  rcDur=3;rcPm='EFECTIVO';
+  updRoomChangeDiff();
+}
+var rcDur=3,rcPm='EFECTIVO';
+function selRCDur(h){
+  rcDur=h;
+  [3,6,8,12].forEach(function(d){var el=document.getElementById('rcDur'+d);if(el)el.classList.toggle('on',d===h);});
+  updRoomChangeDiff();
+}
+function selRCPm(pm){
+  rcPm=pm;
+  ['EF','TA','NE'].forEach(function(k){var el=document.getElementById('rcPm'+k);if(el)el.classList.toggle('on',{EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI'}[k]===pm);});
+}
+function updRoomChangeDiff(){
+  var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
+  var toRoom=rooms.find(function(r){return r.roomId===toRoomId;});
+  var el=document.getElementById('rcDiffBox');
+  if(!toRoom||!el)return;
+  var fromCfg=MP[curRoom.category]||MP['Junior'];
+  var toCfg=MP[toRoom.category]||MP['Junior'];
+  var fromPrice=calcP(rcDur,fromCfg);
+  var toPrice=calcP(rcDur,toCfg);
+  var diff=toPrice-fromPrice;
+  if(diff>0)el.innerHTML='<div style="color:#f59e0b">Diferencia a cobrar: <b>'+fmt(diff)+'</b></div>';
+  else if(diff<0)el.innerHTML='<div style="color:#22c55e">Devolución al cliente: <b>'+fmt(Math.abs(diff))+'</b></div>';
+  else el.innerHTML='<div style="color:#9ca3af">Sin diferencia de precio</div>';
+}
+function confirmRoomChange(){
+  if(!curRoom)return;
+  var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
+  if(!toRoomId){toast('Selecciona una habitación.','err');return;}
+  conf('Cambiar Hab '+curRoom.roomId+' → Hab '+toRoomId+'?',function(){
+    rpc('roomChange',{fromRoomId:curRoom.roomId,toRoomId:toRoomId,durationHrs:rcDur,payMethod:rcPm,userName:sess.userName,userRole:sess.userRole},
+      function(res){
+        var msg='Cambio realizado.';
+        if(res.diff>0)msg+=' Cobrar: '+fmt(res.diff);
+        else if(res.diff<0)msg+=' Devolver: '+fmt(Math.abs(res.diff));
+        toast(msg,'ok');
+        closeM('mRoomChange');closeM('mRoom');
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+      },
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
  function doEditPlate(){
   if(!curRoom)return;
   var h='<div class="mh"><div class="mt">Editar Llegada — Hab '+curRoom.roomId+'</div><button class="mc" onclick="closeM(\'mEditPlate\')">✕</button></div>';
@@ -1189,7 +1258,7 @@ function renderMaid(){
     document.getElementById('maidCont').innerHTML='<div style="text-align:center;padding:30px"><p style="color:#ef4444;font-weight:700;margin-bottom:12px">⚠️ Debes seleccionar tu nombre antes de continuar</p><button class="btn ba sm" onclick="checkMaidSelection()">¿Quién eres?</button></div>';
     return;
   }
-  var pending=rooms.filter(function(r){return r.state==='DIRTY'&&!r.maidInProgress;});
+  var pending=rooms.filter(function(r){return (r.state==='DIRTY'||r.retoque)&&!r.maidInProgress;});
  var inProgress=rooms.filter(function(r){return (r.state==='DIRTY'||r.state==='CONTAMINATED')&&(r.maidInProgress&&r.maidNameProgress===sess.userName||r.state==='CONTAMINATED'&&!r.maidInProgress);});
  
   var h='';
