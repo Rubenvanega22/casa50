@@ -1283,14 +1283,16 @@ async function apiAddExtraPerson(p, res) {
 
 async function apiUpdateArrivalPlate(p, res) {
   const roomId=String(p.roomId||'').trim(),plate=String(p.plate||'').toUpperCase().trim();
+  const arrivalType=String(p.arrivalType||'').toUpperCase().trim();
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
   const room=await getRoom(roomId);
   if(!room)return err(res,'Habitacion no existe');
   if(room.state!=='OCCUPIED')return err(res,'Habitacion no esta ocupada');
-  if(room.arrival_type==='CAR'&&!plate)return err(res,'Placa obligatoria para CAR');
-  await supabase.from('rooms').update({arrival_plate:plate,updated_at:new Date().toISOString()}).eq('room_id',roomId);
-  return ok(res,{roomId,plate});
+  const updates={arrival_plate:plate,updated_at:new Date().toISOString()};
+  if(arrivalType)updates.arrival_type=arrivalType;
+  await supabase.from('rooms').update(updates).eq('room_id',roomId);
+  return ok(res,{roomId,plate,arrivalType});
 }
 async function apiGetMaintHistory(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
