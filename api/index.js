@@ -323,7 +323,14 @@ async function apiCheckIn(p, res) {
   const mixtoTj = Number(p.mixtoTj || 0);
   const mixtoNq = Number(p.mixtoNq || 0);
   console.log('MIXTO DEBUG:', payMethod, mixtoEf, mixtoTj, mixtoNq);
-
+  await supabase.from('rooms').update({
+    state: 'OCCUPIED', state_since_ms: now, people,
+    check_in_ms: now, due_ms: dueMs,
+    arrival_type: arrivalType, arrival_plate: arrivalPlate,
+    alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
+    checkout_obs: '', contaminated_since_ms: 0, retoque: false,
+    updated_at: new Date().toISOString()
+  }).eq('room_id', roomId);
   await supabase.from('sales').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'SALE',
