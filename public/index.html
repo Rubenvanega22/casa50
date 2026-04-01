@@ -1447,7 +1447,8 @@ function loadVentas(){
     var taxiList=(m.taxiList||[]);
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
-    var sl=(m.allSalesList||[]).filter(function(s){return !fromMs||Number(s.checkInMs||0)>=fromMs;});
+    var sl=(m.allSalesList||[]).filter(function(s){return !fromMs||Number(s.checkInMs||0)>=fromMs;}).sort(function(a,b){return a.checkInMs-b.checkInMs;});
+var num=1;
     var h='<div class="pay-row"><div class="pay-item"><div class="pay-lbl">Efectivo</div><div class="pay-val" style="color:#22c55e">'+fmt(t.totalEfectivo||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(t.totalTarjeta||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Nequi</div><div class="pay-val" style="color:#a78bfa">'+fmt(t.totalNequi||0)+'</div></div>';
@@ -2573,8 +2574,9 @@ function renderMet(m,hourly){
       var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne'}[s.payMethod]||'badge-ap';
       var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
       var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
-      h+='<div class="sale-row"><div class="sale-top"><b>Hab '+s.roomId+' — '+esc(s.category)+'</b><span class="badge '+pmB+'">'+s.payMethod+'</span><b style="color:#22c55e">'+fmt(s.total)+'</b></div>';
+      h+='<div class="sale-row"><div class="sale-top"><b>#'+num+' Hab '+s.roomId+' — '+esc(s.category)+'</b><span class="badge '+pmB+'">'+s.payMethod+'</span><b style="color:#22c55e">'+fmt(s.total)+'</b></div>';
       h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span>'+(sn[s.shiftId]||s.shiftId)+'</span></div></div>';
+     num++;
     });
   }
   return h;
