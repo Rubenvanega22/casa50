@@ -1603,7 +1603,6 @@ function loadCuadre(){
     var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0,nq_hab=0,nq_padd=0,nq_hadd=0;
 sl.forEach(function(s){
       var pm=s.payMethod||'EFECTIVO';
-      if(pm==='MIXTO')toast('MIXTO: ef='+s.amount_1+' tj='+s.amount_2+' nq='+s.amount_3,'ok');
       var tot=Number(s.total||0);
       var extraP=Number(s.extraPeopleTotal||0);
       var extraH=Number(s.extraHoursTotal||0);
