@@ -175,6 +175,7 @@ case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'getDailyCuadre':     return await apiGetDailyCuadre(payload, res);
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
       case 'roomChange':         return await apiRoomChange(payload, res);
+      case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
         case 'getRoomIssues':    return await apiGetRoomIssues(payload, res);
