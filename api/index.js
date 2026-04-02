@@ -7,7 +7,8 @@
 //  - addExtraPerson: persona adicional post check-in
 //  - updateArrivalPlate: placa post check-in
 //  - setDisabled: RECEPTION puede bloquear (no desbloquear)
-//  - checkOut: warning si due_ms pendiente (param force)
+//  - checkOut: warni
+ng si due_ms pendiente (param force)
 //  - metricas: filtrado REAL por shift_id
 //  - notas: historial permanente + borrado logico + getNoteHistory/deleteNote
 //  - saveStaff/getStaff: ficha completa con cedula/celular etc
