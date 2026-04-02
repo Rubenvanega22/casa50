@@ -759,15 +759,17 @@ async function apiRegisterExtra(p, res) {
   const personName = String(p.personName || '').trim();
   const area = String(p.area || 'Servicios').trim();
   const entryMs = Number(p.entryMs || now);
+  const scheduledExitMs = Number(p.scheduledExitMs || 0);
+  const workHours = Number(p.workHours || 0);
   if (!personName) return err(res, 'Nombre requerido');
-
   await supabase.from('extra_staff').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     registered_by: String(p.userName || ''),
     person_name: personName, entry_ms: entryMs,
-    area, active: true, exit_ms: 0, payment: 0
+    area, active: true, exit_ms: 0, payment: 0,
+    scheduled_exit_ms: scheduledExitMs, work_hours: workHours
   });
-  return ok(res, { personName, area, shiftId: shift, businessDay: bDay });
+  return ok(res, { personName, area, shiftId: shift, businessDay: bDay, scheduledExitMs, workHours });
 }
 
 async function apiCheckoutExtra(p, res) {
@@ -796,7 +798,9 @@ async function apiGetExtra(p, res) {
       entryMs: Number(r.entry_ms || 0), exitMs: Number(r.exit_ms || 0),
       payment: Number(r.payment || 0), active: r.active,
       paidMs: Number(r.paid_ms || 0), paidBy: r.paid_by || '',
-      registeredBy: r.registered_by || ''
+      registeredBy: r.registered_by || '',
+      scheduledExitMs: Number(r.scheduled_exit_ms || 0),
+      workHours: Number(r.work_hours || 0)
     }))
   });
 }
