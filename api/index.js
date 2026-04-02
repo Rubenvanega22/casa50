@@ -895,7 +895,7 @@ async function apiCloseShift(p, res) {
   let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
 
   (salesRes.data || []).forEach(r => {
-    if (r.room_id === '304') return;
+    if (String(r.room_id) === '304') return;
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
     if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'REFUND') totalRefunds += t;
@@ -948,7 +948,7 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
   (salesRes.data||[]).forEach(r=>{
     const t=Number(r.total||0),type=r.type,pm=String(r.pay_method||'').toUpperCase(),sid=r.shift_id;
     const isRev=type==='SALE'||type==='EXTENSION'||type==='RENEWAL';
-    const skip304 = r.room_id === '304';
+    const skip304 = String(r.room_id) === '304';
     if(isRev){
       if(!skip304){
         dayTotal+=t;
@@ -1261,7 +1261,7 @@ async function apiGetDailyCuadre(p, res) {
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
-    if(r.room_id === '304') return;
+    if(String(r.room_id) === '304') return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
     if(r.type==='SALE'){
       const habVal=t-epv;
