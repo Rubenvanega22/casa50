@@ -972,7 +972,8 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
   });
   const taxiList=[];
 (taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftTaxi+=a;taxiList.push({tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a,businessDay:r.business_day||''});});
-  (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0);dayBar+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftBar+=a;});
+ let dayBarEfe=0,dayBarTar=0,dayBarNeq=0;
+  (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter)shiftBar+=a;});
   (gastoRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayGastos+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftGastos+=a;});
   (loansRes.data||[]).forEach(r=>{dayLoans+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
@@ -985,6 +986,7 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
     totals:{
       sales:dayTotal,bar:dayBar,refunds:dayRefunds,taxi:dayTaxi,loans:dayLoans,extraStaff:dayExtraStaff,gastos:dayGastos,net:dayNet,
       totalEfectivo:dayEfe,totalTarjeta:dayTar,totalNequi:dayNeq,
+      barEfectivo:dayBarEfe,barTarjeta:dayBarTar,barNequi:dayBarNeq,
       shiftNet,shiftSales,shiftRoomsSold:shiftRooms,shiftPeople,shiftBar,shiftTaxi,shiftGastos,
       shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq
     },
@@ -1204,10 +1206,10 @@ async function apiAddBarSale(p, res) {
   const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
-  const cash=Number(p.amountCash||0),card=Number(p.amountCard||0);
-  if(cash+card<=0)return err(res,'Monto total debe ser mayor a 0');
-  await supabase.from('bar_sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,total:cash+card});
-  return ok(res,{tsMs:now,total:cash+card,shiftId:shift});
+  const cash=Number(p.amountCash||0),card=Number(p.amountCard||0),nequi=Number(p.amountNequi||0);
+  if(cash+card+nequi<=0)return err(res,'Monto total debe ser mayor a 0');
+  await supabase.from('bar_sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,amount_nequi:nequi,total:cash+card+nequi});
+  return ok(res,{tsMs:now,total:cash+card+nequi,shiftId:shift});
 }
 
 async function apiGetBarSales(p, res) {
@@ -1216,8 +1218,8 @@ async function apiGetBarSales(p, res) {
   let q=supabase.from('bar_sales').select('*').eq('business_day',bDay).order('ts_ms');
   if(shiftFilter)q=q.eq('shift_id',shiftFilter);
   const{data}=await q;
-  const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amountCash:Number(r.amount_cash||0),amountCard:Number(r.amount_card||0),total:Number(r.total||0)}));
-  const totals=list.reduce((acc,r)=>({cash:acc.cash+r.amountCash,card:acc.card+r.amountCard,total:acc.total+r.total}),{cash:0,card:0,total:0});
+ const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amountCash:Number(r.amount_cash||0),amountCard:Number(r.amount_card||0),amountNequi:Number(r.amount_nequi||0),total:Number(r.total||0)}));
+  const totals=list.reduce((acc,r)=>({cash:acc.cash+r.amountCash,card:acc.card+r.amountCard,nequi:acc.nequi+r.amountNequi,total:acc.total+r.total}),{cash:0,card:0,nequi:0,total:0});
   return ok(res,{sales:list,totals});
 }
 
