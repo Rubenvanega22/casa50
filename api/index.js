@@ -895,6 +895,7 @@ async function apiCloseShift(p, res) {
   let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
 
   (salesRes.data || []).forEach(r => {
+    if (r.room_id === '304') return;
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
     if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'REFUND') totalRefunds += t;
