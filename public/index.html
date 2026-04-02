@@ -1616,13 +1616,14 @@ sl.forEach(function(s){
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
     var taxis=Number(t.taxi||0);
     var taxiList=(m.taxiList||[]);
-toast('taxiList total: '+taxiList.length,'ok');
+toast('taxiList total: '+taxiList.length,'ok');'+taxiList.length,'ok');
     var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
     var totalGastos=gastos_gen+taxis+turnos;
     var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
     var barSaved={};try{barSaved=JSON.parse(sessionStorage.getItem(barKey)||'{}');}catch(e){}
     var barEf=barSaved.ef!==undefined?barSaved.ef:'';
     var barTj=barSaved.tj!==undefined?barSaved.tj:'';
+    var barNq=barSaved.nq!==undefined?barSaved.nq:'';
     var h='<div id="cuadreRep">';
     h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="font-size:18px;font-weight:900;color:#a78bfa">CASA 50 — SPA MOTEL</div>';
@@ -1642,7 +1643,8 @@ toast('taxiList total: '+taxiList.length,'ok');
     h+=_cRow('Habitaciones',nq_hab,'#a78bfa');
     h+=_cRow('P. Adicional',nq_padd,'#a78bfa');
     h+=_cRow('H. Adicional',nq_hadd,'#a78bfa');
-    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Nequi</span><span style="font-weight:800;color:#a78bfa">'+fmt(nq_hab+nq_padd+nq_hadd)+'</span></div></div>'; 
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barNqInput" placeholder="0" min="0" value="'+barNq+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Nequi</span><span style="font-weight:800;color:#a78bfa" id="totalNqDisp">'+fmt(nq_hab+nq_padd+nq_hadd+(Number(barNq)||0))+'</span></div></div>'; 
    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
     h+='<div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:10px;text-transform:uppercase">💵 Efectivo</div>';
     h+=_cRow('Habitaciones',ef_hab,'#22c55e');
@@ -1658,10 +1660,11 @@ toast('taxiList total: '+taxiList.length,'ok');
     h+=_cRow('Taxis ('+taxisCount+')',taxis,'#f59e0b');
     h+=_cRow('Turnos',turnos,'#f97316');
     h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Gastos</span><span style="font-weight:800;color:#ef4444">'+fmt(totalGastos)+'</span></div></div>';
-    var entrega=(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0)+nq_hab+nq_padd+nq_hadd)-totalGastos;
-    h+='<div style="background:#22222c;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px"><div style="font-size:11px;color:#9ca3af;text-transform:uppercase">💰 Entrega Diaria</div><div style="font-size:28px;font-weight:900;color:'+(entrega>=0?'#22c55e':'#ef4444')+'" id="entregaDisp">'+fmt(entrega)+'</div><div style="font-size:11px;color:#9ca3af;margin-top:4px">Total Efectivo + Nequi − Total Gastos</div></div>';
+    var entrega=(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))-totalGastos;
+    h+='<div style="background:#22222c;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px"><div style="font-size:11px;color:#9ca3af;text-transform:uppercase">💰 Entrega Diaria</div><div style="font-size:28px;font-weight:900;color:'+(entrega>=0?'#22c55e':'#ef4444')+'" id="entregaDisp">'+fmt(entrega)+'</div><div style="font-size:11px;color:#9ca3af;margin-top:4px">Total Efectivo − Total Gastos</div></div>';
     h+='<input type="hidden" id="_ef_base" value="'+(ef_hab+ef_padd+ef_hadd)+'">';
     h+='<input type="hidden" id="_tj_base" value="'+(tj_hab+tj_padd+tj_hadd)+'">';
+    h+='<input type="hidden" id="_nq_base" value="'+(nq_hab+nq_padd+nq_hadd)+'">';
     h+='<input type="hidden" id="_tGastos" value="'+totalGastos+'">';
     h+='<input type="hidden" id="_barKey" value="'+barKey+'">';
     if(sl.length){
@@ -1683,13 +1686,15 @@ function _cRow(label,val,color){return '<div style="display:flex;justify-content
 function updCuadre(){
   var barEf=Number((document.getElementById('barEfInput')||{}).value||0);
   var barTj=Number((document.getElementById('barTjInput')||{}).value||0);
+  var barNq=Number((document.getElementById('barNqInput')||{}).value||0);
   var efBase=Number((document.getElementById('_ef_base')||{}).value||0);
   var tjBase=Number((document.getElementById('_tj_base')||{}).value||0);
   var tGastos=Number((document.getElementById('_tGastos')||{}).value||0);
   var barKey=(document.getElementById('_barKey')||{}).value||'';
-  try{sessionStorage.setItem(barKey,JSON.stringify({ef:barEf,tj:barTj}));}catch(e){}
+  try{sessionStorage.setItem(barKey,JSON.stringify({ef:barEf,tj:barTj,nq:barNq}));}catch(e){}
   var elEf=document.getElementById('totalEfDisp');if(elEf)elEf.textContent=fmt(efBase+barEf);
   var elTj=document.getElementById('totalTjDisp');if(elTj)elTj.textContent=fmt(tjBase+barTj);
+  var elNq=document.getElementById('totalNqDisp');if(elNq)elNq.textContent=fmt(Number((document.getElementById('_nq_base')||{}).value||0)+barNq);
   var elEnt=document.getElementById('entregaDisp');
   if(elEnt){var ent=(efBase+barEf)-tGastos;elEnt.textContent=fmt(ent);elEnt.style.color=ent>=0?'#22c55e':'#ef4444';}
 }
@@ -1701,7 +1706,8 @@ function doCierre(){
   var n=(document.getElementById('closeN2')||{}).value||'';
   var ca=Number((document.getElementById('cashIn2')||{}).value||0);
   conf('Confirmar cierre del turno?',function(){
-    rpc('closeShift',{notes:n,cashCount:ca,barEfectivo:Number(barEfEl.value||0),barTarjeta:Number(barTjEl.value||0),userRole:sess.userRole,userName:sess.userName},
+    var barNqEl=document.getElementById('barNqInput');
+    rpc('closeShift',{notes:n,cashCount:ca,barEfectivo:Number(barEfEl.value||0),barTarjeta:Number(barTjEl.value||0),barNequi:Number(barNqEl?barNqEl.value:0),userRole:sess.userRole,userName:sess.userName},
       function(res){toast('Turno cerrado — Neto: '+fmt((res.summary&&res.summary.net)||0),'ok');var bk=(document.getElementById('_barKey')||{}).value||'';try{sessionStorage.removeItem(bk);}catch(e){}},
       function(e){toast(e.message||String(e),'err');}
     );
