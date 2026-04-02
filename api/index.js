@@ -306,7 +306,7 @@ async function apiCheckIn(p, res) {
   const people = Math.max(includedPeople, Number(p.people || includedPeople));
   const extraPeople = Math.max(0, people - includedPeople);
   const extraPeopleValue = extraPeople * Number(cfg.extraPerson || 0);
-  const total = basePrice + extraPeopleValue;
+  const total = roomId === '304' ? 0 : basePrice + extraPeopleValue;
   const dueMs = now + durationHrs * 3600000;
 
   // v3: CAR=placa obligatoria, MOTO=placa opcional, WALK/TAXI=sin placa
