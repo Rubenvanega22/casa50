@@ -581,7 +581,7 @@ function checkAutoHora(){
   rooms.forEach(function(r){
     if(r.state!=='OCCUPIED'||!r.dueMs)return;
     var vencida=now-Number(r.dueMs);
-    if(vencida<15*60*1000)return; // menos de 15 min vencida
+    if(vencida<30*60*1000)return; // menos de 30 min vencida
     var key='autoHora_'+r.roomId+'_'+r.dueMs;
     if(sessionStorage.getItem(key))return; // ya se cobró
     sessionStorage.setItem(key,'1');
