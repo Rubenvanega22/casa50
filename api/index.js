@@ -885,7 +885,7 @@ async function apiCloseShift(p, res) {
   await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: 'LOGOUT', logout_ms: now });
 
   const [salesRes, taxiRes, loansRes, extraRes] = await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,people').eq('business_day', bDay).eq('shift_id', shift),
+    supabase.from('sales').select('type,total,pay_method,people,room_id').eq('business_day', bDay).eq('shift_id', shift),
     supabase.from('taxi_expenses').select('amount').eq('business_day', bDay).eq('shift_id', shift),
     supabase.from('loans').select('amount').eq('business_day', bDay).eq('shift_id', shift),
     supabase.from('extra_staff').select('payment').eq('business_day', bDay).eq('shift_id', shift)
@@ -1244,7 +1244,7 @@ async function apiGetDailyCuadre(p, res) {
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id').eq('business_day',bDay),
+    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id').eq('business_day',bDay),
     supabase.from('taxi_expenses').select('amount,shift_id').eq('business_day',bDay),
     supabase.from('extra_staff').select('payment,shift_id').eq('business_day',bDay),
     supabase.from('bar_sales').select('amount_cash,amount_card,shift_id').eq('business_day',bDay),
