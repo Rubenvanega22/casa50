@@ -150,6 +150,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label>Area</label><select id="exArea"><option value="Servicios">Servicios</option><option value="Camarera">Camarera</option><option value="Patiero">Patiero</option><option value="Mantenimiento">Mantenimiento</option><option value="Recepcion">Recepcion</option></select>
 <label>Turno</label><select id="exShift"><option value="SHIFT_1">Turno 1 (6am-2pm)</option><option value="SHIFT_2">Turno 2 (2pm-9pm)</option><option value="SHIFT_3">Turno 3 (9pm-6am)</option></select>
 <label>Hora de entrada</label><input type="time" id="exEntryTime">
+<label>¿Cuántas horas va a trabajar?</label><select id="exHours"><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="7">7 horas</option><option value="8">8 horas</option><option value="9">9 horas</option><option value="10">10 horas</option></select>
 <button class="btn ba full" style="margin-top:8px" onclick="saveExtra()">Registrar</button></div></div>
 <div class="ov" id="mExCo"><div class="modal"><div class="mh"><div class="mt" id="mExCoT">Pago y Salida</div><button class="mc" onclick="closeM('mExCo')">✕</button></div><div id="mExCoI" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
 <label>Hora de salida</label><input type="time" id="exExitTime">
@@ -616,7 +617,19 @@ function checkAlarms(){
       list.appendChild(d);
     });
     try{var ctx=new(window.AudioContext||window.webkitAudioContext)();[0,300,600].forEach(function(dly){var o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.setValueAtTime(.15,ctx.currentTime+dly/1000);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+dly/1000+.15);o.start(ctx.currentTime+dly/1000);o.stop(ctx.currentTime+dly/1000+.2);});}catch(e){}
-  }else box.classList.add('h');
+ }else box.classList.add('h');
+  // Alarma personal extra
+  if(window.extraStaffList){
+    window.extraStaffList.filter(function(ex){
+      return ex.active && ex.scheduledExitMs && now>=Number(ex.scheduledExitMs);
+    }).forEach(function(ex){
+      var d=document.createElement('div');d.className='ai';
+      d.style.background='#7c3aed';
+      d.innerHTML='⏰ Extra '+ex.personName+' terminó — PÁGUELE';
+      list.appendChild(d);
+      box.classList.remove('h');
+    });
+  }
 }
 function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];checkAlarms();renderRooms();}});toast('Alarma silenciada','ok');});}
 
@@ -1509,8 +1522,10 @@ function saveExtra(){
   // Convertir hora a ms
   var entryMs=Date.now();
   if(entryTime){var parts=entryTime.split(':');var d=new Date();d.setHours(Number(parts[0]),Number(parts[1]),0,0);entryMs=d.getTime();}
-  rpc('registerExtraStaff',{personName:n,area:a,userRole:sess.userRole,userName:sess.userName,shiftId:sh||BS.currentShiftId,businessDay:sess.businessDay,entryMs:entryMs},
-    function(){toast(n+' registrado.','ok');closeM('mExtra');loadExtra();document.getElementById('exName').value='';},
+  var exHours=Number(document.getElementById('exHours').value||4);
+  var exitMs=entryMs+(exHours*3600000);
+  rpc('registerExtraStaff',{personName:n,area:a,userRole:sess.userRole,userName:sess.userName,shiftId:sh||BS.currentShiftId,businessDay:sess.businessDay,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours},
+    function(){toast(n+' registrado. Sale a las '+new Date(exitMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'.','ok');closeM('mExtra');loadExtra();document.getElementById('exName').value='';},
     function(e){toast(e.message||String(e),'err');}
   );
 }
@@ -1539,6 +1554,7 @@ function saveExCo(){
 function loadExtra(){
   if(!sess)return;
   rpc('getExtraStaff',{businessDay:sess.businessDay},function(data){
+    window.extraStaffList=data&&data.extraStaff?data.extraStaff:[];
     var c=document.getElementById('extraCont');
     if(!data||!data.extraStaff||!data.extraStaff.length){c.innerHTML='<p style="color:#9ca3af;font-size:13px">Sin personal extra hoy.</p>';return;}
     var sn={SHIFT_1:'T1 (6a-2p)',SHIFT_2:'T2 (2p-9p)',SHIFT_3:'T3 (9p-6a)'};
