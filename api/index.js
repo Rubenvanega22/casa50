@@ -1260,6 +1260,7 @@ async function apiGetDailyCuadre(p, res) {
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
+    if(r.room_id === '304') return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
     if(r.type==='SALE'){
       const habVal=t-epv;
