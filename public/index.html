@@ -324,12 +324,18 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <!-- CALENDARIO (admin) -->
 <div class="pnl" id="pnl-sched">
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-<input type="date" id="swk" style="width:auto;margin:0">
+<input type="month" id="schedMonth" style="width:auto;margin:0">
 <button class="btn ba sm" onclick="loadSched()">Ver</button>
-<button class="btn bg sm" id="btnSaveSched" onclick="saveSched()">Guardar Horario</button>
+<button class="btn bg sm" id="btnProgMes" onclick="openProgMes()" style="display:none">+ Programar persona</button>
+<button class="btn bb sm" onclick="printSched()">🖨 Imprimir</button>
 </div>
 <div id="schedCont"></div>
 </div>
+```
+
+Luego busca con **Ctrl+F**:
+```
+if(id==='sched'){setDefWk();loadSched();var btnP=document.getElementById('btnProgMes');if(btnP)btnP.style.display=sess&&sess.userRole==='ADMIN'?'':'none';}
 <!-- NOTAS -->
 <div class="pnl" id="pnl-notes">
 <div style="margin-bottom:8px">
@@ -509,7 +515,8 @@ function buildTabs(){
   var r=sess.userRole,tabs=[];
   if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
-  if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'horarios',l:'Horarios'});
+ if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'});
+if(r==='MAID')tabs.push({id:'sched',l:'Calendario'});
   if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'});
   tabs.push({id:'notes',l:'Reportes'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
@@ -1756,43 +1763,160 @@ function renderSchedView(sched, ws) {
 }
 
 // ---- CALENDARIO (admin) ----
-function setDefWk(){var ws=getWS(new Date());var el=document.getElementById('swk');if(el)el.value=ws;}
-function loadSched(){var ws=(document.getElementById('swk').value||'').trim()||getWS(new Date());rpc('getSchedule',{weekStart:ws},function(data){document.getElementById('schedCont').innerHTML=renderSchedEdit(data.schedule||[],ws);});}
-function renderSchedEdit(sched, ws) {
-  var days = ['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado','Domingo'];
-  var shifts = [{id:'SHIFT_1',l:'T1 (6a-2p)'},{id:'SHIFT_2',l:'T2 (2p-9p)'},{id:'SHIFT_3',l:'T3 (9p-6a)'}];
-  var areas = ['Recepcion','Camarera','Patiero','Mantenimiento'];
-  var h = '<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">Semana del ' + ws + '</div>';
-  shifts.forEach(function(sh) {
-    h += '<div class="sh-block"><div class="sh-hdr">' + sh.l + '</div><div class="sh-body"><table><thead><tr><th style="min-width:80px">Area</th>';
-    days.forEach(function(d) { h += '<th style="min-width:80px">' + d.substring(0,3) + '</th>'; });
-    h += '</tr></thead><tbody>';
-    areas.forEach(function(area) {
-      h += '<tr><td style="font-weight:700;font-size:11px">' + area + '</td>';
-      days.forEach(function(day) {
-        var entries = sched.filter(function(e) {
-          return e.shiftId === sh.id && e.area === area && e.dayOfWeek === day;
-        });
-        var names = entries.map(function(e) { return e.personName || ''; }).filter(Boolean);
-        var cellId = 'cell_' + sh.id + '_' + area.replace(/\s/g,'') + '_' + day;
-        h += '<td style="padding:3px;vertical-align:top"><div id="' + cellId + '" style="min-width:75px">';
-        names.forEach(function(nm) {
-          h += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:2px">';
-          h += '<input type="text" value="' + esc(nm) + '" data-shift="' + sh.id + '" data-area="' + area + '" data-day="' + day + '" style="flex:1;width:60px;padding:2px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:3px;color:#e5e7eb;font-size:10px">';
-          h += '<button onclick="removeSchedSlot(this)" style="background:#ef4444;border:none;border-radius:3px;color:#fff;padding:1px 4px;cursor:pointer;font-size:10px;flex-shrink:0">✕</button>';
-          h += '</div>';
-        });
-        if (names.length < 4) {
-          h += '<button onclick="addSchedSlot(this,\'' + sh.id + '\',\'' + area + '\',\'' + day + '\')" style="background:#22222c;border:1px dashed #3b82f6;border-radius:3px;color:#3b82f6;padding:2px 5px;cursor:pointer;font-size:9px;width:100%;margin-top:1px">+ Agregar</button>';
-        }
-        h += '</div></td>';
-      });
-      h += '</tr>';
-    });
-    h += '</tbody></table></div></div>';
+function setDefWk(){var now=new Date();var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');var el=document.getElementById('schedMonth');if(el)el.value=ym;}
+function loadSched(){
+  var ym=(document.getElementById('schedMonth')||{}).value||'';
+  if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+  rpc('getSchedule',{},function(data){
+    document.getElementById('schedCont').innerHTML=renderCalMes(data.schedule||[],ym,sess&&sess.userRole==='ADMIN');
   });
+}
+function renderCalMes(sched, ym, isAdmin) {
+  var partes=ym.split('-');var anio=Number(partes[0]),mes=Number(partes[1]);
+  var diasSemana=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+  var areas=['Recepcion','Camarera','Patiero'];
+  var TURNOS={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+  var primerDia=new Date(anio,mes-1,1).getDay();
+  var ultimoDia=new Date(anio,mes,0).getDate();
+  var hoy=new Date();
+  var esHoyMes=hoy.getFullYear()===anio&&(hoy.getMonth()+1)===mes;
+
+  function pad(n){return n<10?'0'+n:String(n);}
+  function getFecha(dia){return anio+'-'+pad(mes)+'-'+pad(dia);}
+  function esDomingo(dia){return new Date(anio,mes-1,dia).getDay()===0;}
+  function getEntrada(fecha,area){
+    return sched.filter(function(e){return e.weekStart===fecha&&e.area===area;});
+  }
+  function colTipo(tipo){
+    if(tipo==='descanso')return '#22c55e';
+    if(tipo==='vacaciones')return '#db2777';
+    if(tipo==='festivo')return '#3b82f6';
+    if(tipo==='domingo')return '#d97706';
+    return '#7c5cfc';
+  }
+
+  var h='<div style="margin-bottom:12px">';
+  // Leyenda
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+  [['#7c5cfc','Turno normal'],['#d97706','Domingo'],['#3b82f6','Festivo'],['#22c55e','Descanso'],['#db2777','Vacaciones']].forEach(function(l){
+    h+='<div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#9ca3af"><div style="width:10px;height:10px;border-radius:2px;background:'+l[0]+';flex-shrink:0"></div>'+l[1]+'</div>';
+  });
+  h+='</div>';
+
+  areas.forEach(function(area){
+    h+='<div style="margin-bottom:18px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#a78bfa;text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">'+area+'</div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:500px">';
+    h+='<thead><tr>';
+    diasSemana.forEach(function(d){h+='<th style="padding:4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">'+d+'</th>';});
+    h+='</tr></thead><tbody><tr>';
+
+    // Celdas vacías al inicio
+    for(var i=0;i<primerDia;i++)h+='<td style="background:#0f0f13;border:1px solid #1a1a24"></td>';
+
+    var col=primerDia;
+    for(var dia=1;dia<=ultimoDia;dia++){
+      var fecha=getFecha(dia);
+      var isDom=esDomingo(dia);
+      var isHoy=esHoyMes&&dia===hoy.getDate();
+      var entradas=getEntrada(fecha,area);
+      var bgColor=isDom?'rgba(217,119,6,.1)':'rgba(124,92,252,.05)';
+      var borderTop=isDom?'2px solid #d97706':'1px solid #2e2e3a';
+      h+='<td style="border:1px solid #2e2e3a;border-top:'+borderTop+';background:'+bgColor+';vertical-align:top;padding:3px;min-width:45px">';
+      h+='<div style="font-size:9px;color:'+(isHoy?'#a78bfa':'#6b7280')+';font-weight:'+(isHoy?'800':'400')+';margin-bottom:2px">'+dia+'</div>';
+      if(isDom&&!entradas.length){
+        h+='<div style="font-size:8px;background:rgba(217,119,6,.3);color:#d97706;border-radius:2px;padding:1px 3px">Dom</div>';
+      }
+      entradas.forEach(function(e){
+        var tipo=e.type||'normal';
+        var col2=colTipo(tipo);
+        var turno=TURNOS[e.shiftId]||'';
+        var label=tipo==='descanso'?'DESC':tipo==='vacaciones'?'VAC':tipo==='festivo'?'FEST':(turno+' '+(e.personName||'')).trim();
+        h+='<div style="font-size:8px;background:rgba('+hexToRgb(col2)+',.25);color:'+col2+';border-radius:2px;padding:1px 3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(e.personName||'')+'">'+esc(label)+'</div>';
+      });
+      if(isAdmin){
+        h+='<div onclick="openDiaEdit(\''+fecha+'\',\''+area+'\')" style="cursor:pointer;font-size:8px;color:#3b82f6;margin-top:1px">+</div>';
+      }
+      h+='</td>';
+      col++;
+      if(col===7&&dia<ultimoDia){h+='</tr><tr>';col=0;}
+    }
+    // Celdas vacías al final
+    var resto=(7-col)%7;for(var j=0;j<resto;j++)h+='<td style="background:#0f0f13;border:1px solid #1a1a24"></td>';
+    h+='</tr></tbody></table></div></div>';
+  });
+  h+='</div>';
   return h;
 }
+function hexToRgb(hex){hex=hex.replace('#','');var r=parseInt(hex.substring(0,2),16),g=parseInt(hex.substring(2,4),16),b=parseInt(hex.substring(4,6),16);return r+','+g+','+b;}
+function openDiaEdit(fecha,area){toast('Día: '+fecha+' — Área: '+area,'ok');}
+function openProgMes(){
+  var h='<div class="mh"><div class="mt">Programar persona del mes</div><button class="mc" onclick="closeM(\'mProgMes\')">✕</button></div>';
+  h+='<label>Nombre</label><select id="pmNombre"><option value="">Selecciona...</option>';
+  (staffList||[]).filter(function(s){return s.active!==false&&s.active!=='false';}).forEach(function(s){
+    h+='<option value="'+esc(s.name)+'">'+esc(s.name)+' ('+esc(s.area)+')</option>';
+  });
+  h+='</select>';
+  h+='<label>Área</label><select id="pmArea"><option value="Recepcion">Recepcion</option><option value="Camarera">Camarera</option><option value="Patiero">Patiero</option></select>';
+  h+='<label>Turno habitual</label><select id="pmTurno"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select>';
+  h+='<label>Hora entrada</label><input type="time" id="pmEntrada" value="06:00">';
+  h+='<label>Hora salida</label><input type="time" id="pmSalida" value="14:00">';
+  h+='<label>Días de descanso</label>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">';
+  ['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado','Domingo'].forEach(function(d){
+    h+='<div onclick="toggleDiaDesc(this)" data-dia="'+d+'" style="padding:5px 9px;background:#22222c;border:2px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:11px">'+d.substring(0,3)+'</div>';
+  });
+  h+='</div>';
+  h+='<label>Días especiales (opcional)</label>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:8px;margin-bottom:8px;font-size:11px;color:#9ca3af">Después de guardar puedes marcar días individuales como festivo o vacaciones haciendo clic en el día del calendario.</div>';
+  h+='<button class="btn ba full" style="margin-top:8px" onclick="saveProgMes()">Guardar programación del mes</button>';
+  var modal=document.getElementById('mProgMes');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mProgMes';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mProgMesB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mProgMes');});document.body.appendChild(div);}
+  document.getElementById('mProgMesB').innerHTML=h;
+  openM('mProgMes');
+}
+function toggleDiaDesc(el){
+  var on=el.style.borderColor==='#22c55e';
+  el.style.borderColor=on?'#2e2e3a':'#22c55e';
+  el.style.color=on?'':'#22c55e';
+}
+function saveProgMes(){
+  var nombre=(document.getElementById('pmNombre').value||'').trim();
+  var area=document.getElementById('pmArea').value;
+  var turno=document.getElementById('pmTurno').value;
+  var entrada=document.getElementById('pmEntrada').value||'';
+  var salida=document.getElementById('pmSalida').value||'';
+  if(!nombre){toast('Selecciona un nombre.','err');return;}
+  var diasDesc=[];
+  document.querySelectorAll('#mProgMesB [data-dia]').forEach(function(el){
+    if(el.style.borderColor==='#22c55e')diasDesc.push(el.dataset.dia);
+  });
+  var ym=(document.getElementById('schedMonth')||{}).value||'';
+  if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+  var partes=ym.split('-');var anio=Number(partes[0]),mes=Number(partes[1]);
+  var ultimoDia=new Date(anio,mes,0).getDate();
+  var diasSemana=['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
+  var entries=[];
+  for(var dia=1;dia<=ultimoDia;dia++){
+    var fecha=anio+'-'+String(mes).padStart(2,'0')+'-'+String(dia).padStart(2,'0');
+    var nombreDia=diasSemana[new Date(anio,mes-1,dia).getDay()];
+    var tipo=diasDesc.indexOf(nombreDia)>=0?'descanso':'normal';
+    entries.push({shiftId:turno,area:area,dayOfWeek:fecha,personName:nombre,type:tipo,horaEntrada:entrada,horaSalida:salida});
+  }
+  var btn=document.getElementById('btnProgMes');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  rpc('saveSchedule',{weekStart:ym,entries:entries,userRole:sess.userRole},
+    function(res){
+      if(btn){btn.disabled=false;btn.textContent='+ Programar persona';}
+      toast('Programación guardada — '+res.saved+' días.','ok');
+      closeM('mProgMes');loadSched();
+    },
+    function(e){
+      if(btn){btn.disabled=false;btn.textContent='+ Programar persona';}
+      toast(e.message||String(e),'err');
+    }
+  );
+}
+function printSched(){var el=document.getElementById('schedCont');if(!el){toast('Carga el calendario primero.','err');return;}var w=window.open('','_blank');w.document.write('<!DOCTYPE html><html><head><title>Calendario Casa 50</title><style>body{font-family:Arial;padding:20px;font-size:11px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px}th{background:#f0f0f0}</style></head><body>'+el.innerHTML+'</body></html>');w.document.close();setTimeout(function(){w.print();},500);}
   function addSchedSlot(btn, shiftId, area, day) {
   var cell = btn.parentElement;
   var existing = cell.querySelectorAll('input[data-shift]').length;
