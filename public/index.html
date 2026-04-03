@@ -186,8 +186,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bg full" style="margin-top:8px" onclick="doEnableConfirm()">Habilitar</button>
 </div></div>
  <div class="ov" id="mCalProg"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt">Programar persona del mes</div><button class="mc" onclick="closeM('mCalProg')">✕</button></div>
-<label>Nombre</label><input type="text" id="cp-nombre" placeholder="Nombre completo">
-<label>Area</label><select id="cp-area"><option value="Recepcion">Recepcion</option><option value="Camareria">Camareria</option><option value="Patio">Patio</option></select>
+<label>Area</label><select id="cp-area" onchange="ncalFiltrarPersonas()"><option value="Recepcion">Recepcion</option><option value="Camareria">Camareria</option><option value="Patio">Patio</option></select>
+<label>Nombre</label><select id="cp-nombre"><option value="">-- Selecciona --</option></select>
 <label>Turno y horario por semana</label>
 <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px">
 <div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 1</div><select class="form-select" id="cs1-turno" onchange="ncalActHoras(1)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs1-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs1-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
@@ -1974,17 +1974,28 @@ function ncalRender(){
   });
   cont.innerHTML=html;
 }
-
+function ncalFiltrarPersonas(){
+  var areaVal=document.getElementById('cp-area').value;
+  var sel=document.getElementById('cp-nombre');
+  var aMap={Recepcion:'Recepcion',Camareria:'Camarera',Patio:'Patiero'};
+  sel.innerHTML='<option value="">-- Selecciona --</option>';
+  (staffList||[]).filter(function(s){
+    if(s.active===false||s.active==='false')return false;
+    return s.area===(aMap[areaVal]||areaVal)||s.area===areaVal;
+  }).forEach(function(s){
+    var opt=document.createElement('option');opt.value=s.name;opt.textContent=s.name;sel.appendChild(opt);
+  });
+  sel.value='';
+}
 function ncalAbrirProg(areaDefault){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo el administrador puede programar.','err');return;}
   ncalDescSel=[];
   document.querySelectorAll('#cp-desc-days .abtn2').forEach(function(el){el.classList.remove('on');});
-  document.getElementById('cp-nombre').value='';
   if(areaDefault)document.getElementById('cp-area').value=areaDefault;
+  ncalFiltrarPersonas();
   for(var s=1;s<=4;s++){document.getElementById('cs'+s+'-turno').value='T1';document.getElementById('cs'+s+'-entrada').value='06:00';document.getElementById('cs'+s+'-salida').value='14:00';}
   openM('mCalProg');
 }
-
 function ncalToggleDesc(el,dia){
   el.classList.toggle('on');
   var i=ncalDescSel.indexOf(dia);
