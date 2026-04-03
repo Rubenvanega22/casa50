@@ -283,6 +283,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div style="display:flex;gap:5px;align-items:center">
 <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">↻ Actualizar</button>
+<button class="btn bk sm" id="btnAbrirCaja" style="display:none" onclick="abrirCajaManual()">🗃 Abrir Caja</button>
 <div class="bdg" id="husr">--</div>
 <button class="btn bk sm" onclick="salir()">Salir</button>
 </div>
@@ -550,6 +551,7 @@ function startApp(){
   document.getElementById('hsh').innerHTML='<b>'+(sn[sess.shiftId]||sess.shiftId)+'</b>';
   document.getElementById('husr').textContent=sess.userName;
   buildTabs();
+actualizarBtnCaja();
   sw(sess.userRole==='MAID'?'maid':'rooms');
   if(rooms.length)renderRooms();
   startPoll();startClock();
@@ -575,7 +577,12 @@ function startApp(){
   }
   loadNotes();
 }
-
+function actualizarBtnCaja(){
+  var btn=document.getElementById('btnAbrirCaja');
+  if(!btn||!sess)return;
+  var r=sess.userRole;
+  btn.style.display=(r==='RECEPTION'||r==='ADMIN')?'':'none';
+}
 function buildTabs(){
   var bar=document.getElementById('tabBar');bar.innerHTML='';
   var r=sess.userRole,tabs=[];
@@ -626,7 +633,13 @@ function salir(){
 }
 
 // ---- BOTÓN REFRESCAR ----
-function doRefresh(){
+function abrirCajaManual(){
+  rpc('openDrawer',{userName:sess.userName,userRole:sess.userRole},
+    function(){toast('Caja abierta.','ok');},
+    function(e){toast(e.message||'Error abriendo caja.','err');}
+  );
+}
+ function doRefresh(){
   var btn=document.getElementById('refreshBtn');
   btn.textContent='↻ Actualizando...';btn.classList.add('updating');
   rpc('getRooms',null,function(d){
