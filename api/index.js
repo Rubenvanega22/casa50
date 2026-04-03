@@ -278,6 +278,28 @@ async function apiLogin(p, res) {
 }
 
 // ==================== CHECK-IN ====================
+
+
+
+async function openCashDrawer() {
+  try {
+    const net = await import('net');
+    const PRINTER_IP = '192.168.0.31';
+    const PRINTER_PORT = 9100;
+    const OPEN_DRAWER = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]);
+    await new Promise((resolve) => {
+      const client = new net.Socket();
+      client.setTimeout(3000);
+      client.connect(PRINTER_PORT, PRINTER_IP, () => {
+        client.write(OPEN_DRAWER);
+        client.end();
+        resolve();
+      });
+      client.on('error', () => resolve());
+      client.on('timeout', () => { client.destroy(); resolve(); });
+    });
+  } catch(e) {}
+}
 async function apiCheckIn(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -357,6 +379,7 @@ async function apiCheckIn(p, res) {
     meta_json: JSON.stringify({ durationHrs, basePrice, total, dueMs, arrivalType, arrivalPlate, payMethod, paidWith, changeGiven, checkInMs: now, extraPeople, extraPeopleValue })
   });
 
+  await openCashDrawer();
   return ok(res, { roomId, total, change: changeGiven, checkInMs: now, dueMs });
 }
 
@@ -439,9 +462,9 @@ async function apiExtendTime(p, res) {
     pay_method: payMethod, check_in_ms: Number(room.check_in_ms || 0), due_ms: newDueMs
   });
 
+  await openCashDrawer();
   return ok(res, { roomId, extraCost, newDueMs });
 }
-
 // ==================== RENOVAR TIEMPO (bloque completo) ====================
 async function apiRenewTime(p, res) {
   const now = Date.now();
