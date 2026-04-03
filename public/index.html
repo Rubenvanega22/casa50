@@ -2949,6 +2949,7 @@ function renderMet(m,hourly){
 
   if(m.allSalesList&&m.allSalesList.length){
     h+='<div class="sec">Ventas del Dia</div>';
+    var num=1;
     m.allSalesList.forEach(function(s){
       var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne'}[s.payMethod]||'badge-ap';
       var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
