@@ -111,6 +111,14 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .badge-mo{background:rgba(249,115,22,.15);color:#f97316}
 .badge-ex{background:rgba(124,92,252,.15);color:#a78bfa}
 .badge-rn{background:rgba(34,197,94,.15);color:#22c55e}
+ .ncal-t1{background:rgba(59,130,246,.2);color:#93c5fd;font-size:8px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block}
+.ncal-t2{background:rgba(34,197,94,.2);color:#86efac;font-size:8px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block}
+.ncal-t3{background:rgba(245,158,11,.2);color:#fcd34d;font-size:8px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block}
+.ncal-dc{background:rgba(107,114,128,.18);color:#9ca3af;font-size:8px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block}
+.ncal-vac{background:rgba(239,68,68,.2);color:#fca5a5;font-size:8px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block}
+.ncal-man{background:rgba(167,139,250,.2);color:#c4b5fd;font-size:8px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block}
+.ncal-ext{font-size:7px;font-weight:500;padding:2px 3px;border-radius:2px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;display:block;background:rgba(251,191,36,.15);color:#fbbf24;border-left:2px solid #f59e0b}
+.ncal-sc{background:rgba(249,115,22,.1);color:#fb923c;border-left:2px solid #f97316;font-size:7px;padding:2px 3px;border-radius:2px;display:block;margin-top:1px}
 .cfg{background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px}
 .cfg h3{font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase}
 .pr2{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3a;font-size:12px}
@@ -176,6 +184,66 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label>Descripcion del arreglo (opcional)</label><input type="text" id="enableDesc" placeholder="Ej: Se cambio la chapa">
 <label>Costo del arreglo (opcional)</label><input type="number" id="enableCost" min="0" placeholder="0">
 <button class="btn bg full" style="margin-top:8px" onclick="doEnableConfirm()">Habilitar</button>
+</div></div>
+ <div class="ov" id="mCalProg"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt">Programar persona del mes</div><button class="mc" onclick="closeM('mCalProg')">✕</button></div>
+<label>Nombre</label><input type="text" id="cp-nombre" placeholder="Nombre completo">
+<label>Area</label><select id="cp-area"><option value="Recepcion">Recepcion</option><option value="Camareria">Camareria</option><option value="Patio">Patio</option></select>
+<label>Turno y horario por semana</label>
+<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px">
+<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 1</div><select class="form-select" id="cs1-turno" onchange="ncalActHoras(1)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs1-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs1-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
+<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 2</div><select id="cs2-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(2)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs2-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs2-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
+<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 3</div><select id="cs3-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(3)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs3-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs3-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
+<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 4</div><select id="cs4-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(4)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs4-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs4-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
+</div>
+<label>Dias de descanso recurrentes</label>
+<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px" id="cp-desc-days">
+<div class="abtn2" onclick="ncalToggleDesc(this,'Dom')">Dom</div><div class="abtn2" onclick="ncalToggleDesc(this,'Lun')">Lun</div><div class="abtn2" onclick="ncalToggleDesc(this,'Mar')">Mar</div><div class="abtn2" onclick="ncalToggleDesc(this,'Mie')">Mie</div><div class="abtn2" onclick="ncalToggleDesc(this,'Jue')">Jue</div><div class="abtn2" onclick="ncalToggleDesc(this,'Vie')">Vie</div><div class="abtn2" onclick="ncalToggleDesc(this,'Sab')">Sab</div>
+</div>
+<button class="btn ba full" style="margin-top:10px" onclick="ncalGuardarProg()">Guardar programacion del mes</button>
+</div></div>
+
+<div class="ov" id="mCalDia"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt" id="mCalDiaT">Editar dia</div><button class="mc" onclick="closeM('mCalDia')">✕</button></div>
+<div id="mCalDiaInfo"></div>
+<label>Tipo de dia</label>
+<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px" id="mCalDiaTipos">
+<div class="abtn2" onclick="ncalSelTipo(this,'normal')">Normal</div>
+<div class="abtn2" onclick="ncalSelTipo(this,'descanso')">DC</div>
+<div class="abtn2" onclick="ncalSelTipo(this,'manual')">Cambio turno</div>
+<div class="abtn2" onclick="ncalSelTipo(this,'12h')" style="border-color:rgba(249,115,22,.3);color:#fb923c">12H</div>
+</div>
+<div id="mCalDia12h" style="display:none;margin-top:8px">
+<label>Horario 12 horas</label>
+<div style="display:flex;gap:6px;margin-top:4px">
+<div class="abtn2" id="ncal12am" onclick="ncalSel12h('am')">6am-6pm</div>
+<div class="abtn2" id="ncal12pm" onclick="ncalSel12h('pm')">6pm-6am</div>
+</div>
+</div>
+<div id="mCalDiaTurno" style="margin-top:8px">
+<label>Turno</label><select id="cdEdit-turno" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px;margin-bottom:4px" onchange="ncalActHorasDia()"><option value="T1">T1 (6am-2pm)</option><option value="T2">T2 (2pm-9pm)</option><option value="T3">T3 (9pm-6am)</option></select>
+<label>Hora entrada</label><input type="time" id="cdEdit-entrada" value="06:00" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px;margin-bottom:4px">
+<label>Hora salida</label><input type="time" id="cdEdit-salida" value="14:00" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px">
+</div>
+<button class="btn ba full" style="margin-top:10px" onclick="ncalGuardarDia()">Guardar cambio</button>
+<div style="margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">
+<button class="btn br full" onclick="ncalMostrarVac()">+ Agregar / Editar Vacaciones</button>
+</div>
+<div id="mCalDiaVac" style="display:none;margin-top:10px;background:rgba(239,68,68,.06);border:0.5px solid rgba(239,68,68,.3);border-radius:8px;padding:12px">
+<div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:8px">Rango de vacaciones — <span id="ncalVacPersona"></span></div>
+<input type="hidden" id="ncal-vac-id">
+<label>Fecha inicio</label><input type="date" id="ncal-vac-inicio" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px;margin-bottom:4px">
+<label>Fecha fin</label><input type="date" id="ncal-vac-fin" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px;margin-bottom:4px">
+<label>Observacion (opcional)</label><input type="text" id="ncal-vac-obs" placeholder="Ej: vacaciones anuales" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px">
+<button class="btn br full" style="margin-top:8px" onclick="ncalGuardarVac()">Guardar vacaciones</button>
+<button class="btn bk full" id="ncalBtnElimVac" style="display:none;margin-top:4px" onclick="ncalEliminarVac()">Eliminar este rango</button>
+<button class="btn bk full" style="margin-top:4px" onclick="document.getElementById('mCalDiaVac').style.display='none'">Cancelar</button>
+</div>
+<div id="mCalDiaExtra" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">
+<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:8px">Cobertura Extra para DC</div>
+<label>Nombre del extra</label><input type="text" id="ncal-ext-nombre" placeholder="Nombre" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px;margin-bottom:4px">
+<label>Turno a cubrir</label><select id="ncal-ext-turno" style="width:100%;background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:7px;margin-bottom:4px"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select>
+<button class="btn by full" onclick="ncalGuardarExtra()">Asignar Extra</button>
+<button class="btn bk full" id="ncalBtnQuitarExt" style="display:none;margin-top:4px" onclick="ncalQuitarExtra()">Quitar extra</button>
+</div>
 </div></div>
 <div class="ov" id="mGoal"><div class="modal"><div class="mh"><div class="mt">Meta del Dia</div><button class="mc" onclick="closeM('mGoal')">✕</button></div><label>Meta en COP</label><input type="number" id="goalIn" min="0"><button class="btn ba full" style="margin-top:8px" onclick="saveGoal()">Guardar Meta</button></div></div>
 <div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt">PIN Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><label>Nombre</label><input type="text" id="pName"><label>PIN</label><input type="password" id="pVal" maxlength="10"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
@@ -1760,202 +1828,329 @@ function renderSchedView(sched, ws) {
   return h;
 }
 
-// ---- CALENDARIO (admin) ----
-function setDefWk(){var now=new Date();var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');var el=document.getElementById('schedMonth');if(el)el.value=ym;}
+// ---- CALENDARIO NUEVO ----
+var ncalDatos={},ncalCoberturas={},ncalVacRangos={},ncalDescSel=[],ncalTipoDia='normal',ncalTipo12h='am',ncalEditando={};
+var ncalAnio=2026,ncalMes=0;
+
+function setDefWk(){var n=new Date();var el=document.getElementById('schedMonth');if(el)el.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+
+function ncalGetYM(){var el=document.getElementById('schedMonth');if(el&&el.value)return el.value;var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+
+function ncalPad(n){return n<10?'0'+n:String(n);}
+function ncalFecha(dia){return ncalAnio+'-'+ncalPad(ncalMes+1)+'-'+ncalPad(dia);}
+function ncalVacKey(area,persona){return area+'|'+persona;}
+function ncalCobKey(fecha,area,persona){return fecha+'|'+area+'|'+persona;}
+
+function ncalGetVac(area,persona,fecha){
+  var r=ncalVacRangos[ncalVacKey(area,persona)]||[];
+  for(var i=0;i<r.length;i++){if(fecha>=r[i].inicio&&fecha<=r[i].fin)return r[i];}
+  return null;
+}
+
+function ncalDiaInicioSem(area,turno){
+  if(area==='Recepcion')return turno==='T2'?0:1;
+  return turno==='T1'?0:1;
+}
+
+function ncalGetSemana(dia,area,turno){
+  var ini=ncalDiaInicioSem(area,turno);
+  var f=new Date(ncalAnio,ncalMes,dia);
+  var ds=f.getDay();
+  var dsd=(ds-ini+7)%7;
+  var iniMs=f.getTime()-dsd*86400000;
+  var p=new Date(ncalAnio,ncalMes,1);
+  var dpd=(p.getDay()-ini+7)%7;
+  var pMs=p.getTime()-dpd*86400000;
+  return Math.min(Math.max(Math.round((iniMs-pMs)/604800000)+1,1),4);
+}
+
+function ncalGetInfo(area,persona,dia,fecha){
+  var key=ncalAnio+'-'+ncalMes+'-'+area;
+  var pData=(ncalDatos[key]||{})[persona];
+  if(!pData)return null;
+  var vac=ncalGetVac(area,persona,fecha);
+  if(vac)return{tipo:'vacaciones',vacId:vac.id,vacInicio:vac.inicio,vacFin:vac.fin,vacObs:vac.obs||''};
+  if(pData.exc&&pData.exc[fecha])return pData.exc[fecha];
+  var ds=(['Dom','Lun','Mar','Mie','Jue','Vie','Sab'])[new Date(ncalAnio,ncalMes,dia).getDay()];
+  if(pData.desc&&pData.desc.indexOf(ds)>=0)return{tipo:'descanso'};
+  var s1=pData.sem&&pData.sem[1];
+  var tRef=s1?s1.turno:'T1';
+  var sem=ncalGetSemana(dia,area,tRef);
+  var sd=pData.sem&&pData.sem[sem]?pData.sem[sem]:s1;
+  if(!sd)return null;
+  return{tipo:'normal',turno:sd.turno,entrada:sd.entrada,salida:sd.salida};
+}
+
 function loadSched(){
-  var ym=(document.getElementById('schedMonth')||{}).value||'';
-  if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
-  rpc('getSchedule',{},function(data){
-    document.getElementById('schedCont').innerHTML=renderCalMes(data.schedule||[],ym,sess&&sess.userRole==='ADMIN');
+  var ym=ncalGetYM();
+  var p=ym.split('-');
+  ncalAnio=parseInt(p[0]);ncalMes=parseInt(p[1])-1;
+  var isAdmin=sess&&sess.userRole==='ADMIN';
+  var btn=document.getElementById('btnProgMes');
+  if(btn)btn.style.display=isAdmin?'':'none';
+  rpc('getSchedule',{weekStart:ym},function(data){
+    ncalDatos={};
+    var SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    var THORAS={T1:{e:'06:00',s:'14:00'},T2:{e:'14:00',s:'21:00'},T3:{e:'21:00',s:'06:00'}};
+    (data.schedule||[]).forEach(function(e){
+      if(!e.dayOfWeek||!e.dayOfWeek.startsWith(ym))return;
+      var key=ncalAnio+'-'+ncalMes+'-'+e.area;
+      if(!ncalDatos[key])ncalDatos[key]={};
+      if(!ncalDatos[key][e.personName])ncalDatos[key][e.personName]={sem:{1:{turno:'T1',entrada:'06:00',salida:'14:00'},2:{turno:'T1',entrada:'06:00',salida:'14:00'},3:{turno:'T1',entrada:'06:00',salida:'14:00'},4:{turno:'T1',entrada:'06:00',salida:'14:00'}},desc:[],exc:{}};
+      var t=SHIFT[e.shiftId]||'T1';
+      var tipo=e.type==='descanso'?'descanso':'normal';
+      ncalDatos[key][e.personName].exc[e.dayOfWeek]={tipo:tipo,turno:t,entrada:e.horaEntrada||THORAS[t].e,salida:e.horaSalida||THORAS[t].s};
+    });
+    ncalRender();
   });
 }
-function renderCalMes(sched, ym, isAdmin) {
-  var partes=ym.split('-');var anio=Number(partes[0]),mes=Number(partes[1]);
-  var diasSemana=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
-  var areas=['Recepcion','Camarera','Patiero'];
-  var TURNOS={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-  var primerDia=new Date(anio,mes-1,1).getDay();
-  var ultimoDia=new Date(anio,mes,0).getDate();
-  var hoy=new Date();
-  var esHoyMes=hoy.getFullYear()===anio&&(hoy.getMonth()+1)===mes;
 
-  function pad(n){return n<10?'0'+n:String(n);}
-  function getFecha(dia){return anio+'-'+pad(mes)+'-'+pad(dia);}
-  function esDomingo(dia){return new Date(anio,mes-1,dia).getDay()===0;}
-  function getEntrada(fecha,area){
-   return sched.filter(function(e){return e.dayOfWeek===fecha&&e.area===area;});
-  }
-  function colTipo(tipo){
-    if(tipo==='descanso')return '#22c55e';
-    if(tipo==='vacaciones')return '#db2777';
-    if(tipo==='festivo')return '#3b82f6';
-    if(tipo==='domingo')return '#d97706';
-    return '#7c5cfc';
-  }
+function ncalGetPersonas(area){
+  return Object.keys(ncalDatos[ncalAnio+'-'+ncalMes+'-'+area]||{});
+}
 
-  var h='<div style="margin-bottom:12px">';
-  // Leyenda
-  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
-  [['#7c5cfc','Turno normal'],['#d97706','Domingo'],['#3b82f6','Festivo'],['#22c55e','Descanso'],['#db2777','Vacaciones']].forEach(function(l){
-    h+='<div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#9ca3af"><div style="width:10px;height:10px;border-radius:2px;background:'+l[0]+';flex-shrink:0"></div>'+l[1]+'</div>';
+function ncalRender(){
+  var cont=document.getElementById('schedCont');
+  if(!cont)return;
+  var AREAS=['Recepcion','Camareria','Patio'];
+  var isAdmin=sess&&sess.userRole==='ADMIN';
+  var html='';
+  html+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;font-size:11px">';
+  [['#3b82f6','T1'],['#22c55e','T2'],['#f59e0b','T3'],['#6b7280','Descanso'],['#ef4444','Vacaciones'],['#a78bfa','Manual']].forEach(function(l){
+    html+='<div style="display:flex;align-items:center;gap:4px;color:#9ca3af"><div style="width:10px;height:10px;border-radius:2px;background:'+l[0]+'"></div>'+l[1]+'</div>';
   });
-  h+='</div>';
-
-  areas.forEach(function(area){
-    h+='<div style="margin-bottom:18px">';
-    h+='<div style="font-size:12px;font-weight:700;color:#a78bfa;text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">'+area+'</div>';
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:500px">';
-    h+='<thead><tr>';
-    diasSemana.forEach(function(d){h+='<th style="padding:4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">'+d+'</th>';});
-    h+='</tr></thead><tbody><tr>';
-
-    // Celdas vacías al inicio
-    for(var i=0;i<primerDia;i++)h+='<td style="background:#0f0f13;border:1px solid #1a1a24"></td>';
-
-    var col=primerDia;
-    for(var dia=1;dia<=ultimoDia;dia++){
-      var fecha=getFecha(dia);
-      var isDom=esDomingo(dia);
-      var isHoy=esHoyMes&&dia===hoy.getDate();
-      var entradas=getEntrada(fecha,area);
-      var bgColor=isDom?'rgba(217,119,6,.1)':'rgba(124,92,252,.05)';
-      var borderTop=isDom?'2px solid #d97706':'1px solid #2e2e3a';
-      h+='<td style="border:1px solid #2e2e3a;border-top:'+borderTop+';background:'+bgColor+';vertical-align:top;padding:3px;min-width:45px">';
-      h+='<div style="font-size:9px;color:'+(isHoy?'#a78bfa':'#6b7280')+';font-weight:'+(isHoy?'800':'400')+';margin-bottom:2px">'+dia+'</div>';
-      if(isDom&&!entradas.length){
-        h+='<div style="font-size:8px;background:rgba(217,119,6,.3);color:#d97706;border-radius:2px;padding:1px 3px">Dom</div>';
-      }
-      entradas.forEach(function(e){
-        var tipo=e.type||'normal';
-        var col2=colTipo(tipo);
-        var turno=TURNOS[e.shiftId]||'';
-        var label=tipo==='descanso'?'DESC':tipo==='vacaciones'?'VAC':tipo==='festivo'?'FEST':(turno+' '+(e.personName||'')).trim();
-        h+='<div style="font-size:8px;background:rgba('+hexToRgb(col2)+',.25);color:'+col2+';border-radius:2px;padding:1px 3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(e.personName||'')+'">'+esc(label)+'</div>';
-      });
-      if(isAdmin){
-        h+='<div onclick="openDiaEdit(\''+fecha+'\',\''+area+'\')" style="cursor:pointer;font-size:8px;color:#3b82f6;margin-top:1px">+</div>';
-      }
-      h+='</td>';
-      col++;
-      if(col===7&&dia<ultimoDia){h+='</tr><tr>';col=0;}
+  html+='</div>';
+  AREAS.forEach(function(area){
+    var personas=ncalGetPersonas(area);
+    html+='<div style="margin-bottom:18px">';
+    html+='<div style="font-size:11px;font-weight:700;color:#a78bfa;text-transform:uppercase;padding:6px 8px;background:rgba(124,92,252,.1);border-left:3px solid #7c5cfc;margin-bottom:0">'+area+(isAdmin?' <span style="font-size:9px;font-weight:400;cursor:pointer;color:#7c5cfc" onclick="ncalAbrirProg(\''+area+'\')">+ Programar</span>':'')+'</div>';
+    if(!personas.length){
+      html+='<div style="font-size:11px;color:#6b7280;padding:8px">Sin personal programado este mes.</div></div>';
+      return;
     }
-    // Celdas vacías al final
-    var resto=(7-col)%7;for(var j=0;j<resto;j++)h+='<td style="background:#0f0f13;border:1px solid #1a1a24"></td>';
-    h+='</tr></tbody></table></div></div>';
+    var ultimoDia=new Date(ncalAnio,ncalMes+1,0).getDate();
+    var hoy=new Date();
+    var DS=['Do','Lu','Ma','Mi','Ju','Vi','Sa'];
+    html+='<div style="overflow-x:auto"><table style="border-collapse:collapse;min-width:'+(80+ultimoDia*35+75)+'px;width:100%">';
+    html+='<thead><tr><th style="position:sticky;left:0;z-index:2;background:#1a1a24;padding:5px 8px;font-size:10px;color:#a78bfa;text-align:left;border:0.5px solid #2e2e3a;min-width:80px">Empleado</th>';
+    for(var d=1;d<=ultimoDia;d++){
+      var dow=new Date(ncalAnio,ncalMes,d).getDay();
+      var esH=hoy.getFullYear()===ncalAnio&&hoy.getMonth()===ncalMes&&hoy.getDate()===d;
+      html+='<th style="padding:2px 1px;font-size:9px;text-align:center;border:0.5px solid #2e2e3a;min-width:33px;'+(dow===0?'color:#f59e0b;':'color:#6b7280;')+(esH?'background:rgba(124,92,252,.15);color:#a78bfa;':'background:#1a1a24;')+'">'+DS[dow]+'<br><b>'+d+'</b></th>';
+    }
+    html+='<th style="position:sticky;right:0;z-index:2;background:#1a1a24;padding:5px 4px;font-size:9px;color:#6b7280;text-align:center;border:0.5px solid #2e2e3a;min-width:65px">Trab<br>DC/Vac<br>T3</th></tr></thead><tbody>';
+    personas.forEach(function(persona){
+      var st={t:0,d:0,n:0};
+      html+='<tr><td style="position:sticky;left:0;z-index:1;background:#18181f;padding:4px 8px;font-size:11px;font-weight:500;color:#e5e7eb;border:0.5px solid #2e2e3a;white-space:nowrap">'+esc(persona)+'</td>';
+      for(var dia=1;dia<=ultimoDia;dia++){
+        var fecha=ncalFecha(dia);
+        var dow2=new Date(ncalAnio,ncalMes,dia).getDay();
+        var info=ncalGetInfo(area,persona,dia,fecha);
+        var cob=ncalCoberturas[ncalCobKey(fecha,area,persona)]||null;
+        var esDes=info&&(info.tipo==='descanso'||info.tipo==='vacaciones');
+        var esDom=dow2===0;
+        var esHoy2=hoy.getFullYear()===ncalAnio&&hoy.getMonth()===ncalMes&&hoy.getDate()===dia;
+        if(info){if(info.tipo==='descanso'||info.tipo==='vacaciones')st.d++;else{st.t++;if(info.turno==='T3'||(info.tipo==='12h'&&info.turno12==='pm'))st.n++;}}
+        var tdBorder=esDom?'border-top:2px solid rgba(245,158,11,.3);':'';
+        if(esDes&&!cob)tdBorder='border-top:2px solid rgba(249,115,22,.5);';
+        var tdBg=esHoy2?'background:rgba(124,92,252,.08);':esDom?'background:rgba(245,158,11,.03);':'';
+        html+='<td style="padding:2px;vertical-align:top;border:0.5px solid rgba(46,46,58,.5);'+tdBorder+tdBg+'">';
+        var onclick=isAdmin?'onclick="ncalAbrirDia(\''+fecha+'\',\''+area+'\',\''+esc(persona)+'\')"':'';
+        html+='<div style="cursor:'+(isAdmin?'pointer':'default')+';min-height:36px;padding:2px;border-radius:2px" '+onclick+'>';
+        if(info){
+          var cls,lbl;
+          if(info.tipo==='descanso'){cls='ncal-dc';lbl='DC';}
+          else if(info.tipo==='vacaciones'){cls='ncal-vac';lbl='VAC';}
+          else if(info.tipo==='12h'){cls='ncal-man';lbl=info.turno12==='am'?'12H↑':'12H↓';}
+          else{cls='ncal-'+(info.turno==='T1'?'t1':info.turno==='T2'?'t2':'t3');lbl=info.turno+(area!=='Recepcion'&&info.entrada?' '+info.entrada.substring(0,5):'');}
+          html+='<span class="'+cls+'">'+lbl+'</span>';
+          if(esDes){if(cob)html+='<span class="ncal-ext">+'+esc(cob.nombre.split(' ')[0])+'</span>';else html+='<span class="ncal-sc">!</span>';}
+        }
+        html+='</div></td>';
+      }
+      html+='<td style="position:sticky;right:0;z-index:1;background:#18181f;padding:3px 4px;text-align:center;border:0.5px solid #2e2e3a;font-size:10px"><div style="color:#22c55e;font-weight:700">'+st.t+'</div><div style="color:#9ca3af">'+st.d+'</div><div style="color:#fcd34d">'+st.n+'</div></td></tr>';
+    });
+    html+='</tbody></table></div></div>';
   });
-  h+='</div>';
-  return h;
+  cont.innerHTML=html;
 }
-function hexToRgb(hex){hex=hex.replace('#','');var r=parseInt(hex.substring(0,2),16),g=parseInt(hex.substring(2,4),16),b=parseInt(hex.substring(4,6),16);return r+','+g+','+b;}
-function openDiaEdit(fecha,area){toast('Día: '+fecha+' — Área: '+area,'ok');}
-function openProgMes(){
+
+function ncalAbrirProg(areaDefault){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo el administrador puede programar.','err');return;}
-  var h='<div class="mh"><div class="mt">Programar persona del mes</div><button class="mc" onclick="closeM(\'mProgMes\')">✕</button></div>';
-  h+='<label>Nombre</label><select id="pmNombre"><option value="">Selecciona...</option>';
-  (staffList||[]).filter(function(s){return s.active!==false&&s.active!=='false';}).forEach(function(s){
-    h+='<option value="'+esc(s.name)+'">'+esc(s.name)+' ('+esc(s.area)+')</option>';
-  });
-  h+='</select>';
-  h+='<label>Área</label><select id="pmArea"><option value="Recepcion">Recepcion</option><option value="Camarera">Camarera</option><option value="Patiero">Patiero</option></select>';
-  h+='<label>Turno habitual</label><select id="pmTurno"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select>';
-  h+='<label>Hora entrada</label><input type="time" id="pmEntrada" value="06:00">';
-  h+='<label>Hora salida</label><input type="time" id="pmSalida" value="14:00">';
-  h+='<label>Días de descanso</label>';
-  h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">';
-  ['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado','Domingo'].forEach(function(d){
-    h+='<div onclick="toggleDiaDesc(this)" data-dia="'+d+'" style="padding:5px 9px;background:#22222c;border:2px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:11px">'+d.substring(0,3)+'</div>';
-  });
-  h+='</div>';
-  h+='<label>Días especiales (opcional)</label>';
-  h+='<div style="background:#22222c;border-radius:8px;padding:8px;margin-bottom:8px;font-size:11px;color:#9ca3af">Después de guardar puedes marcar días individuales como festivo o vacaciones haciendo clic en el día del calendario.</div>';
-  h+='<button class="btn ba full" style="margin-top:8px" onclick="saveProgMes()">Guardar programación del mes</button>';
-  var modal=document.getElementById('mProgMes');
-  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mProgMes';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mProgMesB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mProgMes');});document.body.appendChild(div);}
-  document.getElementById('mProgMesB').innerHTML=h;
-  openM('mProgMes');
+  ncalDescSel=[];
+  document.querySelectorAll('#cp-desc-days .abtn2').forEach(function(el){el.classList.remove('on');});
+  document.getElementById('cp-nombre').value='';
+  if(areaDefault)document.getElementById('cp-area').value=areaDefault;
+  for(var s=1;s<=4;s++){document.getElementById('cs'+s+'-turno').value='T1';document.getElementById('cs'+s+'-entrada').value='06:00';document.getElementById('cs'+s+'-salida').value='14:00';}
+  openM('mCalProg');
 }
-function toggleDiaDesc(el){
-  var on=el.style.borderColor==='#22c55e';
-  el.style.borderColor=on?'#2e2e3a':'#22c55e';
-  el.style.color=on?'':'#22c55e';
+
+function ncalToggleDesc(el,dia){
+  el.classList.toggle('on');
+  var i=ncalDescSel.indexOf(dia);
+  if(i>=0)ncalDescSel.splice(i,1);else ncalDescSel.push(dia);
 }
-function saveProgMes(){
-  var nombre=(document.getElementById('pmNombre').value||'').trim();
-  var area=document.getElementById('pmArea').value;
-  var turno=document.getElementById('pmTurno').value;
-  var entrada=document.getElementById('pmEntrada').value||'';
-  var salida=document.getElementById('pmSalida').value||'';
-  if(!nombre){toast('Selecciona un nombre.','err');return;}
-  var diasDesc=[];
-  document.querySelectorAll('#mProgMesB [data-dia]').forEach(function(el){
-    if(el.style.borderColor==='#22c55e')diasDesc.push(el.dataset.dia);
-  });
-  var ym=(document.getElementById('schedMonth')||{}).value||'';
-  if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
-  var partes=ym.split('-');var anio=Number(partes[0]),mes=Number(partes[1]);
-  var ultimoDia=new Date(anio,mes,0).getDate();
-  var diasSemana=['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'];
+
+function ncalActHoras(sem){
+  var th={T1:{e:'06:00',s:'14:00'},T2:{e:'14:00',s:'21:00'},T3:{e:'21:00',s:'06:00'}};
+  var t=document.getElementById('cs'+sem+'-turno').value;
+  document.getElementById('cs'+sem+'-entrada').value=th[t].e;
+  document.getElementById('cs'+sem+'-salida').value=th[t].s;
+}
+
+function ncalActHorasDia(){
+  var th={T1:{e:'06:00',s:'14:00'},T2:{e:'14:00',s:'21:00'},T3:{e:'21:00',s:'06:00'}};
+  var t=document.getElementById('cdEdit-turno').value;
+  document.getElementById('cdEdit-entrada').value=th[t].e;
+  document.getElementById('cdEdit-salida').value=th[t].s;
+}
+
+function ncalGuardarProg(){
+  var nombre=(document.getElementById('cp-nombre').value||'').trim();
+  var area=document.getElementById('cp-area').value;
+  if(!nombre){toast('Ingresa el nombre.','err');return;}
+  var ym=ncalGetYM();
+  var semanas={};
+  var SHIFT={T1:'SHIFT_1',T2:'SHIFT_2',T3:'SHIFT_3'};
+  for(var s=1;s<=4;s++){
+    semanas[s]={turno:document.getElementById('cs'+s+'-turno').value,entrada:document.getElementById('cs'+s+'-entrada').value,salida:document.getElementById('cs'+s+'-salida').value};
+  }
+  var ultimoDia=new Date(ncalAnio,ncalMes+1,0).getDate();
+  var DS=['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
   var entries=[];
   for(var dia=1;dia<=ultimoDia;dia++){
-    var fecha=anio+'-'+String(mes).padStart(2,'0')+'-'+String(dia).padStart(2,'0');
-    var nombreDia=diasSemana[new Date(anio,mes-1,dia).getDay()];
-    var tipo=diasDesc.indexOf(nombreDia)>=0?'descanso':'normal';
-    entries.push({shiftId:turno,area:area,dayOfWeek:fecha,personName:nombre,type:tipo,horaEntrada:entrada,horaSalida:salida});
+    var fecha=ncalFecha(dia);
+    var dname=DS[new Date(ncalAnio,ncalMes,dia).getDay()];
+    var tipo=ncalDescSel.indexOf(dname)>=0?'descanso':'normal';
+    var s1=semanas[1];
+    var sem=ncalGetSemana(dia,area,s1.turno);
+    var sd=semanas[sem]||s1;
+    entries.push({shiftId:SHIFT[sd.turno],area:area,dayOfWeek:fecha,personName:nombre,type:tipo,horaEntrada:sd.entrada,horaSalida:sd.salida});
   }
-  var btn=document.getElementById('btnProgMes');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  var btn=document.querySelector('#mCalProg .btn.ba');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
   rpc('saveSchedule',{weekStart:ym,entries:entries,userRole:sess.userRole},
-    function(res){
-      if(btn){btn.disabled=false;btn.textContent='+ Programar persona';}
-      toast('Programación guardada — '+res.saved+' días.','ok');
-      closeM('mProgMes');loadSched();
-    },
-    function(e){
-      if(btn){btn.disabled=false;btn.textContent='+ Programar persona';}
-      toast(e.message||String(e),'err');
-    }
+    function(res){if(btn){btn.disabled=false;btn.textContent='Guardar programacion del mes';}toast('Programación guardada — '+res.saved+' días.','ok');closeM('mCalProg');loadSched();},
+    function(e){if(btn){btn.disabled=false;btn.textContent='Guardar programacion del mes';}toast(e.message||String(e),'err');}
   );
 }
-function printSched(){var el=document.getElementById('schedCont');if(!el){toast('Carga el calendario primero.','err');return;}var w=window.open('','_blank');w.document.write('<!DOCTYPE html><html><head><title>Calendario Casa 50</title><style>body{font-family:Arial;padding:20px;font-size:11px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px}th{background:#f0f0f0}</style></head><body>'+el.innerHTML+'</body></html>');w.document.close();setTimeout(function(){w.print();},500);}
-  function addSchedSlot(btn, shiftId, area, day) {
-  var cell = btn.parentElement;
-  var existing = cell.querySelectorAll('input[data-shift]').length;
-  if (existing >= 4) { toast('Máximo 4 personas por celda.', 'err'); return; }
-  var wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;align-items:center;gap:2px;margin-bottom:2px';
-  var inp = document.createElement('input');
-  inp.type = 'text';
-  inp.dataset.shift = shiftId;
-  inp.dataset.area = area;
-  inp.dataset.day = day;
-  inp.placeholder = 'Nombre...';
-  inp.style.cssText = 'flex:1;width:60px;padding:2px 4px;background:#22222c;border:1px solid #3b82f6;border-radius:3px;color:#e5e7eb;font-size:10px';
-  var removeBtn = document.createElement('button');
-  removeBtn.textContent = '✕';
-  removeBtn.style.cssText = 'background:#ef4444;border:none;border-radius:3px;color:#fff;padding:1px 4px;cursor:pointer;font-size:10px;flex-shrink:0';
-  removeBtn.onclick = function() { removeSchedSlot(removeBtn); };
-  wrap.appendChild(inp);
-  wrap.appendChild(removeBtn);
-  cell.insertBefore(wrap, btn);
-  inp.focus();
-  if (existing + 1 >= 4) btn.style.display = 'none';
+
+function ncalAbrirDia(fecha,area,persona){
+  if(!sess||sess.userRole!=='ADMIN'){return;}
+  ncalEditando={fecha:fecha,area:area,persona:persona};
+  document.getElementById('mCalDiaT').textContent=fecha+' — '+persona;
+  document.getElementById('mCalDiaVac').style.display='none';
+  var dia=parseInt(fecha.split('-')[2]);
+  var info=ncalGetInfo(area,persona,dia,fecha);
+  var infoBox=document.getElementById('mCalDiaInfo');
+  var vac=ncalGetVac(area,persona,fecha);
+  if(vac){infoBox.innerHTML='<div style="background:rgba(239,68,68,.1);border:0.5px solid rgba(239,68,68,.4);border-radius:7px;padding:8px;margin-bottom:8px;font-size:12px;color:#fca5a5">VAC: '+vac.inicio+' → '+vac.fin+(vac.obs?' — '+vac.obs:'')+'</div>';}
+  else infoBox.innerHTML='';
+  var tipo=info&&info.tipo!=='vacaciones'?info.tipo:'normal';
+  ncalSelTipoStr(tipo);
+  if(info&&info.turno)document.getElementById('cdEdit-turno').value=info.turno;
+  if(info&&info.entrada)document.getElementById('cdEdit-entrada').value=info.entrada;
+  if(info&&info.salida)document.getElementById('cdEdit-salida').value=info.salida;
+  var extraSec=document.getElementById('mCalDiaExtra');
+  var cob=ncalCoberturas[ncalCobKey(fecha,area,persona)]||null;
+  if(info&&info.tipo==='descanso'){
+    extraSec.style.display='block';
+    document.getElementById('ncal-ext-nombre').value=cob?cob.nombre:'';
+    document.getElementById('ncal-ext-turno').value=cob?cob.turno:'T1';
+    document.getElementById('ncalBtnQuitarExt').style.display=cob?'':'none';
+  } else extraSec.style.display='none';
+  openM('mCalDia');
 }
-function removeSchedSlot(btn) {
-  var wrap = btn.parentElement;
-  var cell = wrap.parentElement;
-  wrap.remove();
-  var addBtn = cell.querySelector('button[onclick*="addSchedSlot"]');
-  if (addBtn) addBtn.style.display = '';
+
+function ncalSelTipo(el,tipo){
+  ncalTipoDia=tipo;
+  document.querySelectorAll('#mCalDiaTipos .abtn2').forEach(function(b){b.classList.remove('on');});
+  el.classList.add('on');
+  var mostrar=tipo==='normal'||tipo==='manual';
+  document.getElementById('mCalDiaTurno').style.display=mostrar?'block':'none';
+  document.getElementById('mCalDia12h').style.display=tipo==='12h'?'block':'none';
+  document.getElementById('mCalDiaExtra').style.display=tipo==='descanso'?'block':'none';
 }
-function saveSched(){
-  var ws=(document.getElementById('swk').value||'').trim()||getWS(new Date());
-  var inputs=document.querySelectorAll('#schedCont input[data-shift]'),entries=[];
-  inputs.forEach(function(inp){var n=(inp.value||'').trim();if(n)entries.push({shiftId:inp.dataset.shift,area:inp.dataset.area,dayOfWeek:inp.dataset.day,personName:n,type:'nomina'});});
-  
-  var btn=document.getElementById('btnSaveSched');if(btn){btn.disabled=true;btn.textContent='Guardando...';}
-  rpc('saveSchedule',{weekStart:ws,entries:entries,userRole:sess.userRole},
-    function(res){if(btn){btn.disabled=false;btn.textContent='Guardar Horario';}toast('Horario guardado — '+res.saved+' entradas.','ok');},
-    function(e){if(btn){btn.disabled=false;btn.textContent='Guardar Horario';}toast(e.message||String(e),'err');}
-  );
+
+function ncalSelTipoStr(tipo){
+  ncalTipoDia=tipo||'normal';
+  document.querySelectorAll('#mCalDiaTipos .abtn2').forEach(function(b){
+    var match=(b.getAttribute('onclick')||'').indexOf("'"+tipo+"'")>=0;
+    b.classList.toggle('on',match);
+  });
+  var mostrar=tipo==='normal'||tipo==='manual';
+  document.getElementById('mCalDiaTurno').style.display=mostrar?'block':'none';
+  document.getElementById('mCalDia12h').style.display=tipo==='12h'?'block':'none';
+  document.getElementById('mCalDiaExtra').style.display=tipo==='descanso'?'block':'none';
+}
+
+function ncalSel12h(t){
+  ncalTipo12h=t;
+  document.getElementById('ncal12am').classList.toggle('on',t==='am');
+  document.getElementById('ncal12pm').classList.toggle('on',t==='pm');
+}
+
+function ncalGuardarDia(){
+  var key=ncalAnio+'-'+ncalMes+'-'+ncalEditando.area;
+  if(!ncalDatos[key]||!ncalDatos[key][ncalEditando.persona])return;
+  var exc={tipo:ncalTipoDia};
+  if(ncalTipoDia==='12h'){exc.turno12=ncalTipo12h;exc.entrada=ncalTipo12h==='am'?'06:00':'18:00';exc.salida=ncalTipo12h==='am'?'18:00':'06:00';}
+  else if(ncalTipoDia!=='descanso'){exc.turno=document.getElementById('cdEdit-turno').value;exc.entrada=document.getElementById('cdEdit-entrada').value;exc.salida=document.getElementById('cdEdit-salida').value;}
+  ncalDatos[key][ncalEditando.persona].exc[ncalEditando.fecha]=exc;
+  if(ncalTipoDia!=='descanso')delete ncalCoberturas[ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona)];
+  closeM('mCalDia');ncalRender();
+}
+
+function ncalMostrarVac(){
+  var vac=ncalGetVac(ncalEditando.area,ncalEditando.persona,ncalEditando.fecha);
+  document.getElementById('ncalVacPersona').textContent=ncalEditando.persona;
+  document.getElementById('ncal-vac-id').value=vac?vac.id:'';
+  document.getElementById('ncal-vac-inicio').value=vac?vac.inicio:ncalEditando.fecha;
+  document.getElementById('ncal-vac-fin').value=vac?vac.fin:ncalEditando.fecha;
+  document.getElementById('ncal-vac-obs').value=vac?vac.obs||'':'';
+  document.getElementById('ncalBtnElimVac').style.display=vac?'':'none';
+  document.getElementById('mCalDiaVac').style.display='block';
+}
+
+function ncalGuardarVac(){
+  var inicio=document.getElementById('ncal-vac-inicio').value;
+  var fin=document.getElementById('ncal-vac-fin').value;
+  var obs=document.getElementById('ncal-vac-obs').value.trim();
+  if(!inicio||!fin){toast('Ingresa fechas.','err');return;}
+  if(fin<inicio){toast('Fecha fin debe ser >= inicio.','err');return;}
+  var vk=ncalVacKey(ncalEditando.area,ncalEditando.persona);
+  if(!ncalVacRangos[vk])ncalVacRangos[vk]=[];
+  var idEdit=document.getElementById('ncal-vac-id').value||'';
+  ncalVacRangos[vk]=ncalVacRangos[vk].filter(function(r){return r.id!==idEdit&&!(r.fin>=inicio&&r.inicio<=fin);});
+  ncalVacRangos[vk].push({id:'vac_'+Date.now(),inicio:inicio,fin:fin,obs:obs});
+  closeM('mCalDia');ncalRender();
+}
+
+function ncalEliminarVac(){
+  var id=document.getElementById('ncal-vac-id').value;
+  var vk=ncalVacKey(ncalEditando.area,ncalEditando.persona);
+  ncalVacRangos[vk]=(ncalVacRangos[vk]||[]).filter(function(r){return r.id!==id;});
+  closeM('mCalDia');ncalRender();
+}
+
+function ncalGuardarExtra(){
+  var nombre=(document.getElementById('ncal-ext-nombre').value||'').trim();
+  var turno=document.getElementById('ncal-ext-turno').value;
+  if(!nombre){toast('Ingresa el nombre del extra.','err');return;}
+  ncalCoberturas[ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona)]={nombre:nombre,turno:turno};
+  closeM('mCalDia');ncalRender();
+}
+
+function ncalQuitarExtra(){
+  delete ncalCoberturas[ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona)];
+  closeM('mCalDia');ncalRender();
+}
+
+function printSched(){
+  var el=document.getElementById('schedCont');
+  if(!el){toast('Carga el calendario primero.','err');return;}
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>Calendario Casa 50</title><style>body{font-family:Arial;background:#fff;color:#000;padding:16px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px;font-size:10px}.ncal-t1{background:#dbeafe;color:#1e40af}.ncal-t2{background:#dcfce7;color:#15803d}.ncal-t3{background:#fef9c3;color:#854d0e}.ncal-dc{background:#f3f4f6;color:#374151}.ncal-vac{background:#fee2e2;color:#991b1b}.ncal-man{background:#ede9fe;color:#5b21b6}</style></head><body>'+el.innerHTML+'</body></html>');
+  w.document.close();setTimeout(function(){w.print();},500);
 }
 function getWS(d){var day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1),mon=new Date(d.setDate(diff));return mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');}
 // ---- PROYECCION (admin) ----
