@@ -1128,13 +1128,15 @@ async function apiGetSchedule(p, res) {
   const{data}=await query.order('shift_id').order('area');
   return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type}))});
 }
-
-async function apiSaveSchedule(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo el administrador puede guardar el calendario');
-  const ws=String(p.weekStart||'').trim(),entries=p.entries||[];
-  if(!ws)return err(res,'Semana requerida');
-  await supabase.from('schedule').delete().eq('week_start',ws);
-  if(entries.length>0){
+// Borrar solo entradas del mismo mes para esa combinación persona+área
+const personasAreas=[...new Set(entries.map(e=>e.area+'|'+(e.personName||'')))];
+for(const pa of personasAreas){
+  const[areaD,personD]=pa.split('|');
+  await supabase.from('schedule').delete()
+    .like('day_of_week',ws+'%')
+    .eq('area',areaD)
+    .eq('person_name',personD);
+} if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'nomina')}));
     await supabase.from('schedule').insert(rows);
   }
