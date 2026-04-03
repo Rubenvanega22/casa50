@@ -1579,10 +1579,10 @@ var num=1;
         if(taxiList.length)toast('TaxiList: '+taxiList.length+' items, primer roomId: '+(taxiList[0].roomId||'vacio'),'ok');
         var taxiTotal=taxiHab.reduce(function(a,tx){return a+tx.amount;},0);
         var totalReal=s.total-taxiTotal;
-        h+='<div class="sale-row"><div class="sale-top"><b>Hab '+s.roomId+'</b> <span class="badge '+pmB+'">'+s.payMethod+'</span> <b style="color:#22c55e">'+fmt(s.total)+'</b>'+(taxiTotal>0?'<span style="color:#f59e0b;font-size:11px"> -taxi '+fmt(taxiTotal)+'</span>':'')+'</div>';
+       h+='<div class="sale-row"><div class="sale-top"><b>#'+num+' Hab '+s.roomId+'</b> <span class="badge '+pmB+'">'+s.payMethod+'</span> <b style="color:#22c55e">'+fmt(s.total)+'</b>'+(taxiTotal>0?'<span style="color:#f59e0b;font-size:11px"> -taxi '+fmt(taxiTotal)+'</span>':'')+'</div>';
         h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span>'+(taxiTotal>0?'<span style="color:#f59e0b">🚕 taxi</span>':'')+'</div></div>';
-      });
-    }
+        num++;
+      });    }
     el.innerHTML=h;
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
 }
@@ -2897,12 +2897,12 @@ function loadM(){
   var day=document.getElementById('mDay').value||sess.businessDay,sh=document.getElementById('mSh').value;
   var el=document.getElementById('metCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
   // Cargar metricas y grafica por hora en paralelo
-  Promise.all([
-    new Promise(function(res){rpc('metrics',{businessDay:day,shiftId:sh},res,function(){res({});});}),
-    new Promise(function(res){rpc('metricsHourly',{businessDay:day},res,function(){res({});});})
-  ]).then(function(results){
-    el.innerHTML=renderMet(results[0],results[1]);
-  });
+  rpc('metrics',{businessDay:day,shiftId:sh},function(m){
+    el.innerHTML=renderMet(m,null);
+    rpc('metricsHourly',{businessDay:day},function(h){
+      el.innerHTML=renderMet(m,h);
+    },function(){});
+  },function(){el.innerHTML='<p style="color:#ef4444">Error cargando métricas</p>';});
 }
 
 function renderMet(m,hourly){
