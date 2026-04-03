@@ -2908,7 +2908,7 @@ function loadM(){
 function renderMet(m,hourly){
   if(!m||!m.totals){return '<p style="color:#ef4444">Error cargando metricas</p>';}
   var t=m.totals||{};
-  var sh=document.getElementById('mSh').value;
+  var sh=(document.getElementById('mSh')||{}).value||'';
   var ventas=sh?(t.shiftSales||0):(t.sales||0);
   var neto=sh?(t.shiftNet||0):(t.net||0);
   var efectivo=sh?(t.shiftEfectivo||0):(t.totalEfectivo||0);
