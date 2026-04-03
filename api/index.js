@@ -1129,13 +1129,14 @@ async function apiGetSchedule(p, res) {
   return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type}))});
 }
 // Borrar solo entradas del mismo mes para esa combinación persona+área
-const personasAreas=[...new Set(entries.map(e=>e.area+'|'+(e.personName||'')))];
-for(const pa of personasAreas){
-  const[areaD,personD]=pa.split('|');
+const personasAreas=[...new Set(entries.map(function(e){return e.area+'|'+(e.personName||'');}))];
+for(let i=0;i<personasAreas.length;i++){
+  const parts=personasAreas[i].split('|');
   await supabase.from('schedule').delete()
     .like('day_of_week',ws+'%')
-    .eq('area',areaD)
-    .eq('person_name',personD);
+    .eq('area',parts[0])
+    .eq('person_name',parts[1]);
+}
 } if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'nomina')}));
     await supabase.from('schedule').insert(rows);
