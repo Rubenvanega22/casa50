@@ -395,7 +395,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <input type="month" id="schedMonth" style="width:auto;margin:0">
 <button class="btn ba sm" onclick="loadSched()">Ver</button>
 <button class="btn bg sm" id="btnProgMes" onclick="ncalAbrirProg('')">+ Programar persona</button>
-<button class="btn bb sm" onclick="printSched()">🖨 Imprimir</button>
+<button class="btn bb sm" id="btnPrintSched" onclick="printSched()">🖨 Imprimir</button>
 </div>
 <div id="schedCont"></div>
 </div>
@@ -1888,6 +1888,7 @@ function loadSched(){
   var isAdmin=sess&&sess.userRole==='ADMIN';
   var btn=document.getElementById('btnProgMes');
   if(btn)btn.style.display=isAdmin?'':'none';
+var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style.display=isAdmin?'':'none';
   rpc('getSchedule',{weekStart:ym},function(data){
     ncalDatos={};
     var SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
