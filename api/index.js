@@ -176,6 +176,7 @@ case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
       case 'roomChange':         return await apiRoomChange(payload, res);
       case 'updatePayMethod':    return await apiUpdatePayMethod(payload, res);
+      case 'openDrawer':         return await apiOpenDrawer(payload, res);
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
@@ -280,7 +281,12 @@ async function apiLogin(p, res) {
 // ==================== CHECK-IN ====================
 
 
-
+async function apiOpenDrawer(p, res) {
+  const userRole=String(p.userRole||'').toUpperCase();
+  if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Sin permiso');
+  await openCashDrawer();
+  return ok(res,{opened:true});
+}
 async function openCashDrawer() {
   try {
     const net = await import('net');
