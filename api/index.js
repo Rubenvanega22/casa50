@@ -175,6 +175,7 @@ case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'getDailyCuadre':     return await apiGetDailyCuadre(payload, res);
       case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
       case 'roomChange':         return await apiRoomChange(payload, res);
+      case 'updatePayMethod':    return await apiUpdatePayMethod(payload, res);
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
@@ -1395,6 +1396,21 @@ async function apiRoomChange(p, res) {
   }
 
   return ok(res, { fromRoomId, toRoomId, diff, newDueMs });
+}
+async function apiUpdatePayMethod(p, res) {
+  const userRole=String(p.userRole||'').toUpperCase();
+  if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
+  const roomId=String(p.roomId||'').trim();
+  const payMethod=String(p.payMethod||'EFECTIVO').toUpperCase();
+  if(!['EFECTIVO','TARJETA','NEQUI'].includes(payMethod))return err(res,'Método de pago inválido');
+  const room=await getRoom(roomId);
+  if(!room)return err(res,'Habitacion no existe');
+  if(room.state!=='OCCUPIED')return err(res,'Solo se puede cambiar en habitación ocupada');
+  const now=Date.now();
+  const bDay=businessDay(now);
+  const shift=currentShiftId(now);
+  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).eq('type','SALE').eq('shift_id',shift);
+  return ok(res,{roomId,payMethod});
 }
 async function apiUpdateArrivalPlate(p, res) {
   const roomId=String(p.roomId||'').trim(),plate=String(p.plate||'').toUpperCase().trim();
