@@ -1148,12 +1148,6 @@ async function apiSaveSchedule(p, res) {
   return ok(res,{saved:entries.length,weekStart:ws});
 }
 
-
-  }
-  // Sincronizar con extra_staff si viene de personal extra
-  return ok(res,{saved:entries.length,weekStart:ws});
-}
-
 // ==================== CONFIG ====================
 async function apiSetMultiMaidMode(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
