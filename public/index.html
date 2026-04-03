@@ -764,7 +764,7 @@ function buildRoomB(r){
   var cfg=MP[r.category]||MP['Junior'];
   var sc={AV:'#22c55e',OC:'#ef4444',DI:'#f59e0b',CO:'#3b82f6',BL:'#6b7280',RT:'#e5e7eb'};
   var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
-  var h='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>';
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>'+(eff==='OC'&&isR?'<button class="btn bg xs" onclick="doHoraGratis()">🎁 +1h</button>':'')+'</div>';
   if(eff==='BL'){
     var disMs=Number(r.disabledDateMs||0);
     h+='<div style="background:rgba(107,114,128,.1);border:1px solid rgba(107,114,128,.4);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
@@ -783,7 +783,7 @@ function buildRoomB(r){
 h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Método pago</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(r.payMethod||'EFECTIVO')+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPayMethod()">✏ Pago</button>':'')+'</div></div>';
     h+='</div>';
     if(isR){
-      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button><button class="btn bg sm" onclick="doHoraGratis()">🎁 +1h Gratis</button></div>';
+      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
       h+='<div id="coF" style="display:none;margin-top:9px"><label>Observacion salida (opcional)</label><input type="text" id="coObs" placeholder="Ej: dejo ropa sucia"><button class="btn br full sm" style="margin-top:6px" onclick="doCheckOut()">Confirmar Salida</button></div>';
       // Panel extender/renovar con tabs
       h+='<div id="extP" style="display:none;margin-top:9px">';
