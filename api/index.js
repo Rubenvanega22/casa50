@@ -1148,9 +1148,7 @@ async function apiSaveSchedule(p, res) {
   return ok(res,{saved:entries.length,weekStart:ws});
 }
 
-} if(entries.length>0){
-    const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'nomina')}));
-    await supabase.from('schedule').insert(rows);
+
   }
   // Sincronizar con extra_staff si viene de personal extra
   return ok(res,{saved:entries.length,weekStart:ws});
