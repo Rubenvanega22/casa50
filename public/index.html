@@ -2844,7 +2844,7 @@ function loadCuadreAdmin(){
     var h='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">';
     h+='<thead><tr><th style="text-align:left;padding:8px;background:#22222c;font-size:11px;color:#9ca3af;border:1px solid #2e2e3a">Concepto</th>';
     shifts.forEach(function(sid,i){
-      var resp=(ms[i].shiftUsers&&ms[i].shiftUsers.length)?ms[i].shiftUsers[0].userName:'—';
+     var resp=(ms[i].shiftUser)||'—';
       h+='<th style="padding:8px;background:#22222c;font-size:11px;color:#a78bfa;border:1px solid #2e2e3a;text-align:center">'+sn[sid]+'<br><span style="color:#9ca3af;font-weight:400">'+resp+'</span></th>';
     });
     h+='<th style="padding:8px;background:#22222c;font-size:11px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">TOTAL</th></tr></thead><tbody>';
