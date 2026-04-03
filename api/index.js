@@ -1128,14 +1128,34 @@ async function apiGetSchedule(p, res) {
   const{data}=await query.order('shift_id').order('area');
   return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type}))});
 }
+async function apiSaveSchedule(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo el administrador puede guardar el calendario');
+  const ws=String(p.weekStart||'').trim(),entries=p.entries||[];
+  if(!ws)return err(res,'Semana requerida');
+  const mesPrefix=ws.substring(0,7);
+  const{data:existing}=await supabase.from('schedule').select('id,area,person_name,day_of_week');
+  const toDelete=(existing||[]).filter(function(r){
+    return String(r.day_of_week||'').startsWith(mesPrefix)&&
+      entries.some(function(e){return e.area===r.area&&e.personName===r.person_name;});
+  }).map(function(r){return r.id;});
+  if(toDelete.length>0){
+    await supabase.from('schedule').delete().in('id',toDelete);
+  }
+  if(entries.length>0){
+    const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal')}));
+    await supabase.from('schedule').insert(rows);
+  }
+  return ok(res,{saved:entries.length,weekStart:ws});
+}
 // Borrar solo entradas del mismo mes para esa combinación persona+área
-const personasAreas=[...new Set(entries.map(function(e){return e.area+'|'+(e.personName||'');}))];
-for(let i=0;i<personasAreas.length;i++){
-  const parts=personasAreas[i].split('|');
-  await supabase.from('schedule').delete()
-    .like('day_of_week',ws+'%')
-    .eq('area',parts[0])
-    .eq('person_name',parts[1]);
+const mesPrefix=ws.substring(0,7);
+const{data:existing}=await supabase.from('schedule').select('*');
+const toDelete=(existing||[]).filter(function(r){
+  return String(r.day_of_week||'').startsWith(mesPrefix)&&
+    entries.some(function(e){return e.area===r.area&&e.personName===r.person_name;});
+}).map(function(r){return r.id;});
+if(toDelete.length>0){
+  await supabase.from('schedule').delete().in('id',toDelete);
 }
 } if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'nomina')}));
