@@ -1147,16 +1147,7 @@ async function apiSaveSchedule(p, res) {
   }
   return ok(res,{saved:entries.length,weekStart:ws});
 }
-// Borrar solo entradas del mismo mes para esa combinación persona+área
-const mesPrefix=ws.substring(0,7);
-const{data:existing}=await supabase.from('schedule').select('*');
-const toDelete=(existing||[]).filter(function(r){
-  return String(r.day_of_week||'').startsWith(mesPrefix)&&
-    entries.some(function(e){return e.area===r.area&&e.personName===r.person_name;});
-}).map(function(r){return r.id;});
-if(toDelete.length>0){
-  await supabase.from('schedule').delete().in('id',toDelete);
-}
+
 } if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'nomina')}));
     await supabase.from('schedule').insert(rows);
