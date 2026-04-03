@@ -930,14 +930,15 @@ async function apiMetrics(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const shiftFilter = String(p.shiftId || '');
 
-  const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes] = await Promise.all([
+  const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes] = await Promise.all([
     supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
     supabase.from('taxi_expenses').select('*').eq('business_day', bDay),
     supabase.from('loans').select('*').eq('business_day', bDay).order('ts_ms'),
     supabase.from('extra_staff').select('*').eq('business_day', bDay),
     supabase.from('bar_sales').select('*').eq('business_day', bDay),
     supabase.from('general_expenses').select('*').eq('business_day', bDay),
-    supabase.from('settings').select('key,value')
+    supabase.from('settings').select('key,value'),
+    supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
   ]);
 
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
@@ -995,7 +996,8 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
     allSalesList:allSalesList.sort((a,b)=>a.tsMs-b.tsMs),
     taxiList,
-    dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null
+    dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null,
+      shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—'
   });
 }
 
