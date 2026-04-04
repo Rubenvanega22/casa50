@@ -1789,11 +1789,7 @@ sl.forEach(function(s){
         h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span></div></div>';
       });
     }
-    h+='<div class="sec">Cierre de Turno</div><label>Efectivo en billetes</label><input type="number" id="cashBilletes" placeholder="Total en billetes" min="0" oninput="calcFaltante()">
-<label>Efectivo en monedas</label><input type="number" id="cashMonedas" placeholder="Total en monedas" min="0" oninput="calcFaltante()">
-<input type="hidden" id="cashIn2">
-<input type="hidden" id="_esperadoEfectivo" value="0">
-<div id="faltanteBox" style="display:none;margin-top:8px;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:500"></div><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
+    h+='<div class="sec">Cierre de Turno</div><label>Efectivo en billetes</label><input type="number" id="cashBilletes" placeholder="Total en billetes" min="0" oninput="calcFaltante()"><label>Efectivo en monedas</label><input type="number" id="cashMonedas" placeholder="Total en monedas" min="0" oninput="calcFaltante()"><input type="hidden" id="cashIn2"><input type="hidden" id="_esperadoEfectivo" value="0"><div id="faltanteBox" style="display:none;margin-top:8px;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:500"></div><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
     h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div></div>';
     el.innerHTML=h;
   });
