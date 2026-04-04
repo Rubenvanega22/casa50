@@ -1727,7 +1727,7 @@ sl.forEach(function(s){
       else{ef_hab+=base;ef_padd+=extraP;ef_hadd+=extraH;}
     });
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
-    var taxis=Number(t.taxi||0);
+   var taxis=Number(t.shiftTaxi||0);
     var taxiList=(m.taxiList||[]);
     var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
     var totalGastos=gastos_gen+taxis+turnos;
