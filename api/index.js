@@ -177,6 +177,8 @@ case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'roomChange':         return await apiRoomChange(payload, res);
       case 'updatePayMethod':    return await apiUpdatePayMethod(payload, res);
       case 'openDrawer':         return await apiOpenDrawer(payload, res);
+      case 'drawerPoll':         return await apiDrawerPoll(payload, res);
+      case 'drawerAck':          return await apiDrawerAck(payload, res);
       case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
         case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
         case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
@@ -281,30 +283,22 @@ async function apiLogin(p, res) {
 // ==================== CHECK-IN ====================
 
 
+var drawerPending=false;
 async function apiOpenDrawer(p, res) {
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Sin permiso');
-  await openCashDrawer();
+  drawerPending=true;
   return ok(res,{opened:true});
 }
+async function apiDrawerPoll(p,res){
+  return ok(res,{open:drawerPending});
+}
+async function apiDrawerAck(p,res){
+  drawerPending=false;
+  return ok(res,{ack:true});
+}
 async function openCashDrawer() {
-  try {
-    const net = await import('net');
-    const PRINTER_IP = '192.168.0.31';
-    const PRINTER_PORT = 9100;
-    const OPEN_DRAWER = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]);
-    await new Promise((resolve) => {
-      const client = new net.Socket();
-      client.setTimeout(3000);
-      client.connect(PRINTER_PORT, PRINTER_IP, () => {
-        client.write(OPEN_DRAWER);
-        client.end();
-        resolve();
-      });
-      client.on('error', () => resolve());
-      client.on('timeout', () => { client.destroy(); resolve(); });
-    });
-  } catch(e) {}
+  drawerPending=true;
 }
 async function apiCheckIn(p, res) {
   const now = Date.now();
