@@ -1789,7 +1789,11 @@ sl.forEach(function(s){
         h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span></div></div>';
       });
     }
-    h+='<div class="sec">Cierre de Turno</div><label>Conteo de caja</label><input type="number" id="cashIn2" placeholder="Monto en efectivo contado" min="0"><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
+    h+='<div class="sec">Cierre de Turno</div><label>Efectivo en billetes</label><input type="number" id="cashBilletes" placeholder="Total en billetes" min="0" oninput="calcFaltante()">
+<label>Efectivo en monedas</label><input type="number" id="cashMonedas" placeholder="Total en monedas" min="0" oninput="calcFaltante()">
+<input type="hidden" id="cashIn2">
+<input type="hidden" id="_esperadoEfectivo" value="0">
+<div id="faltanteBox" style="display:none;margin-top:8px;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:500"></div><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
     h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div></div>';
     el.innerHTML=h;
   });
@@ -1808,7 +1812,31 @@ function updCuadre(){
   var elTj=document.getElementById('totalTjDisp');if(elTj)elTj.textContent=fmt(tjBase+barTj);
   var elNq=document.getElementById('totalNqDisp');if(elNq)elNq.textContent=fmt(Number((document.getElementById('_nq_base')||{}).value||0)+barNq);
   var elEnt=document.getElementById('entregaDisp');
-  if(elEnt){var ent=(efBase+barEf)-tGastos;elEnt.textContent=fmt(ent);elEnt.style.color=ent>=0?'#22c55e':'#ef4444';}
+  if(elEnt){var ent=(efBase+barEf)-tGastos;elEnt.textContent=fmt(ent);elEnt.style.color=ent>=0?'#22c55e':'#ef4444';
+  var hidEsp=document.getElementById('_esperadoEfectivo');if(hidEsp)hidEsp.value=ent;}
+}
+ function calcFaltante(){
+  var billetes=Number((document.getElementById('cashBilletes')||{}).value||0);
+  var monedas=Number((document.getElementById('cashMonedas')||{}).value||0);
+  var total=billetes+monedas;
+  document.getElementById('cashIn2').value=total;
+  var box=document.getElementById('faltanteBox');
+  var esperado=Number((document.getElementById('_esperadoEfectivo')||{}).value||0);
+  if(!box)return;
+  if(!total){box.style.display='none';return;}
+  box.style.display='block';
+  if(!esperado){box.innerHTML='<span style="color:#9ca3af">Total contado: <b>'+fmt(total)+'</b></span>';return;}
+  var diff=total-esperado;
+  if(diff===0){
+    box.style.background='rgba(34,197,94,.1)';box.style.border='0.5px solid rgba(34,197,94,.4)';
+    box.innerHTML='<span style="color:#22c55e">✅ ¡Perfecto! Entrega exacta de <b>'+fmt(total)+'</b></span>';
+  } else if(diff>0){
+    box.style.background='rgba(59,130,246,.1)';box.style.border='0.5px solid rgba(59,130,246,.4)';
+    box.innerHTML='<span style="color:#93c5fd">ℹ️ Sobrante de <b>'+fmt(diff)+'</b> — Esperado: '+fmt(esperado)+' / Contado: '+fmt(total)+'</span>';
+  } else {
+    box.style.background='rgba(239,68,68,.1)';box.style.border='0.5px solid rgba(239,68,68,.4)';
+    box.innerHTML='<span style="color:#fca5a5">⚠️ Faltante de <b>'+fmt(Math.abs(diff))+'</b> — Ten mucho cuidado para la próxima. Esperado: '+fmt(esperado)+' / Contado: '+fmt(total)+'</span>';
+  }
 }
 function doCierre(){
   var barEfEl=document.getElementById('barEfInput');
