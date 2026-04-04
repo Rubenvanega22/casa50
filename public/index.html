@@ -411,7 +411,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <select id="noteTarget" style="width:auto;margin:0">
 <option value="ALL">Para todos</option>
 <option value="ADMIN">Solo Admin</option>
-<option value="MAID">Solo Camarera</option>
+<option value="RECEPTION">Solo Recepcion</option>
 </select>
 <button class="btn ba sm" onclick="sendNote()">Enviar Reporte</button>
 </div>
@@ -1012,11 +1012,11 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   if(selPay==='MIXTO'){
     mixtoEf=Number((document.getElementById('mixtoEf')||{}).value||0);
     mixtoTj=Number((document.getElementById('mixtotj')||{}).value||0);
-    toast('mixtoTj val: '+mixtoTj,'ok');
+    
     mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
     if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
   }
- toast('selPay: '+selPay,'ok'); 
+ 
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
     rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
@@ -1348,7 +1348,7 @@ function doRef(){
 }
 function doTaxi(){
   var rid=curRoom?curRoom.roomId:'';
-  toast('Debug roomId: '+rid,'ok');
+  
   rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
     function(){toast('Taxi $3.000 registrado.','ok');closeM('mConf');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
     function(e){toast(e.message||String(e),'err');}
@@ -1589,7 +1589,7 @@ var num=1;
         var arrB={'CAR':'badge-ca','TAXI':'badge-tx','MOTO':'badge-mo'}[s.arrivalType]||'badge-ap';
         var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
         var taxiHab=(typeof taxiList!=='undefined'?taxiList:[]).filter(function(tx){return tx.roomId===s.roomId;});
-        if(taxiList.length)toast('TaxiList: '+taxiList.length+' items, primer roomId: '+(taxiList[0].roomId||'vacio'),'ok');
+         
         var taxiTotal=taxiHab.reduce(function(a,tx){return a+tx.amount;},0);
         var totalReal=s.total-taxiTotal;
        h+='<div class="sale-row"><div class="sale-top"><b>#'+num+' Hab '+s.roomId+'</b> <span class="badge '+pmB+'">'+s.payMethod+'</span> <b style="color:#22c55e">'+fmt(s.total)+'</b>'+(taxiTotal>0?'<span style="color:#f59e0b;font-size:11px"> -taxi '+fmt(taxiTotal)+'</span>':'')+'</div>';
@@ -2916,11 +2916,11 @@ h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
     dataRow('Gastos Generales',function(m,sl,ls){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0);},'#ef4444');
     shifts.forEach(function(sid,i){loans.filter(function(l){return l.shiftId===sid;}).forEach(function(l){var cols=['','',''];cols[i]='-'+fmt(l.amount);h+='<tr><td style="padding:3px 8px 3px 20px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">'+esc(l.borrowerName||'')+(l.note?' — '+esc(l.note):'')+'</td>'+cols.map(function(c){return '<td style="padding:3px 8px;border:1px solid #2e2e3a;font-size:11px;color:#ef4444;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';});});
-    dataRow('Taxis',function(m){return Number((m.totals||{}).taxi||0);},'#f59e0b');
+    dataRow('Taxis',function(m){return Number((m.totals||{}).shiftTaxi||0);},'#f59e0b');
     dataRow('Turnos',function(m,sl,ls,ex){return ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#f97316');
-    dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).taxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
+    dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
-    dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).taxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
+    dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
     h+='</tbody></table></div>';
     el.innerHTML=h;
   });
