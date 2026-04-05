@@ -971,6 +971,8 @@ async function apiCloseShift(p, res) {
     total_sales: totalSales, total_refunds: totalRefunds, total_taxi: totalTaxi,
     total_loans: totalLoans, total_extra_staff: totalExtraStaff, net,
     rooms_sold: roomsSold, people, cash_count: Number(p.cashCount||0),
+    cash_billetes: Number(p.cashBilletes||0),
+    cash_monedas: Number(p.cashMonedas||0),
     notes: String(p.notes||''), total_efectivo: totalEfectivo,
     total_tarjeta: totalTarjeta, total_nequi: totalNequi
   });
