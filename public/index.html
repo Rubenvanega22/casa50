@@ -1423,7 +1423,7 @@ function renderMaid(){
       h+='<div><b style="font-size:15px">Hab '+r.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+r.category+'</span></div>';
       h+='<span style="font-size:11px;color:'+col+';font-weight:700">'+mins+' min</span>';
       h+='</div>';
-      h+='<div style="font-size:11px;color:#9ca3af;margin-top:3px">'+(isDirty?'Salio: '+fT(r.lastCheckoutMs):'Contaminada desde: '+fT(since))+'</div>';
+      h+='<div style="font-size:11px;color:#9ca3af;margin-top:3px">'+(isDirty?'Ent: '+fT(r.checkInMs)+' | Salio: '+fT(r.lastCheckoutMs):'Contaminada desde: '+fT(since))+'</div>';
       h+='<div id="pendPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
       h+='<button class="btn by sm" style="width:100%" onclick="event.stopPropagation();doMaidTakeInline(\''+r.roomId+'\',this)">Empezar Limpieza</button>';
       h+='</div>';
@@ -1528,10 +1528,18 @@ function loadMaidLogInline(){
       var cleanMins=Math.round((Number(l.finishedMs)-Number(l.startedMs))/60000);
       var isDone=l.stateTo==='AVAILABLE';
       var col=isDone?'#22c55e':'#3b82f6';
-      h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
+     h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
       h+='<div><b>Hab '+esc(l.roomId)+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(l.category||'')+'</span></div>';
-      h+='<div style="text-align:right"><div style="font-size:11px;color:'+col+';font-weight:700">'+(isDone?'✓ Lista':'⚠ Contaminada')+'</div><div style="font-size:10px;color:#9ca3af">'+cleanMins+' min</div></div>';
+      h+='<div style="font-size:11px;color:'+col+';font-weight:700">'+(isDone?'✓ Lista':'⚠ Contaminada')+'</div>';
       h+='</div>';
+      h+='<div style="font-size:10px;color:#9ca3af;display:flex;flex-wrap:wrap;gap:8px">';
+      h+='<span>🛎 Vendida: <b style="color:#e5e7eb">'+fT(Number(l.checkInMs||0))+'</b></span>';
+      h+='<span>🚪 Salió: <b style="color:#e5e7eb">'+fT(Number(l.checkoutMs||0))+'</b></span>';
+      h+='<span>🧹 Aseo: <b style="color:#e5e7eb">'+fT(Number(l.startedMs||0))+'</b></span>';
+      h+='<span>⏱ Duración: <b style="color:'+col+'">'+cleanMins+' min</b></span>';
+      h+='</div></div>';
+      
     });
     c.innerHTML=h;
   });
