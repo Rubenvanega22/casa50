@@ -862,20 +862,8 @@ async function apiAddNote(p, res) {
   const shift = currentShiftId(now);
   const target = String(p.target || 'ALL').toUpperCase();
   let photoUrl = null;
-  if(p.photoBase64 && p.photoName){
-    try {
-      const base64Data = p.photoBase64.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      const ext = String(p.photoName).split('.').pop() || 'jpg';
-      const fileName = `note_${now}.${ext}`;
-      const { data: upData, error: upErr } = await supabase.storage
-        .from('maid-photos')
-        .upload(fileName, buffer, { contentType: `image/${ext}`, upsert: true });
-      if(!upErr){
-        const { data: urlData } = supabase.storage.from('maid-photos').getPublicUrl(fileName);
-        photoUrl = urlData.publicUrl;
-      }
-    } catch(e) { console.error('Photo upload error:', e); }
+  if(p.photoUrl){
+    photoUrl = String(p.photoUrl);
   }
   await supabase.from('shift_notes').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
