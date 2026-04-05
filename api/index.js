@@ -885,8 +885,8 @@ async function apiGetNotes(p, res) {
     userRole: r.user_role, userName: r.user_name, note: r.note,
     target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
     businessDay: r.business_day, photoUrl: r.photo_url || null
-  })) });
-
+ })) });
+}
 async function apiMarkNoteSeen(p, res) {
   const noteId = Number(p.noteId || 0);
   const userRole = String(p.userRole || '').toUpperCase();
