@@ -414,7 +414,9 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="RECEPTION">Solo Recepcion</option>
 </select>
 <button class="btn ba sm" onclick="sendNote()">Enviar Reporte</button>
+<label class="btn bk sm" style="cursor:pointer">📷 Foto <input type="file" id="notePhoto" accept="image/*" capture="environment" style="display:none" onchange="selNoteFoto()"></label>
 </div>
+<div id="notePhotoPreview"></div>
 </div>
 <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
 <input type="date" id="notesDay" style="width:auto;margin:0">
@@ -3077,15 +3079,36 @@ function renderMP(data){
 }
 
 // ---- NOTAS ----
-// ---- NOTAS ----
 function sendNote(){
   var t=(document.getElementById('noteIn')||{}).value||'';
   var target=(document.getElementById('noteTarget')||{}).value||'ALL';
   if(!t.trim()){toast('Escribe algo.','err');return;}
-  rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole},
-    function(){document.getElementById('noteIn').value='';toast('Nota enviada.','ok');loadNotes();updNoteBadge();},
-    function(e){toast(e.message||String(e),'err');}
-  );
+  var fotoFile=document.getElementById('notePhoto')&&document.getElementById('notePhoto').files[0];
+  if(fotoFile){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var base64=e.target.result;
+      rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoBase64:base64,photoName:fotoFile.name},
+        function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
+        function(e){toast(e.message||String(e),'err');}
+      );
+    };
+    reader.readAsDataURL(fotoFile);
+  } else {
+    rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole},
+      function(){document.getElementById('noteIn').value='';toast('Nota enviada.','ok');loadNotes();updNoteBadge();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  }
+}
+function selNoteFoto(){
+  var f=document.getElementById('notePhoto').files[0];
+  if(!f)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    document.getElementById('notePhotoPreview').innerHTML='<img src="'+e.target.result+'" style="max-width:100%;max-height:150px;border-radius:8px;margin-top:6px">';
+  };
+  reader.readAsDataURL(f);
 }
 
 function loadNotes(){
