@@ -3079,21 +3079,30 @@ function renderMP(data){
 }
 
 // ---- NOTAS ----
+var SUPA_URL='https://fojffyncxrrxevavshod.supabase.co';
+var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvamZmeW5jeHJyeGV2YXZzaG9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDY5MDkzNjksImV4cCI6MjAyMjQ4NTM2OX0.dNBs_7iJOtNUfTwSsEwL-snON9OoOudf6T9Bjxc80hI';
+
 function sendNote(){
   var t=(document.getElementById('noteIn')||{}).value||'';
   var target=(document.getElementById('noteTarget')||{}).value||'ALL';
   if(!t.trim()){toast('Escribe algo.','err');return;}
   var fotoFile=document.getElementById('notePhoto')&&document.getElementById('notePhoto').files[0];
   if(fotoFile){
-    var reader=new FileReader();
-    reader.onload=function(e){
-      var base64=e.target.result;
-      rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoBase64:base64,photoName:fotoFile.name},
+    toast('Subiendo foto...','ok');
+    var fileName='note_'+Date.now()+'.'+fotoFile.name.split('.').pop();
+    var formData=new FormData();
+    formData.append('',fotoFile,fileName);
+    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true'},
+      body:fotoFile
+    }).then(function(r){return r.json();}).then(function(){
+      var photoUrl=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+      rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoUrl:photoUrl},
         function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
         function(e){toast(e.message||String(e),'err');}
       );
-    };
-    reader.readAsDataURL(fotoFile);
+    }).catch(function(e){toast('Error subiendo foto.','err');});
   } else {
     rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole},
       function(){document.getElementById('noteIn').value='';toast('Nota enviada.','ok');loadNotes();updNoteBadge();},
