@@ -167,7 +167,8 @@ case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'markNoteSeen':       return await apiMarkNoteSeen(payload, res);
       case 'getAllNotes':         return await apiGetAllNotes(payload, res);
       case 'getNoteHistory':     return await apiGetNoteHistory(payload, res);
-      case 'deleteNote':         return await apiDeleteNote(payload, res);
+     case 'reviewNote':         return await apiReviewNote(payload, res);
+      case 'deleteNote':        return await apiDeleteNote(payload, res);
       case 'addBarSale':         return await apiAddBarSale(payload, res);
       case 'getBarSales':        return await apiGetBarSales(payload, res);
       case 'addGeneralExpense':  return await apiAddGeneralExpense(payload, res);
@@ -830,6 +831,19 @@ async function apiGetExtra(p, res) {
 }
 
 // ==================== NOTAS v3 (historial permanente, borrado logico) ====================
+async function apiReviewNote(p, res) {
+  const noteId = Number(p.noteId || 0);
+  const photoUrl = String(p.photoUrl || '');
+  if(!noteId) return err(res, 'noteId requerido');
+  if(photoUrl){
+    try {
+      const fileName = photoUrl.split('/').pop();
+      await supabase.storage.from('maid-photos').remove([fileName]);
+    } catch(e) { console.error('Error borrando foto:', e); }
+  }
+  await supabase.from('shift_notes').update({photo_url: null}).eq('id', noteId);
+  return ok(res, {});
+}
 async function apiAddNote(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -870,9 +884,8 @@ async function apiGetNotes(p, res) {
     id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id,
     userRole: r.user_role, userName: r.user_name, note: r.note,
     target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
-    businessDay: r.business_day
+    businessDay: r.business_day, photoUrl: r.photo_url || null
   })) });
-}
 
 async function apiMarkNoteSeen(p, res) {
   const noteId = Number(p.noteId || 0);
