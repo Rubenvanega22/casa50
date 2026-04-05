@@ -23,11 +23,11 @@ const supabase = createClient(
 
 // ==================== PRECIOS ====================
 const MASTER_PRICING = {
-  'Junior':         { h3:60000,  h6:120000, h8:160000,  h12:105000, extraHour:20000, extraPerson:20000, included:2 },
-  'Suite Jacuzzi':  { h3:85000,  h6:170000, h8:220000,  h12:130000, extraHour:25000, extraPerson:25000, included:2 },
-  'Presidencial':   { h3:105000, h6:210000, h8:265000,  h12:145000, extraHour:30000, extraPerson:30000, included:2 },
-  'Suite Multiple': { h3:135000, h6:160000, h8:195000,  h12:235000, extraHour:35000, extraPerson:30000, included:4 },
-  'Suite Disco':    { h3:180000, h6:360000, h8:430000,  h12:315000, extraHour:35000, extraPerson:30000, included:4 }
+  'Junior':         { h3:60000,  h6:120000, h8:85000,   h12:105000, extraHour:20000, extraPerson:20000, included:2 },
+  'Suite Jacuzzi':  { h3:85000,  h6:170000, h8:110000,  h12:130000, extraHour:25000, extraPerson:25000, included:2 },
+  'Presidencial':   { h3:105000, h6:210000, h8:130000,  h12:145000, extraHour:30000, extraPerson:30000, included:2 },
+  'Suite Multiple': { h3:135000, h6:270000, h8:195000,  h12:235000, extraHour:35000, extraPerson:30000, included:4 },
+  'Suite Disco':    { h3:180000, h6:360000, h8:260000,  h12:315000, extraHour:35000, extraPerson:30000, included:4 }
 };
 
 // ==================== HELPERS ====================
