@@ -646,7 +646,10 @@ async function apiGetMaidLog(p, res) {
       maidName: r.maid_name, roomId: r.room_id, action: r.action, state: r.state,
       note: r.note, startedMs: Number(r.started_ms || r.ts_ms || 0),
       finishedMs: Number(r.finished_ms || 0),
-      stateFrom: r.state_from || '', stateTo: r.state_to || ''
+      stateFrom: r.state_from || '', stateTo: r.state_to || '',
+      category: r.category || '',
+      checkInMs: Number(r.check_in_ms || 0),
+      checkoutMs: Number(r.checkout_ms || 0)
     }))
   });
 }
