@@ -3140,12 +3140,12 @@ function sendNote(){
     var fileName='note_'+Date.now()+'.'+fotoFile.name.split('.').pop();
     var formData=new FormData();
     formData.append('',fotoFile,fileName);
-    fetch(SUPA_URL+'/storage/v1/object/maid - photos/'+fileName,{
+    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
       method:'POST',
       headers:{'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true'},
       body:fotoFile
     }).then(function(r){return r.json();}).then(function(){
-      var photoUrl=SUPA_URL+'/storage/v1/object/public/maid - photos/'+fileName;
+      var photoUrl=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
       rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoUrl:photoUrl},
         function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
         function(e){toast(e.message||String(e),'err');}
