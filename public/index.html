@@ -2923,6 +2923,23 @@ h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px
     dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
     dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
+    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#f59e0b;border:1px solid #2e2e3a">📋 CONTEO RECEPCIONISTA</td></tr>';
+    shifts.forEach(function(sid,i){
+      var sc=(ms[i].totals||{}).shiftClose||null;
+      var entregaEsp=0;
+      if(ms[i].totals){var sl2=(ms[i].allSalesList||[]).filter(function(s){return s.shiftId===sid;});var ls2=loans.filter(function(l){return l.shiftId===sid;});var ex2=extras.filter(function(e){return e.shiftId===sid&&Number(e.payment||0)>0;});var ef2=sl2.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((ms[i].totals||{}).barEfectivo||0);var gas2=ls2.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((ms[i].totals||{}).shiftTaxi||0)+ex2.reduce(function(a,e){return a+Number(e.payment||0);},0);entregaEsp=ef2-gas2;}
+      var cashCount=sc?sc.cashCount:null;
+      var diff=cashCount!==null?cashCount-entregaEsp:null;
+      var cols=['','',''];
+      if(cashCount!==null){
+        var txt=fmt(cashCount);
+        if(diff===0)txt+=' ✅';
+        else if(diff>0)txt+=' <span style="color:#93c5fd">+'+fmt(diff)+'</span>';
+        else txt+=' <span style="color:#fca5a5">-'+fmt(Math.abs(diff))+'</span>';
+        cols[i]=txt;
+      } else {cols[i]='<span style="color:#6b7280">—</span>';}
+     if(i===2)h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;color:#9ca3af">Efectivo entregado</td>'+cols.map(function(c){return '<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+    });
     h+='</tbody></table></div>';
     el.innerHTML=h;
   });
