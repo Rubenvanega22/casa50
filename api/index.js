@@ -689,15 +689,22 @@ async function apiClearContaminated(p, res) {
 
   if (openLog && openLog.length) {
     await supabase.from('maid_log').update({
-      action: 'FINISH', finished_ms: now, state_to: 'AVAILABLE'
-    }).eq('id', openLog[0].id);
+        action: 'FINISH', finished_ms: now, state_to: resultState,
+        note: p.note || '',
+        check_in_ms: Number(room.check_in_ms || 0),
+        checkout_ms: Number(room.last_checkout_ms || 0),
+        category: String(room.category || '')
+      }).eq('id', openLog[0].id);
   } else {
     await supabase.from('maid_log').insert({
       ts_ms: now, business_day: bDay, shift_id: shift,
       maid_name: userName, room_id: roomId,
       action: 'FINISH', state: 'AVAILABLE', note: '',
       started_ms: now, finished_ms: now,
-      state_from: 'CONTAMINATED', state_to: 'AVAILABLE'
+      state_from: 'CONTAMINATED', state_to: 'AVAILABLE',
+        check_in_ms: Number(room.check_in_ms || 0),
+        checkout_ms: Number(room.last_checkout_ms || 0),
+        category: String(room.category || '')
     });
   }
 
