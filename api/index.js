@@ -535,8 +535,8 @@ async function apiMaidTake(p, res) {
     state_from: room.state, state_to: '',
     check_in_ms: Number(room.check_in_ms || 0),
     checkout_ms: Number(room.last_checkout_ms || 0),
-    category: String(room.category || '');
-
+    category: String(room.category || '')
+  });
   await supabase.from('rooms').update({
     maid_in_progress: true,
     maid_name_progress: maidName,
