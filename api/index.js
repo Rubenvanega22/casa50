@@ -530,10 +530,12 @@ async function apiMaidTake(p, res) {
   await supabase.from('maid_log').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: roomId,
-    action: 'START', state: room.state, note: '',
+   action: 'START', state: room.state, note: '',
     started_ms: now, finished_ms: 0,
-    state_from: room.state, state_to: ''
-  });
+    state_from: room.state, state_to: '',
+    check_in_ms: Number(room.check_in_ms || 0),
+    checkout_ms: Number(room.last_checkout_ms || 0),
+    category: String(room.category || '');
 
   await supabase.from('rooms').update({
     maid_in_progress: true,
