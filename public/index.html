@@ -2940,7 +2940,29 @@ h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px
         else txt+=' <span style="color:#fca5a5">-'+fmt(Math.abs(diff))+'</span>';
         cols[i]=txt;
       } else {cols[i]='<span style="color:#6b7280">—</span>';}
-     if(i===2)h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;color:#9ca3af">Efectivo entregado</td>'+cols.map(function(c){return '<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+     if(i===2){
+        var colsBill=['','',''],colsMon=['','',''],colsDiff=['','',''];
+        shifts.forEach(function(s2,j){
+          var sc2=(ms[j].totals||{}).shiftClose||null;
+          var sl3=(ms[j].allSalesList||[]).filter(function(s){return s.shiftId===s2;});
+          var ls3=loans.filter(function(l){return l.shiftId===s2;});
+          var ex3=extras.filter(function(e){return e.shiftId===s2&&Number(e.payment||0)>0;});
+          var ef3=sl3.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((ms[j].totals||{}).barEfectivo||0);
+          var gas3=ls3.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((ms[j].totals||{}).shiftTaxi||0)+ex3.reduce(function(a,e){return a+Number(e.payment||0);},0);
+          var esp=ef3-gas3;
+          if(sc2){
+            colsBill[j]=fmt(sc2.cashBilletes||0);
+            colsMon[j]=fmt(sc2.cashMonedas||0);
+            var d=(sc2.cashCount||0)-esp;
+            if(d===0)colsDiff[j]='<span style="color:#22c55e">✅ Exacto</span>';
+            else if(d>0)colsDiff[j]='<span style="color:#3b82f6">+'+fmt(d)+' sobrante</span>';
+            else colsDiff[j]='<span style="color:#ef4444">-'+fmt(Math.abs(d))+' faltante</span>';
+          } else {colsBill[j]='<span style="color:#6b7280">—</span>';colsMon[j]='<span style="color:#6b7280">—</span>';colsDiff[j]='<span style="color:#6b7280">—</span>';}
+        });
+        h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;color:#9ca3af">Billetes entregados</td>'+colsBill.map(function(c){return '<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;color:#f59e0b">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+        h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;color:#9ca3af">Monedas entregadas</td>'+colsMon.map(function(c){return '<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;color:#f59e0b">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+        h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;color:#9ca3af">Diferencia</td>'+colsDiff.map(function(c){return '<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+      }
     });
     h+='</tbody></table></div>';
     el.innerHTML=h;
