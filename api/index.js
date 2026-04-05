@@ -850,7 +850,7 @@ async function apiReviewNote(p, res) {
   if(photoUrl){
     try {
       const fileName = photoUrl.split('/').pop();
-      await supabase.storage.from('maid - photos').remove([fileName]);
+      await supabase.storage.from('maid-photos').remove([fileName]);
     } catch(e) { console.error('Error borrando foto:', e); }
   }
   await supabase.from('shift_notes').update({photo_url: null}).eq('id', noteId);
