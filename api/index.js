@@ -983,7 +983,7 @@ async function apiMetrics(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const shiftFilter = String(p.shiftId || '');
 
-  const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes] = await Promise.all([
+  const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes, shiftCloseRes] = await Promise.all([
     supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
     supabase.from('taxi_expenses').select('*').eq('business_day', bDay),
     supabase.from('loans').select('*').eq('business_day', bDay).order('ts_ms'),
@@ -991,9 +991,9 @@ async function apiMetrics(p, res) {
     supabase.from('bar_sales').select('*').eq('business_day', bDay),
     supabase.from('general_expenses').select('*').eq('business_day', bDay),
     supabase.from('settings').select('key,value'),
-    supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
+    supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
+    supabase.from('shift_close').select('shift_id,cash_count,net,total_efectivo').eq('business_day', bDay)
   ]);
-
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
   const dailyGoal=Number(settings.DAILY_GOAL||0);
 let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
@@ -1050,7 +1050,8 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
     allSalesList:allSalesList.sort((a,b)=>a.tsMs-b.tsMs),
     taxiList,
     dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null,
-      shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—'
+      shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—',
+    shiftClose:shiftFilter?(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===shiftFilter).map(r=>({cashCount:Number(r.cash_count||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0)}))[0]||null:null
   });
 }
 
