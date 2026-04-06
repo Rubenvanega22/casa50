@@ -3141,7 +3141,7 @@ function sendNote(){
     var formData=new FormData();
     formData.append('',fotoFile,fileName);
     fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
-      method:'POST',
+      method:'PUT',
       headers:{'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':fotoFile.type||'image/jpeg'},
       body:fotoFile
     }).then(function(r){return r.json();}).then(function(resp){toast('Storage resp: '+JSON.stringify(resp).substring(0,80),'ok');
