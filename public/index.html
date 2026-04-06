@@ -3144,7 +3144,7 @@ function sendNote(){
       method:'PUT',
       headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':fotoFile.type||'image/jpeg'},
       body:fotoFile
-   }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});return r.json();}).then(function(resp){toast('Storage resp: '+JSON.stringify(resp).substring(0,80),'ok');
+   }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});return r.json();}).then(function(resp){
       var photoUrl=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
       rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoUrl:photoUrl},
         function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
