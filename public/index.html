@@ -3137,7 +3137,8 @@ function sendNote(){
   var fotoFile=document.getElementById('notePhoto')&&document.getElementById('notePhoto').files[0];
   if(fotoFile){
     toast('Subiendo foto...','ok');
-    var fileName='note_'+Date.now()+'.'+fotoFile.name.split('.').pop();
+    var ext=(fotoFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+    var fileName='note_'+Date.now()+'.'+(ext||'jpg');
     var formData=new FormData();
     formData.append('',fotoFile,fileName);
     fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
