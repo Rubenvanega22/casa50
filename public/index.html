@@ -769,8 +769,38 @@ function openRoom(rid){
   selDur=3;selPpl=Number(cfg.included||2);selArr='WALK';selPay='EFECTIVO';selExtMode='ext';selRenewDur=3;
   document.getElementById('mRoomT').textContent='Hab. '+curRoom.roomId+' — '+curRoom.category;
   buildRoomB(curRoom);openM('mRoom');
+  // Cargar resumen financiero si está ocupada o sucia
+  if(curRoom.state==='OCCUPIED'||curRoom.state==='DIRTY'){
+    var checkInMs=Number(curRoom.checkInMs||curRoom.lastCheckoutMs||0);
+    if(checkInMs){
+      rpc('roomHistory',{roomId:rid,limit:10},function(data){
+        var sales=data.salesHistory||[];
+        if(!sales.length)return;
+        var h='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-top:10px">';
+        h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div>';
+        var totalCobrado=0,taxis=0,horaGratis=false;
+        sales.forEach(function(s){
+          if(s.type==='HORA_GRATIS'){horaGratis=true;return;}
+          totalCobrado+=Number(s.total||0);
+          var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
+          var typeL={'SALE':'Venta','EXTENSION':'H.Adicional','RENEWAL':'Renovación','REFUND':'Devolución','SALE':'Venta'}[s.type]||s.type;
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
+          h+='<div><span style="color:#9ca3af">'+typeL+'</span>';
+          if(s.type==='SALE')h+=' <span style="font-size:10px;color:#9ca3af">'+s.durationHrs+'h — '+s.people+'p</span>';
+          if(s.type==='EXTENSION')h+=' <span style="font-size:10px;color:#9ca3af">'+s.durationHrs+'h</span>';
+          h+='</div>';
+          h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+pmB+'">'+s.payMethod+'</span><b style="color:#22c55e">'+fmt(s.total)+'</b></div>';
+          h+='</div>';
+        });
+        if(horaGratis)h+='<div style="font-size:11px;color:#22c55e;padding:4px 0">🎁 Hora gratis aplicada</div>';
+        h+='<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;font-weight:800"><span>Total cobrado</span><span style="color:#22c55e">'+fmt(totalCobrado)+'</span></div>';
+        h+='</div>';
+        var box=document.getElementById('mRoomB');
+        if(box)box.innerHTML+=h;
+      });
+    }
+  }
 }
-
 function buildRoomB(r){
   var now=Date.now();
   var eff=r.disabled?'BL':r.retoque?'RT':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':'CO';
