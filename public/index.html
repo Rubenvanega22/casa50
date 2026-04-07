@@ -2192,6 +2192,47 @@ function selExtCalTipo(t){
   });
   document.getElementById('extCalVacDiv').style.display=t==='vacaciones'?'block':'none';
 }
+function ncalGuardarExtraNew(){
+  var id=document.getElementById('extCalId').value||'';
+  var fecha=document.getElementById('extCalFecha').value;
+  var area=document.getElementById('extCalArea').value;
+  var nombre=(document.getElementById('extCalNombre').value||'').trim();
+  var entrada=document.getElementById('extCalEntrada').value||'06:00';
+  var salida=document.getElementById('extCalSalida').value||'14:00';
+  var tipo=extCalTipoSel||'normal';
+  var vacIni=document.getElementById('extCalVacIni')?document.getElementById('extCalVacIni').value||'':'';
+  var vacFin=document.getElementById('extCalVacFin')?document.getElementById('extCalVacFin').value||'':'';
+  if(!nombre){toast('Ingresa el nombre.','err');return;}
+  rpc('saveExtra',{id:id?Number(id):0,fecha:fecha,area:area,nombre:nombre,horaEntrada:entrada,horaSalida:salida,tipo:tipo,vacInicio:vacIni,vacFin:vacFin,userRole:sess.userRole},
+    function(){toast('Extra guardado.','ok');closeM('mExtrasCal');loadSched();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+function ncalEditarExtra(id,fecha,area){
+  var ex=(window.ncalExtras||[]).find(function(e){return e.id===id;});
+  if(!ex)return;
+  closeM('mExtrasCal');
+  setTimeout(function(){
+    ncalAbrirExtra(fecha,area);
+    setTimeout(function(){
+      document.getElementById('extCalId').value=id;
+      document.getElementById('extCalNombre').value=ex.nombre;
+      document.getElementById('extCalEntrada').value=ex.horaEntrada||'06:00';
+      document.getElementById('extCalSalida').value=ex.horaSalida||'14:00';
+      selExtCalTipo(ex.tipo||'normal');
+      if(ex.vacInicio)document.getElementById('extCalVacIni').value=ex.vacInicio;
+      if(ex.vacFin)document.getElementById('extCalVacFin').value=ex.vacFin;
+    },100);
+  },100);
+}
+function ncalBorrarExtra(id){
+  conf('¿Borrar este extra?',function(){
+    rpc('deleteExtra',{id:id,userRole:sess.userRole},
+      function(){toast('Extra borrado.','ok');closeM('mExtrasCal');loadSched();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
 function ncalAbrirProg(areaDefault){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo el administrador puede programar.','err');return;}
   ncalDescSel=[];
