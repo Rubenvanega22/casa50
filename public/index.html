@@ -773,62 +773,44 @@ function openRoom(rid){
   if(curRoom.state==='OCCUPIED'||curRoom.state==='DIRTY'){
     rpc('roomHistory',{roomId:rid,limit:20},function(data){
       var allSales=data.salesHistory||[];
-      if(!allSales.length)return;
-      // Determinar check_in_ms del ciclo actual
+      if(!allSales.length){
+        var box=document.getElementById('resumenEstadia');
+        if(box)box.innerHTML='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Sin ventas registradas.</p>';
+        return;
+      }
       var anclaMs=0;
       if(curRoom.state==='OCCUPIED'){
         anclaMs=Number(curRoom.checkInMs||0);
       } else {
-        // SUCIA: usar el check_in_ms de la venta más reciente
-        var ventaReciente=allSales.find(function(s){return s.type==='SALE';});
-        anclaMs=ventaReciente?Number(ventaReciente.checkInMs||0):0;
+        var ventaRec=allSales.find(function(s){return s.type==='SALE';});
+        anclaMs=ventaRec?Number(ventaRec.checkInMs||0):0;
       }
       if(!anclaMs)return;
-      // Filtrar solo ventas del ciclo actual
       var sales=allSales.filter(function(s){return Number(s.checkInMs||0)===anclaMs;});
-      if(!sales.length)return;
       var ventaBase=sales.find(function(s){return s.type==='SALE';});
       var extensiones=sales.filter(function(s){return s.type==='EXTENSION';});
-      var renovaciones=sales.filter(function(s){return s.type==='RENEWAL';});
       var horaGratis=allSales.some(function(s){return s.type==='HORA_GRATIS'&&Number(s.checkInMs||0)===anclaMs;});
-      var h='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-top:10px">';
-      h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div>';
       if(ventaBase){
-        h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:6px">Ingreso: <b style="color:#e5e7eb">'+fT(anclaMs)+'</b> | Salida prog: <b style="color:#e5e7eb">'+fT(ventaBase.dueMs)+'</b></div>';
-        var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[ventaBase.payMethod]||'badge-ap';
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
-        h+='<div><span style="color:#9ca3af">Habitación</span> <span style="font-size:10px;color:#9ca3af">'+ventaBase.durationHrs+'h — '+ventaBase.people+'p</span></div>';
-        h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+pmB+'">'+ventaBase.payMethod+'</span><b style="color:#22c55e">'+fmt(ventaBase.total)+'</b></div>';
-        h+='</div>';
+        var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+        var turnoEl=document.getElementById('turnoVentaDisp');
+        if(turnoEl)turnoEl.textContent=sn[ventaBase.shiftId]||ventaBase.shiftId||'—';
+      }
+      var h='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div>';
+      if(ventaBase){
+        h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Habitación '+ventaBase.durationHrs+'h — '+ventaBase.people+'p</span><b style="color:#22c55e">'+fmt(ventaBase.total)+'</b></div>';
         if(Number(ventaBase.extraPeople||0)>0){
-          h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
-          h+='<span style="color:#9ca3af">P. Adicional ('+ventaBase.extraPeople+')</span>';
-          h+='<b style="color:#f59e0b">'+fmt(ventaBase.extraPeopleValue||0)+'</b></div>';
+          h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Personas extra: '+ventaBase.extraPeople+'</span><b style="color:#f59e0b">'+fmt(ventaBase.extraPeopleValue||0)+'</b></div>';
+        } else {
+          h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Personas extra: 0</span><b style="color:#6b7280">$0</b></div>';
         }
       }
-      var totalExt=0;
-      extensiones.forEach(function(s){totalExt+=Number(s.total||0);});
-      if(extensiones.length){
-        h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
-        h+='<span style="color:#9ca3af">H. Adicional ('+extensiones.length+' vez)</span>';
-        h+='<b style="color:#3b82f6">'+fmt(totalExt)+'</b></div>';
-      }
-      var totalRen=0;
-      renovaciones.forEach(function(s){totalRen+=Number(s.total||0);});
-      if(renovaciones.length){
-        h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
-        h+='<span style="color:#9ca3af">Renovación ('+renovaciones.length+')</span>';
-        h+='<b style="color:#22c55e">'+fmt(totalRen)+'</b></div>';
-      }
-      if(horaGratis){
-        h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
-        h+='<span style="color:#22c55e">🎁 Hora gratis</span><b style="color:#22c55e">$0</b></div>';
-      }
+      var totalExt=extensiones.reduce(function(a,s){return a+Number(s.total||0);},0);
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Horas extra pagadas: '+extensiones.length+'</span><b style="color:#3b82f6">'+fmt(totalExt)+'</b></div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Hora regalo aplicada</span><b style="color:'+(horaGratis?'#22c55e':'#6b7280')+'">'+(horaGratis?'Sí, 1 hora':'No')+'</b></div>';
       var totalCobrado=sales.filter(function(s){return s.type!=='HORA_GRATIS';}).reduce(function(a,s){return a+Number(s.total||0);},0);
       h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e">'+fmt(totalCobrado)+'</span></div>';
-      h+='</div>';
-      var box=document.getElementById('mRoomB');
-     if(box)box.innerHTML+=h;
+      var box=document.getElementById('resumenEstadia');
+      if(box)box.innerHTML=h;
     });
   }
 }
@@ -848,29 +830,29 @@ function buildRoomB(r){
     h+='</div>';
   }
 
-  // --- OCUPADA ---
+ // --- OCUPADA ---
   if(eff==='OC'){
+    var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
     if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora ingreso</span><b>'+fT(r.checkInMs)+'</b></div>';
     if(r.dueMs){var left=Number(r.dueMs)-now;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora salida</span><b>'+fT(r.dueMs)+'</b></div><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo</span><b style="color:'+(left>0?'#22c55e':'#ef4444')+'">'+(left>0?fDur(left):'VENCIDA +'+fDur(Math.abs(left)))+'</b></div>';}
     if(r.people)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Personas</span><b>'+r.people+'</b></div>';
     if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Llegada</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(aLbl)+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPlate()">✏ Llegada</button>':'')+'</div></div>';}
-h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Método pago</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(r.payMethod||'EFECTIVO')+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPayMethod()">✏ Pago</button>':'')+'</div></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Método pago</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(r.payMethod||'EFECTIVO')+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPayMethod()">✏ Pago</button>':'')+'</div></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Turno venta</span><b style="color:#a78bfa" id="turnoVentaDisp">—</b></div>';
     h+='</div>';
+   h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
     if(isR){
       h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
       h+='<div id="coF" style="display:none;margin-top:9px"><label>Observacion salida (opcional)</label><input type="text" id="coObs" placeholder="Ej: dejo ropa sucia"><button class="btn br full sm" style="margin-top:6px" onclick="doCheckOut()">Confirmar Salida</button></div>';
-      // Panel extender/renovar con tabs
       h+='<div id="extP" style="display:none;margin-top:9px">';
       h+='<div class="ext-tabs"><div class="ext-tab'+(selExtMode==='ext'?' on':'')+'" id="extTabExt" onclick="setExtMode(\'ext\')">Extender (hrs sueltas)</div><div class="ext-tab'+(selExtMode==='renew'?' on':'')+'" id="extTabRew" onclick="setExtMode(\'renew\')">Renovar (bloque)</div></div>';
-      // Sub-panel extender
       h+='<div id="extSubExt"'+(selExtMode==='renew'?' style="display:none"':'')+'>';
       h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:5px">'+fmt(cfg.extraHour)+' por hora adicional</div>';
       h+='<select id="extHrs" style="margin-bottom:8px"><option value="1">+1h — '+fmt(1*cfg.extraHour)+'</option><option value="2">+2h — '+fmt(2*cfg.extraHour)+'</option><option value="3">+3h — '+fmt(3*cfg.extraHour)+'</option><option value="4">+4h — '+fmt(4*cfg.extraHour)+'</option><option value="5">+5h — '+fmt(5*cfg.extraHour)+'</option><option value="6">+6h — '+fmt(6*cfg.extraHour)+'</option></select>';
       h+='<div class="pm"><div class="pmo on" id="extPmEF" onclick="selExtPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="extPmTA" onclick="selExtPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="extPmNE" onclick="selExtPm(\'NEQUI\')">Nequi</div></div>';
       h+='<button class="btn bb full" onclick="doExt()">Confirmar Extension</button>';
       h+='</div>';
-      // Sub-panel renovar
       h+='<div id="extSubRew"'+(selExtMode==='ext'?' style="display:none"':'')+'>';
       var renewDurs=cfg.h6>0?[3,6,8,12]:[3,8,12];
       h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:6px">Precio de bloque completo (tarifa base):</div>';
@@ -881,7 +863,7 @@ h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span 
       h+='<div class="tb"><div class="tl">Total renovacion</div><div class="tv" id="rewTot">'+fmt(calcP(selRenewDur,cfg))+'</div></div>';
       h+='<button class="btn bg full" onclick="doRenew()">Confirmar Renovacion</button>';
       h+='</div>';
-      h+='</div>'; // cierra extP
+      h+='</div>';
     }
   }
 
