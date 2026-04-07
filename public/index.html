@@ -1996,8 +1996,13 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
     var SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     var THORAS={T1:{e:'06:00',s:'14:00'},T2:{e:'14:00',s:'21:00'},T3:{e:'21:00',s:'06:00'}};
    ncalCoberturas={};
+    window.ncalDatosPersonas={};
     (data.schedule||[]).forEach(function(e){
       if(!e.dayOfWeek||!e.dayOfWeek.startsWith(ym))return;
+      if(e.personName&&!e.personName.startsWith('_EXTRA_')&&!e.personName.startsWith('__EXT__')){
+        if(!window.ncalDatosPersonas[e.area])window.ncalDatosPersonas[e.area]=[];
+        if(window.ncalDatosPersonas[e.area].indexOf(e.personName)<0)window.ncalDatosPersonas[e.area].push(e.personName);
+      }
       // Ignorar registros _EXTRA_ antiguos
      if(e.personName&&(e.personName.startsWith('_EXTRA_')||e.personName.startsWith('__EXT__'))){
         if(e.personName.startsWith('__EXT__')&&e.extraNombre){
@@ -2165,7 +2170,13 @@ function ncalFormExtra(fecha,area,extraId){
   h+='<input type="hidden" id="extCalId" value="'+(extraId||'')+'">';
   h+='<input type="hidden" id="extCalFecha" value="'+fecha+'">';
   h+='<input type="hidden" id="extCalArea" value="'+area+'">';
-  h+='<label>Nombre</label><input type="text" id="extCalNombre" placeholder="Nombre completo">';
+ h+='<label>Reemplaza a</label>';
+  h+='<select id="extCalFijo">';
+  h+='<option value="">-- Ninguno (extra adicional) --</option>';
+  var personasArea=(window.ncalDatosPersonas||{})[area]||[];
+  personasArea.forEach(function(p){h+='<option value="'+esc(p)+'">'+esc(p)+'</option>';});
+  h+='</select>';
+  h+='<label>Nombre del extra</label><input type="text" id="extCalNombre" placeholder="Nombre completo">';
   h+='<label>Hora entrada</label><input type="time" id="extCalEntrada" value="06:00">';
   h+='<label>Hora salida</label><input type="time" id="extCalSalida" value="14:00">';
   h+='<label>Tipo</label>';
