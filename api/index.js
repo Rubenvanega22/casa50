@@ -1183,7 +1183,7 @@ async function apiSaveSchedule(p, res) {
   const ws=String(p.weekStart||'').trim(),entries=p.entries||[];
   if(!ws)return err(res,'Semana requerida');
   const mesPrefix=ws.substring(0,7);
-  const existingRes=await supabase.from('schedule').select('id,area,person_name,day_of_week');const existing=existingRes.data||[];
+  const existingRes=await supabase.from('schedule').select('id,area,person_name,day_of_week,type');const existing=existingRes.data||[];
   const personasEnEntradas=[...new Set(entries.map(function(e){return e.area+'|'+e.personName;}))];
   const toDelete=(existing||[]).filter(function(r){
     if(!String(r.day_of_week||'').startsWith(mesPrefix))return false;
