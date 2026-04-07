@@ -1616,11 +1616,10 @@ async function apiSaveExtra(p, res) {
   const{data}=await supabase.from('schedule').select('id').eq('day_of_week',fecha).eq('area',area).eq('person_name',personName).limit(1);
   if(data&&data.length){
     await supabase.from('schedule').update({extra_nombre:extraNombre,extra_turno:extraTurno}).eq('id',data[0].id);
-  } else {
-    // Si no encuentra el registro, insertarlo
+ } else {
     await supabase.from('schedule').insert({day_of_week:fecha,area:area,person_name:personName,extra_nombre:extraNombre,extra_turno:extraTurno,type:'extra_day',week_start:fecha.substring(0,7),shift_id:'SHIFT_1'});
   }
- return ok(res,{fecha,area,personName,extraNombre,extraTurno,found:!!(data&&data.length)});
+  return ok(res,{fecha,area,personName,extraNombre,extraTurno,found:!!(data&&data.length)});
 }
 async function apiMaidCancel(p, res) {
   const now=Date.now();
