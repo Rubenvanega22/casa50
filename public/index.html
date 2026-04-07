@@ -1838,6 +1838,13 @@ function updCuadre(){
   var monedas=Number((document.getElementById('cashMonedas')||{}).value||0);
   var total=billetes+monedas;
   document.getElementById('cashIn2').value=total;
+  // Recalcular esperado en caso de que no se haya llamado updCuadre
+  var barEf=Number((document.getElementById('barEfInput')||{}).value||0);
+  var efBase=Number((document.getElementById('_ef_base')||{}).value||0);
+  var tGastos=Number((document.getElementById('_tGastos')||{}).value||0);
+  var esp2=efBase+barEf-tGastos;
+  var hidEsp=document.getElementById('_esperadoEfectivo');
+  if(hidEsp&&Number(hidEsp.value||0)===0&&esp2>0)hidEsp.value=esp2;
   var box=document.getElementById('faltanteBox');
   var esperado=Number((document.getElementById('_esperadoEfectivo')||{}).value||0);
   if(!box)return;
