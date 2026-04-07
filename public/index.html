@@ -2076,7 +2076,9 @@ function ncalRender(){
         if(info){if(info.tipo==='descanso'||info.tipo==='vacaciones')st.d++;else{st.t++;if(info.turno==='T3'||(info.tipo==='12h'&&info.turno12==='pm'))st.n++;}}
         var tdBorder=esDom?'border-top:2px solid rgba(245,158,11,.3);':'';
         if(esDes&&!cob)tdBorder='border-top:2px solid rgba(249,115,22,.5);';
-        var tdBg=esHoy2?'background:rgba(124,92,252,.08);':esDom?'background:rgba(245,158,11,.03);':'';
+        // Verificar si hay un extra que cubre a este fijo en este día
+        var extraCubriendo=(window.ncalExtras||[]).find(function(ex){return ex.fecha===fecha&&ex.area===area&&ex.fijo===persona&&(ex.tipo==='dc'||ex.tipo==='vacaciones');});
+        var tdBg=extraCubriendo?'background:rgba(107,114,128,.2);':esHoy2?'background:rgba(124,92,252,.08);':esDom?'background:rgba(245,158,11,.03);':'';
         html+='<td style="padding:2px;vertical-align:top;border:0.5px solid rgba(46,46,58,.5);'+tdBorder+tdBg+'">';
         var onclick=isAdmin?'onclick="ncalAbrirDia(\''+fecha+'\',\''+area+'\',\''+esc(persona)+'\')"':'';
         html+='<div style="cursor:'+(isAdmin?'pointer':'default')+';min-height:36px;padding:2px;border-radius:2px" '+onclick+'>';
@@ -2214,7 +2216,8 @@ function ncalGuardarExtraNew(){
   var vacIni=document.getElementById('extCalVacIni')?document.getElementById('extCalVacIni').value||'':'';
   var vacFin=document.getElementById('extCalVacFin')?document.getElementById('extCalVacFin').value||'':'';
   if(!nombre){toast('Ingresa el nombre.','err');return;}
-  rpc('saveExtra',{id:id?Number(id):0,fecha:fecha,area:area,nombre:nombre,horaEntrada:entrada,horaSalida:salida,tipo:tipo,vacInicio:vacIni,vacFin:vacFin,userRole:sess.userRole},
+ var fijo=(document.getElementById('extCalFijo')||{}).value||'';
+  rpc('saveExtra',{id:id?Number(id):0,fecha:fecha,area:area,nombre:nombre,horaEntrada:entrada,horaSalida:salida,tipo:tipo,vacInicio:vacIni,vacFin:vacFin,fijo:fijo,userRole:sess.userRole},
     function(){toast('Extra guardado.','ok');closeM('mExtrasCal');loadSched();},
     function(e){toast(e.message||String(e),'err');}
   );
