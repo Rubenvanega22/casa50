@@ -1987,6 +1987,10 @@ function loadSched(){
   var btn=document.getElementById('btnProgMes');
   if(btn)btn.style.display=isAdmin?'':'none';
 var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style.display=isAdmin?'':'none';
+  var ymMes=ncalAnio+'-'+String(ncalMes+1).padStart(2,'0');
+  rpc('getExtras',{mes:ymMes},function(extData){
+    window.ncalExtras=extData.extras||[];
+  },function(){window.ncalExtras=[];});
   rpc('getSchedule',{weekStart:ym},function(data){
     ncalDatos={};
     var SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
@@ -2084,6 +2088,29 @@ function ncalRender(){
       }
       html+='<td style="position:sticky;right:0;z-index:1;background:#18181f;padding:3px 4px;text-align:center;border:0.5px solid #2e2e3a;font-size:10px"><div style="color:#22c55e;font-weight:700">'+st.t+'</div><div style="color:#9ca3af">'+st.d+'</div><div style="color:#fcd34d">'+st.n+'</div></td></tr>';
     });
+    // Fila EXTRA del area
+    if(isAdmin){
+      var limiteExtra=area==='Camareria'?4:area==='Patio'?2:1;
+      html+='<tr><td style="position:sticky;left:0;z-index:1;background:#1a1a24;padding:4px 8px;font-size:10px;font-weight:700;color:#f59e0b;border:0.5px solid #2e2e3a;white-space:nowrap">EXTRA</td>';
+      for(var dia2=1;dia2<=ultimoDia;dia2++){
+        var fecha2=ncalFecha(dia2);
+        var extrasDelDia=(window.ncalExtras||[]).filter(function(ex){return ex.fecha===fecha2&&ex.area===area;});
+        var count=extrasDelDia.length;
+        var esHoy3=hoy.getFullYear()===ncalAnio&&hoy.getMonth()===ncalMes&&hoy.getDate()===dia2;
+        html+='<td style="padding:2px;vertical-align:top;border:0.5px solid rgba(46,46,58,.5);'+(esHoy3?'background:rgba(124,92,252,.08);':'background:rgba(245,158,11,.03);')+'">';
+        html+='<div style="cursor:pointer;min-height:36px;padding:2px;border-radius:2px" onclick="ncalAbrirExtra(\''+fecha2+'\',\''+area+'\')">';
+        if(count>0){
+          html+='<span style="font-size:9px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,.2);border-radius:3px;padding:1px 3px">+'+count+'</span>';
+          extrasDelDia.forEach(function(ex){
+            html+='<span style="display:block;font-size:8px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(ex.nombre.split(' ')[0])+'</span>';
+          });
+        } else {
+          html+='<span style="font-size:9px;color:#2e2e3a">+</span>';
+        }
+        html+='</div></td>';
+      }
+      html+='<td style="position:sticky;right:0;z-index:1;background:#1a1a24;border:0.5px solid #2e2e3a"></td></tr>';
+    }
     html+='</tbody></table></div></div>';
   });
   cont.innerHTML=html;
@@ -2101,7 +2128,70 @@ function ncalFiltrarPersonas(){
   });
   sel.value='';
 }
-function ncalAbrirProg(areaDefault){
+function ncalAbrirExtra(fecha,area){
+  var limites={Camareria:4,Patio:2,Recepcion:1};
+  var limite=limites[area]||1;
+  var extrasDelDia=(window.ncalExtras||[]).filter(function(ex){return ex.fecha===fecha&&ex.area===area;});
+  var h='<div class="mh"><div class="mt">Extras — '+area+' — '+fecha+'</div><button class="mc" onclick="closeM(\'mExtrasCal\')">✕</button></div>';
+  if(extrasDelDia.length){
+    h+='<div style="margin-bottom:10px">';
+    extrasDelDia.forEach(function(ex){
+      h+='<div style="background:#22222c;border-left:3px solid #f59e0b;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center">';
+      h+='<div><b>'+esc(ex.nombre)+'</b><span style="font-size:10px;color:#9ca3af;margin-left:6px">'+esc(ex.tipo)+'</span></div>';
+      h+='<div style="display:flex;gap:4px">';
+      h+='<button class="btn by xs" onclick="ncalEditarExtra('+ex.id+',\''+fecha+'\',\''+area+'\')">✏</button>';
+      h+='<button class="btn br xs" onclick="ncalBorrarExtra('+ex.id+')">✕</button>';
+      h+='</div></div>';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+esc(ex.horaEntrada)+' → '+esc(ex.horaSalida)+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  if(extrasDelDia.length<limite){
+    h+=ncalFormExtra(fecha,area,null);
+  } else {
+    h+='<p style="font-size:11px;color:#f59e0b">Límite de '+limite+' extras alcanzado para este día.</p>';
+  }
+  var modal=document.getElementById('mExtrasCal');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mExtrasCal';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mExtrasCalB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mExtrasCal');});document.body.appendChild(div);}
+  document.getElementById('mExtrasCalB').innerHTML=h;
+  openM('mExtrasCal');
+}
+
+function ncalFormExtra(fecha,area,extraId){
+  var h='<div style="border-top:1px solid #2e2e3a;padding-top:10px;margin-top:6px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:8px">'+(extraId?'Editar Extra':'+ Nuevo Extra')+'</div>';
+  h+='<input type="hidden" id="extCalId" value="'+(extraId||'')+'">';
+  h+='<input type="hidden" id="extCalFecha" value="'+fecha+'">';
+  h+='<input type="hidden" id="extCalArea" value="'+area+'">';
+  h+='<label>Nombre</label><input type="text" id="extCalNombre" placeholder="Nombre completo">';
+  h+='<label>Hora entrada</label><input type="time" id="extCalEntrada" value="06:00">';
+  h+='<label>Hora salida</label><input type="time" id="extCalSalida" value="14:00">';
+  h+='<label>Tipo</label>';
+  h+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px">';
+  ['normal','dc','vacaciones','12h'].forEach(function(t){
+    h+='<div class="abtn2" id="extCalTipo_'+t+'" onclick="selExtCalTipo(\''+t+'\')" style="'+(t==='normal'?'border-color:#7c5cfc;background:rgba(124,92,252,.1);color:#a78bfa':'')+'">'+t.toUpperCase()+'</div>';
+  });
+  h+='</div>';
+  h+='<div id="extCalVacDiv" style="display:none">';
+  h+='<label>Fecha inicio vacaciones</label><input type="date" id="extCalVacIni">';
+  h+='<label>Fecha fin vacaciones</label><input type="date" id="extCalVacFin">';
+  h+='</div>';
+  h+='<button class="btn ba full" onclick="ncalGuardarExtraNew()">Guardar</button>';
+  h+='</div>';
+  return h;
+}
+
+var extCalTipoSel='normal';
+function selExtCalTipo(t){
+  extCalTipoSel=t;
+  ['normal','dc','vacaciones','12h'].forEach(function(x){
+    var el=document.getElementById('extCalTipo_'+x);
+    if(el){el.style.borderColor=x===t?'#7c5cfc':'';el.style.background=x===t?'rgba(124,92,252,.1)':'';el.style.color=x===t?'#a78bfa':'';}
+  });
+  document.getElementById('extCalVacDiv').style.display=t==='vacaciones'?'blo
+ function ncalAbrirProg(areaDefault){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo el administrador puede programar.','err');return;}
   ncalDescSel=[];
   document.querySelectorAll('#cp-desc-days .abtn2').forEach(function(el){el.classList.remove('on');});
