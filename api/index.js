@@ -435,7 +435,6 @@ async function apiHoraGratis(p, res) {
   const room = await getRoom(roomId);
   if(!room) return err(res, 'Habitacion no existe');
   if(room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
-  // Verificar si ya se regaló hora gratis en esta estadía
   const checkInMs = Number(room.check_in_ms || 0);
   const { data: existing } = await supabase.from('sales')
     .select('id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
@@ -444,53 +443,10 @@ async function apiHoraGratis(p, res) {
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const userName = String(p.userName || '').trim();
-  await supabase.from('rooms').update({
-    state: 'DIRTY', state_since_ms: now, people: 0,
-    due_ms: 0, last_checkout_ms: now,
-    arrival_type: '', arrival_plate: '',
-    alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
-    checkout_obs: obs, contaminated_since_ms: 0,
-    pay_method: '',
-    updated_at: new Date().toISOString()
-  }).eq('room_id', roomId);
-  await supabase.from('state_history').insert({
-    ts_ms: now, business_day: bDay, shift_id: shift,
-    user_role: 'RECEPTION', user_name: userName, room_id: roomId,
-    from_state: 'OCCUPIED', to_state: 'DIRTY', people: 0,
-    meta_json: JSON.stringify({ lastCheckoutMs: now, checkoutObs: obs })
-  });
-  return ok(res, { roomId, checkoutMs: now });
-}
-async function apiExtendTime(p, res) {
-  const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = currentShiftId(now);
-  const userName = String(p.userName || '').trim();
-  const roomId = String(p.roomId || '').trim();
-  const extraHrs = Number(p.extraHrs || 0);
-  if (![1,2,3,4,5,6].includes(extraHrs)) return err(res, 'Horas extra invalidas (1-6)');
-
-  const room = await getRoom(roomId);
-  if (!room) return err(res, 'Habitacion no existe');
-  if (room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
-
-  const cfg = MASTER_PRICING[room.category] || MASTER_PRICING['Junior'];
-  const extraCost = extraHrs * Number(cfg.extraHour || 0);
-  const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
-  const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
-
+  const newDueMs = Number(room.due_ms || now) + 3600000;
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({
-    ts_ms: now, business_day: bDay, shift_id: shift,
-    user_role: 'RECEPTION', user_name: userName, type: 'EXTENSION',
-    room_id: roomId, category: room.category, duration_hrs: extraHrs,
-    base_price: extraCost, people: Number(room.people || 0),
-    extra_hours: extraHrs, extra_hours_value: extraCost, total: extraCost,
-    pay_method: payMethod, check_in_ms: Number(room.check_in_ms || 0), due_ms: newDueMs
-  });
-
-  await openCashDrawer();
-  return ok(res, { roomId, extraCost, newDueMs });
+  await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
+  return ok(res, { roomId, newDueMs });
 }
 // ==================== RENOVAR TIEMPO (bloque completo) ====================
 async function apiRenewTime(p, res) {
