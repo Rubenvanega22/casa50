@@ -1995,7 +1995,14 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
     (data.schedule||[]).forEach(function(e){
       if(!e.dayOfWeek||!e.dayOfWeek.startsWith(ym))return;
       // Ignorar registros _EXTRA_ antiguos
-      if(e.personName&&e.personName.startsWith('_EXTRA_'))return;
+     if(e.personName&&(e.personName.startsWith('_EXTRA_')||e.personName.startsWith('__EXT__'))){
+        if(e.personName.startsWith('__EXT__')&&e.extraNombre){
+          var personaBase=e.personName.replace('__EXT__','');
+          var cobKey=e.dayOfWeek+'|'+e.area+'|'+personaBase;
+          ncalCoberturas[cobKey]={nombre:e.extraNombre,turno:e.extraTurno||'T1'};
+        }
+        return;
+      }
       var key=ncalAnio+'-'+ncalMes+'-'+e.area;
       if(!ncalDatos[key])ncalDatos[key]={};
       if(!ncalDatos[key][e.personName])ncalDatos[key][e.personName]={sem:{1:{turno:'T1',entrada:'06:00',salida:'14:00'},2:{turno:'T1',entrada:'06:00',salida:'14:00'},3:{turno:'T1',entrada:'06:00',salida:'14:00'},4:{turno:'T1',entrada:'06:00',salida:'14:00'}},desc:[],exc:{}};
