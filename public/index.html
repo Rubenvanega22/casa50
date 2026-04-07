@@ -1453,6 +1453,7 @@ function renderMaid(){
       }else{
         h+='<button class="btn bg" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'AVAILABLE\')">✓ Marcar Lista</button>';
         h+='<button class="btn bo" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'CONTAMINATED\')">⚠ Contaminada</button>';
+        h+='<button class="btn br" style="flex:1" onclick="doMaidCancel(\''+r.roomId+'\')">↩ Devolver</button>';
       }
       h+='</div></div></div>';
     });
@@ -1497,6 +1498,18 @@ function doMaidFinishInline(rid,state){
     rpc('maidFinish',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole,resultState:state},
       function(res){
         toast('Hab '+rid+' — '+res.cleanMins+' min','ok');
+        try{sessionStorage.removeItem('maidStart_'+rid);}catch(e){}
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});
+      },
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+function doMaidCancel(rid){
+  conf('¿Devolver Hab '+rid+' a sucia?',function(){
+    rpc('maidCancel',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole},
+      function(){
+        toast('Hab '+rid+' devuelta a sucia.','ok');
         try{sessionStorage.removeItem('maidStart_'+rid);}catch(e){}
         rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});
       },
