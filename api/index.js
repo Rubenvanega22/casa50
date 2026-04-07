@@ -1319,7 +1319,7 @@ async function apiGetDailyCuadre(p, res) {
     supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id').eq('business_day',bDay),
     supabase.from('taxi_expenses').select('amount,shift_id').eq('business_day',bDay),
     supabase.from('extra_staff').select('payment,shift_id').eq('business_day',bDay),
-    supabase.from('bar_sales').select('amount_cash,amount_card,shift_id').eq('business_day',bDay),
+    supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
     supabase.from('general_expenses').select('amount,shift_id').eq('business_day',bDay),
     supabase.from('shift_log').select('shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
   ]);
@@ -1329,7 +1329,7 @@ async function apiGetDailyCuadre(p, res) {
 
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
   const c={};
-  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,gastos:0,taxis:0,turnos:0};});
+  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiBar:0,gastos:0,taxis:0,turnos:0};});
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
@@ -1344,7 +1344,7 @@ async function apiGetDailyCuadre(p, res) {
       if(pm==='TARJETA')c[sid].tarjetaHoras+=t;else c[sid].efectivoHoras+=t;
     }
   });
-  (barRes.data||[]).forEach(r=>{const sid=r.shift_id;if(!c[sid])return;c[sid].tarjetaBar+=Number(r.amount_card||0);c[sid].efectivoBar+=Number(r.amount_cash||0);});
+  (barRes.data||[]).forEach(r=>{const sid=r.shift_id;if(!c[sid])return;c[sid].tarjetaBar+=Number(r.amount_card||0);c[sid].efectivoBar+=Number(r.amount_cash||0);c[sid].nequiBar+=Number(r.amount_nequi||0);});
   (taxiRes.data||[]).forEach(r=>{const sid=r.shift_id;if(c[sid])c[sid].taxis+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{const sid=r.shift_id;if(c[sid])c[sid].turnos+=Number(r.payment||0);});
   (gastoRes.data||[]).forEach(r=>{const sid=r.shift_id;if(c[sid])c[sid].gastos+=Number(r.amount||0);});
@@ -1353,11 +1353,12 @@ async function apiGetDailyCuadre(p, res) {
   shifts.forEach(sid=>{
     const x=c[sid];
     const totTarjeta=x.tarjetaHab+x.tarjetaPersonas+x.tarjetaHoras+x.tarjetaBar;
+    const totNequi=x.nequiBar;
     const totEfectivo=x.efectivoHab+x.efectivoPersonas+x.efectivoHoras+x.efectivoBar;
     const totGastos=x.gastos+x.taxis+x.turnos;
-    const entrega=totTarjeta+totEfectivo-totGastos;
+    const entrega=totTarjeta+totEfectivo+totNequi-totGastos;
     diaTotal+=entrega;
-    cuadre[sid]={responsable:x.responsable,tarjeta:{hab:x.tarjetaHab,personas:x.tarjetaPersonas,horas:x.tarjetaHoras,bar:x.tarjetaBar,total:totTarjeta},efectivo:{hab:x.efectivoHab,personas:x.efectivoPersonas,horas:x.efectivoHoras,bar:x.efectivoBar,total:totEfectivo},gastos:{generales:x.gastos,taxis:x.taxis,turnos:x.turnos,total:totGastos},entregaDiaria:entrega};
+    cuadre[sid]={responsable:x.responsable,tarjeta:{hab:x.tarjetaHab,personas:x.tarjetaPersonas,horas:x.tarjetaHoras,bar:x.tarjetaBar,total:totTarjeta},efectivo:{hab:x.efectivoHab,personas:x.efectivoPersonas,horas:x.efectivoHoras,bar:x.efectivoBar,total:totEfectivo},nequi:{bar:x.nequiBar,total:totNequi},gastos:{generales:x.gastos,taxis:x.taxis,turnos:x.turnos,total:totGastos},entregaDiaria:entrega};
   });
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
