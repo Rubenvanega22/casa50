@@ -2091,9 +2091,8 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
       if(e.extraNombre){
         var cobKey=e.dayOfWeek+'|'+e.area+'|'+e.personName;
         ncalCoberturas[cobKey]={nombre:e.extraNombre,turno:e.extraTurno||'T1'};
-      }
-    });
-   ncalRender();
+      });
+    ncalRender();
     });
   });
 
