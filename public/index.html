@@ -2190,8 +2190,9 @@ function selExtCalTipo(t){
     var el=document.getElementById('extCalTipo_'+x);
     if(el){el.style.borderColor=x===t?'#7c5cfc':'';el.style.background=x===t?'rgba(124,92,252,.1)':'';el.style.color=x===t?'#a78bfa':'';}
   });
-  document.getElementById('extCalVacDiv').style.display=t==='vacaciones'?'blo
- function ncalAbrirProg(areaDefault){
+  document.getElementById('extCalVacDiv').style.display=t==='vacaciones'?'block':'none';
+}
+function ncalAbrirProg(areaDefault){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo el administrador puede programar.','err');return;}
   ncalDescSel=[];
   document.querySelectorAll('#cp-desc-days .abtn2').forEach(function(el){el.classList.remove('on');});
