@@ -195,7 +195,8 @@ case 'updateTarea':      return await apiUpdateTarea(payload, res);
 case 'deleteTarea':      return await apiDeleteTarea(payload, res);
 case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
         case 'clearMaidLog': return await apiClearMaidLog(payload, res);
-      case 'maidCancel':   return await apiMaidCancel(payload, res);
+     case 'maidCancel':   return await apiMaidCancel(payload, res);
+      case 'saveExtra':    return await apiSaveExtra(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1603,7 +1604,21 @@ async function apiClearMaidLog(p, res) {
   await supabase.from('maid_log').delete().eq('business_day',bDay);
   return ok(res,{businessDay:bDay});
 }
-
+async function apiSaveExtra(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const fecha=String(p.fecha||'').trim();
+  const area=String(p.area||'').trim();
+  const personName=String(p.personName||'').trim();
+  const extraNombre=String(p.extraNombre||'').trim();
+  const extraTurno=String(p.extraTurno||'').trim();
+  if(!fecha||!area||!personName) return err(res,'Datos incompletos');
+  // Buscar el registro de descanso de esa persona en esa fecha
+  const{data}=await supabase.from('schedule').select('id').eq('day_of_week',fecha).eq('area',area).eq('person_name',personName).limit(1);
+  if(data&&data.length){
+    await supabase.from('schedule').update({extra_nombre:extraNombre,extra_turno:extraTurno}).eq('id',data[0].id);
+  }
+  return ok(res,{fecha,area,personName,extraNombre,extraTurno});
+}
 async function apiMaidCancel(p, res) {
   const now=Date.now();
   const bDay=businessDay(now);
