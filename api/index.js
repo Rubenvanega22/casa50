@@ -1063,7 +1063,7 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
     taxiList,
     dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null,
       shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—',
-   shiftClose:shiftFilter?(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===shiftFilter).map(r=>({cashCount:Number(r.cash_count||0),cashBilletes:Number(r.cash_billetes||0),cashMonedas:Number(r.cash_monedas||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0)}))[0]||null:null
+  shiftClose:(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===(shiftFilter||'').toUpperCase()).map(r=>({cashCount:Number(r.cash_count||0),cashBilletes:Number(r.cash_billetes||0),cashMonedas:Number(r.cash_monedas||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0)}))[0]||null
   });
 }
 
