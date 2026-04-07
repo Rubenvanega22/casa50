@@ -105,7 +105,8 @@ function mapRoom(r) {
     lastMaidDoneMs: Number(r.last_maid_done_ms || 0),
     maidInProgress: !!r.maid_in_progress,
     maidNameProgress: r.maid_name_progress || '',
-    retoque: !!r.retoque
+    retoque: !!r.retoque,
+    payMethod: r.pay_method || ''
   };
 }
 
@@ -356,6 +357,7 @@ async function apiCheckIn(p, res) {
     arrival_type: arrivalType, arrival_plate: arrivalPlate,
     alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
     checkout_obs: '', contaminated_since_ms: 0, retoque: false,
+    pay_method: payMethod,
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
   await supabase.from('sales').insert({
@@ -408,12 +410,6 @@ async function apiCheckOut(p, res) {
   }
 
   await supabase.from('rooms').update({
-    state: 'DIRTY', state_since_ms: now, people: 0,
-    due_ms: 0, last_checkout_ms: now,
-    arrival_type: '', arrival_plate: '',
-    alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
-    checkout_obs: obs, contaminated_since_ms: 0, updated_at: new Date().toISOString()
-  }).eq('room_id', roomId);
 
   await supabase.from('state_history').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
@@ -441,10 +437,22 @@ async function apiHoraGratis(p, res) {
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const userName = String(p.userName || '').trim();
-  const newDueMs = Number(room.due_ms || now) + 3600000;
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
-  return ok(res, { roomId, newDueMs });
+  await supabase.from('rooms').update({
+    state: 'DIRTY', state_since_ms: now, people: 0,
+    due_ms: 0, last_checkout_ms: now,
+    arrival_type: '', arrival_plate: '',
+    alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
+    checkout_obs: obs, contaminated_since_ms: 0,
+    pay_method: '',
+    updated_at: new Date().toISOString()
+  }).eq('room_id', roomId);
+  await supabase.from('state_history').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName, room_id: roomId,
+    from_state: 'OCCUPIED', to_state: 'DIRTY', people: 0,
+    meta_json: JSON.stringify({ lastCheckoutMs: now, checkoutObs: obs })
+  });
+  return ok(res, { roomId, checkoutMs: now });
 }
 async function apiExtendTime(p, res) {
   const now = Date.now();
