@@ -1611,8 +1611,7 @@ async function apiGetExtras(p, res) {
   const mes=String(p.mes||'').trim();
   if(!mes) return err(res,'mes requerido');
   const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
-  return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||''}))});
-}
+ return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||''}))});
 
 async function apiSaveExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
@@ -1633,9 +1632,9 @@ async function apiSaveExtra(p, res) {
     if(existing&&existing.length>=limite) return err(res,'Límite de extras alcanzado para este día ('+limite+')');
   }
   if(id){
-    await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin}).eq('id',id);
+   await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
   } else {
-    await supabase.from('schedule_extras').insert({fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin});
+    await supabase.from('schedule_extras').insert({fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')});
   }
   return ok(res,{ok:true});
 }
