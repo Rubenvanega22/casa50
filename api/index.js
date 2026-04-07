@@ -986,8 +986,7 @@ async function apiCloseShift(p, res) {
       total:barEf+barTj+barNq
     });
   }
-
-  return ok(res, { { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
+  return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
 }
 
 // ==================== METRICAS v3 (filtrado REAL por turno) ====================
