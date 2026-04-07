@@ -2057,10 +2057,10 @@ function loadSched(){
   if(btn)btn.style.display=isAdmin?'':'none';
 var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style.display=isAdmin?'':'none';
   var ymMes=ncalAnio+'-'+String(ncalMes+1).padStart(2,'0');
+  window.ncalExtras=[];
   rpc('getExtras',{mes:ymMes},function(extData){
     window.ncalExtras=extData.extras||[];
-  },function(){window.ncalExtras=[];});
-  rpc('getSchedule',{weekStart:ym},function(data){
+    rpc('getSchedule',{weekStart:ym},function(data){
     ncalDatos={};
     var SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     var THORAS={T1:{e:'06:00',s:'14:00'},T2:{e:'14:00',s:'21:00'},T3:{e:'21:00',s:'06:00'}};
@@ -2093,9 +2093,9 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
         ncalCoberturas[cobKey]={nombre:e.extraNombre,turno:e.extraTurno||'T1'};
       }
     });
-    ncalRender();
+   ncalRender();
+    });
   });
-}
 
 function ncalGetPersonas(area){
   return Object.keys(ncalDatos[ncalAnio+'-'+ncalMes+'-'+area]||{});
