@@ -196,7 +196,9 @@ case 'deleteTarea':      return await apiDeleteTarea(payload, res);
 case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
         case 'clearMaidLog': return await apiClearMaidLog(payload, res);
      case 'maidCancel':   return await apiMaidCancel(payload, res);
-      case 'saveExtra':    return await apiSaveExtra(payload, res);
+      case 'saveExtra':       return await apiSaveExtra(payload, res);
+      case 'getExtras':       return await apiGetExtras(payload, res);
+      case 'deleteExtra':     return await apiDeleteExtra(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1604,22 +1606,46 @@ async function apiClearMaidLog(p, res) {
   await supabase.from('maid_log').delete().eq('business_day',bDay);
   return ok(res,{businessDay:bDay});
 }
+
+async function apiGetExtras(p, res) {
+  const mes=String(p.mes||'').trim();
+  if(!mes) return err(res,'mes requerido');
+  const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
+  return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||''}))});
+}
+
 async function apiSaveExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id=Number(p.id||0);
   const fecha=String(p.fecha||'').trim();
   const area=String(p.area||'').trim();
-  const personName=String(p.personName||'').trim();
-  const extraNombre=String(p.extraNombre||'').trim();
-  const extraTurno=String(p.extraTurno||'').trim();
-  if(!fecha||!area||!personName) return err(res,'Datos incompletos');
-  // Buscar el registro de descanso de esa persona en esa fecha
-  const{data}=await supabase.from('schedule').select('id').eq('day_of_week',fecha).eq('area',area).eq('person_name','__EXT__'+personName).limit(1);
-  if(data&&data.length){
-    await supabase.from('schedule').update({extra_nombre:extraNombre,extra_turno:extraTurno}).eq('id',data[0].id);
- } else {
-  await supabase.from('schedule').insert({day_of_week:fecha,area:area,person_name:'__EXT__'+personName,extra_nombre:extraNombre,extra_turno:extraTurno,type:'extra_day',week_start:fecha.substring(0,7),shift_id:'SHIFT_1'});
+  const nombre=String(p.nombre||'').trim();
+  const horaEntrada=String(p.horaEntrada||'').trim();
+  const horaSalida=String(p.horaSalida||'').trim();
+  const tipo=String(p.tipo||'normal').trim();
+  const vacInicio=String(p.vacInicio||'').trim();
+  const vacFin=String(p.vacFin||'').trim();
+  if(!fecha||!area||!nombre) return err(res,'Datos incompletos');
+  // Verificar limite por area
+  if(!id){
+    const limite=area==='Camareria'?4:area==='Patio'?2:10;
+    const{data:existing}=await supabase.from('schedule_extras').select('id').eq('fecha',fecha).eq('area',area);
+    if(existing&&existing.length>=limite) return err(res,'Límite de extras alcanzado para este día ('+limite+')');
   }
-  return ok(res,{fecha,area,personName,extraNombre,extraTurno,found:!!(data&&data.length)});
+  if(id){
+    await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin}).eq('id',id);
+  } else {
+    await supabase.from('schedule_extras').insert({fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin});
+  }
+  return ok(res,{ok:true});
+}
+
+async function apiDeleteExtra(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id=Number(p.id||0);
+  if(!id) return err(res,'id requerido');
+  await supabase.from('schedule_extras').delete().eq('id',id);
+  return ok(res,{ok:true});
 }
 async function apiMaidCancel(p, res) {
   const now=Date.now();
