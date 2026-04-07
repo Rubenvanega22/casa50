@@ -2166,7 +2166,7 @@ function ncalRender(){
       html+='<td style="position:sticky;right:0;z-index:1;background:#18181f;padding:3px 4px;text-align:center;border:0.5px solid #2e2e3a;font-size:10px"><div style="color:#22c55e;font-weight:700">'+st.t+'</div><div style="color:#9ca3af">'+st.d+'</div><div style="color:#fcd34d">'+st.n+'</div></td></tr>';
     });
     // Fila EXTRA del area
-    if(isAdmin){
+    if(true){
       var limiteExtra=area==='Camareria'?4:area==='Patio'?2:1;
       html+='<tr><td style="position:sticky;left:0;z-index:1;background:#1a1a24;padding:4px 8px;font-size:10px;font-weight:700;color:#f59e0b;border:0.5px solid #2e2e3a;white-space:nowrap">EXTRA</td>';
       for(var dia2=1;dia2<=ultimoDia;dia2++){
@@ -2175,7 +2175,7 @@ function ncalRender(){
         var count=extrasDelDia.length;
         var esHoy3=hoy.getFullYear()===ncalAnio&&hoy.getMonth()===ncalMes&&hoy.getDate()===dia2;
         html+='<td style="padding:2px;vertical-align:top;border:0.5px solid rgba(46,46,58,.5);'+(esHoy3?'background:rgba(124,92,252,.08);':'background:rgba(245,158,11,.03);')+'">';
-        html+='<div style="cursor:pointer;min-height:36px;padding:2px;border-radius:2px" onclick="ncalAbrirExtra(\''+fecha2+'\',\''+area+'\')">';
+        html+='<div style="cursor:'+(isAdmin?'pointer':'default')+';min-height:36px;padding:2px;border-radius:2px" '+(isAdmin?'onclick="ncalAbrirExtra(\''+fecha2+'\',\''+area+'\')"':'')+' >';
         if(count>0){
           html+='<span style="font-size:9px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,.2);border-radius:3px;padding:1px 3px">+'+count+'</span>';
           extrasDelDia.forEach(function(ex){
