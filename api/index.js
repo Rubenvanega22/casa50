@@ -1612,6 +1612,7 @@ async function apiGetExtras(p, res) {
   if(!mes) return err(res,'mes requerido');
   const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
  return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||''}))});
+}
 
 async function apiSaveExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
