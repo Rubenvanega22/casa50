@@ -1991,22 +1991,22 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
     ncalDatos={};
     var SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     var THORAS={T1:{e:'06:00',s:'14:00'},T2:{e:'14:00',s:'21:00'},T3:{e:'21:00',s:'06:00'}};
-    ncalCoberturas={};
+   ncalCoberturas={};
     (data.schedule||[]).forEach(function(e){
       if(!e.dayOfWeek||!e.dayOfWeek.startsWith(ym))return;
-      // Cargar extras guardados en Supabase
-      if(e.type==='extra'&&e.personName&&e.personName.startsWith('_EXTRA_')){
-        var personaBase=e.personName.replace('_EXTRA_','');
-        var cobKey=e.dayOfWeek+'|'+e.area+'|'+personaBase;
-        ncalCoberturas[cobKey]={nombre:e.extraNombre||'',turno:e.extraTurno||'T1'};
-        return;
-      }
+      // Ignorar registros _EXTRA_ antiguos
+      if(e.personName&&e.personName.startsWith('_EXTRA_'))return;
       var key=ncalAnio+'-'+ncalMes+'-'+e.area;
       if(!ncalDatos[key])ncalDatos[key]={};
       if(!ncalDatos[key][e.personName])ncalDatos[key][e.personName]={sem:{1:{turno:'T1',entrada:'06:00',salida:'14:00'},2:{turno:'T1',entrada:'06:00',salida:'14:00'},3:{turno:'T1',entrada:'06:00',salida:'14:00'},4:{turno:'T1',entrada:'06:00',salida:'14:00'}},desc:[],exc:{}};
       var t=SHIFT[e.shiftId]||'T1';
       var tipo=e.type==='descanso'?'descanso':'normal';
       ncalDatos[key][e.personName].exc[e.dayOfWeek]={tipo:tipo,turno:t,entrada:e.horaEntrada||THORAS[t].e,salida:e.horaSalida||THORAS[t].s};
+      // Cargar extra si existe en este registro
+      if(tipo==='descanso'&&e.extraNombre){
+        var cobKey=e.dayOfWeek+'|'+e.area+'|'+e.personName;
+        ncalCoberturas[cobKey]={nombre:e.extraNombre,turno:e.extraTurno||'T1'};
+      }
     });
     ncalRender();
   });
@@ -2255,19 +2255,9 @@ function ncalGuardarExtra(){
   var turno=document.getElementById('ncal-ext-turno').value;
   if(!nombre){toast('Ingresa el nombre del extra.','err');return;}
   ncalCoberturas[ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona)]={nombre:nombre,turno:turno};
-  // Guardar en Supabase
-  var SHIFT={T1:'SHIFT_1',T2:'SHIFT_2',T3:'SHIFT_3'};
-  rpc('saveSchedule',{weekStart:ncalAnio+'-'+String(ncalMes+1).padStart(2,'0'),entries:[{shiftId:SHIFT[turno]||turno,area:ncalEditando.area,dayOfWeek:ncalEditando.fecha,personName:'_EXTRA_'+ncalEditando.persona,type:'extra',horaEntrada:'',horaSalida:'',extraNombre:nombre,extraTurno:turno}],userRole:sess.userRole},
+  rpc('saveExtra',{fecha:ncalEditando.fecha,area:ncalEditando.area,personName:ncalEditando.persona,extraNombre:nombre,extraTurno:turno,userRole:sess.userRole},
     function(){toast('Extra guardado.','ok');},
     function(e){toast(e.message||String(e),'err');}
-  );
-  closeM('mCalDia');ncalRender();
-}
-function ncalQuitarExtra(){
-  delete ncalCoberturas[ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona)];
-  // Borrar de Supabase
-  rpc('saveSchedule',{weekStart:ncalAnio+'-'+String(ncalMes+1).padStart(2,'0'),entries:[{shiftId:'SHIFT_1',area:ncalEditando.area,dayOfWeek:ncalEditando.fecha,personName:'_EXTRA_'+ncalEditando.persona,type:'extra_delete'}],userRole:sess.userRole},
-    function(){},function(){}
   );
   closeM('mCalDia');ncalRender();
 }
