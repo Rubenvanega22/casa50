@@ -2963,7 +2963,7 @@ h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px
      if(i===2){
         var colsBill=['','',''],colsMon=['','',''],colsDiff=['','',''];
         shifts.forEach(function(s2,j){
-          var sc2=(ms[j].totals||{}).shiftClose||null;
+          var sc2=ms[j].shiftClose||null;
           var sl3=(ms[j].allSalesList||[]).filter(function(s){return s.shiftId===s2;});
           var ls3=loans.filter(function(l){return l.shiftId===s2;});
           var ex3=extras.filter(function(e){return e.shiftId===s2&&Number(e.payment||0)>0;});
