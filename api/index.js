@@ -1620,7 +1620,8 @@ async function apiSaveExtra(p, res) {
     // Si no encuentra el registro, insertarlo
     await supabase.from('schedule').insert({day_of_week:fecha,area:area,person_name:personName,extra_nombre:extraNombre,extra_turno:extraTurno,type:'extra_day',week_start:fecha.substring(0,7),shift_id:'SHIFT_1'});
   }
-  return ok(res,{fecha,area,personName,extraNombre,extraTurno,found:!!(data&&data.length)});
+ return ok(res,{fecha,area,personName,extraNombre,extraTurno,found:!!(data&&data.length)});
+}
 async function apiMaidCancel(p, res) {
   const now=Date.now();
   const bDay=businessDay(now);
