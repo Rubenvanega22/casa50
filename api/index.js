@@ -1250,14 +1250,16 @@ async function apiRoomHistory(p, res) {
   const roomId=String(p.roomId||'').trim();
   if(!roomId)return err(res,'roomId requerido');
   const limit=Number(p.limit||30);
-  const[stateRes,salesRes]=await Promise.all([
+  const[stateRes,salesRes,taxiRes]=await Promise.all([
     supabase.from('state_history').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
-    supabase.from('sales').select('*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL']).order('ts_ms',{ascending:false}).limit(limit)
+    supabase.from('sales').select('*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
+    supabase.from('taxi_expenses').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
   ]);
   return ok(res,{
     roomId,
     stateHistory:(stateRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,fromState:r.from_state,toState:r.to_state,userName:r.user_name,meta:(()=>{try{return JSON.parse(r.meta_json||'{}');}catch(e){return{};}})()})),
-    salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)}))
+    salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)})),
+    taxiHistory:(taxiRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),amount:Number(r.amount||0)}))
   });
 }
 
