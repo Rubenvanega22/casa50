@@ -1257,7 +1257,7 @@ async function apiRoomHistory(p, res) {
   return ok(res,{
     roomId,
     stateHistory:(stateRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,fromState:r.from_state,toState:r.to_state,userName:r.user_name,meta:(()=>{try{return JSON.parse(r.meta_json||'{}');}catch(e){return{};}})()})),
-    salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)}))
+    salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)}))
   });
 }
 
