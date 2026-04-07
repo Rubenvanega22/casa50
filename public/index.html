@@ -1643,51 +1643,75 @@ function loadVentas(){
     var taxiList=(m.taxiList||[]);
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
-    var sl=(m.allSalesList||[]).filter(function(s){return !fromMs||Number(s.checkInMs||0)>=fromMs;}).sort(function(a,b){return a.checkInMs-b.checkInMs;});
-var num=1;
+    var sl=(m.allSalesList||[]).filter(function(s){
+      return s.type==='SALE'&&(!fromMs||Number(s.checkInMs||0)>=fromMs);
+    }).sort(function(a,b){return a.checkInMs-b.checkInMs;});
+
+    // Colores por turno
+    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+
+    // Resumen por turno
+    var resumen={SHIFT_1:{count:0,total:0},SHIFT_2:{count:0,total:0},SHIFT_3:{count:0,total:0}};
+    sl.forEach(function(s){
+      var sid=s.shiftId||'SHIFT_1';
+      if(resumen[sid]){resumen[sid].count++;resumen[sid].total+=Number(s.total||0);}
+    });
+
+    // Totales generales
     var h='<div class="pay-row"><div class="pay-item"><div class="pay-lbl">Efectivo</div><div class="pay-val" style="color:#22c55e">'+fmt(t.totalEfectivo||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(t.totalTarjeta||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Nequi</div><div class="pay-val" style="color:#a78bfa">'+fmt(t.totalNequi||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Total dia</div><div class="pay-val" style="color:#22c55e">'+fmt(t.sales||0)+'</div></div></div>';
+
+    // Resumen por turno
+    h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">';
+    ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
+      var col=turnoColor[sid];
+      var r=resumen[sid];
+      h+='<div style="background:#18181f;border:1px solid '+col+';border-top:3px solid '+col+';border-radius:8px;padding:8px;text-align:center">';
+      h+='<div style="font-size:10px;font-weight:700;color:'+col+'">'+turnoLabel[sid]+'</div>';
+      h+='<div style="font-size:16px;font-weight:800;color:#e5e7eb">'+r.count+' hab</div>';
+      h+='<div style="font-size:11px;color:#9ca3af">'+fmt(r.total)+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+sl.length+' ventas hoy</div>';
-    if(!sl.length){h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';}
-    else{
-      var taxis=taxiList||[];
+
+    if(!sl.length){
+      h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
+    } else {
+      var num=1;
       sl.forEach(function(s){
-        var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne'}[s.payMethod]||'badge-ap';
+        var sid=s.shiftId||'SHIFT_1';
+        var col=turnoColor[sid]||'#6b7280';
+        var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
         var arrB={'CAR':'badge-ca','TAXI':'badge-tx','MOTO':'badge-mo'}[s.arrivalType]||'badge-ap';
         var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
-        var taxiHab=(typeof taxiList!=='undefined'?taxiList:[]).filter(function(tx){return tx.roomId===s.roomId;});
-         
+        var taxiHab=taxiList.filter(function(tx){return tx.roomId===s.roomId;});
         var taxiTotal=taxiHab.reduce(function(a,tx){return a+tx.amount;},0);
-        var totalReal=s.total-taxiTotal;
-       h+='<div class="sale-row"><div class="sale-top"><b>#'+num+' Hab '+s.roomId+'</b> <span class="badge '+pmB+'">'+s.payMethod+'</span> <b style="color:#22c55e">'+fmt(s.total)+'</b>'+(taxiTotal>0?'<span style="color:#f59e0b;font-size:11px"> -taxi '+fmt(taxiTotal)+'</span>':'')+'</div>';
-        h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span>'+(taxiTotal>0?'<span style="color:#f59e0b">🚕 taxi</span>':'')+'</div></div>';
+        h+='<div class="sale-row" style="border-left:3px solid '+col+'">';
+        h+='<div class="sale-top">';
+        h+='<b>#'+num+' Hab '+s.roomId+'</b>';
+        h+='<span style="font-size:9px;font-weight:700;color:'+col+';background:rgba('+
+          (sid==='SHIFT_1'?'59,130,246':sid==='SHIFT_2'?'34,197,94':'249,115,22')+
+          ',.15);border-radius:4px;padding:1px 5px">'+turnoLabel[sid]+'</span>';
+        h+='<span class="badge '+pmB+'">'+s.payMethod+'</span>';
+        h+='<b style="color:#22c55e">'+fmt(s.total)+'</b>';
+        if(taxiTotal>0)h+='<span style="color:#f59e0b;font-size:11px">-taxi '+fmt(taxiTotal)+'</span>';
+        h+='</div>';
+        h+='<div class="sale-det">';
+        h+='<span>Ent: '+fT(s.checkInMs)+'</span>';
+        h+='<span>Sal: '+fT(s.dueMs)+'</span>';
+        h+='<span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span>';
+        h+='<span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span>';
+        h+='</div></div>';
         num++;
-      });    }
+      });
+    }
     el.innerHTML=h;
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
-}
-
-// ---- PRESTAMOS ----
-function saveLoan(){
-  var n=(document.getElementById('lnName').value||'').trim(),a=Number(document.getElementById('lnAmt').value||0),nt=(document.getElementById('lnNote').value||'').trim();
-  if(!n){toast('Nombre requerido.','err');return;}if(a<=0){toast('Monto invalido.','err');return;}
-  rpc('addLoan',{borrowerName:n,amount:a,note:nt,userRole:sess.userRole,userName:sess.userName},
-    function(){toast('Prestamo guardado.','ok');closeM('mLoan');loadLoans();loadCuadre();document.getElementById('lnName').value='';document.getElementById('lnAmt').value='';document.getElementById('lnNote').value='';},
-    function(e){toast(e.message||String(e),'err');}
-  );
-}
-function loadLoans(){
-  if(!sess)return;
-  rpc('getLoans',{businessDay:sess.businessDay},function(data){
-    var c=document.getElementById('loanCont');
-    if(!data||!data.loans||!data.loans.length){c.innerHTML='<p style="color:#9ca3af;font-size:13px">Sin prestamos hoy.</p>';return;}
-    var tot=0,h='';
-    data.loans.forEach(function(l){tot+=Number(l.amount||0);var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};h+='<div class="li"><div><div style="font-weight:700">'+esc(l.borrowerName)+'</div><div style="font-size:10px;color:#9ca3af">'+(sn[l.shiftId]||l.shiftId||'')+' '+fT(Number(l.tsMs||0))+(l.note?' | '+esc(l.note):'')+'</div></div><div style="font-weight:800;color:#ef4444">'+fmt(l.amount)+'</div></div>';});
-    h+='<div style="background:#22222c;border-radius:7px;padding:9px;text-align:right;margin-top:5px;border-left:3px solid #ef4444"><b>Total: <span style="color:#ef4444">'+fmt(tot)+'</span></b></div>';
-    c.innerHTML=h;
-  });
 }
 
 // ---- PERSONAL EXTRA ----
