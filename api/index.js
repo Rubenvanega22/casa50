@@ -973,11 +973,21 @@ async function apiCloseShift(p, res) {
     rooms_sold: roomsSold, people, cash_count: Number(p.cashCount||0),
     cash_billetes: Number(p.cashBilletes||0),
     cash_monedas: Number(p.cashMonedas||0),
-    notes: String(p.notes||''), total_efectivo: totalEfectivo,
+   notes: String(p.notes||''), total_efectivo: totalEfectivo,
     total_tarjeta: totalTarjeta, total_nequi: totalNequi
   });
 
-  return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
+  const barEf=Number(p.barEfectivo||0),barTj=Number(p.barTarjeta||0),barNq=Number(p.barNequi||0);
+  if(barEf+barTj+barNq>0){
+    await supabase.from('bar_sales').insert({
+      ts_ms:now,business_day:bDay,shift_id:shift,
+      user_name:userName,description:'Bar turno cierre',
+      amount_cash:barEf,amount_card:barTj,amount_nequi:barNq,
+      total:barEf+barTj+barNq
+    });
+  }
+
+  return ok(res, { { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
 }
 
 // ==================== METRICAS v3 (filtrado REAL por turno) ====================
