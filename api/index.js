@@ -1176,7 +1176,7 @@ async function apiGetSchedule(p, res) {
   let query=supabase.from('schedule').select('*');
   if(ws)query=query.eq('week_start',ws);
   const{data}=await query.order('shift_id').order('area');
-  return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type}))});
+ return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',extraNombre:r.extra_nombre||'',extraTurno:r.extra_turno||''}))});;
 }
 async function apiSaveSchedule(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo el administrador puede guardar el calendario');
@@ -1193,7 +1193,7 @@ async function apiSaveSchedule(p, res) {
     await supabase.from('schedule').delete().in('id',toDelete);
   }
   if(entries.length>0){
-    const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal')}));
+    const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal'),hora_entrada:String(e.horaEntrada||''),hora_salida:String(e.horaSalida||''),extra_nombre:String(e.extraNombre||''),extra_turno:String(e.extraTurno||'')}));
     await supabase.from('schedule').insert(rows);
   }
   return ok(res,{saved:entries.length,weekStart:ws});
