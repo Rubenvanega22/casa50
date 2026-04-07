@@ -2094,8 +2094,9 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
       }
     });
     ncalRender();
-    });
-  });
+    },function(){ncalRender();});
+  },function(){window.ncalExtras=[];rpc('getSchedule',{weekStart:ym},function(data){ncalDatos={};ncalRender();});});
+}
 
 function ncalGetPersonas(area){
   return Object.keys(ncalDatos[ncalAnio+'-'+ncalMes+'-'+area]||{});
