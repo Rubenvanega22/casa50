@@ -410,7 +410,14 @@ async function apiCheckOut(p, res) {
   }
 
   await supabase.from('rooms').update({
-
+    state: 'DIRTY', state_since_ms: now, people: 0,
+    due_ms: 0, last_checkout_ms: now,
+    arrival_type: '', arrival_plate: '',
+    alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
+    checkout_obs: obs, contaminated_since_ms: 0,
+    pay_method: '',
+    updated_at: new Date().toISOString()
+  }).eq('room_id', roomId);
   await supabase.from('state_history').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, room_id: roomId,
