@@ -432,8 +432,18 @@ async function apiHoraGratis(p, res) {
   const room = await getRoom(roomId);
   if(!room) return err(res, 'Habitacion no existe');
   if(room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
+  // Verificar si ya se regaló hora gratis en esta estadía
+  const checkInMs = Number(room.check_in_ms || 0);
+  const { data: existing } = await supabase.from('sales')
+    .select('id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
+    .gte('check_in_ms', checkInMs).limit(1);
+  if(existing && existing.length) return err(res, 'Ya se obsequió la hora gratis para esta habitación');
+  const bDay = businessDay(now);
+  const shift = currentShiftId(now);
+  const userName = String(p.userName || '').trim();
   const newDueMs = Number(room.due_ms || now) + 3600000;
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
   return ok(res, { roomId, newDueMs });
 }
 async function apiExtendTime(p, res) {
