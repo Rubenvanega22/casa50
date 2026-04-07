@@ -1424,7 +1424,8 @@ function renderMaid(){
       h+='</div>';
       h+='<div style="font-size:11px;color:#9ca3af;margin-top:3px">'+(isDirty?'Ent: '+fT(r.checkInMs)+' | Salio: '+fT(r.lastCheckoutMs):'Contaminada desde: '+fT(since))+'</div>';
       h+='<div id="pendPanel_'+r.roomId+'" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
-      h+='<button class="btn by sm" style="width:100%" onclick="event.stopPropagation();doMaidTakeInline(\''+r.roomId+'\',this)">Empezar Limpieza</button>';
+     h+='<button class="btn by sm" style="width:100%;margin-bottom:4px" onclick="event.stopPropagation();doMaidTakeInline(\''+r.roomId+'\',this)">Empezar Limpieza</button>';
+      if(isRetoque)h+='<button class="btn br sm" style="width:100%" onclick="event.stopPropagation();doMaidCancel(\''+r.roomId+'\')">↩ Devolver a Sucia</button>';
       h+='</div>';
       h+='</div>';
     });
@@ -1449,7 +1450,8 @@ function renderMaid(){
       h+='<div style="font-size:12px;color:#9ca3af;margin-bottom:8px">Tiempo en limpieza: <b style="color:'+inpCol+'">'+elapsed+' min</b></div>';
       h+='<div style="display:flex;gap:6px">';
       if(r.state==='CONTAMINATED'){
-        h+='<button class="btn bb" style="width:100%" onclick="doMaidClearInline(\''+r.roomId+'\')">✓ Habilitar Habitacion</button>';
+        h+='<button class="btn bb" style="flex:1" onclick="doMaidClearInline(\''+r.roomId+'\')">✓ Habilitar Habitacion</button>';
+        h+='<button class="btn br" style="flex:1" onclick="doMaidCancel(\''+r.roomId+'\')">↩ Devolver</button>';
       }else{
         h+='<button class="btn bg" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'AVAILABLE\')">✓ Marcar Lista</button>';
         h+='<button class="btn bo" style="flex:1" onclick="doMaidFinishInline(\''+r.roomId+'\',\'CONTAMINATED\')">⚠ Contaminada</button>';
