@@ -1637,6 +1637,8 @@ async function apiMaidCancel(p, res) {
   await supabase.from('rooms').update({
     maid_in_progress:false,
     maid_name_progress:'',
+    state: room.state==='CONTAMINATED'?'DIRTY':room.state,
+    contaminated_since_ms: 0,
     updated_at:new Date().toISOString()
   }).eq('room_id',roomId);
   return ok(res,{roomId,cancelled:true});
