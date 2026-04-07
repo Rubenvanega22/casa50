@@ -807,6 +807,8 @@ function openRoom(rid){
       var totalExt=extensiones.reduce(function(a,s){return a+Number(s.total||0);},0);
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Horas extra pagadas: '+extensiones.length+'</span><b style="color:#3b82f6">'+fmt(totalExt)+'</b></div>';
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Hora regalo aplicada</span><b style="color:'+(horaGratis?'#22c55e':'#6b7280')+'">'+(horaGratis?'Sí, 1 hora':'No')+'</b></div>';
+      var taxiTotal=(data.taxiHistory||[]).reduce(function(a,t){return a+Number(t.amount||0);},0);
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Taxi</span><b style="color:'+(taxiTotal>0?'#f59e0b':'#6b7280')+'">'+fmt(taxiTotal)+'</b></div>';
       var totalCobrado=sales.filter(function(s){return s.type!=='HORA_GRATIS';}).reduce(function(a,s){return a+Number(s.total||0);},0);
       h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e">'+fmt(totalCobrado)+'</span></div>';
       var box=document.getElementById('resumenEstadia');
