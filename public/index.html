@@ -778,7 +778,7 @@ function buildRoomB(r){
   var cfg=MP[r.category]||MP['Junior'];
   var sc={AV:'#22c55e',OC:'#ef4444',DI:'#f59e0b',CO:'#3b82f6',BL:'#6b7280',RT:'#e5e7eb'};
   var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
-  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>'+(eff==='OC'&&isR?'<button class="btn bg xs" style="margin-right:30px" onclick="doHoraGratis()">🎁 +1h</button>':'')+'</div>';
+  var h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>'+(eff==='OC'&&isR&&(r.payMethod||'EFECTIVO')==='EFECTIVO'?'<button class="btn bg xs" style="margin-right:30px" onclick="doHoraGratis()">🎁 +1h</button>':'')+'</div>';
   if(eff==='BL'){
     var disMs=Number(r.disabledDateMs||0);
     h+='<div style="background:rgba(107,114,128,.1);border:1px solid rgba(107,114,128,.4);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
