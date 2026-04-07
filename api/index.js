@@ -194,6 +194,7 @@ case 'updateTarea':      return await apiUpdateTarea(payload, res);
 case 'deleteTarea':      return await apiDeleteTarea(payload, res);
 case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
         case 'clearMaidLog': return await apiClearMaidLog(payload, res);
+      case 'maidCancel':   return await apiMaidCancel(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1617,4 +1618,26 @@ async function apiClearMaidLog(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   await supabase.from('maid_log').delete().eq('business_day',bDay);
   return ok(res,{businessDay:bDay});
+}
+
+async function apiMaidCancel(p, res) {
+  const now=Date.now();
+  const bDay=businessDay(now);
+  const roomId=String(p.roomId||'').trim();
+  const maidName=String(p.maidName||p.userName||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  const room=await getRoom(roomId);
+  if(!room) return err(res,'Habitacion no existe');
+  // Borrar registro START abierto
+  await supabase.from('maid_log')
+    .delete()
+    .eq('maid_name',maidName).eq('room_id',roomId)
+    .eq('business_day',bDay).eq('action','START').eq('finished_ms',0);
+  // Quitar en proceso de la habitacion
+  await supabase.from('rooms').update({
+    maid_in_progress:false,
+    maid_name_progress:'',
+    updated_at:new Date().toISOString()
+  }).eq('room_id',roomId);
+  return ok(res,{roomId,cancelled:true});
 }
