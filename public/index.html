@@ -2150,8 +2150,8 @@ function ncalRender(){
         var extraCubriendo=(window.ncalExtras||[]).find(function(ex){return ex.fecha===fecha&&ex.area===area&&ex.fijo===persona&&(ex.tipo==='dc'||ex.tipo==='vacaciones');});
        var tdBg=extraCubriendo?'background:rgba(239,68,68,.15);':esHoy2?'background:rgba(124,92,252,.08);':esDom?'background:rgba(245,158,11,.03);':'';
         html+='<td style="padding:2px;vertical-align:top;border:0.5px solid rgba(46,46,58,.5);'+tdBorder+tdBg+'">';
-        var onclick=isAdmin?'onclick="ncalAbrirDia(\''+fecha+'\',\''+area+'\',\''+esc(persona)+'\')"':'';
-        html+='<div style="cursor:'+(isAdmin?'pointer':'default')+';min-height:36px;padding:2px;border-radius:2px" '+onclick+'>';
+       var onclick='';
+        html+='<div style="cursor:default;min-height:36px;padding:2px;border-radius:2px">';
         if(info){
           var cls,lbl;
           if(info.tipo==='descanso'){cls='ncal-dc';lbl='DC';}
