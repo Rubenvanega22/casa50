@@ -1188,7 +1188,7 @@ async function apiSaveSchedule(p, res) {
   const personasEnEntradas=[...new Set(entries.map(function(e){return e.area+'|'+e.personName;}))];
   const toDelete=(existing||[]).filter(function(r){
     if(!String(r.day_of_week||'').startsWith(mesPrefix))return false;
-    if(String(r.type||'').startsWith('extra'))return false;
+  if(String(r.type||'').startsWith('extra')||String(r.type||'')==='extra_day')return false;
     return personasEnEntradas.indexOf(r.area+'|'+r.person_name)>=0;
   }).map(function(r){return r.id;});
   if(toDelete.length>0){
@@ -1613,11 +1613,11 @@ async function apiSaveExtra(p, res) {
   const extraTurno=String(p.extraTurno||'').trim();
   if(!fecha||!area||!personName) return err(res,'Datos incompletos');
   // Buscar el registro de descanso de esa persona en esa fecha
-  const{data}=await supabase.from('schedule').select('id').eq('day_of_week',fecha).eq('area',area).eq('person_name',personName).limit(1);
+  const{data}=await supabase.from('schedule').select('id').eq('day_of_week',fecha).eq('area',area).eq('person_name','__EXT__'+personName).limit(1);
   if(data&&data.length){
     await supabase.from('schedule').update({extra_nombre:extraNombre,extra_turno:extraTurno}).eq('id',data[0].id);
  } else {
-    await supabase.from('schedule').insert({day_of_week:fecha,area:area,person_name:personName,extra_nombre:extraNombre,extra_turno:extraTurno,type:'extra_day',week_start:fecha.substring(0,7),shift_id:'SHIFT_1'});
+  await supabase.from('schedule').insert({day_of_week:fecha,area:area,person_name:'__EXT__'+personName,extra_nombre:extraNombre,extra_turno:extraTurno,type:'extra_day',week_start:fecha.substring(0,7),shift_id:'SHIFT_1'});
   }
   return ok(res,{fecha,area,personName,extraNombre,extraTurno,found:!!(data&&data.length)});
 }
