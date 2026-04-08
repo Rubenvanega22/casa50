@@ -1905,7 +1905,7 @@ function loadCuadre(){
 
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
-    var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===sess.shiftId&&(!fromMs||Number(s.checkInMs||0)>=fromMs);});
+    var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===sess.shiftId&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
     var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId;});
     var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0;});
     var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0,nq_hab=0,nq_padd=0,nq_hadd=0;
