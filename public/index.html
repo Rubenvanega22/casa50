@@ -1143,7 +1143,7 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   }
  
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
-    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
+   rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
