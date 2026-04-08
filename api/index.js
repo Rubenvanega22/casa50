@@ -954,7 +954,7 @@ async function apiGetNoteHistory(p, res) {
 async function apiCloseShift(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
   const userName = String(p.userName || '');
   // Marcar turno como cerrado para liberar el acceso
   await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: 'LOGOUT', logout_ms: now });
