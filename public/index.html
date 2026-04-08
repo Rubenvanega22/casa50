@@ -3633,14 +3633,7 @@ function reviewedNote(id,photoUrl,btn){
     function(e){toast(e.message||String(e),'err');}
   );
 }
- function reviewedNote(id,photoUrl,btn){
-  conf('Borrar esta nota?',function(){
-    rpc('deleteNote',{noteId:id,userRole:sess.userRole,userName:sess.userName},
-      function(){toast('Nota borrada.','ok');loadNotes();},
-      function(e){toast(e.message||String(e),'err');}
-    );
-  });
-}
+ 
 
 function updNoteBadge(notes){
   if(!sess)return;
