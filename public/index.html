@@ -3293,7 +3293,7 @@ function loadCuadreAdmin(){
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#22c55e');
    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
     dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
-    dataRow('Total Efectivo',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);},'#22c55e');
+    dataRow('Total Efectivo',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
     dataRow('Gastos Generales',function(m,sl,ls){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0);},'#ef4444');
     shifts.forEach(function(sid,i){loans.filter(function(l){return l.shiftId===sid;}).forEach(function(l){var cols=['','',''];cols[i]='-'+fmt(l.amount);h+='<tr><td style="padding:3px 8px 3px 20px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">'+esc(l.borrowerName||'')+(l.note?' — '+esc(l.note):'')+'</td>'+cols.map(function(c){return '<td style="padding:3px 8px;border:1px solid #2e2e3a;font-size:11px;color:#ef4444;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';});});
@@ -3301,7 +3301,7 @@ function loadCuadreAdmin(){
     dataRow('Turnos',function(m,sl,ls,ex){return ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#f97316');
     dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
-    dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
+    dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);;var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#f59e0b;border:1px solid #2e2e3a">📋 CONTEO RECEPCIONISTA</td></tr>';
     shifts.forEach(function(sid,i){
       var sc=(ms[i].totals||{}).shiftClose||null;
