@@ -1407,7 +1407,7 @@ function doMaidTake(rid){
 function doMaidFinish(rid,state){
   conf('Marcar Hab '+rid+(state==='CONTAMINATED'?' como CONTAMINADA':' como LISTA')+' ?',function(){
     rpc('maidFinish',{roomId:rid,maidName:sess.userName,userName:sess.userName,userRole:sess.userRole,resultState:state},
-      function(res){toast('Hab '+rid+' — Tiempo limpieza: '+res.cleanMins+' min','ok');closeM('mRoom');loadMaidLog();rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});},
+      function(res){toast('Hab '+rid+' — Tiempo limpieza: '+res.cleanMins+' min','ok');closeM('mRoom');loadMaidLogInline();rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderMaid();}});},
       function(e){toast(e.message||String(e),'err');}
     );
   });
@@ -2582,7 +2582,13 @@ function ncalEliminarVac(){
   closeM('mCalDia');ncalRender();
 }
 
-function ncalGuardarExtra(){
+function ncalQuitarExtra(){
+  var key=ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona);
+  delete ncalCoberturas[key];
+  closeM('mCalDia');
+  ncalRender();
+}
+ function ncalGuardarExtra(){
   var nombre=(document.getElementById('ncal-ext-nombre').value||'').trim();
   var turno=document.getElementById('ncal-ext-turno').value;
   if(!nombre){toast('Ingresa el nombre del extra.','err');return;}
@@ -3604,7 +3610,13 @@ function markSeen(id,btn){
   );
 }
 
-function deleteNote(id,btn){
+function reviewedNote(id,photoUrl,btn){
+  rpc('reviewNote',{noteId:id,userRole:sess.userRole,userName:sess.userName},
+    function(){if(btn){btn.textContent='✅ Revisada';btn.disabled=true;}toast('Nota marcada como revisada.','ok');loadNotes();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+ function reviewedNote(id,photoUrl,btn){
   conf('Borrar esta nota?',function(){
     rpc('deleteNote',{noteId:id,userRole:sess.userRole,userName:sess.userName},
       function(){toast('Nota borrada.','ok');loadNotes();},
