@@ -1811,13 +1811,22 @@ function loadCuadre(){
 sl.forEach(function(s){
       var pm=s.payMethod||'EFECTIVO';
       var tot=Number(s.total||0);
-      var extraP=Number(s.extraPeopleTotal||0);
-      var extraH=Number(s.extraHoursTotal||0);
-      var base=tot-extraP-extraH;if(base<0)base=tot;
-      if(pm==='TARJETA'){tj_hab+=base;tj_padd+=extraP;tj_hadd+=extraH;}
-      else if(pm==='NEQUI'){nq_hab+=base;nq_padd+=extraP;nq_hadd+=extraH;}
-      else if(pm==='MIXTO'){ef_hab+=Number(s.amount_1||0);tj_hab+=Number(s.amount_2||0);nq_hab+=Number(s.amount_3||0);}
-      else{ef_hab+=base;ef_padd+=extraP;ef_hadd+=extraH;}
+      var tipo=s.type||'SALE';
+      if(tipo==='EXTENSION'||tipo==='RENEWAL'){
+        // Horas adicionales
+        if(pm==='TARJETA')tj_hadd+=tot;
+        else if(pm==='NEQUI')nq_hadd+=tot;
+        else if(pm==='MIXTO'){tj_hadd+=Number(s.amount_2||0);nq_hadd+=Number(s.amount_3||0);ef_hadd+=Number(s.amount_1||0);}
+        else ef_hadd+=tot;
+      } else {
+        // Venta base
+        var extraP=Number(s.extraPeopleValue||0);
+        var base=tot-extraP;if(base<0)base=tot;extraP=base<tot?extraP:0;
+        if(pm==='TARJETA'){tj_hab+=base;tj_padd+=extraP;}
+        else if(pm==='NEQUI'){nq_hab+=base;nq_padd+=extraP;}
+        else if(pm==='MIXTO'){ef_hab+=Number(s.amount_1||0);tj_hab+=Number(s.amount_2||0);nq_hab+=Number(s.amount_3||0);}
+        else{ef_hab+=base;ef_padd+=extraP;}
+      }
     });
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
    var taxis=Number(t.shiftTaxi||0);
