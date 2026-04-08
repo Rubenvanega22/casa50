@@ -503,7 +503,6 @@ window.onload=function(){
     updSI();
     if(saved&&saved.userName){
       sess=saved;
-      sess.shiftId=BS.currentShiftId;
       sess.businessDay=BS.businessDay;
       saveSess(sess);
       startApp();
