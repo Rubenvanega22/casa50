@@ -1790,7 +1790,31 @@ function loadVentas(){
     el.innerHTML=h;
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
 }
-
+// ---- GASTOS ----
+function loadLoans(){
+  if(!sess)return;
+  rpc('getLoans',{businessDay:sess.businessDay},function(data){
+    var loans=(data.loans||[]).filter(function(l){return l.shiftId===sess.shiftId;});
+    var c=document.getElementById('loanCont');if(!c)return;
+    if(!loans.length){c.innerHTML='<p style="color:#9ca3af;font-size:13px">Sin gastos en este turno.</p>';return;}
+    var h='';
+    loans.forEach(function(l){
+      h+='<div class="li"><span><b>'+esc(l.borrowerName||'')+'</b>'+(l.note?' — '+esc(l.note):'')+'</span><span style="color:#ef4444;font-weight:700">-'+fmt(l.amount)+'</span></div>';
+    });
+    c.innerHTML=h;
+  });
+}
+function saveLoan(){
+  var nm=(document.getElementById('lnName').value||'').trim();
+  var amt=Number(document.getElementById('lnAmt').value||0);
+  var note=(document.getElementById('lnNote').value||'').trim();
+  if(!nm){toast('Ingresa el nombre.','err');return;}
+  if(amt<=0){toast('Monto inválido.','err');return;}
+  rpc('addLoan',{borrowerName:nm,amount:amt,note:note,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,businessDay:sess.businessDay},
+    function(){toast('Gasto registrado.','ok');closeM('mLoan');loadLoans();loadCuadre();document.getElementById('lnName').value='';document.getElementById('lnAmt').value='';document.getElementById('lnNote').value='';},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
 // ---- PERSONAL EXTRA ----
 function openMExtra(){
   var now=new Date();
