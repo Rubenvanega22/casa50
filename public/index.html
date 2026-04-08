@@ -246,7 +246,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 </div></div>
 <div class="ov" id="mGoal"><div class="modal"><div class="mh"><div class="mt">Meta del Dia</div><button class="mc" onclick="closeM('mGoal')">✕</button></div><label>Meta en COP</label><input type="number" id="goalIn" min="0"><button class="btn ba full" style="margin-top:8px" onclick="saveGoal()">Guardar Meta</button></div></div>
-<div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt">PIN Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><label>Nombre</label><input type="text" id="pName"><label>PIN</label><input type="password" id="pVal" maxlength="10"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
+<div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt" id="mPinT">Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><input type="hidden" id="pOldName"><label>Nombre</label><input type="text" id="pName" placeholder="Nombre completo"><label>PIN</label><input type="password" id="pVal" maxlength="10" placeholder="PIN numérico"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
 <div class="ov" id="mChPin"><div class="modal"><div class="mh"><div class="mt">Cambiar PIN Admin</div><button class="mc" onclick="closeM('mChPin')">✕</button></div><label>PIN actual</label><input type="password" id="cpCur"><label>Nuevo PIN</label><input type="password" id="cpNew"><button class="btn br full" style="margin-top:8px" onclick="doChPin()">Cambiar</button></div></div>
 <div class="ov" id="mMaidLog"><div class="modal"><div class="mh"><div class="mt">Registrar Actividad</div><button class="mc" onclick="closeM('mMaidLog')">✕</button></div><label>Habitacion</label><input type="text" id="mlRoom" placeholder="Ej: 201"><label>Estado</label><select id="mlState"><option value="DIRTY">Sucia</option><option value="AVAILABLE">Lista</option><option value="CONTAMINATED">Contaminada</option></select><label>Nota</label><input type="text" id="mlNote" placeholder="Opcional"><button class="btn ba full" style="margin-top:8px" onclick="saveMaidLog()">Registrar</button></div></div>
 
@@ -3647,12 +3647,30 @@ function updNoteBadge(notes){
  function loadCfg(){
   rpc('getReceptionPins',{userRole:sess.userRole},function(data){
     var pins=data.pins||[];
-    var h='<div class="cfg"><h3>PINs Recepcionistas</h3>';
-    pins.forEach(function(p){h+='<div class="pr2"><span>'+esc(p.userName)+'</span><div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px;color:'+(p.hasPin?'#22c55e':'#9ca3af')+'">'+(p.hasPin?'Con PIN':'Sin PIN')+'</span><button class="btn bk xs" onclick="openPin(\''+esc(p.userName)+'\')">Editar PIN</button></div></div>';});
+    var h='<div class="cfg"><h3>Recepcionistas Autorizadas</h3>';
+    if(!pins.length){h+='<p style="font-size:12px;color:#9ca3af">Sin recepcionistas registradas.</p>';}
+    pins.forEach(function(p){
+      h+='<div class="pr2">';
+      h+='<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:700">'+esc(p.userName)+'</span><span style="font-size:10px;color:'+(p.hasPin?'#22c55e':'#ef4444')+'">'+(p.hasPin?'Con PIN':'Sin PIN')+'</span></div>';
+      h+='<div style="display:flex;gap:4px">';
+      h+='<button class="btn bk xs" onclick="openPin(\''+esc(p.userName)+'\')">✏ Editar</button>';
+      h+='<button class="btn br xs" onclick="deletePin(\''+esc(p.userName)+'\')">✕ Eliminar</button>';
+      h+='</div></div>';
+    });
+    h+='<button class="btn ba sm" style="margin-top:10px" onclick="openPin(\'\')">+ Agregar Recepcionista</button>';
     h+='</div>';
     h+='<div class="cfg"><h3>PIN Administrador</h3><button class="btn br sm" onclick="openM(\'mChPin\')">Cambiar PIN Admin</button></div>';
     document.getElementById('cfgCont').innerHTML=h;
   },function(e){document.getElementById('cfgCont').innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+}
+
+function deletePin(nm){
+  conf('¿Eliminar a '+nm+' de recepcionistas autorizadas?',function(){
+    rpc('deleteReceptionPin',{targetName:nm,userRole:sess.userRole},
+      function(){toast(nm+' eliminada.','ok');loadCfg();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
 }
 function openGoal(){
   var el=document.getElementById('goalIn');
@@ -3666,9 +3684,28 @@ function saveGoal(){
     function(e){toast(e.message||String(e),'err');}
   );
 }
-function openPin(nm){document.getElementById('pName').value=nm||'';document.getElementById('pVal').value='';openM('mPin');}
-function savePin(){var nm=(document.getElementById('pName').value||'').trim(),pin=(document.getElementById('pVal').value||'').trim();if(!nm){toast('Nombre requerido.','err');return;}rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},function(){toast('PIN guardado.','ok');closeM('mPin');loadCfg();},function(e){toast(e.message||String(e),'err');});}
-function doChPin(){var cur=document.getElementById('cpCur').value||'',nw=document.getElementById('cpNew').value||'';rpc('changeAdminPin',{currentPin:cur,newPin:nw,userRole:sess.userRole},function(){toast('PIN actualizado.','ok');closeM('mChPin');},function(e){toast(e.message||String(e),'err');});}
+function openPin(nm){
+  document.getElementById('pName').value=nm||'';
+  document.getElementById('pVal').value='';
+  document.getElementById('pOldName').value=nm||'';
+  document.getElementById('mPinT').textContent=nm?'Editar: '+nm:'Nueva Recepcionista';
+  openM('mPin');
+}
+function savePin(){
+  var nm=(document.getElementById('pName').value||'').trim();
+  var pin=(document.getElementById('pVal').value||'').trim();
+  var oldNm=(document.getElementById('pOldName').value||'').trim();
+  if(!nm){toast('Nombre requerido.','err');return;}
+  if(!pin){toast('PIN requerido.','err');return;}
+  var done=function(){toast('Guardado.','ok');closeM('mPin');loadCfg();};
+  if(oldNm&&oldNm!==nm){
+    rpc('deleteReceptionPin',{targetName:oldNm,userRole:sess.userRole},function(){
+      rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},done,function(e){toast(e.message||String(e),'err');});
+    },function(e){toast(e.message||String(e),'err');});
+  } else {
+    rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},done,function(e){toast(e.message||String(e),'err');});
+  }
+}
 </script>
 </body>
 </html>
