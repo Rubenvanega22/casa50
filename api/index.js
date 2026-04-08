@@ -264,6 +264,7 @@ async function apiLogin(p, res) {
     return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, businessDay: bDay, serverNowMs: now } });
   }
   if (userRole === 'RECEPTION') {
+    const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
     const storedPin = pinRow ? String(pinRow.pin || '') : '';
     if (!pinRow) {
       await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
