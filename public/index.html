@@ -1368,7 +1368,7 @@ function doExt(){
   var hrs=Number((document.getElementById('extHrs')||{}).value||1);
   var cfg=MP[curRoom.category]||MP['Junior'];
   conf('Extender '+hrs+'h por '+fmt(hrs*cfg.extraHour)+'?',function(){
-    rpc('extendTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:hrs,payMethod:selExtPayMode},
+   rpc('extendTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,extraHrs:hrs,payMethod:selExtPayMode},
       function(res){toast('Extendida +'+hrs+'h — '+fmt(res.extraCost),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -1378,7 +1378,7 @@ function doRenew(){
   if(!curRoom)return;
   var cfg=MP[curRoom.category]||MP['Junior'],price=calcP(selRenewDur,cfg);
   conf('Renovar '+selRenewDur+'h por '+fmt(price)+'?',function(){
-    rpc('renewTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,durationHrs:selRenewDur,payMethod:selRewPayMode},
+    rpc('renewTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,durationHrs:selRenewDur,payMethod:selRewPayMode},
       function(res){toast('Renovado +'+selRenewDur+'h — '+fmt(res.renewPrice),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
