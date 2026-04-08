@@ -788,7 +788,7 @@ async function apiTaxi(p, res) {
 async function apiAddLoan(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.shiftId || '').trim() || currentShiftId(now);
   const borrowerName = String(p.borrowerName || '').trim();
   const amount = Number(p.amount || 0);
   if (!borrowerName) return err(res, 'Nombre requerido');
