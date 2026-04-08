@@ -954,14 +954,18 @@ async function apiCloseShift(p, res) {
   const userName = String(p.userName || '');
   // Marcar turno como cerrado para liberar el acceso
   await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: 'LOGOUT', logout_ms: now });
-
+  // Buscar timestamp de login de este turno para filtrar solo ventas de esta sesión
+  const { data: loginLog } = await supabase.from('shift_log')
+    .select('ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
+    .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
+    .order('ts_ms', { ascending: false }).limit(1);
+  const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
   const [salesRes, taxiRes, loansRes, extraRes] = await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,people,room_id').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)]),
-    supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)]),
-    supabase.from('loans').select('amount').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)]),
-    supabase.from('extra_staff').select('payment').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)])
+    supabase.from('sales').select('type,total,pay_method,people,room_id').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('loans').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('extra_staff').select('payment').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
-
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
   let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
 
