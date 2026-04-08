@@ -1930,8 +1930,8 @@ sl.forEach(function(s){
       }
     });
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
-   var taxis=Number(t.shiftTaxi||0);
-    var taxiList=(m.taxiList||[]);
+    var taxiList=(m.taxiList||[]).filter(function(tx){return !fromMs||Number(tx.tsMs||0)>=fromMs;});
+    var taxis=taxiList.reduce(function(s,tx){return s+Number(tx.amount||0);},0);
     var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
     var totalGastos=gastos_gen+taxis+turnos;
     var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
