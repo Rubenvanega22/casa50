@@ -233,7 +233,11 @@ async function apiGetRooms(req, res) {
 async function apiLogin(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  let shift = currentShiftId(now);
+  if(shift==='SHIFT_3'){
+    const{data:logoutT3}=await supabase.from('shift_log').select('id').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+    if(logoutT3&&logoutT3.length)shift='SHIFT_1';
+  }
   const userName = String(p.userName || '').trim();
   const userRole = String(p.userRole || '').toUpperCase();
   if (!userName) return err(res, 'Nombre requerido');
