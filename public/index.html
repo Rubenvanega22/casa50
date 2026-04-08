@@ -1835,9 +1835,9 @@ sl.forEach(function(s){
     var totalGastos=gastos_gen+taxis+turnos;
     var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
     var barSaved={};try{barSaved=JSON.parse(sessionStorage.getItem(barKey)||'{}');}catch(e){}
-    var barEf=barSaved.ef!==undefined?barSaved.ef:'';
-    var barTj=barSaved.tj!==undefined?barSaved.tj:'';
-    var barNq=barSaved.nq!==undefined?barSaved.nq:'';
+    var barEf=barSaved.ef!==undefined?barSaved.ef:(Number(t.shiftBarEfectivo||0)||'');
+    var barTj=barSaved.tj!==undefined?barSaved.tj:(Number(t.shiftBarTarjeta||0)||'');
+    var barNq=barSaved.nq!==undefined?barSaved.nq:(Number(t.shiftBarNequi||0)||'');
     var h='<div id="cuadreRep">';
     h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="font-size:18px;font-weight:900;color:#a78bfa">CASA 50 — SPA MOTEL</div>';
