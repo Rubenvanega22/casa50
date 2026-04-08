@@ -3164,8 +3164,8 @@ function loadCuadreAdmin(){
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#3b82f6');
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#3b82f6');
     dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
-    dataRow('Total Tarjeta',
-h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">📱 NEQUI</td></tr>';
+    dataRow('Total Tarjeta',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barTarjeta||0);},'#3b82f6');
+    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">📱 NEQUI</td></tr>';
     dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.total||0)-Number(s.extraPeopleValue||0);},0);},'#a78bfa');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#a78bfa');
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#a78bfa');
