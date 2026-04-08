@@ -1721,11 +1721,9 @@ function loadVentas(){
   rpc('metrics',{businessDay:sess.businessDay,shiftId:''},function(m){
     var taxiList=(m.taxiList||[]);
     var t=m.totals||{};
-    var fromMs=Number(sess.fromMs||0);
     var sl=(m.allSalesList||[]).filter(function(s){
-      return s.type==='SALE'&&(!fromMs||Number(s.checkInMs||0)>=fromMs);
+      return s.type==='SALE';
     }).sort(function(a,b){return a.checkInMs-b.checkInMs;});
-
     // Colores por turno
     var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
     var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
