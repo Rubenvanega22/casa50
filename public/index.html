@@ -957,6 +957,7 @@ function buildRoomB(r){
     h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo sucia</span><b style="color:#f59e0b">'+mD+' minutos</b></div>';
     if(r.checkoutObs)h+='<div style="margin-top:5px;color:#f59e0b;font-size:11px">Obs: '+esc(r.checkoutObs)+'</div>';
     h+='</div>';
+    h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
     if(sess&&sess.userRole==='MAID'){
       h+='<div class="row"><button class="btn by sm" id="btnTake_'+r.roomId+'" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
       h+='<div style="margin-top:8px;display:none" id="btnsDone_'+r.roomId+'"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button>&nbsp;<button class="btn bo xs" onclick="doMaidFinish(\''+r.roomId+'\',\'CONTAMINATED\')">Contaminada</button></div>';
