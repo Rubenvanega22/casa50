@@ -546,6 +546,8 @@ function entrar(){
 function showLE(m){var e=document.getElementById('lerr');e.textContent=m;tog('lerr',true);}
 
 function startApp(){
+  turnoAlertaMostrada=false;
+  turnoVencidoMostrado=false;
   document.getElementById('ls').style.display='none';
   document.getElementById('app').style.display='block';
   var sn={SHIFT_1:'T1 6a-2p',SHIFT_2:'T2 2p-9p',SHIFT_3:'T3 9p-6a'};
