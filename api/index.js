@@ -357,7 +357,7 @@ async function apiCheckIn(p, res) {
   const mixtoEf = Number(p.mixtoEf || 0);
   const mixtoTj = Number(p.mixtoTj || 0);
   const mixtoNq = Number(p.mixtoNq || 0);
-  console.log('MIXTO DEBUG:', payMethod, mixtoEf, mixtoTj, mixtoNq);
+  
   await supabase.from('rooms').update({
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: now, due_ms: dueMs,
@@ -1371,10 +1371,13 @@ async function apiGetDailyCuadre(p, res) {
     if(r.type==='SALE'){
       const habVal=t-epv;
       if(pm==='TARJETA'){c[sid].tarjetaHab+=habVal;c[sid].tarjetaPersonas+=epv;}
+      else if(pm==='MIXTO'){c[sid].efectivoHab+=Number(r.amount_1||0);c[sid].tarjetaHab+=Number(r.amount_2||0);c[sid].nequiHab=(c[sid].nequiHab||0)+Number(r.amount_3||0);}
       else{c[sid].efectivoHab+=habVal;c[sid].efectivoPersonas+=epv;}
     }
-    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
-      if(pm==='TARJETA')c[sid].tarjetaHoras+=t;else c[sid].efectivoHoras+=t;
+   if(r.type==='EXTENSION'||r.type==='RENEWAL'){
+      if(pm==='TARJETA')c[sid].tarjetaHoras+=t;
+      else if(pm==='MIXTO'){c[sid].efectivoHoras+=Number(r.amount_1||0);c[sid].tarjetaHoras+=Number(r.amount_2||0);}
+      else c[sid].efectivoHoras+=t;
     }
   });
   (barRes.data||[]).forEach(r=>{const sid=r.shift_id;if(!c[sid])return;c[sid].tarjetaBar+=Number(r.amount_card||0);c[sid].efectivoBar+=Number(r.amount_cash||0);c[sid].nequiBar+=Number(r.amount_nequi||0);});
