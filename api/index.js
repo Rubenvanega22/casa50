@@ -956,10 +956,10 @@ async function apiCloseShift(p, res) {
   await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: 'LOGOUT', logout_ms: now });
 
   const [salesRes, taxiRes, loansRes, extraRes] = await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,people,room_id').eq('business_day', bDay).eq('shift_id', shift),
-    supabase.from('taxi_expenses').select('amount').eq('business_day', bDay).eq('shift_id', shift),
-    supabase.from('loans').select('amount').eq('business_day', bDay).eq('shift_id', shift),
-    supabase.from('extra_staff').select('payment').eq('business_day', bDay).eq('shift_id', shift)
+    supabase.from('sales').select('type,total,pay_method,people,room_id').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)]),
+    supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)]),
+    supabase.from('loans').select('amount').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)]),
+    supabase.from('extra_staff').select('payment').eq('shift_id', shift).in('business_day', [bDay, businessDay(now - 86400000)])
   ]);
 
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
