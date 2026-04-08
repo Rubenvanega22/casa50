@@ -2584,12 +2584,23 @@ function ncalEliminarVac(){
 }
 
 function ncalQuitarExtra(){
-  var key=ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona);
-  delete ncalCoberturas[key];
-  closeM('mCalDia');
-  ncalRender();
-}
- function ncalGuardarExtra(){
+  var ex=(window.ncalExtras||[]).find(function(e){
+    return e.fecha===ncalEditando.fecha&&e.area===ncalEditando.area&&e.fijo===ncalEditando.persona;
+  });
+  if(ex){
+    conf('¿Quitar el extra asignado a '+ncalEditando.persona+' el '+ncalEditando.fecha+'?',function(){
+      rpc('deleteExtra',{id:ex.id,userRole:sess.userRole},
+        function(){toast('Extra eliminado.','ok');closeM('mCalDia');loadSched();},
+        function(e){toast(e.message||String(e),'err');}
+      );
+    });
+  } else {
+    var key=ncalCobKey(ncalEditando.fecha,ncalEditando.area,ncalEditando.persona);
+    delete ncalCoberturas[key];
+    closeM('mCalDia');
+    ncalRender();
+  }
+}function ncalGuardarExtra(){
   var nombre=(document.getElementById('ncal-ext-nombre').value||'').trim();
   var turno=document.getElementById('ncal-ext-turno').value;
   if(!nombre){toast('Ingresa el nombre del extra.','err');return;}
