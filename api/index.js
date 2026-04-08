@@ -309,7 +309,7 @@ async function openCashDrawer() {
 async function apiCheckIn(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const durationHrs = Number(p.durationHrs || 0);
@@ -432,6 +432,33 @@ async function apiCheckOut(p, res) {
 }
 
 // ==================== EXTENDER TIEMPO (horas sueltas) ====================
+async function apiExtendTime(p, res) {
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const userName = String(p.userName || '').trim();
+  const roomId = String(p.roomId || '').trim();
+  const extraHrs = Number(p.extraHrs || 0);
+  if (![1,2,3,4,5,6].includes(extraHrs)) return err(res, 'Horas extra invalidas (1-6)');
+  const room = await getRoom(roomId);
+  if (!room) return err(res, 'Habitacion no existe');
+  if (room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
+  const cfg = MASTER_PRICING[room.category] || MASTER_PRICING['Junior'];
+  const extraCost = extraHrs * Number(cfg.extraHour || 0);
+  const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
+  const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
+  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await supabase.from('sales').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName, type: 'EXTENSION',
+    room_id: roomId, category: room.category, duration_hrs: extraHrs,
+    base_price: extraCost, people: Number(room.people || 0),
+    extra_hours: extraHrs, extra_hours_value: extraCost, total: extraCost,
+    pay_method: payMethod, check_in_ms: Number(room.check_in_ms || 0), due_ms: newDueMs
+  });
+  await openCashDrawer();
+  return ok(res, { roomId, extraCost, newDueMs });
+}
 async function apiHoraGratis(p, res) {
   const now = Date.now();
   const roomId = String(p.roomId || '').trim();
@@ -455,7 +482,7 @@ async function apiHoraGratis(p, res) {
 async function apiRenewTime(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const durationHrs = Number(p.durationHrs || 0);
