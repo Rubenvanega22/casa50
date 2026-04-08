@@ -1023,9 +1023,8 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
   });
   const taxiList=[];
 (taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||(r.shift_id||'').toUpperCase()===shiftFilter)shiftTaxi+=a;taxiList.push({tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a,businessDay:r.business_day||''});});
- let dayBarEfe=0,dayBarTar=0,dayBarNeq=0;
-  (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter)shiftBar+=a;});
-  (gastoRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayGastos+=a;if(!shiftFilter||r.shift_id===shiftFilter)shiftGastos+=a;});
+ let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
+  (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=a;shiftBarEfe+=Number(r.amount_cash||0);shiftBarTar+=Number(r.amount_card||0);shiftBarNeq+=Number(r.amount_nequi||0);}});
   (loansRes.data||[]).forEach(r=>{dayLoans+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
 
@@ -1039,7 +1038,8 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
       totalEfectivo:dayEfe,totalTarjeta:dayTar,totalNequi:dayNeq,
       barEfectivo:dayBarEfe,barTarjeta:dayBarTar,barNequi:dayBarNeq,
       shiftNet,shiftSales,shiftRoomsSold:shiftRooms,shiftPeople,shiftBar,shiftTaxi,shiftGastos,
-      shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq
+      shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,
+      shiftBarEfectivo:shiftBarEfe,shiftBarTarjeta:shiftBarTar,shiftBarNequi:shiftBarNeq
     },
     loans:(loansRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,borrowerName:r.borrower_name,amount:Number(r.amount),note:r.note})),
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
