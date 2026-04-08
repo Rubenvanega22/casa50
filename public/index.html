@@ -3169,13 +3169,13 @@ function loadCuadreAdmin(){
     dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.total||0)-Number(s.extraPeopleValue||0);},0);},'#a78bfa');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#a78bfa');
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#a78bfa');
-    dataRow('Bar Nequi',function(m){return Number((m.totals||{}).barNequi||0);},'#a78bfa');
+    dataRow('Bar Nequi',function(m){return Number((m.totals||{}).shiftBarNequi||0);},'#a78bfa');
     dataRow('Total Nequi',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barNequi||0);},'#a78bfa');
    h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO</td></tr>';
     dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.total||0)-Number(s.extraPeopleValue||0);},0);},'#22c55e');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#22c55e');
    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
-    dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).barEfectivo||0);},'#22c55e');
+    dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
     dataRow('Total Efectivo',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).barEfectivo||0);},'#22c55e');
     h+='<tr><td colspan="5" style="padding:5px 8px;background:#18181f;font-size:11px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
     dataRow('Gastos Generales',function(m,sl,ls){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0);},'#ef4444');
