@@ -2055,7 +2055,7 @@ function doCierre(){
     var barNqEl=document.getElementById('barNqInput');
     var cashBilletes=Number((document.getElementById('cashBilletes')||{}).value||0);
     var cashMonedas=Number((document.getElementById('cashMonedas')||{}).value||0);
-    rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:Number(barEfEl.value||0),barTarjeta:Number(barTjEl.value||0),barNequi:Number(barNqEl?barNqEl.value:0),userRole:sess.userRole,userName:sess.userName},
+    rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:Number(barEfEl.value||0),barTarjeta:Number(barTjEl.value||0),barNequi:Number(barNqEl?barNqEl.value:0),shiftId:sess.shiftId,userRole:sess.userRole,userName:sess.userName},
       function(res){toast('Turno cerrado — Neto: '+fmt((res.summary&&res.summary.net)||0),'ok');var bk=(document.getElementById('_barKey')||{}).value||'';try{sessionStorage.removeItem(bk);sessionStorage.setItem('turnoAlerta','1');sessionStorage.setItem('turnoVencido','1');}catch(e){}turnoAlertaMostrada=true;turnoVencidoMostrado=true;var m=document.getElementById('mTurnoAlert');if(m)m.classList.remove('op');},
     );
   });
