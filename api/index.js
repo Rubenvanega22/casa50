@@ -162,6 +162,7 @@ module.exports = async function handler(req, res) {
 case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
       case 'setReceptionPin':   return await apiSetPin(payload, res);
+      case 'deleteReceptionPin': return await apiDeletePin(payload, res);
       case 'getReceptionPins':  return await apiGetPins(payload, res);
       case 'changeAdminPin':    return await apiChangeAdminPin(payload, res);
      case 'roomHistory':        return await apiRoomHistory(payload, res);
@@ -263,9 +264,12 @@ async function apiLogin(p, res) {
     return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, businessDay: bDay, serverNowMs: now } });
   }
   if (userRole === 'RECEPTION') {
-    const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
     const storedPin = pinRow ? String(pinRow.pin || '') : '';
-    if (storedPin && String(p.userPin || '') !== storedPin) {
+    if (!pinRow) {
+      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
+      return err(res, 'Recepcionista no autorizada. Contacte al administrador.');
+    }
+    if (String(p.userPin || '') !== storedPin) {
       await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
@@ -1262,6 +1266,14 @@ async function apiSetPin(p, res) {
   const targetName=String(p.targetName||'').trim(),pin=String(p.pin||'').trim();
   if(!targetName)return err(res,'Nombre requerido');
   await supabase.from('reception_pins').upsert({user_name:targetName,pin,updated_at:new Date().toISOString()},{onConflict:'user_name'});
+  return ok(res,{});
+}
+
+async function apiDeletePin(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
+  const targetName=String(p.targetName||'').trim();
+  if(!targetName)return err(res,'Nombre requerido');
+  await supabase.from('reception_pins').delete().eq('user_name',targetName);
   return ok(res,{});
 }
 
