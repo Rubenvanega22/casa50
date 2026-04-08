@@ -662,7 +662,7 @@ function startPoll(){
     loadNotes();
     if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
   },10000);
-  checkAlarms();clearInterval(aT);aT=setInterval(checkAlarms,30000);
+  checkAlarms();checkTurnoAlert();clearInterval(aT);aT=setInterval(function(){checkAlarms();checkTurnoAlert();},30000);
 }
 function checkAutoHora(){
   var now=Date.now();
@@ -717,6 +717,82 @@ function checkAlarms(){
       box.classList.remove('h');
     });
   }
+}
+ // ---- ALERTA DE TURNO ----
+var turnoAlertaMostrada=false,turnoVencidoMostrado=false;
+function checkTurnoAlert(){
+  if(!sess||sess.userRole!=='RECEPTION')return;
+  var now=Date.now();
+  var turnoFin={SHIFT_1:14,SHIFT_2:21,SHIFT_3:6};
+  var turnoNombre={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-9pm)',SHIFT_3:'Turno 3 (9pm-6am)'};
+  var sid=sess.shiftId;
+  var finH=turnoFin[sid];
+  var d=new Date(now);
+  var finMs;
+  if(sid==='SHIFT_3'){
+    var manana=new Date(d);
+    if(d.getHours()>=21)manana.setDate(manana.getDate()+1);
+    manana.setHours(6,0,0,0);
+    finMs=manana.getTime();
+  } else {
+    var hoy=new Date(d);
+    hoy.setHours(finH,0,0,0);
+    finMs=hoy.getTime();
+  }
+  var diff=finMs-now;
+  var modal=document.getElementById('mTurnoAlert');
+  // 15 minutos antes
+  if(diff>0&&diff<=15*60*1000&&!turnoAlertaMostrada){
+    turnoAlertaMostrada=true;
+    var mins=Math.round(diff/60000);
+    mostrarAlertaTurno('⏰ Tu turno termina en '+mins+' minutos',false,finMs);
+  }
+  // Turno vencido
+  if(diff<=0&&!turnoVencidoMostrado){
+    turnoVencidoMostrado=true;
+    mostrarAlertaTurno('🚨 Tu turno ha vencido. Debes cerrar para que tu compañera pueda entrar.',true,finMs);
+  }
+}
+
+function mostrarAlertaTurno(msg,urgente,finMs){
+  var modal=document.getElementById('mTurnoAlert');
+  if(!modal){
+    var div=document.createElement('div');
+    div.className='ov';div.id='mTurnoAlert';
+    div.innerHTML='<div class="modal"><div id="mTurnoAlertB"></div></div>';
+    document.body.appendChild(div);
+  }
+  var h='<div style="text-align:center;padding:10px">';
+  h+='<div style="font-size:32px;margin-bottom:10px">'+(urgente?'🚨':'⏰')+'</div>';
+  h+='<div style="font-size:14px;font-weight:700;color:'+(urgente?'#ef4444':'#f59e0b')+';margin-bottom:16px">'+msg+'</div>';
+  if(urgente){
+    h+='<button class="btn br full" style="margin-bottom:8px" onclick="closeM(\'mTurnoAlert\');sw(\'cuadre\')">Ir a Cuadre para Cerrar</button>';
+  } else {
+    h+='<button class="btn bg full" style="margin-bottom:8px" onclick="closeM(\'mTurnoAlert\')">Entendido</button>';
+    h+='<button class="btn bb full" onclick="activarTurno12h('+finMs+')">Continuar en Turno 12 Horas</button>';
+  }
+  h+='</div>';
+  document.getElementById('mTurnoAlertB').innerHTML=h;
+  openM('mTurnoAlert');
+}
+
+function activarTurno12h(finActual){
+  // Calcular nueva hora = inicio del turno + 12h
+  var sid=sess.shiftId;
+  var inicioH={SHIFT_1:6,SHIFT_2:14,SHIFT_3:21};
+  var d=new Date();
+  d.setHours(inicioH[sid],0,0,0);
+  if(sid==='SHIFT_3'&&new Date().getHours()<6)d.setDate(d.getDate()-1);
+  var nuevaFin=d.getTime()+12*3600000;
+  turnoAlertaMostrada=false;
+  turnoVencidoMostrado=false;
+  closeM('mTurnoAlert');
+  toast('Turno extendido a 12 horas. Nueva salida: '+fT(nuevaFin),'ok');
+  // Reprogramar alerta
+  setTimeout(function(){
+    turnoAlertaMostrada=false;
+    turnoVencidoMostrado=false;
+  },100);
 }
 function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];checkAlarms();renderRooms();}});toast('Alarma silenciada','ok');});}
 
