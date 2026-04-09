@@ -1125,12 +1125,12 @@ async function apiMetricsHourly(p, res) {
 
   return ok(res, { businessDay: bDay, buckets, mode });
 }
-
 async function apiMonthMetrics(p, res) {
   const ym = String(p.yearMonth || '');
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
-  const { data: sales } = await supabase.from('sales').select('business_day,type,total,people').like('business_day', ym + '%');
+  const { data: sales } = await supabase.from('sales').select('business_day,type,total,people,user_name').like('business_day', ym + '%');
   const { data: taxi } = await supabase.from('taxi_expenses').select('business_day,amount').like('business_day', ym + '%');
+  const { data: maidLogsMonth } = await supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym + '%');
   const dayMap = {};
   const ed = d => { if(!dayMap[d])dayMap[d]={day:d,sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0}; return dayMap[d]; };
   (sales||[]).forEach(r=>{const d=ed(r.business_day),t=Number(r.total||0);if(['SALE','EXTENSION','RENEWAL'].includes(r.type)){d.sales+=t;if(r.type==='SALE'){d.roomsSold++;d.people+=Number(r.people||0);}}if(r.type==='REFUND')d.refunds+=t;});
@@ -1138,9 +1138,24 @@ async function apiMonthMetrics(p, res) {
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
   days.forEach(d=>{d.net=d.sales+d.refunds-d.taxi;});
   const monthTotals = days.reduce((acc,d)=>{acc.sales+=d.sales;acc.refunds+=d.refunds;acc.taxi+=d.taxi;acc.net+=d.net;acc.people+=d.people;acc.roomsSold+=d.roomsSold;return acc;},{sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0});
-  return ok(res, { yearMonth: ym, monthTotals, days });
+  const recepMes={};
+  (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
+    const nm=r.user_name||'?';
+    if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};
+    recepMes[nm].habs++;
+    recepMes[nm].total+=Number(r.total||0);
+  });
+  const recepRankingMes=Object.values(recepMes).sort((a,b)=>b.total-a.total);
+  const maidMes={};
+  (maidLogsMonth||[]).filter(r=>Number(r.finished_ms||0)>0&&r.state_to==='AVAILABLE').forEach(r=>{
+    const nm=r.maid_name||'?';
+    if(!maidMes[nm])maidMes[nm]={nombre:nm,habs:0,totalMins:0};
+    maidMes[nm].habs++;
+    maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);
+  });
+  const maidRankingMes=Object.values(maidMes).sort((a,b)=>b.habs-a.habs);
+  return ok(res, { yearMonth: ym, monthTotals, days, recepRankingMes, maidRankingMes });
 }
-
 // ==================== PANEL CAMARERAS ====================
 async function apiMaidPanel(p, res) {
   const now = Date.now();
