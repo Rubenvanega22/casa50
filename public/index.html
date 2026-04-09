@@ -265,6 +265,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="ADMIN">Administrador</option>
 </select>
 <div id="nw" class="h"><label id="nlbl">Tu Nombre</label><input type="text" id="lnm" placeholder="Nombre completo" autocomplete="off" oninput="chkBtn()"></div>
+<div id="nwRec" class="h"><label>Tu Nombre</label><select id="lnmRec" onchange="selRecName()" style="margin-bottom:6px"><option value="">-- Selecciona tu nombre --</option></select></div>
 <div id="uw" class="h"><label>PIN Personal</label><input type="password" id="upin" placeholder="PIN (si tienes)" maxlength="10"></div>
 <div id="aw" class="h"><label>PIN Administrador</label><input type="password" id="apin" placeholder="PIN Admin" maxlength="10"></div>
 <button class="btn full ba" id="lbtn" onclick="entrar()" disabled style="margin-top:10px">Ingresar</button>
