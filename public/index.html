@@ -3420,7 +3420,7 @@ function loadCuadreAdmin(){
       var cols=['','',''];
       if(cashCount!==null){
         var txt=fmt(cashCount);
-        if(diff===0)txt+=' ✅';
+        if(diff===0)txt+=' OK';
         else if(diff>0)txt+=' <span style="color:#93c5fd">+'+fmt(diff)+'</span>';
         else txt+=' <span style="color:#fca5a5">-'+fmt(Math.abs(diff))+'</span>';
         cols[i]=txt;
@@ -3439,7 +3439,7 @@ function loadCuadreAdmin(){
             colsBill[j]=fmt(sc2.cashBilletes||0);
             colsMon[j]=fmt(sc2.cashMonedas||0);
             var d=(sc2.cashCount||0)-esp;
-            if(d===0)colsDiff[j]='<span style="color:#22c55e">✅ Exacto</span>';
+            if(d===0)colsDiff[j]='<span style="color:#22c55e">OK Exacto</span>';
             else if(d>0)colsDiff[j]='<span style="color:#3b82f6">+'+fmt(d)+' sobrante</span>';
             else colsDiff[j]='<span style="color:#ef4444">-'+fmt(Math.abs(d))+' faltante</span>';
           } else {colsBill[j]='<span style="color:#6b7280">—</span>';colsMon[j]='<span style="color:#6b7280">—</span>';colsDiff[j]='<span style="color:#6b7280">—</span>';}
