@@ -558,8 +558,8 @@ actualizarBtnCaja();
   if(rooms.length)renderRooms();
   startPoll();startClock();
   if(sess.userRole==='ADMIN'){
-    document.getElementById('mDay').value=sess.businessDay||'';
-    document.getElementById('mdDay').value=sess.businessDay||'';
+    var mDayEl=document.getElementById('mDay');if(mDayEl)mDayEl.value=sess.businessDay||'';
+    var mdDayEl=document.getElementById('mdDay');if(mdDayEl)mdDayEl.value=sess.businessDay||'';
     setDefWk();loadM();loadMP();loadStaff();
     rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];}});
   }
@@ -3618,6 +3618,8 @@ function _dash_card(label,val,color){
 function _dash_trophy(label,val,sub,color){
   return '<div style="background:#22222c;border-radius:10px;padding:10px;border-left:3px solid '+color+'"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">'+label+'</div><div style="font-size:14px;font-weight:800;color:'+color+'">'+esc(String(val))+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">'+esc(String(sub))+'</div></div>';
 }
+function loadMo(){var ym=document.getElementById('moPick').value;if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}var el=document.getElementById('moCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';rpc('monthMetrics',{yearMonth:ym},function(data){el.innerHTML=renderMo(data);},function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});}
+function renderMo(data){var mt=data.monthTotals||{};var h='<div class="mg"><div class="mc2"><div class="ml">Ventas Mes</div><div class="mv g">'+fmt(mt.sales||0)+'</div></div><div class="mc2"><div class="ml">Neto</div><div class="mv '+(mt.net>=0?'g':'r')+'">'+fmt(mt.net||0)+'</div></div><div class="mc2"><div class="ml">Hab.</div><div class="mv a">'+mt.roomsSold+'</div></div><div class="mc2"><div class="ml">Personas</div><div class="mv a">'+mt.people+'</div></div></div>';if(data.days&&data.days.length){var mx=Math.max.apply(null,data.days.map(function(d){return d.sales||0;}));if(mx<1)mx=1;h+='<div class="chart-wrap"><div class="chart-title">Ventas por dia</div><div class="bc" style="height:75px">';data.days.forEach(function(d){var p=Math.round(((d.sales||0)/mx)*100),dn=d.day.split('-')[2];h+='<div class="bco"><div class="bf" style="height:'+p+'%;background:'+(d.sales>0?'#7c5cfc':'#2e2e3a')+'"></div><div class="bl">'+Number(dn)+'</div></div>';});h+='</div></div><table><thead><tr><th>Dia</th><th>Ventas</th><th>Hab.</th><th>Neto</th></tr></thead><tbody>';data.days.forEach(function(d){h+='<tr><td><b>'+d.day+'</b></td><td>'+fmt(d.sales)+'</td><td>'+d.roomsSold+'</td><td style="color:'+(d.net>=0?'#22c55e':'#ef4444')+'">'+fmt(d.net)+'</td></tr>';});h+='</tbody></table>';}return h;}
 // ---- NOTAS ----
 var SUPA_URL='https://fojffyncxrrxevavshod.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvamZmeW5jeHJyeGV2YXZzaG9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzQ1MDQsImV4cCI6MjA4NzQ1MDUwNH0.dNBs_7iJOtNUfTwSsEwL-snON9OoOudf6T9Bjxc80hI';
