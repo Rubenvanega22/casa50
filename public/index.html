@@ -1952,21 +1952,30 @@ sl.forEach(function(s){
     h+=_cRow('P. Adicional',tj_padd,'#3b82f6');
     h+=_cRow('H. Adicional',tj_hadd,'#3b82f6');
     h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barTjInput" placeholder="0" min="0" value="'+barTj+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0))+'</span></div></div>';
+   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0))+'</span><button class="btn bb xs" onclick="toggleDesgloseC(\'tj\')">Ver detalle</button></div></div>';
+h+='<div id="desgloseC_tj" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
+h+=_desgloseRows(sl,'TARJETA',Number(barTj)||0,'#3b82f6');
+h+='</div></div>';
    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
     h+='<div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:10px;text-transform:uppercase">📱 Nequi</div>';
     h+=_cRow('Habitaciones',nq_hab,'#a78bfa');
     h+=_cRow('P. Adicional',nq_padd,'#a78bfa');
     h+=_cRow('H. Adicional',nq_hadd,'#a78bfa');
     h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barNqInput" placeholder="0" min="0" value="'+barNq+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Nequi</span><span style="font-weight:800;color:#a78bfa" id="totalNqDisp">'+fmt(nq_hab+nq_padd+nq_hadd+(Number(barNq)||0))+'</span></div></div>'; 
+   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Nequi</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#a78bfa" id="totalNqDisp">'+fmt(nq_hab+nq_padd+nq_hadd+(Number(barNq)||0))+'</span><button class="btn bp xs" onclick="toggleDesgloseC(\'nq\')">Ver detalle</button></div></div>';
+h+='<div id="desgloseC_nq" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
+h+=_desgloseRows(sl,'NEQUI',Number(barNq)||0,'#a78bfa');
+h+='</div></div>';
    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
     h+='<div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:10px;text-transform:uppercase">💵 Efectivo</div>';
     h+=_cRow('Habitaciones',ef_hab,'#22c55e');
     h+=_cRow('P. Adicional',ef_padd,'#22c55e');
     h+=_cRow('H. Adicional',ef_hadd,'#22c55e');
     h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barEfInput" placeholder="0" min="0" value="'+barEf+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="font-weight:700">Total Efectivo</span><span style="font-weight:800;color:#22c55e" id="totalEfDisp">'+fmt(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))+'</span></div></div>';
+   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Efectivo</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#22c55e" id="totalEfDisp">'+fmt(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))+'</span><button class="btn bg xs" onclick="toggleDesgloseC(\'ef\')">Ver detalle</button></div></div>';
+h+='<div id="desgloseC_ef" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
+h+=_desgloseRows(sl,'EFECTIVO',Number(barEf)||0,'#22c55e');
+h+='</div></div>';
     h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
     h+='<div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:10px;text-transform:uppercase">📤 Gastos</div>';
     h+=_cRow('Gastos Generales',gastos_gen,'#ef4444');
@@ -1996,6 +2005,47 @@ sl.forEach(function(s){
     h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div></div>';
     el.innerHTML=h;
   });
+}
+ function toggleDesgloseC(tipo){
+  var el=document.getElementById('desgloseC_'+tipo);
+  if(!el)return;
+  var vis=el.style.display!=='none';
+  el.style.display=vis?'none':'block';
+}
+function _desgloseRows(sl,pm,barVal,color){
+  var ventas=sl.filter(function(s){return s.payMethod===pm&&s.type==='SALE';});
+  var exts=sl.filter(function(s){return s.payMethod===pm&&(s.type==='EXTENSION'||s.type==='RENEWAL');});
+  var h='';
+  if(ventas.length){
+    h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin-bottom:5px">Ventas base</div>';
+    ventas.forEach(function(s){
+      h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
+      h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+esc(s.category)+' '+s.durationHrs+'h</span>';
+      h+='<span style="color:'+color+'">'+fmt(s.total)+'</span>';
+      h+='</div>';
+    });
+  }
+  if(exts.length){
+    h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin:8px 0 5px">H. Adicional</div>';
+    exts.forEach(function(s){
+      h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
+      h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+s.durationHrs+'h extra</span>';
+      h+='<span style="color:'+color+'">'+fmt(s.total)+'</span>';
+      h+='</div>';
+    });
+  }
+  if(barVal>0){
+    h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin:8px 0 5px">Bar</div>';
+    h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
+    h+='<span style="color:#9ca3af">Bar turno</span>';
+    h+='<span style="color:'+color+'">'+fmt(barVal)+'</span>';
+    h+='</div>';
+  }
+  var tot=ventas.reduce(function(a,s){return a+Number(s.total||0);},0)+exts.reduce(function(a,s){return a+Number(s.total||0);},0)+barVal;
+  h+='<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:6px 0;margin-top:4px;border-top:1px solid rgba(46,46,58,.6)">';
+  h+='<span>Total</span><span style="color:'+color+'">'+fmt(tot)+'</span>';
+  h+='</div>';
+  return h;
 }
 function _cRow(label,val,color){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">'+label+'</span><span style="font-weight:700;color:'+color+'">'+fmt(val)+'</span></div>';}
 function updCuadre(){
