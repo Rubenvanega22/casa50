@@ -3549,12 +3549,42 @@ function renderDashboard(m,hourly,maid,month,day){
   h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px">';
   h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:12px">🏆 Panel de Desempeño</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">';
-  h+=_dash_trophy('Mejor Recepcionista',mejorRecep?mejorRecep.nombre:'—',mejorRecep?mejorRecep.habs+' hab — '+fmt(mejorRecep.total):'Sin datos','#22c55e');
-  h+=_dash_trophy('Mejor Camarera',mejorMaid?mejorMaid.nombre:'—',mejorMaid?mejorMaid.habs+' cuartos':'Sin datos','#3b82f6');
+ h+=_dash_trophy('Mejor Recepcionista hoy',mejorRecep?mejorRecep.nombre:'—',mejorRecep?mejorRecep.habs+' hab — '+fmt(mejorRecep.total):'Sin datos','#22c55e');
+  h+=_dash_trophy('Mejor Camarera hoy',mejorMaid?mejorMaid.nombre:'—',mejorMaid?mejorMaid.habs+' cuartos':'Sin datos','#3b82f6');
   h+=_dash_trophy('Turno más fuerte',mejorTurno.label,fmt(mejorTurno.total),mejorTurno.color);
   h+=_dash_trophy('Hora pico',peakBucket.count>0?peakBucket.realHour+':00h':'—',peakBucket.count>0?peakBucket.count+' ventas':'Sin datos','#a78bfa');
-  h+='</div></div>';
-
+  h+='</div>';
+  var recepMes=(month&&month.recepRankingMes)||[];
+  var maidMes=(month&&month.maidRankingMes)||[];
+  h+='<div style="margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:8px">Ranking del Mes</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h+='<div>';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:5px">&#127942; Recepcionistas</div>';
+  if(!recepMes.length){h+='<p style="font-size:11px;color:#6b7280">Sin datos</p>';}
+  recepMes.forEach(function(r,i){
+    var badges=['&#127945;','&#127946;','&#127947;'];
+    var col=i===0?'#22c55e':i===1?'#3b82f6':'#6b7280';
+    h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.3);font-size:11px">';
+    h+='<span>'+(badges[i]||'')+'  '+esc(r.nombre)+'</span>';
+    h+='<span style="color:'+col+'"><b>'+r.habs+' hab</b> — '+fmt(r.total)+'</span>';
+    h+='</div>';
+  });
+  h+='</div>';
+  h+='<div>';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:5px">&#127942; Camareras</div>';
+  if(!maidMes.length){h+='<p style="font-size:11px;color:#6b7280">Sin datos</p>';}
+  maidMes.forEach(function(r,i){
+    var badges=['&#127945;','&#127946;','&#127947;'];
+    var col=i===0?'#22c55e':i===1?'#3b82f6':'#6b7280';
+    var prom=r.habs>0?Math.round(r.totalMins/r.habs):0;
+    h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.3);font-size:11px">';
+    h+='<span>'+(badges[i]||'')+'  '+esc(r.nombre)+'</span>';
+    h+='<span style="color:'+col+'"><b>'+r.habs+' cuartos</b> — prom '+prom+' min</span>';
+    h+='</div>';
+  });
+  h+='</div>';
+  h+='</div></div></div>';
   // ── BLOQUE 7: ANÁLISIS DEL MES ──
   if(monthDays.length){
     var maxDay=Math.max.apply(null,monthDays.map(function(d){return d.sales||0;}))||1;
