@@ -2053,13 +2053,26 @@ function _desgloseRows(sl,pm,barVal,color){
     });
   }
   if(exts.length){
-    h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin:8px 0 5px">H. Adicional</div>';
-    exts.forEach(function(s){
-      h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
-      h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+s.durationHrs+'h extra</span>';
-      h+='<span style="color:'+color+'">'+fmt(s.total)+'</span>';
-      h+='</div>';
-    });
+    var extsNorm=exts.filter(function(s){return s.note!=='AUTO';});
+    var extsAuto=exts.filter(function(s){return s.note==='AUTO';});
+    if(extsNorm.length){
+      h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin:8px 0 5px">H. Adicional</div>';
+      extsNorm.forEach(function(s){
+        h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
+        h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+s.durationHrs+'h extra</span>';
+        h+='<span style="color:'+color+'">'+fmt(s.total)+'</span>';
+        h+='</div>';
+      });
+    }
+    if(extsAuto.length){
+      h+='<div style="font-size:10px;font-weight:700;color:#f59e0b;text-transform:uppercase;margin:8px 0 5px">H. Vencida</div>';
+      extsAuto.forEach(function(s){
+        h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
+        h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+s.durationHrs+'h vencida</span>';
+        h+='<span style="color:#f59e0b">'+fmt(s.total)+'</span>';
+        h+='</div>';
+      });
+    }
   }
   if(barVal>0){
     h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin:8px 0 5px">Bar</div>';
