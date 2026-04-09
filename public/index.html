@@ -2112,7 +2112,7 @@ function updCuadre(){
   var diff=total-esperado;
   if(diff===0){
     box.style.background='rgba(34,197,94,.1)';box.style.border='0.5px solid rgba(34,197,94,.4)';
-    box.innerHTML='<span style="color:#22c55e">✅ ¡Perfecto! Entrega exacta de <b>'+fmt(total)+'</b></span>';
+    box.innerHTML='<span style="color:#22c55e">OK ¡Perfecto! Entrega exacta de <b>'+fmt(total)+'</b></span>';
   } else if(diff>0){
     box.style.background='rgba(59,130,246,.1)';box.style.border='0.5px solid rgba(59,130,246,.4)';
     box.innerHTML='<span style="color:#93c5fd">ℹ️ Sobrante de <b>'+fmt(diff)+'</b> — Esperado: '+fmt(esperado)+' / Contado: '+fmt(total)+'</span>';
@@ -3877,7 +3877,7 @@ function markSeen(id,btn){
 
 function reviewedNote(id,photoUrl,btn){
   rpc('reviewNote',{noteId:id,userRole:sess.userRole,userName:sess.userName},
-    function(){if(btn){btn.textContent='✅ Revisada';btn.disabled=true;}toast('Nota marcada como revisada.','ok');loadNotes();},
+    function(){if(btn){btn.textContent='OK Revisada';btn.disabled=true;}toast('Nota marcada como revisada.','ok');loadNotes();},
     function(e){toast(e.message||String(e),'err');}
   );
 }
