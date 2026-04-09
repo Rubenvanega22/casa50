@@ -3359,7 +3359,8 @@ function loadCuadreAdmin(){
       var total=vals.reduce(function(a,b){return a+b;},0);
      h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">'+label+'</td>';
       vals.forEach(function(v){h+='<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:'+(color||'#e5e7eb')+'">'+fmt(v)+'</td>';});
-      h+='<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;font-weight:800;color:'+(color||'#e5e7eb')+'">'+fmt(total)+'</td></tr>';
+     h+='<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;font-weight:800;color:'+(color||'#e5e7eb')+'">'+fmt(total)+'</td></tr>';
+    }
     var _admDesKey=0;
     function dataRowTotal(label,pm,barGetter,color){
       _admDesKey++;
