@@ -3397,21 +3397,21 @@ function loadCuadreAdmin(){
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#a78bfa');
     dataRow('Bar Nequi',function(m){return Number((m.totals||{}).shiftBarNequi||0);},'#a78bfa');
     dataRowTotal('Total Nequi','NEQUI',function(m){return Number((m.totals||{}).shiftBarNequi||0);},'#a78bfa');
-   h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO
+   h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO</td></tr>';
     dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.total||0)-Number(s.extraPeopleValue||0);},0);},'#22c55e');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#22c55e');
    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#22c55e');
     dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
    dataRowTotal('Total Efectivo','EFECTIVO',function(m){return Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
-    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS
+    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
     dataRow('Gastos Generales',function(m,sl,ls){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0);},'#ef4444');
     shifts.forEach(function(sid,i){loans.filter(function(l){return l.shiftId===sid;}).forEach(function(l){var cols=['','',''];cols[i]='-'+fmt(l.amount);h+='<tr><td style="padding:3px 8px 3px 20px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">'+esc(l.borrowerName||'')+(l.note?' — '+esc(l.note):'')+'</td>'+cols.map(function(c){return '<td style="padding:3px 8px;border:1px solid #2e2e3a;font-size:11px;color:#ef4444;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';});});
     dataRow('Taxis',function(m){return Number((m.totals||{}).shiftTaxi||0);},'#f59e0b');
     dataRow('Turnos',function(m,sl,ls,ex){return ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#f97316');
     dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
-    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA
+    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
     dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);;var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
-    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#f59e0b;border:1px solid #2e2e3a">📋 CONTEO
+    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#f59e0b;border:1px solid #2e2e3a">📋 CONTEO</td></tr>';
     shifts.forEach(function(sid,i){
       var sc=(ms[i].totals||{}).shiftClose||null;
       var entregaEsp=0;
