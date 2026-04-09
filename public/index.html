@@ -3344,7 +3344,7 @@ function loadCuadreAdmin(){
     var loans=r[3].loans||[];
     var extras=r[4].extraStaff||[];
     var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
-    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;table-layout:fixed">';
+    var h='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;table-layout:fixed">';
 h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">Concepto</th>';
     shifts.forEach(function(sid,i){
      var resp=(ms[i].shiftUser)||'—';
