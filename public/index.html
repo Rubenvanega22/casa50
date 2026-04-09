@@ -517,9 +517,30 @@ function updSI(){var sh=(BS.shifts||[]).find(function(s){return s.id===BS.curren
 
 function onRol(){
   var r=document.getElementById('lrol').value;
-  tog('nw',!!r);tog('uw',r==='RECEPTION');tog('aw',r==='ADMIN'&&adminTap);
+  tog('nw',!!r&&r!=='RECEPTION');
+  tog('nwRec',r==='RECEPTION');
+  tog('uw',r==='RECEPTION');
+  tog('aw',r==='ADMIN'&&adminTap);
   document.getElementById('nlbl').textContent=r==='MAID'?'Nombre de Camarera':'Tu Nombre';
-  document.getElementById('lbtn').disabled=!r;updSI();
+  document.getElementById('lbtn').disabled=!r;
+  if(r==='RECEPTION')loadRecepPins();
+  updSI();
+}
+function loadRecepPins(){
+  rpc('getReceptionPins',{userRole:'ADMIN'},function(data){
+    var sel=document.getElementById('lnmRec');
+    sel.innerHTML='<option value="">-- Selecciona tu nombre --</option>';
+    (data.pins||[]).forEach(function(p){
+      var opt=document.createElement('option');
+      opt.value=p.userName;opt.textContent=p.userName;
+      sel.appendChild(opt);
+    });
+  },function(){});
+}
+function selRecName(){
+  var nm=document.getElementById('lnmRec').value;
+  document.getElementById('lnm').value=nm;
+  document.getElementById('lbtn').disabled=!nm;
 }
 
 // 5 toques en el logo para activar modo admin
