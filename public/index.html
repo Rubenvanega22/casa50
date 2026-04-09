@@ -3442,9 +3442,9 @@ function loadCuadreAdmin(){
             if(d===0)colsDiff[j]='<span style="color:#22c55e">OK Exacto</span>';
             else if(d>0)colsDiff[j]='<span style="color:#3b82f6">+'+fmt(d)+' sobrante</span>';
             else colsDiff[j]='<span style="color:#ef4444">-'+fmt(Math.abs(d))+' faltante</span>';
-          } else {colsBill[j]='<span style="color:#6b7280">—</span>';colsMon[j]='<span style="color:#6b7280">—</span>';colsDiff[j]='<span style="color:#6b7280">—</span>';}
+         } else {colsBill[j]='<span style="color:#6b7280">—</span>';colsMon[j]='<span style="color:#6b7280">—</span>';colsDiff[j]='<span style="color:#6b7280">—</span>';}
         });
-h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">Billetes entregados</td>'+colsBill.map(function(c){return '<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:#f59e0b">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+        h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">Billetes entregados</td>'+colsBill.map(function(c){return '<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:#f59e0b">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
         h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">Monedas entregadas</td>'+colsMon.map(function(c){return '<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:#f59e0b">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
        h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">Diferencia</td>'+colsDiff.map(function(c){return '<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
       }
