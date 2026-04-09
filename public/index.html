@@ -695,8 +695,8 @@ function checkAutoHora(){
     if(vencida<30*60*1000)return; // menos de 30 min vencida
     var key='autoHora_'+r.roomId+'_'+r.dueMs;
     if(sessionStorage.getItem(key))return; // ya se cobró
-    sessionStorage.setItem(key,'1');h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+sl.length+' 
-   rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO',note:'AUTO'},
+   sessionStorage.setItem(key,'1');
+    rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO',note:'AUTO'},
       function(res){toast('⏰ Hab '+r.roomId+' — Hora extra automática cobrada: '+fmt(res.extraCost),'ok');loadCuadre();},
       function(e){toast('Error hora auto Hab '+r.roomId+': '+(e.message||''),'err');}
     );
