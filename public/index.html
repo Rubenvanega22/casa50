@@ -3344,13 +3344,12 @@ function loadCuadreAdmin(){
     var loans=r[3].loans||[];
     var extras=r[4].extraStaff||[];
     var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
-    var h='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">';
-    h+='<thead><tr><th style="text-align:left;padding:8px;background:#22222c;font-size:11px;color:#9ca3af;border:1px solid #2e2e3a">Concepto</th>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;table-layout:fixed">';
+h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">Concepto</th>';
     shifts.forEach(function(sid,i){
      var resp=(ms[i].shiftUser)||'—';
-      h+='<th style="padding:8px;background:#22222c;font-size:11px;color:#a78bfa;border:1px solid #2e2e3a;text-align:center">'+sn[sid]+'<br><span style="color:#9ca3af;font-weight:400">'+resp+'</span></th>';
-    });
-    h+='<th style="padding:8px;background:#22222c;font-size:11px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">TOTAL</th></tr></thead><tbody>';
+      h+='<th style="width:20%;padding:4px 6px;background:#22222c;font-size:10px;color:#a78bfa;border:1px solid #2e2e3a;text-align:center">'+sn[sid]+'<br><span style="color:#9ca3af;font-weight:400;font-size:9px">'+resp+'</span></th>';
+   h+='<th style="width:18%;padding:4px 6px;background:#22222c;font-size:10px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">TOTAL</th></tr></thead><tbody>';
    function dataRow(label,getter,color){
       var vals=ms.map(function(m,i){
         var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
