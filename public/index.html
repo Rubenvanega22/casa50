@@ -695,8 +695,8 @@ function checkAutoHora(){
     if(vencida<30*60*1000)return; // menos de 30 min vencida
     var key='autoHora_'+r.roomId+'_'+r.dueMs;
     if(sessionStorage.getItem(key))return; // ya se cobró
-    sessionStorage.setItem(key,'1');
-    rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO'},
+    sessionStorage.setItem(key,'1');h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+sl.length+' 
+   rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO',note:'AUTO'},
       function(res){toast('⏰ Hab '+r.roomId+' — Hora extra automática cobrada: '+fmt(res.extraCost),'ok');loadCuadre();},
       function(e){toast('Error hora auto Hab '+r.roomId+': '+(e.message||''),'err');}
     );
@@ -1781,8 +1781,10 @@ function loadVentas(){
     if(!sl.length){
       h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
     } else {
+      var sinCobro304=sl.filter(function(s){return s.roomId==='304';});
+      var conCobro304=sl.filter(function(s){return s.roomId!=='304';});
       var num=1;
-      sl.forEach(function(s){
+      conCobro304.forEach(function(s){
         var sid=s.shiftId||'SHIFT_1';
         var col=turnoColor[sid]||'#6b7280';
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
@@ -1808,6 +1810,13 @@ function loadVentas(){
         h+='</div></div>';
         num++;
       });
+      if(sinCobro304.length){
+        h+='<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:8px">';
+        h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #6b7280;border-radius:0 8px 8px 0;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">';
+        h+='<span style="font-weight:700;color:#9ca3af">Hab 304</span>';
+        h+='<span style="font-size:12px;color:#6b7280">['+sinCobro304.length+' '+(sinCobro304.length===1?'vez':'veces')+']</span>';
+        h+='</div></div>';
+      }
     }
     el.innerHTML=h;
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
@@ -3724,12 +3733,11 @@ function renderDashboard(m,hourly,maid,month,day){
   }
 
   // ── BLOQUE 2: VENTAS EN TIEMPO REAL ──
-  h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:14px">';
-  h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:10px">🛎 Ventas del Día ('+onlySales.length+')</div>';
-  if(!onlySales.length){h+='<p style="font-size:12px;color:#6b7280">Sin ventas hoy.</p>';}
+ var sinCobro304M=onlySales.filter(function(s){return s.roomId==='304';});
+  var conCobro304M=onlySales.filter(function(s){return s.roomId!=='304';});
   var num=1;
   var grupos={SHIFT_1:[],SHIFT_2:[],SHIFT_3:[]};
-  onlySales.forEach(function(s){(grupos[s.shiftId]||(grupos[s.shiftId]=[])).push(s);});
+  conCobro304M.forEach(function(s){(grupos[s.shiftId]||(grupos[s.shiftId]=[])).push(s);});
   ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
     var lista=grupos[sid]||[];
     if(!lista.length)return;
@@ -3751,8 +3759,22 @@ function renderDashboard(m,hourly,maid,month,day){
       num++;
     });
   });
+  if(sinCobro304M.length){
+    h+='<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:8px">';
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #6b7280;border-radius:0 8px 8px 0;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">';
+    h+='<span style="font-weight:700;color:#9ca3af">Hab 304</span>';
+    h+='<span style="font-size:12px;color:#6b7280">['+sinCobro304M.length+' '+(sinCobro304M.length===1?'vez':'veces')+']</span>';
+    h+='</div></div>';
+  }
   h+='</div>';
-
+  if(sinCobro304M.length){
+    h+='<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:8px">';
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #6b7280;border-radius:0 8px 8px 0;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">';
+    h+='<span style="font-weight:700;color:#9ca3af">Hab 304</span>';
+    h+='<span style="font-size:12px;color:#6b7280">['+sinCobro304M.length+' '+(sinCobro304M.length===1?'vez':'veces')+']</span>';
+    h+='</div></div>';
+  }
+  h+='</div>';
   return h;
 }
 
