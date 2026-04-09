@@ -33,19 +33,19 @@ const MASTER_PRICING = {
 // ==================== HELPERS ====================
 // Business day: cambia a las 6AM (0-5AM = dia anterior)
 function businessDay(ms) {
-  const d = new Date(ms || Date.now());
-  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const d = new Date((ms || Date.now()) - 5 * 3600000);
+  if (d.getUTCHours() < 6) d.setUTCDate(d.getUTCDate() - 1);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
 // Rango del business day: [6AM hoy, 6AM mañana)
 function businessDayRange(bDay) {
   const [y, m, d] = bDay.split('-').map(Number);
-  const start = new Date(y, m - 1, d, 6, 0, 0, 0).getTime();
-  const end   = new Date(y, m - 1, d + 1, 6, 0, 0, 0).getTime();
+  const start = Date.UTC(y, m - 1, d, 11, 0, 0, 0);
+  const end   = Date.UTC(y, m - 1, d + 1, 11, 0, 0, 0);
   return { start, end };
 }
 
