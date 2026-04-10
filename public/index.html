@@ -4083,7 +4083,7 @@ function savePin(){
     rpc('deleteReceptionPin',{targetName:oldNm,userRole:sess.userRole},function(){
       rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},done,function(e){toast(e.message||String(e),'err');});
     },function(e){toast(e.message||String(e),'err');});
-  } else {
+ } else {
     rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},done,function(e){toast(e.message||String(e),'err');});
   }
 }
