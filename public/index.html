@@ -2118,8 +2118,7 @@ function updCuadre(){
   var monedas=Number((document.getElementById('cashMonedas')||{}).value||0);
   var total=billetes+monedas;
   document.getElementById('cashIn2').value=total;
-  // Recalcular esperado en caso de que no se haya llamado updCuadre
-  var barEf=Number((document.getElementById('barEfInput')||{}).value||0);
+  var barEf=parseFmtInput('barEfInput');
   var efBase=Number((document.getElementById('_ef_base')||{}).value||0);
   var tGastos=Number((document.getElementById('_tGastos')||{}).value||0);
   var esp2=efBase+barEf-tGastos;
@@ -2142,6 +2141,7 @@ function updCuadre(){
     box.style.background='rgba(239,68,68,.1)';box.style.border='0.5px solid rgba(239,68,68,.4)';
     box.innerHTML='<span style="color:#fca5a5">⚠️ Faltante de <b>'+fmt(Math.abs(diff))+'</b> — Ten mucho cuidado para la próxima. Esperado: '+fmt(esperado)+' / Contado: '+fmt(total)+'</span>';
   }
+}
 function doCierre(){
   var barEfEl=document.getElementById('barEfInput');
   var barTjEl=document.getElementById('barTjInput');
