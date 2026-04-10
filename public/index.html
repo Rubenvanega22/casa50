@@ -4014,10 +4014,7 @@ function reviewedNote(id,photoUrl,btn){
   rpc('reviewNote',{noteId:id,userRole:sess.userRole,userName:sess.userName},
     function(){if(btn){btn.textContent='OK Revisada';btn.disabled=true;}toast('Nota marcada como revisada.','ok');loadNotes();},
     function(e){toast(e.message||String(e),'err');}
-  );
-}
- 
-
+ );
 }
 function updNoteBadge(notes){
   if(!sess)return;
