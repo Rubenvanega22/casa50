@@ -2142,7 +2142,6 @@ function updCuadre(){
     box.style.background='rgba(239,68,68,.1)';box.style.border='0.5px solid rgba(239,68,68,.4)';
     box.innerHTML='<span style="color:#fca5a5">⚠️ Faltante de <b>'+fmt(Math.abs(diff))+'</b> — Ten mucho cuidado para la próxima. Esperado: '+fmt(esperado)+' / Contado: '+fmt(total)+'</span>';
   }
-}
 function doCierre(){
   var barEfEl=document.getElementById('barEfInput');
   var barTjEl=document.getElementById('barTjInput');
@@ -2151,23 +2150,24 @@ function doCierre(){
   var n=(document.getElementById('closeN2')||{}).value||'';
   var ca=Number((document.getElementById('cashIn2')||{}).value||0);
   conf('Confirmar cierre del turno?',function(){
-    var barNqEl=document.getElementById('barNqInput');
     var cashBilletes=Number((document.getElementById('cashBilletes')||{}).value||0);
     var cashMonedas=Number((document.getElementById('cashMonedas')||{}).value||0);
     var barEfVal=parseFmtInput('barEfInput');
     var barTjVal=parseFmtInput('barTjInput');
     var barNqVal=parseFmtInput('barNqInput');
-   rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:barEfVal,barTarjeta:barTjVal,barNequi:barNqVal,shiftId:sess.shiftId,userRole:sess.userRole,userName:sess.userName},
+    rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:barEfVal,barTarjeta:barTjVal,barNequi:barNqVal,shiftId:sess.shiftId,userRole:sess.userRole,userName:sess.userName},
       function(res){
-  var bk=(document.getElementById('_barKey')||{}).value||'';
-  try{sessionStorage.removeItem(bk);sessionStorage.setItem('turnoAlerta','1');sessionStorage.setItem('turnoVencido','1');}catch(e){}
-  turnoAlertaMostrada=true;turnoVencidoMostrado=true;
-  var m=document.getElementById('mTurnoAlert');if(m)m.classList.remove('op');
-  var neto=fmt((res.summary&&res.summary.net)||0);
-  var div=document.createElement('div');div.className='ov op';div.id='mCierreOk';
-  div.innerHTML='<div class="modal"><div style="text-align:center;padding:10px"><div style="font-size:48px;margin-bottom:10px">&#x2705;</div><div style="font-size:18px;font-weight:900;color:#22c55e;margin-bottom:8px">¡Envío de Cuadre Exitoso!</div><div style="font-size:13px;color:#9ca3af;margin-bottom:6px">Turno cerrado correctamente</div><div style="font-size:13px;color:#9ca3af;margin-bottom:16px">Recepcionista: <b style="color:#e5e7eb">'+sess.userName+'</b></div><div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:16px"><div style="font-size:11px;color:#9ca3af">Neto del turno</div><div style="font-size:28px;font-weight:900;color:#22c55e">'+neto+'</div></div><button class="btn bg full" onclick="document.getElementById(\'mCierreOk\').remove()">Aceptar</button></div></div>';
- document.body.appendChild(div);
-    });
+        var bk=(document.getElementById('_barKey')||{}).value||'';
+        try{sessionStorage.removeItem(bk);sessionStorage.setItem('turnoAlerta','1');sessionStorage.setItem('turnoVencido','1');}catch(e){}
+        turnoAlertaMostrada=true;turnoVencidoMostrado=true;
+        var m=document.getElementById('mTurnoAlert');if(m)m.classList.remove('op');
+        var neto=fmt((res.summary&&res.summary.net)||0);
+        var div=document.createElement('div');div.className='ov op';div.id='mCierreOk';
+        div.innerHTML='<div class="modal"><div style="text-align:center;padding:10px"><div style="font-size:48px;margin-bottom:10px">&#x2705;</div><div style="font-size:18px;font-weight:900;color:#22c55e;margin-bottom:8px">¡Envío de Cuadre Exitoso!</div><div style="font-size:13px;color:#9ca3af;margin-bottom:6px">Turno cerrado correctamente</div><div style="font-size:13px;color:#9ca3af;margin-bottom:16px">Recepcionista: <b style="color:#e5e7eb">'+sess.userName+'</b></div><div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:16px"><div style="font-size:11px;color:#9ca3af">Neto del turno</div><div style="font-size:28px;font-weight:900;color:#22c55e">'+neto+'</div></div><button class="btn bg full" onclick="document.getElementById(\'mCierreOk\').remove()">Aceptar</button></div></div>';
+        document.body.appendChild(div);
+      },
+      function(e){toast(e.message||String(e),'err');}
+    );
   });
 }
 function printC(){
