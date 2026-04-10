@@ -3813,9 +3813,8 @@ function renderDashboard(m,hourly,maid,month,day){
     });
     h+='</div></div>';
   }
-
-  // ── BLOQUE 2: VENTAS EN TIEMPO REAL ──
- var sinCobro304M=onlySales.filter(function(s){return s.roomId==='304';});
+// ── BLOQUE 2: VENTAS EN TIEMPO REAL ──
+  var sinCobro304M=onlySales.filter(function(s){return s.roomId==='304';});
   var conCobro304M=onlySales.filter(function(s){return s.roomId!=='304';});
   var num=1;
   var grupos={SHIFT_1:[],SHIFT_2:[],SHIFT_3:[]};
@@ -3825,21 +3824,40 @@ function renderDashboard(m,hourly,maid,month,day){
     if(!lista.length)return;
     var col=turnoColor[sid];
     h+='<div style="font-size:11px;font-weight:700;color:'+col+';margin:8px 0 5px;padding:4px 8px;background:rgba('+(sid==='SHIFT_1'?'59,130,246':sid==='SHIFT_2'?'34,197,94':'249,115,22')+',.1);border-radius:6px">'+sn[sid]+'</div>';
+    h+='<div style="background:#1a1a24;border:1px solid #2e2e3a;border-radius:8px;overflow:hidden;margin-bottom:10px">';
     lista.forEach(function(s){
-      var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
+      var pmB={'EFECTIVO':'EF','TARJETA':'TA','NEQUI':'NQ','MIXTO':'MX'}[s.payMethod]||s.payMethod;
+      var pmColor={'EFECTIVO':'#22c55e','TARJETA':'#3b82f6','NEQUI':'#a78bfa','MIXTO':'#f97316'}[s.payMethod]||'#9ca3af';
+      var pmBg={'EFECTIVO':'rgba(34,197,94,.15)','TARJETA':'rgba(59,130,246,.15)','NEQUI':'rgba(124,92,252,.15)','MIXTO':'rgba(249,115,22,.15)'}[s.payMethod]||'rgba(107,114,128,.15)';
       var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
-      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px">';
-      h+='<div style="display:flex;align-items:center;gap:6px">';
-      h+='<span style="color:'+col+';font-weight:700;min-width:22px">#'+num+'</span>';
-      h+='<span><b>Hab '+s.roomId+'</b> <span style="color:#9ca3af">'+s.durationHrs+'h'+extraI+'</span></span>';
+      var arrLabel=s.arrivalPlate?s.arrivalType+' '+s.arrivalPlate:s.arrivalType;
+      // Buscar aseo de esta habitacion para esta estadía
+      var maidLog=(maidLogs||[]).find(function(l){
+        return l.roomId===s.roomId&&Number(l.startedMs||0)>=Number(s.checkInMs||0)&&Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE';
+      });
+      var maidLine='';
+      if(maidLog){
+        var cleanMins=Math.round((Number(maidLog.finishedMs)-Number(maidLog.startedMs))/60000);
+        maidLine='<span style="color:#a78bfa">🧹 '+esc(maidLog.maidName)+' · '+fT(maidLog.startedMs)+'–'+fT(maidLog.finishedMs)+' <span style="background:rgba(34,197,94,.12);color:#22c55e;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">'+cleanMins+' min</span></span>';
+      } else {
+        maidLine='<span style="color:#3a3a4a">— sin registro de aseo</span>';
+      }
+      h+='<div style="display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid rgba(46,46,58,.5);gap:6px">';
+      h+='<span style="font-size:11px;font-weight:700;color:'+col+';min-width:20px;flex-shrink:0">#'+num+'</span>';
+      h+='<div style="width:1px;height:20px;background:rgba(46,46,58,.8);flex-shrink:0"></div>';
+      h+='<span style="font-size:12px;font-weight:700;min-width:44px;flex-shrink:0">'+s.roomId+' <span style="font-size:9px;color:#9ca3af;font-weight:400">'+s.durationHrs+'h'+extraI+'</span></span>';
+      h+='<div style="width:1px;height:20px;background:rgba(46,46,58,.8);flex-shrink:0"></div>';
+      h+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">';
+      h+='<span style="font-size:10px;color:#9ca3af">Ent <b style="color:#e5e7eb">'+fT(s.checkInMs)+'</b> · Sal <b style="color:#e5e7eb">'+fT(s.dueMs)+'</b> · '+esc(arrLabel)+'</span>';
+      h+=maidLine;
       h+='</div>';
-      h+='<div style="display:flex;align-items:center;gap:6px">';
-      h+='<span style="font-size:10px;color:#9ca3af">'+fT(s.checkInMs)+'</span>';
-      h+='<span class="badge '+pmB+'">'+s.payMethod+'</span>';
-      h+='<b style="color:#22c55e">'+fmt(s.total)+'</b>';
+      h+='<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">';
+      h+='<span style="background:'+pmBg+';color:'+pmColor+';padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700">'+pmB+'</span>';
+      h+='<b style="color:#22c55e;font-size:12px">'+fmt(s.total)+'</b>';
       h+='</div></div>';
       num++;
     });
+    h+='</div>';
   });
  if(sinCobro304M.length){
     h+='<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:8px">';
