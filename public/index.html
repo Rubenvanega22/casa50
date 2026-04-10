@@ -2113,7 +2113,8 @@ function updCuadre(){
   var elEnt=document.getElementById('entregaDisp');
   if(elEnt){var ent=(efBase+barEf)-tGastos;elEnt.textContent=fmt(ent);elEnt.style.color=ent>=0?'#22c55e':'#ef4444';
   var hidEsp=document.getElementById('_esperadoEfectivo');if(hidEsp)hidEsp.value=ent;}
-} function calcFaltante(){
+}
+function calcFaltante(){
   var billetes=Number((document.getElementById('cashBilletes')||{}).value||0);
   var monedas=Number((document.getElementById('cashMonedas')||{}).value||0);
   var total=billetes+monedas;
