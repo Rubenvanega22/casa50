@@ -3567,7 +3567,7 @@ function loadM(){
   if(!sess)return;
   var day=document.getElementById('mDay').value||sess.businessDay;
   var el=document.getElementById('metCont');
-  el.innerHTML='<div style="color:#9ca3af;padding:20px;text-align:center">Cargando dashboard...</div>';
+ if(!el.innerHTML.trim())el.innerHTML='<div style="color:#9ca3af;padding:20px;text-align:center">Cargando dashboard...</div>';
   clearInterval(dashInterval);
   Promise.all([
     new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:''},r,function(){r({});});}),
