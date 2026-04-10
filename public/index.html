@@ -3541,12 +3541,17 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
           var gas3=ls3.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((ms[j].totals||{}).shiftTaxi||0)+ex3.reduce(function(a,e){return a+Number(e.payment||0);},0);
           var esp=ef3-gas3;
           if(sc2){
-            colsBill[j]=fmt(sc2.cashBilletes||0);
-            colsMon[j]=fmt(sc2.cashMonedas||0);
-            var d=(sc2.cashCount||0)-esp;
-            if(d===0)colsDiff[j]='<span style="color:#22c55e">OK Exacto</span>';
-            else if(d>0)colsDiff[j]='<span style="color:#3b82f6">+'+fmt(d)+' sobrante</span>';
-            else colsDiff[j]='<span style="color:#ef4444">-'+fmt(Math.abs(d))+' faltante</span>';
+            var hoy=new Date();
+            var hoy6am=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate(),6,0,0,0).getTime();
+            var esCierreValido=!sc2.tsMs||(Number(sc2.tsMs)>=hoy6am)||(s2!=='SHIFT_3');
+            if(esCierreValido){
+              colsBill[j]=fmt(sc2.cashBilletes||0);
+              colsMon[j]=fmt(sc2.cashMonedas||0);
+              var d=(sc2.cashCount||0)-esp;
+              if(d===0)colsDiff[j]='<span style="color:#22c55e">OK Exacto</span>';
+              else if(d>0)colsDiff[j]='<span style="color:#3b82f6">+'+fmt(d)+' sobrante</span>';
+              else colsDiff[j]='<span style="color:#ef4444">-'+fmt(Math.abs(d))+' faltante</span>';
+            } else {colsBill[j]='<span style="color:#6b7280">—</span>';colsMon[j]='<span style="color:#6b7280">—</span>';colsDiff[j]='<span style="color:#6b7280">—</span>';}
          } else {colsBill[j]='<span style="color:#6b7280">—</span>';colsMon[j]='<span style="color:#6b7280">—</span>';colsDiff[j]='<span style="color:#6b7280">—</span>';}
         });
         h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">Billetes entregados</td>'+colsBill.map(function(c){return '<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:#f59e0b">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
