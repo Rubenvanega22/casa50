@@ -201,7 +201,6 @@ case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
      case 'maidCancel':   return await apiMaidCancel(payload, res);
       case 'saveExtra':       return await apiSaveExtra(payload, res);
       case 'getExtras':       return await apiGetExtras(payload, res);
-      case 'deleteExtra':     return await apiDeleteExtra(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
