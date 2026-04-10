@@ -589,8 +589,7 @@ actualizarBtnCaja();
   if(sess.userRole==='MAID'){
     rpc('getMultiMaidMode',{},function(d){
       multiMaidMode=d.multiMaidMode||false;
-      renderMaid();
-      checkMaidSelection();
+      rpc('getRooms',null,function(rd){if(rd){rooms=rd.rooms||[];}renderMaid();checkMaidSelection();});
     });
   }
   if(sess.userRole==='ADMIN'){
@@ -681,7 +680,7 @@ function doMaidRefresh(){
 function startPoll(){
   clearInterval(pT);
   pT=setInterval(function(){
-    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
+   rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}});
     loadNotes();
     if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
   },10000);
@@ -818,7 +817,7 @@ function activarTurno12h(finActual){
     turnoVencidoMostrado=false;
   },100);
 }
-function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];checkAlarms();renderRooms();}});toast('Alarma silenciada','ok');});}
+function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}});toast('Alarma silenciada','ok');});}
 
 // ---- HABITACIONES ----
 function renderRooms(){
