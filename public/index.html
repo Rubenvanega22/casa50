@@ -1485,12 +1485,13 @@ function doRef(){
   var amt=Number((document.getElementById('refAmt')||{}).value||0),reason=(document.getElementById('refR')||{}).value||'';
   if(amt<=0){toast('Monto invalido.','err');return;}
   if(reason.trim().length<3){toast('Motivo obligatorio.','err');return;}
-  conf('Devolucion de '+fmt(amt)+' — '+reason+'?',function(){
+ conf('Devolucion de '+fmt(amt)+' — '+reason+'?',function(){
     rpc('refund',{roomId:curRoom.roomId,amount:amt,refundReason:reason,userName:sess.userName,userRole:sess.userRole},
       function(){toast('Devolucion registrada.','ok');closeM('mRoom');},
       function(e){toast(e.message||String(e),'err');}
     );
   });
+}
 function doTaxi(){
   var rid=curRoom?curRoom.roomId:'';
   conf('¿Registrar taxi $3.000 para Hab '+rid+'?',function(){
