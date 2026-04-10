@@ -201,6 +201,7 @@ case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
      case 'maidCancel':   return await apiMaidCancel(payload, res);
       case 'saveExtra':       return await apiSaveExtra(payload, res);
       case 'getExtras':       return await apiGetExtras(payload, res);
+      case 'deleteScheduleExtra': return await apiDeleteScheduleExtra(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1734,7 +1735,7 @@ async function apiSaveExtra(p, res) {
   return ok(res,{ok:true});
 }
 
-async function apiDeleteExtra(p, res) {
+async function apiDeleteScheduleExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
