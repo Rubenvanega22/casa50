@@ -145,6 +145,8 @@ module.exports = async function handler(req, res) {
       case 'addLoan':           return await apiAddLoan(payload, res);
       case 'getLoans':          return await apiGetLoans(payload, res);
       case 'registerExtraStaff':return await apiRegisterExtra(payload, res);
+      case 'updateExtraStaff':  return await apiUpdateExtra(payload, res);
+      case 'deleteExtra':       return await apiDeleteExtra(payload, res);
       case 'checkoutExtraStaff':return await apiCheckoutExtra(payload, res);
       case 'getExtraStaff':     return await apiGetExtra(payload, res);
       case 'addShiftNote':      return await apiAddNote(payload, res);
@@ -829,6 +831,30 @@ async function apiRegisterExtra(p, res) {
   });
   return ok(res, { personName, area, shiftId: shift, businessDay: bDay, scheduledExitMs, workHours });
 }
+async function apiUpdateExtra(p, res) {
+  const id = Number(p.id || 0);
+  if (!id) return err(res, 'ID requerido');
+  const personName = String(p.personName || '').trim();
+  const area = String(p.area || 'Servicios').trim();
+  const entryMs = Number(p.entryMs || 0);
+  const scheduledExitMs = Number(p.scheduledExitMs || 0);
+  const workHours = Number(p.workHours || 0);
+  const shift = String(p.shiftId || '');
+  if (!personName) return err(res, 'Nombre requerido');
+  await supabase.from('extra_staff').update({
+    person_name: personName, area, entry_ms: entryMs,
+    scheduled_exit_ms: scheduledExitMs, work_hours: workHours,
+    shift_id: shift
+  }).eq('id', id);
+  return ok(res, { updated: true });
+}
+async function apiDeleteExtra(p, res) {
+  const id = Number(p.id || 0);
+  if (!id) return err(res, 'ID requerido');
+  await supabase.from('extra_staff').delete().eq('id', id);
+ return ok(res, { deleted: true });
+}
+
 
 async function apiCheckoutExtra(p, res) {
   const now = Date.now();
