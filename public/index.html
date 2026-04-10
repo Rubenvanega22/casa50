@@ -3355,37 +3355,71 @@ function loadMP(){
   var el=document.getElementById('mpCont');
   el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
   rpc('maidPanel',{userRole:sess.userRole,businessDay:day},function(data){
+    var dirty=data.dirtyRooms||[];
+    var contaminated=data.contaminatedRooms||[];
+    var shiftReport=data.shiftReport||{};
     var logs=data.maidLogs||[];
+    var now=Date.now();
+    var h='';
+    // Habitaciones sucias
+    h+='<div class="sec">🟡 Habitaciones Sucias ('+dirty.length+')</div>';
+    if(!dirty.length){h+='<p style="color:#9ca3af;font-size:12px">Ninguna sucia.</p>';}
+    else{
+      h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+      dirty.forEach(function(r){
+        h+='<div style="background:#22222c;border:1px solid #f59e0b;border-radius:8px;padding:7px 12px;font-size:12px">';
+        h+='<b>Hab '+esc(r.roomId)+'</b> <span style="color:#9ca3af">'+r.waitingMins+' min</span>';
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    // Habitaciones contaminadas
+    if(contaminated.length){
+      h+='<div class="sec">🔴 Contaminadas ('+contaminated.length+')</div>';
+      h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+      contaminated.forEach(function(r){
+        h+='<div style="background:#22222c;border:1px solid #ef4444;border-radius:8px;padding:7px 12px;font-size:12px">';
+        h+='<b>Hab '+esc(r.roomId)+'</b> <span style="color:#9ca3af">'+r.waitingMins+' min</span>';
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    // Registro por turno
+    ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
+      var sn={SHIFT_1:'Turno 1',SHIFT_2:'Turno 2',SHIFT_3:'Turno 3'}[sid];
+      var maids=shiftReport[sid]||[];
+      if(!maids.length)return;
+      h+='<div class="sec">'+sn+'</div>';
+      maids.forEach(function(m){
+        h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:6px">';
+        h+='<div style="display:flex;justify-content:space-between"><b>'+esc(m.maidName)+'</b>';
+        h+='<span style="color:#22c55e;font-size:12px">'+m.totalRooms+' cuartos — prom '+m.avgCleanMins+' min</span></div>';
+        h+='</div>';
+      });
+    });
+    // Log detallado
     var byMaid={};
     logs.forEach(function(l){
       var nm=l.maidName||'?';
-      if(!byMaid[nm])byMaid[nm]={nombre:nm,habs:0,totalMins:0,logs:[]};
-      if(Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE'){
-        byMaid[nm].habs++;
-        byMaid[nm].totalMins+=Math.round((Number(l.finishedMs)-Number(l.startedMs))/60000);
-      }
-      byMaid[nm].logs.push(l);
+      if(!byMaid[nm])byMaid[nm]=[];
+      byMaid[nm].push(l);
     });
-    var maids=Object.values(byMaid).sort(function(a,b){return b.habs-a.habs;});
-    if(!maids.length){el.innerHTML='<p style="color:#9ca3af">Sin registros de camareras hoy.</p>';return;}
-    var h='';
-    maids.forEach(function(m){
-      var prom=m.habs>0?Math.round(m.totalMins/m.habs):0;
-      h+='<div class="sh-block"><div class="sh-hdr">'+esc(m.nombre)+' — '+m.habs+' cuartos — prom '+prom+' min</div><div style="padding:8px">';
-      m.logs.filter(function(l){return Number(l.finishedMs||0)>0;}).forEach(function(l){
+    Object.keys(byMaid).forEach(function(nm){
+      var mLogs=byMaid[nm].filter(function(l){return Number(l.finishedMs||0)>0;});
+      if(!mLogs.length)return;
+      h+='<div class="sh-block"><div class="sh-hdr">'+esc(nm)+'</div><div style="padding:8px">';
+      mLogs.forEach(function(l){
         var mins=Math.round((Number(l.finishedMs)-Number(l.startedMs))/60000);
         var col=l.stateTo==='AVAILABLE'?'#22c55e':'#3b82f6';
-        h+='<div style="background:#22222c;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:7px 10px;margin-bottom:5px">';
-        h+='<div style="display:flex;justify-content:space-between;align-items:center">';
-        h+='<b>Hab '+esc(l.roomId)+'</b>';
-        h+='<span style="font-size:11px;color:'+col+'">'+mins+' min</span>';
-        h+='</div>';
-        h+='<div style="font-size:10px;color:#9ca3af">Inicio: '+fT(Number(l.startedMs))+' | Fin: '+fT(Number(l.finishedMs))+'</div>';
+        h+='<div style="background:#18181f;border-left:3px solid '+col+';border-radius:0 7px 7px 0;padding:7px 10px;margin-bottom:5px">';
+        h+='<div style="display:flex;justify-content:space-between"><b>Hab '+esc(l.roomId)+'</b>';
+        h+='<span style="color:'+col+';font-size:11px">'+mins+' min</span></div>';
+        h+='<div style="font-size:10px;color:#9ca3af">'+fT(Number(l.startedMs))+' → '+fT(Number(l.finishedMs))+'</div>';
         h+='</div>';
       });
       h+='</div></div>';
     });
-    el.innerHTML=h;
+    el.innerHTML=h||'<p style="color:#9ca3af">Sin registros hoy.</p>';
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message||'Error')+'</p>';});
 }
 // ---- CUADRE ADMIN ----
