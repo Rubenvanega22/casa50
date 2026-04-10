@@ -2098,6 +2098,7 @@ function _desgloseRows(sl,pm,barVal,color){
 }
 function parseFmtInput(id){var el=document.getElementById(id);if(!el)return 0;return Number(String(el.value||'').replace(/\./g,'').replace(/[^0-9]/g,''))||0;}
 function fmtBarInput(el){var v=String(el.value||'').replace(/\./g,'').replace(/[^0-9]/g,'');if(!v){el.value='';return;}el.value=Number(v).toLocaleString('es-CO');}
+function _cRow(label,val,color){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">'+label+'</span><span style="font-weight:700;color:'+color+'">'+fmt(val)+'</span></div>';}
 function updCuadre(){
   var barEf=parseFmtInput('barEfInput');
   var barTj=parseFmtInput('barTjInput');
