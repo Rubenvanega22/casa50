@@ -1982,7 +1982,7 @@ sl.forEach(function(s){
     h+=_cRow('Habitaciones',tj_hab,'#3b82f6');
     h+=_cRow('P. Adicional',tj_padd,'#3b82f6');
     h+=_cRow('H. Adicional',tj_hadd,'#3b82f6');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barTjInput" placeholder="0" min="0" value="'+barTj+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barTjInput" placeholder="0" value="'+(barTj?Number(barTj).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0))+'</span><button class="btn bb xs" onclick="toggleDesgloseC(\'tj\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_tj" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'TARJETA',Number(barTj)||0,'#3b82f6');
@@ -1992,7 +1992,7 @@ h+='</div></div>';
     h+=_cRow('Habitaciones',nq_hab,'#a78bfa');
     h+=_cRow('P. Adicional',nq_padd,'#a78bfa');
     h+=_cRow('H. Adicional',nq_hadd,'#a78bfa');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barNqInput" placeholder="0" min="0" value="'+barNq+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barNqInput" placeholder="0" value="'+(barNq?Number(barNq).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Nequi</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#a78bfa" id="totalNqDisp">'+fmt(nq_hab+nq_padd+nq_hadd+(Number(barNq)||0))+'</span><button class="btn bp xs" onclick="toggleDesgloseC(\'nq\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_nq" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'NEQUI',Number(barNq)||0,'#a78bfa');
@@ -2002,7 +2002,7 @@ h+='</div></div>';
     h+=_cRow('Habitaciones',ef_hab,'#22c55e');
     h+=_cRow('P. Adicional',ef_padd,'#22c55e');
     h+=_cRow('H. Adicional',ef_hadd,'#22c55e');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="number" id="barEfInput" placeholder="0" min="0" value="'+barEf+'" oninput="updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barEfInput" placeholder="0" value="'+(barEf?Number(barEf).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Efectivo</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#22c55e" id="totalEfDisp">'+fmt(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))+'</span><button class="btn bg xs" onclick="toggleDesgloseC(\'ef\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_ef" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'EFECTIVO',Number(barEf)||0,'#22c55e');
@@ -2096,11 +2096,12 @@ function _desgloseRows(sl,pm,barVal,color){
   h+='</div>';
   return h;
 }
-function _cRow(label,val,color){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">'+label+'</span><span style="font-weight:700;color:'+color+'">'+fmt(val)+'</span></div>';}
+function parseFmtInput(id){var el=document.getElementById(id);if(!el)return 0;return Number(String(el.value||'').replace(/\./g,'').replace(/[^0-9]/g,''))||0;}
+function fmtBarInput(el){var v=String(el.value||'').replace(/\./g,'').replace(/[^0-9]/g,'');if(!v){el.value='';return;}el.value=Number(v).toLocaleString('es-CO');}
 function updCuadre(){
-  var barEf=Number((document.getElementById('barEfInput')||{}).value||0);
-  var barTj=Number((document.getElementById('barTjInput')||{}).value||0);
-  var barNq=Number((document.getElementById('barNqInput')||{}).value||0);
+  var barEf=parseFmtInput('barEfInput');
+  var barTj=parseFmtInput('barTjInput');
+  var barNq=parseFmtInput('barNqInput');
   var efBase=Number((document.getElementById('_ef_base')||{}).value||0);
   var tjBase=Number((document.getElementById('_tj_base')||{}).value||0);
   var tGastos=Number((document.getElementById('_tGastos')||{}).value||0);
@@ -2112,8 +2113,7 @@ function updCuadre(){
   var elEnt=document.getElementById('entregaDisp');
   if(elEnt){var ent=(efBase+barEf)-tGastos;elEnt.textContent=fmt(ent);elEnt.style.color=ent>=0?'#22c55e':'#ef4444';
   var hidEsp=document.getElementById('_esperadoEfectivo');if(hidEsp)hidEsp.value=ent;}
-}
- function calcFaltante(){
+} function calcFaltante(){
   var billetes=Number((document.getElementById('cashBilletes')||{}).value||0);
   var monedas=Number((document.getElementById('cashMonedas')||{}).value||0);
   var total=billetes+monedas;
@@ -2154,7 +2154,10 @@ function doCierre(){
     var barNqEl=document.getElementById('barNqInput');
     var cashBilletes=Number((document.getElementById('cashBilletes')||{}).value||0);
     var cashMonedas=Number((document.getElementById('cashMonedas')||{}).value||0);
-    rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:Number(barEfEl.value||0),barTarjeta:Number(barTjEl.value||0),barNequi:Number(barNqEl?barNqEl.value:0),shiftId:sess.shiftId,userRole:sess.userRole,userName:sess.userName},
+    var barEfVal=parseFmtInput('barEfInput');
+    var barTjVal=parseFmtInput('barTjInput');
+    var barNqVal=parseFmtInput('barNqInput');
+   rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:barEfVal,barTarjeta:barTjVal,barNequi:barNqVal,shiftId:sess.shiftId,userRole:sess.userRole,userName:sess.userName},
       function(res){
   var bk=(document.getElementById('_barKey')||{}).value||'';
   try{sessionStorage.removeItem(bk);sessionStorage.setItem('turnoAlerta','1');sessionStorage.setItem('turnoVencido','1');}catch(e){}
