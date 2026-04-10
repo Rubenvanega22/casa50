@@ -1492,14 +1492,14 @@ function doRef(){
       function(e){toast(e.message||String(e),'err');}
     );
   });
-}
 function doTaxi(){
   var rid=curRoom?curRoom.roomId:'';
-  
-  rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
-    function(){toast('Taxi $3.000 registrado.','ok');closeM('mConf');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
-    function(e){toast(e.message||String(e),'err');}
-  );
+  conf('¿Registrar taxi $3.000 para Hab '+rid+'?',function(){
+    rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
+      function(){toast('Taxi $3.000 registrado.','ok');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
 }
 // ---- PANEL CAMARERA ----
  function checkMaidSelection(){
@@ -1937,8 +1937,9 @@ function loadCuadre(){
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
     var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===sess.shiftId&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
-    var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId;});
-    var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0;});
+    var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId&&(!fromMs||Number(l.tsMs||0)>=fromMs);});
+    var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0&&(!fromMs||Number(e.tsMs||0)>=fromMs);});
+    var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId&&(!fromMs||Number(tx.tsMs||0)>=fromMs);});
     var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0,nq_hab=0,nq_padd=0,nq_hadd=0;
 sl.forEach(function(s){
       var pm=s.payMethod||'EFECTIVO';
@@ -1961,7 +1962,6 @@ sl.forEach(function(s){
       }
     });
     var gastos_gen=loans.reduce(function(s,l){return s+Number(l.amount||0);},0);
-    var taxiList=(m.taxiList||[]).filter(function(tx){return !fromMs||Number(tx.tsMs||0)>=fromMs;});
     var taxis=taxiList.reduce(function(s,tx){return s+Number(tx.amount||0);},0);
     var turnos=extras.reduce(function(s,e){return s+Number(e.payment||0);},0);
     var totalGastos=gastos_gen+taxis+turnos;
