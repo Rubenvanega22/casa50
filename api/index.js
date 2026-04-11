@@ -1,18 +1,14 @@
 // ============================================================
-// CASA 50 - SPA MOTEL | API Backend v3.2
-// api/index.js - Vercel Serverless (Node.js) v3.2
-// Cambios v3:
-//  - bar_sales + general_expenses (nuevas tablas)
-//  - getDailyCuadre: cuadre de caja admin por turno
-//  - addExtraPerson: persona adicional post check-in
-//  - updateArrivalPlate: placa post check-in
-//  - setDisabled: RECEPTION puede bloquear (no desbloquear)
-//  - checkOut: warning si due_ms pendiente (param force)
-//  - metricas: filtrado REAL por shift_id
-//  - notas: historial permanente + borrado logico + getNoteHistory/deleteNote
-//  - saveStaff/getStaff: ficha completa con cedula/celular etc
-//  - taxi desacoplado (no afecta checkIn)
-//  - SHIFT_3: 9pm-6am (21h)
+// CASA 50 - SPA MOTEL | API Backend v3.3
+// api/index.js - Vercel Serverless (Node.js) v3.3
+// Cambios v3.3:
+//  - Fix T3 medianoche: solo cambia a SHIFT_1 si logout fue en madrugada
+//  - Sistema liberacion de turnos: closeShift marca released=true
+//  - Bloqueo login: verifica que turno anterior cerro con cuadre
+//  - Admin puede forzar entrada
+//  - deleteTaxi: eliminar taxi desde modal habitacion
+//  - roomChange: transfiere venta original a nueva habitacion
+//  - shift_failures: registro de fallas por turno
 // ============================================================
 const { createClient } = require('@supabase/supabase-js');
 
@@ -31,7 +27,6 @@ const MASTER_PRICING = {
 };
 
 // ==================== HELPERS ====================
-// Business day: cambia a las 6AM (0-5AM = dia anterior)
 function businessDay(ms) {
   const d = new Date((ms || Date.now()) - 5 * 3600000);
   if (d.getUTCHours() < 6) d.setUTCDate(d.getUTCDate() - 1);
@@ -41,7 +36,6 @@ function businessDay(ms) {
   return `${y}-${m}-${day}`;
 }
 
-// Rango del business day: [6AM hoy, 6AM mañana)
 function businessDayRange(bDay) {
   const [y, m, d] = bDay.split('-').map(Number);
   const start = Date.UTC(y, m - 1, d, 11, 0, 0, 0);
@@ -51,7 +45,6 @@ function businessDayRange(bDay) {
 
 function currentShiftId(ms) {
   const bogota = new Date((ms || Date.now()) + (-5 * 60 * 60 * 1000));
-  // Ajuste manual UTC-5 (Colombia no tiene horario de verano)
   const h = bogota.getUTCHours();
   if (h >= 6 && h < 14) return 'SHIFT_1';
   if (h >= 14 && h < 21) return 'SHIFT_2';
@@ -128,8 +121,8 @@ module.exports = async function handler(req, res) {
       case 'login':             return await apiLogin(payload, res);
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
-         case 'extendTime':        return await apiExtendTime(payload, res);
-        case 'horaGratis':        return await apiHoraGratis(payload, res);
+      case 'extendTime':        return await apiExtendTime(payload, res);
+      case 'horaGratis':        return await apiHoraGratis(payload, res);
       case 'renewTime':         return await apiRenewTime(payload, res);
       case 'silenceAlarm':      return await apiSilenceAlarm(payload, res);
       case 'maidTake':          return await apiMaidTake(payload, res);
@@ -142,6 +135,7 @@ module.exports = async function handler(req, res) {
       case 'setDisabled':       return await apiSetDisabled(payload, res);
       case 'refund':            return await apiRefund(payload, res);
       case 'taxi':              return await apiTaxi(payload, res);
+      case 'deleteTaxi':        return await apiDeleteTaxi(payload, res);
       case 'addLoan':           return await apiAddLoan(payload, res);
       case 'getLoans':          return await apiGetLoans(payload, res);
       case 'registerExtraStaff':return await apiRegisterExtra(payload, res);
@@ -160,48 +154,50 @@ module.exports = async function handler(req, res) {
       case 'saveStaff':         return await apiSaveStaff(payload, res);
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
-        case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
-case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
+      case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
+      case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
       case 'setReceptionPin':   return await apiSetPin(payload, res);
-      case 'deleteReceptionPin': return await apiDeletePin(payload, res);
+      case 'deleteReceptionPin':return await apiDeletePin(payload, res);
       case 'getReceptionPins':  return await apiGetPins(payload, res);
       case 'changeAdminPin':    return await apiChangeAdminPin(payload, res);
-     case 'roomHistory':        return await apiRoomHistory(payload, res);
-      case 'markNoteSeen':       return await apiMarkNoteSeen(payload, res);
-      case 'getAllNotes':         return await apiGetAllNotes(payload, res);
-      case 'getNoteHistory':     return await apiGetNoteHistory(payload, res);
-     case 'reviewNote':         return await apiReviewNote(payload, res);
+      case 'roomHistory':       return await apiRoomHistory(payload, res);
+      case 'markNoteSeen':      return await apiMarkNoteSeen(payload, res);
+      case 'getAllNotes':        return await apiGetAllNotes(payload, res);
+      case 'getNoteHistory':    return await apiGetNoteHistory(payload, res);
+      case 'reviewNote':        return await apiReviewNote(payload, res);
       case 'deleteNote':        return await apiDeleteNote(payload, res);
-      case 'addBarSale':         return await apiAddBarSale(payload, res);
-      case 'getBarSales':        return await apiGetBarSales(payload, res);
-      case 'addGeneralExpense':  return await apiAddGeneralExpense(payload, res);
-      case 'getGeneralExpenses': return await apiGetGeneralExpenses(payload, res);
-      case 'getDailyCuadre':     return await apiGetDailyCuadre(payload, res);
-      case 'addExtraPerson':     return await apiAddExtraPerson(payload, res);
-      case 'roomChange':         return await apiRoomChange(payload, res);
-      case 'updatePayMethod':    return await apiUpdatePayMethod(payload, res);
-      case 'openDrawer':         return await apiOpenDrawer(payload, res);
-      case 'drawerPoll':         return await apiDrawerPoll(payload, res);
-      case 'drawerAck':          return await apiDrawerAck(payload, res);
-      case 'updateArrivalPlate': return await apiUpdateArrivalPlate(payload, res);
-        case 'getMaintHistory': return await apiGetMaintHistory(payload, res);
-        case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
-        case 'getRoomIssues':    return await apiGetRoomIssues(payload, res);
-case 'addRoomIssue':     return await apiAddRoomIssue(payload, res);
-case 'editRoomIssue':    return await apiEditRoomIssue(payload, res);
-case 'resolveRoomIssue': return await apiResolveRoomIssue(payload, res);
-case 'deleteRoomIssue':  return await apiDeleteRoomIssue(payload, res);
-        case 'getProyeccion':    return await apiGetProyeccion(payload, res);
-case 'saveTarea':        return await apiSaveTarea(payload, res);
-case 'updateTarea':      return await apiUpdateTarea(payload, res);
-case 'deleteTarea':      return await apiDeleteTarea(payload, res);
-case 'saveMesProyeccion':return await apiSaveMesProyeccion(payload, res);
-        case 'clearMaidLog': return await apiClearMaidLog(payload, res);
-     case 'maidCancel':   return await apiMaidCancel(payload, res);
-      case 'saveExtra':       return await apiSaveExtra(payload, res);
-      case 'getExtras':       return await apiGetExtras(payload, res);
-      case 'deleteScheduleExtra': return await apiDeleteScheduleExtra(payload, res);
+      case 'addBarSale':        return await apiAddBarSale(payload, res);
+      case 'getBarSales':       return await apiGetBarSales(payload, res);
+      case 'addGeneralExpense': return await apiAddGeneralExpense(payload, res);
+      case 'getGeneralExpenses':return await apiGetGeneralExpenses(payload, res);
+      case 'getDailyCuadre':    return await apiGetDailyCuadre(payload, res);
+      case 'addExtraPerson':    return await apiAddExtraPerson(payload, res);
+      case 'roomChange':        return await apiRoomChange(payload, res);
+      case 'updatePayMethod':   return await apiUpdatePayMethod(payload, res);
+      case 'openDrawer':        return await apiOpenDrawer(payload, res);
+      case 'drawerPoll':        return await apiDrawerPoll(payload, res);
+      case 'drawerAck':         return await apiDrawerAck(payload, res);
+      case 'updateArrivalPlate':return await apiUpdateArrivalPlate(payload, res);
+      case 'getMaintHistory':   return await apiGetMaintHistory(payload, res);
+      case 'clearMaintHistory': return await apiClearMaintHistory(payload, res);
+      case 'getRoomIssues':     return await apiGetRoomIssues(payload, res);
+      case 'addRoomIssue':      return await apiAddRoomIssue(payload, res);
+      case 'editRoomIssue':     return await apiEditRoomIssue(payload, res);
+      case 'resolveRoomIssue':  return await apiResolveRoomIssue(payload, res);
+      case 'deleteRoomIssue':   return await apiDeleteRoomIssue(payload, res);
+      case 'getProyeccion':     return await apiGetProyeccion(payload, res);
+      case 'saveTarea':         return await apiSaveTarea(payload, res);
+      case 'updateTarea':       return await apiUpdateTarea(payload, res);
+      case 'deleteTarea':       return await apiDeleteTarea(payload, res);
+      case 'saveMesProyeccion': return await apiSaveMesProyeccion(payload, res);
+      case 'clearMaidLog':      return await apiClearMaidLog(payload, res);
+      case 'maidCancel':        return await apiMaidCancel(payload, res);
+      case 'saveExtra':         return await apiSaveExtra(payload, res);
+      case 'getExtras':         return await apiGetExtras(payload, res);
+      case 'deleteScheduleExtra':return await apiDeleteScheduleExtra(payload, res);
+      case 'saveShiftFailure':  return await apiSaveShiftFailure(payload, res);
+      case 'getShiftFailures':  return await apiGetShiftFailures(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -237,12 +233,26 @@ async function apiLogin(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   let shift = currentShiftId(now);
+
+  // FIX T3 MEDIANOCHE (item 1):
+  // Solo cambia a SHIFT_1 si el logout del T3 fue en la madrugada (0h-6h)
+  // Si son las 9pm-11pm y hay un logout del T3 de la madrugada anterior, no cambia
   if(shift==='SHIFT_3'){
-    const{data:logoutT3}=await supabase.from('shift_log').select('id').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
-    if(logoutT3&&logoutT3.length)shift='SHIFT_1';
+    const nowHour = new Date(now + (-5*3600000)).getUTCHours();
+    // Solo verificar si estamos en la madrugada (0am-6am)
+    if(nowHour >= 0 && nowHour < 6){
+      const{data:logoutT3}=await supabase.from('shift_log').select('id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+      if(logoutT3&&logoutT3.length){
+        const logoutHour = new Date(Number(logoutT3[0].ts_ms) + (-5*3600000)).getUTCHours();
+        // Solo cambia a SHIFT_1 si el logout fue tambien en la madrugada
+        if(logoutHour >= 0 && logoutHour < 6) shift = 'SHIFT_1';
+      }
+    }
   }
+
   const userName = String(p.userName || '').trim();
   const userRole = String(p.userRole || '').toUpperCase();
+  const forceEntry = p.forceEntry === true || p.forceEntry === 'true'; // Admin fuerza entrada
   if (!userName) return err(res, 'Nombre requerido');
   if (!userRole) return err(res, 'Rol requerido');
 
@@ -265,20 +275,55 @@ async function apiLogin(p, res) {
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: userName, action: 'LOGIN' });
     return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, businessDay: bDay, serverNowMs: now } });
   }
+
   if (userRole === 'RECEPTION') {
     const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
-    const storedPin = pinRow ? String(pinRow.pin || '') : '';
     if (!pinRow) {
       await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'Recepcionista no autorizada. Contacte al administrador.');
     }
-    if (String(p.userPin || '') !== storedPin) {
+    if (String(p.userPin || '') !== String(pinRow.pin || '')) {
       await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
+
+    // SISTEMA LIBERACION DE TURNOS (items 2,3,4,5):
+    // Verificar si el turno anterior cerro correctamente (con cuadre)
+    // Admin puede forzar con forceEntry=true
+    if(!forceEntry) {
+      const prevShiftMap = { SHIFT_1: 'SHIFT_3', SHIFT_2: 'SHIFT_1', SHIFT_3: 'SHIFT_2' };
+      const prevShiftId = prevShiftMap[shift];
+      // SHIFT_1 busca el T3 del dia anterior
+      const prevBDay = shift === 'SHIFT_1' ? businessDay(now - 86400000) : bDay;
+
+      // Ver si el turno anterior tuvo login (hubo recepcionista)
+      const { data: prevLogin } = await supabase.from('shift_log')
+        .select('user_name')
+        .eq('business_day', prevBDay)
+        .eq('shift_id', prevShiftId)
+        .eq('user_role', 'RECEPTION')
+        .in('action', ['LOGIN', 'RELOGIN'])
+        .order('ts_ms')
+        .limit(1);
+
+      if(prevLogin && prevLogin.length) {
+        // Hubo recepcionista en turno anterior - verificar si cerro con cuadre
+        const { data: prevReleased } = await supabase.from('shift_log')
+          .select('id')
+          .eq('business_day', prevBDay)
+          .eq('shift_id', prevShiftId)
+          .eq('action', 'LOGOUT')
+          .eq('released', true)
+          .limit(1);
+
+        if(!prevReleased || !prevReleased.length) {
+          return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
+        }
+      }
+    }
+
     const { data: existing } = await supabase.from('shift_log').select('user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
     if (existing && existing.user_name.toLowerCase() !== userName.toLowerCase()) {
-      // Verificar si el turno fue cerrado (LOGOUT)
       const { data: logout } = await supabase.from('shift_log').select('id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
       if (!logout || !logout.length) {
         return err(res, 'Este turno ya tiene recepcionista: ' + existing.user_name);
@@ -289,6 +334,7 @@ async function apiLogin(p, res) {
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now, fromMs } });
   }
+
   if (userRole === 'MAID') {
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAID', user_name: userName, action: 'LOGIN' });
     return ok(res, { session: { userName, userRole: 'MAID', shiftId: shift, businessDay: bDay, serverNowMs: now } });
@@ -298,8 +344,6 @@ async function apiLogin(p, res) {
 }
 
 // ==================== CHECK-IN ====================
-
-
 var drawerPending=false;
 async function apiOpenDrawer(p, res) {
   const userRole=String(p.userRole||'').toUpperCase();
@@ -317,6 +361,7 @@ async function apiDrawerAck(p,res){
 async function openCashDrawer() {
   drawerPending=true;
 }
+
 async function apiCheckIn(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -334,8 +379,6 @@ async function apiCheckIn(p, res) {
   if (room.state !== 'AVAILABLE') return err(res, `Hab ${roomId} no disponible (${room.state})`);
 
   const cfg = MASTER_PRICING[room.category] || MASTER_PRICING['Junior'];
-
-  // Validar 6h para Suite Multiple
   if (room.category === 'Suite Multiple' && durationHrs === 6 && !cfg.h6) {
     return err(res, 'Suite Multiple no tiene precio para 6h');
   }
@@ -350,13 +393,9 @@ async function apiCheckIn(p, res) {
   const total = roomId === '304' ? 0 : basePrice + extraPeopleValue;
   const dueMs = now + durationHrs * 3600000;
 
-  // v3: CAR=placa obligatoria, MOTO=placa opcional, WALK/TAXI=sin placa
   const arrivalType = String(p.arrivalType || 'WALK').toUpperCase();
-  const needsPlate = arrivalType === 'CAR';
-  const plateOptional = arrivalType === 'MOTO';
   let arrivalPlate = String(p.arrivalPlate || '').toUpperCase().trim();
- // placa opcional
-  if (!needsPlate && !plateOptional) arrivalPlate = '';
+  if (arrivalType !== 'CAR' && arrivalType !== 'MOTO') arrivalPlate = '';
 
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
   const paidWith = Number(p.paidWith || 0);
@@ -364,7 +403,7 @@ async function apiCheckIn(p, res) {
   const mixtoEf = Number(p.mixtoEf || 0);
   const mixtoTj = Number(p.mixtoTj || 0);
   const mixtoNq = Number(p.mixtoNq || 0);
-  
+
   await supabase.from('rooms').update({
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: now, due_ms: dueMs,
@@ -374,6 +413,7 @@ async function apiCheckIn(p, res) {
     pay_method: payMethod,
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
+
   await supabase.from('sales').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'SALE',
@@ -401,7 +441,7 @@ async function apiCheckIn(p, res) {
   return ok(res, { roomId, total, change: changeGiven, checkInMs: now, dueMs });
 }
 
-// ==================== CHECK-OUT v3 (warning si tiempo pendiente) ====================
+// ==================== CHECK-OUT ====================
 async function apiCheckOut(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -416,7 +456,6 @@ async function apiCheckOut(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'OCCUPIED') return err(res, 'Solo checkout si OCUPADA');
 
-  // v3: advertir si hay tiempo pagado pendiente
   const dueMs = Number(room.due_ms || 0);
   if (!force && dueMs > now) {
     const minsLeft = Math.round((dueMs - now) / 60000);
@@ -432,6 +471,7 @@ async function apiCheckOut(p, res) {
     pay_method: '',
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
+
   await supabase.from('state_history').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, room_id: roomId,
@@ -442,7 +482,7 @@ async function apiCheckOut(p, res) {
   return ok(res, { roomId, checkoutMs: now });
 }
 
-// ==================== EXTENDER TIEMPO (horas sueltas) ====================
+// ==================== EXTENDER TIEMPO ====================
 async function apiExtendTime(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -458,6 +498,7 @@ async function apiExtendTime(p, res) {
   const extraCost = extraHrs * Number(cfg.extraHour || 0);
   const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
+  const note = String(p.note || '').trim();
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await supabase.from('sales').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
@@ -465,11 +506,13 @@ async function apiExtendTime(p, res) {
     room_id: roomId, category: room.category, duration_hrs: extraHrs,
     base_price: extraCost, people: Number(room.people || 0),
     extra_hours: extraHrs, extra_hours_value: extraCost, total: extraCost,
-    pay_method: payMethod, check_in_ms: Number(room.check_in_ms || 0), due_ms: newDueMs
+    pay_method: payMethod, check_in_ms: Number(room.check_in_ms || 0), due_ms: newDueMs,
+    note: note
   });
   await openCashDrawer();
   return ok(res, { roomId, extraCost, newDueMs });
 }
+
 async function apiHoraGratis(p, res) {
   const now = Date.now();
   const roomId = String(p.roomId || '').trim();
@@ -480,7 +523,7 @@ async function apiHoraGratis(p, res) {
   const { data: existing } = await supabase.from('sales')
     .select('id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
     .gte('check_in_ms', checkInMs).limit(1);
-  if(existing && existing.length) return err(res, 'Ya se obsequió la hora gratis para esta habitación');
+  if(existing && existing.length) return err(res, 'Ya se obsequio la hora gratis para esta habitacion');
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const userName = String(p.userName || '').trim();
@@ -489,7 +532,8 @@ async function apiHoraGratis(p, res) {
   await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
   return ok(res, { roomId, newDueMs });
 }
-// ==================== RENOVAR TIEMPO (bloque completo) ====================
+
+// ==================== RENOVAR TIEMPO ====================
 async function apiRenewTime(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -544,7 +588,6 @@ async function apiMaidTake(p, res) {
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED' && !room.retoque) return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
-  // Si es retoque, habilitar directamente
   if(room.retoque){
     await supabase.from('rooms').update({retoque:false,state:'AVAILABLE',state_since_ms:now,updated_at:new Date().toISOString()}).eq('room_id',roomId);
     return ok(res,{roomId,maidName,startedMs:now,retoque:true});
@@ -553,7 +596,7 @@ async function apiMaidTake(p, res) {
   await supabase.from('maid_log').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: roomId,
-   action: 'START', state: room.state, note: '',
+    action: 'START', state: room.state, note: '',
     started_ms: now, finished_ms: 0,
     state_from: room.state, state_to: '',
     check_in_ms: Number(room.check_in_ms || 0),
@@ -583,7 +626,6 @@ async function apiMaidFinish(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED') return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
 
-  // Buscar registro START activo (finished_ms = 0) para esta camarera y habitacion
   const { data: openLog } = await supabase.from('maid_log')
     .select('id, started_ms, ts_ms')
     .eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay)
@@ -591,13 +633,11 @@ async function apiMaidFinish(p, res) {
     .order('ts_ms', { ascending: false }).limit(1);
 
   let startedMs = openLog && openLog.length ? Number(openLog[0].started_ms || openLog[0].ts_ms) : now;
-
   const lastCheckoutMs = Number(room.last_checkout_ms || 0);
   const dirtyMins = lastCheckoutMs ? Math.max(0, Math.round((now - lastCheckoutMs) / 60000)) : 0;
   const cleanMins = Math.max(0, Math.round((now - startedMs) / 60000));
-  const contaminatedSinceMs = resultState === 'CONTAMINATED' ? now : 0;
 
-await supabase.from('rooms').update({
+  await supabase.from('rooms').update({
     state: resultState, state_since_ms: now,
     last_maid_name: maidName, last_maid_done_ms: now,
     contaminated_since_ms: resultState === 'CONTAMINATED' ? now : 0,
@@ -606,6 +646,7 @@ await supabase.from('rooms').update({
     retoque: false,
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
+
   await supabase.from('state_history').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'MAID', user_name: maidName, room_id: roomId,
@@ -613,11 +654,8 @@ await supabase.from('rooms').update({
     meta_json: JSON.stringify({ maidName, lastCheckoutMs, startedMs, finishedMs: now, dirtyMins, cleanMins, contaminated: resultState === 'CONTAMINATED' })
   });
 
-  // Actualizar el registro START con finished_ms o insertar nuevo registro FINISH
- if (openLog && openLog.length) {
-    if(resultState === 'CONTAMINATED'){
-      // No cerrar el log — la habitacion sigue en proceso
-    } else {
+  if (openLog && openLog.length) {
+    if(resultState !== 'CONTAMINATED'){
       await supabase.from('maid_log').update({
         action: 'FINISH', finished_ms: now, state_to: resultState,
         note: p.note || ''
@@ -680,8 +718,6 @@ async function apiGetMaidLog(p, res) {
 }
 
 // ==================== ACCIONES HABITACION ====================
-
-
 async function apiClearContaminated(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -692,20 +728,19 @@ async function apiClearContaminated(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'CONTAMINATED') return err(res, 'Solo si CONTAMINADA');
 
- await supabase.from('rooms').update({ 
-    state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0, 
-    maid_in_progress: false, maid_name_progress: '', 
-    updated_at: new Date().toISOString() 
+  await supabase.from('rooms').update({
+    state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0,
+    maid_in_progress: false, maid_name_progress: '',
+    updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({ 
-    ts_ms: now, business_day: bDay, shift_id: shift, 
-    user_role: p.userRole||'RECEPTION', user_name: userName, room_id: roomId, 
-    from_state: 'CONTAMINATED', to_state: 'AVAILABLE', people: 0, 
-    meta_json: JSON.stringify({action:'clearContaminated', maidName: userName}) 
+  await supabase.from('state_history').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: p.userRole||'RECEPTION', user_name: userName, room_id: roomId,
+    from_state: 'CONTAMINATED', to_state: 'AVAILABLE', people: 0,
+    meta_json: JSON.stringify({action:'clearContaminated', maidName: userName})
   });
 
-  // Buscar log abierto y cerrarlo
   const { data: openLog } = await supabase.from('maid_log')
     .select('id, started_ms')
     .eq('room_id', roomId).eq('business_day', bDay)
@@ -714,12 +749,12 @@ async function apiClearContaminated(p, res) {
 
   if (openLog && openLog.length) {
     await supabase.from('maid_log').update({
-        action: 'FINISH', finished_ms: now, state_to: 'AVAILABLE',
-        note: p.note || '',
-        check_in_ms: Number(room.check_in_ms || 0),
-        checkout_ms: Number(room.last_checkout_ms || 0),
-        category: String(room.category || '')
-      }).eq('id', openLog[0].id);
+      action: 'FINISH', finished_ms: now, state_to: 'AVAILABLE',
+      note: p.note || '',
+      check_in_ms: Number(room.check_in_ms || 0),
+      checkout_ms: Number(room.last_checkout_ms || 0),
+      category: String(room.category || '')
+    }).eq('id', openLog[0].id);
   } else {
     await supabase.from('maid_log').insert({
       ts_ms: now, business_day: bDay, shift_id: shift,
@@ -727,16 +762,15 @@ async function apiClearContaminated(p, res) {
       action: 'FINISH', state: 'AVAILABLE', note: '',
       started_ms: now, finished_ms: now,
       state_from: 'CONTAMINATED', state_to: 'AVAILABLE',
-        check_in_ms: Number(room.check_in_ms || 0),
-        checkout_ms: Number(room.last_checkout_ms || 0),
-        category: String(room.category || '')
+      check_in_ms: Number(room.check_in_ms || 0),
+      checkout_ms: Number(room.last_checkout_ms || 0),
+      category: String(room.category || '')
     });
   }
 
   return ok(res, { roomId });
 }
 
-// v3: RECEPTION puede bloquear, solo ADMIN puede desbloquear
 async function apiSetMinorNote(p, res) {
   const roomId = String(p.roomId || '').trim();
   const enabled = !!p.enabled;
@@ -750,10 +784,10 @@ async function apiSetMinorNote(p, res) {
   }).eq('room_id', roomId);
   return ok(res, { roomId, noteMinor: enabled });
 }
+
 async function apiSetDisabled(p, res) {
   const userRole = String(p.userRole || '').toUpperCase();
   const disableFlag = !!p.enabled;
- 
   if (userRole !== 'ADMIN' && userRole !== 'RECEPTION') return err(res, 'Solo ADMIN o RECEPTION');
   const now = Date.now();
   const bDay = businessDay(now);
@@ -768,6 +802,7 @@ async function apiSetDisabled(p, res) {
   return ok(res, { roomId, disabled: disableFlag });
 }
 
+// ITEM 9: Devolucion - descuenta solo el monto indicado
 async function apiRefund(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -778,8 +813,17 @@ async function apiRefund(p, res) {
   const reason = String(p.refundReason || '').trim();
   if (reason.length < 3) return err(res, 'Motivo obligatorio');
   const room = await getRoom(roomId);
-  await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'REFUND', room_id: roomId, category: room ? room.category : '', total: -amount, refund_reason: reason, pay_method: 'EFECTIVO' });
-  return ok(res, { roomId, total: -amount });
+  // Insertar devolucion como venta negativa - se descuenta del cuadre automaticamente
+  await supabase.from('sales').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
+    room_id: roomId, category: room ? room.category : '',
+    total: -amount, // negativo para que se reste del total
+    refund_reason: reason,
+    pay_method: 'EFECTIVO',
+    check_in_ms: room ? Number(room.check_in_ms || 0) : 0
+  });
+  return ok(res, { roomId, total: -amount, amount });
 }
 
 async function apiTaxi(p, res) {
@@ -787,8 +831,22 @@ async function apiTaxi(p, res) {
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
-  await supabase.from('taxi_expenses').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: String(p.userName || ''), amount: 3000, note: 'Taxi fijo', room_id: roomId });
-  return ok(res, {});
+  const { data } = await supabase.from('taxi_expenses').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: String(p.userName || ''),
+    amount: 3000, note: 'Taxi fijo', room_id: roomId
+  }).select().single();
+  return ok(res, { id: data ? data.id : null });
+}
+
+// ITEM 7: Eliminar taxi
+async function apiDeleteTaxi(p, res) {
+  const userRole = String(p.userRole || '').toUpperCase();
+  if(userRole !== 'RECEPTION' && userRole !== 'ADMIN') return err(res, 'Sin permiso');
+  const id = Number(p.id || 0);
+  if(!id) return err(res, 'id requerido');
+  await supabase.from('taxi_expenses').delete().eq('id', id);
+  return ok(res, { deleted: true });
 }
 
 // ==================== PRESTAMOS ====================
@@ -811,7 +869,6 @@ async function apiGetLoans(p, res) {
 }
 
 // ==================== PERSONAL EXTRA ====================
-// Sin campo de habitacion — solo nombre, turno, entrada, salida, pago
 async function apiRegisterExtra(p, res) {
   const now = Date.now();
   const bDay = String(p.businessDay || businessDay(now));
@@ -831,6 +888,7 @@ async function apiRegisterExtra(p, res) {
   });
   return ok(res, { personName, area, shiftId: shift, businessDay: bDay, scheduledExitMs, workHours });
 }
+
 async function apiUpdateExtra(p, res) {
   const id = Number(p.id || 0);
   if (!id) return err(res, 'ID requerido');
@@ -848,13 +906,13 @@ async function apiUpdateExtra(p, res) {
   }).eq('id', id);
   return ok(res, { updated: true });
 }
+
 async function apiDeleteExtra(p, res) {
   const id = Number(p.id || 0);
   if (!id) return err(res, 'ID requerido');
   await supabase.from('extra_staff').delete().eq('id', id);
- return ok(res, { deleted: true });
+  return ok(res, { deleted: true });
 }
-
 
 async function apiCheckoutExtra(p, res) {
   const now = Date.now();
@@ -889,7 +947,7 @@ async function apiGetExtra(p, res) {
   });
 }
 
-// ==================== NOTAS v3 (historial permanente, borrado logico) ====================
+// ==================== NOTAS ====================
 async function apiReviewNote(p, res) {
   const noteId = Number(p.noteId || 0);
   const photoUrl = String(p.photoUrl || '');
@@ -903,15 +961,14 @@ async function apiReviewNote(p, res) {
   await supabase.from('shift_notes').update({photo_url: null}).eq('id', noteId);
   return ok(res, {});
 }
+
 async function apiAddNote(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
   const target = String(p.target || 'ALL').toUpperCase();
   let photoUrl = null;
-  if(p.photoUrl){
-    photoUrl = String(p.photoUrl);
-  }
+  if(p.photoUrl){ photoUrl = String(p.photoUrl); }
   await supabase.from('shift_notes').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: String(p.userRole || ''), user_name: String(p.userName || ''),
@@ -932,8 +989,9 @@ async function apiGetNotes(p, res) {
     userRole: r.user_role, userName: r.user_name, note: r.note,
     target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
     businessDay: r.business_day, photoUrl: r.photo_url || null
- })) });
+  })) });
 }
+
 async function apiMarkNoteSeen(p, res) {
   const noteId = Number(p.noteId || 0);
   const userRole = String(p.userRole || '').toUpperCase();
@@ -969,7 +1027,6 @@ async function apiGetAllNotes(p, res) {
   })) });
 }
 
-// v3: historial de notas de todos los dias
 async function apiGetNoteHistory(p, res) {
   const limit = Math.min(200, Number(p.limit || 100));
   const fromDate = String(p.fromDate || '');
@@ -979,28 +1036,35 @@ async function apiGetNoteHistory(p, res) {
   return ok(res, { notes: (data || []).map(r => ({ id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id, userRole: r.user_role, userName: r.user_name, note: r.note })) });
 }
 
-
-
 // ==================== CIERRE DE TURNO ====================
+// ITEM 2: Al cerrar con cuadre, marca released=true para liberar el siguiente turno
 async function apiCloseShift(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   const shift = String(p.shiftId||'').trim()||currentShiftId(now);
   const userName = String(p.userName || '');
-  // Marcar turno como cerrado para liberar el acceso
-  await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: 'LOGOUT', logout_ms: now });
-  // Buscar timestamp de login de este turno para filtrar solo ventas de esta sesión
+
+  // Marcar turno como cerrado Y liberado (released=true)
+  await supabase.from('shift_log').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName,
+    action: 'LOGOUT', logout_ms: now,
+    released: true // NUEVO: libera el turno siguiente
+  });
+
   const { data: loginLog } = await supabase.from('shift_log')
     .select('ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
     .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
     .order('ts_ms', { ascending: false }).limit(1);
   const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
+
   const [salesRes, taxiRes, loansRes, extraRes] = await Promise.all([
     supabase.from('sales').select('type,total,pay_method,people,room_id').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('loans').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('extra_staff').select('payment').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
+
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
   let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
 
@@ -1024,7 +1088,7 @@ async function apiCloseShift(p, res) {
     rooms_sold: roomsSold, people, cash_count: Number(p.cashCount||0),
     cash_billetes: Number(p.cashBilletes||0),
     cash_monedas: Number(p.cashMonedas||0),
-   notes: String(p.notes||''), total_efectivo: totalEfectivo,
+    notes: String(p.notes||''), total_efectivo: totalEfectivo,
     total_tarjeta: totalTarjeta, total_nequi: totalNequi
   });
 
@@ -1040,7 +1104,7 @@ async function apiCloseShift(p, res) {
   return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
 }
 
-// ==================== METRICAS v3 (filtrado REAL por turno) ====================
+// ==================== METRICAS ====================
 async function apiMetrics(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const shiftFilter = String(p.shiftId || '');
@@ -1056,16 +1120,13 @@ async function apiMetrics(p, res) {
     supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
     supabase.from('shift_close').select('shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
   ]);
+
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
   const dailyGoal=Number(settings.DAILY_GOAL||0);
-let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
+  let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
   let dayEfe=0,dayTar=0,dayNeq=0;
   let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
   const allSalesList=[];
-  // Reset explícito
-  dayTotal=0;dayRefunds=0;dayTaxi=0;dayBar=0;dayGastos=0;dayLoans=0;dayExtraStaff=0;
-  dayEfe=0;dayTar=0;dayNeq=0;
-  shiftSales=0;shiftRooms=0;shiftPeople=0;shiftEfe=0;shiftTar=0;shiftNeq=0;shiftTaxi=0;shiftBar=0;shiftGastos=0;
 
   (salesRes.data||[]).forEach(r=>{
     const t=Number(r.total||0),type=r.type,pm=String(r.pay_method||'').toUpperCase(),sid=r.shift_id;
@@ -1085,11 +1146,18 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
         }
       }
     }
-    if(type==='REFUND')dayRefunds+=t;
+    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;}
   });
+
   const taxiList=[];
-(taxiRes.data||[]).forEach(r=>{const a=Number(r.amount||0);dayTaxi+=a;if(!shiftFilter||(r.shift_id||'').toUpperCase()===shiftFilter)shiftTaxi+=a;taxiList.push({tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a,businessDay:r.business_day||''});});
- let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
+  (taxiRes.data||[]).forEach(r=>{
+    const a=Number(r.amount||0);
+    dayTaxi+=a;
+    if(!shiftFilter||(r.shift_id||'').toUpperCase()===shiftFilter)shiftTaxi+=a;
+    taxiList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a,businessDay:r.business_day||''});
+  });
+
+  let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=a;shiftBarEfe+=Number(r.amount_cash||0);shiftBarTar+=Number(r.amount_card||0);shiftBarNeq+=Number(r.amount_nequi||0);}});
   (loansRes.data||[]).forEach(r=>{dayLoans+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
@@ -1112,25 +1180,21 @@ let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraSt
     allSalesList:allSalesList.sort((a,b)=>a.tsMs-b.tsMs),
     taxiList,
     dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null,
-      shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—',
-  shiftClose:(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===(shiftFilter||'').toUpperCase()).map(r=>({cashCount:Number(r.cash_count||0),cashBilletes:Number(r.cash_billetes||0),cashMonedas:Number(r.cash_monedas||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0),tsMs:Number(r.ts_ms||0)}))[0]||null
+    shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—',
+    shiftClose:(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===(shiftFilter||'').toUpperCase()).map(r=>({cashCount:Number(r.cash_count||0),cashBilletes:Number(r.cash_billetes||0),cashMonedas:Number(r.cash_monedas||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0),tsMs:Number(r.ts_ms||0)}))[0]||null
   });
 }
 
-// ==================== METRICAS POR HORA (6AM->6AM) ====================
+// ==================== METRICAS POR HORA ====================
 async function apiMetricsHourly(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const { start, end } = businessDayRange(bDay);
-  const mode = String(p.mode || 'count'); // 'count' o 'sales'
-
   const { data } = await supabase.from('sales')
     .select('ts_ms, total, type')
     .eq('business_day', bDay)
     .in('type', ['SALE', 'EXTENSION', 'RENEWAL'])
     .order('ts_ms');
 
-  // Crear 24 buckets: hora 0 = 6AM, hora 23 = 5AM siguiente
-  // buckets[i] = { label: '6:00', hour: i, realHour: (6+i)%24, count: 0, sales: 0 }
   const buckets = [];
   for (let i = 0; i < 24; i++) {
     const realHour = (6 + i) % 24;
@@ -1141,7 +1205,6 @@ async function apiMetricsHourly(p, res) {
     const ms = Number(r.ts_ms || 0);
     if (ms < start || ms >= end) return;
     const realHour = new Date(ms).getHours();
-    // Convertir a bucket index: realHour 6->0, 7->1, ..., 5(next)->23
     const bucketIdx = realHour >= 6 ? realHour - 6 : realHour + 18;
     if (buckets[bucketIdx]) {
       buckets[bucketIdx].count++;
@@ -1149,8 +1212,9 @@ async function apiMetricsHourly(p, res) {
     }
   });
 
-  return ok(res, { businessDay: bDay, buckets, mode });
+  return ok(res, { businessDay: bDay, buckets });
 }
+
 async function apiMonthMetrics(p, res) {
   const ym = String(p.yearMonth || '');
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
@@ -1168,20 +1232,19 @@ async function apiMonthMetrics(p, res) {
   (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
     const nm=r.user_name||'?';
     if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};
-    recepMes[nm].habs++;
-    recepMes[nm].total+=Number(r.total||0);
+    recepMes[nm].habs++;recepMes[nm].total+=Number(r.total||0);
   });
   const recepRankingMes=Object.values(recepMes).sort((a,b)=>b.total-a.total);
   const maidMes={};
   (maidLogsMonth||[]).filter(r=>Number(r.finished_ms||0)>0&&r.state_to==='AVAILABLE').forEach(r=>{
     const nm=r.maid_name||'?';
     if(!maidMes[nm])maidMes[nm]={nombre:nm,habs:0,totalMins:0};
-    maidMes[nm].habs++;
-    maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);
+    maidMes[nm].habs++;maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);
   });
   const maidRankingMes=Object.values(maidMes).sort((a,b)=>b.habs-a.habs);
   return ok(res, { yearMonth: ym, monthTotals, days, recepRankingMes, maidRankingMes });
 }
+
 // ==================== PANEL CAMARERAS ====================
 async function apiMaidPanel(p, res) {
   const now = Date.now();
@@ -1229,7 +1292,6 @@ async function apiMaidPanel(p, res) {
 }
 
 // ==================== PERSONAL / CALENDARIO ====================
-// v3: ficha completa del trabajador
 async function apiGetStaff(p, res) {
   const { data } = await supabase.from('staff').select('*').order('area').order('name');
   return ok(res, { staff: (data||[]).map(r=>({
@@ -1260,23 +1322,23 @@ async function apiGetSchedule(p, res) {
   let query=supabase.from('schedule').select('*');
   if(ws)query=query.eq('week_start',ws);
   const{data}=await query.order('shift_id').order('area');
- return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',extraNombre:r.extra_nombre||'',extraTurno:r.extra_turno||''}))});;
+  return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',extraNombre:r.extra_nombre||'',extraTurno:r.extra_turno||''}))});
 }
+
 async function apiSaveSchedule(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo el administrador puede guardar el calendario');
   const ws=String(p.weekStart||'').trim(),entries=p.entries||[];
   if(!ws)return err(res,'Semana requerida');
   const mesPrefix=ws.substring(0,7);
-  const existingRes=await supabase.from('schedule').select('id,area,person_name,day_of_week,type');const existing=existingRes.data||[];
+  const existingRes=await supabase.from('schedule').select('id,area,person_name,day_of_week,type');
+  const existing=existingRes.data||[];
   const personasEnEntradas=[...new Set(entries.map(function(e){return e.area+'|'+e.personName;}))];
   const toDelete=(existing||[]).filter(function(r){
     if(!String(r.day_of_week||'').startsWith(mesPrefix))return false;
-  if(String(r.type||'').startsWith('extra')||String(r.type||'')==='extra_day')return false;
+    if(String(r.type||'').startsWith('extra')||String(r.type||'')==='extra_day')return false;
     return personasEnEntradas.indexOf(r.area+'|'+r.person_name)>=0;
   }).map(function(r){return r.id;});
-  if(toDelete.length>0){
-    await supabase.from('schedule').delete().in('id',toDelete);
-  }
+  if(toDelete.length>0){await supabase.from('schedule').delete().in('id',toDelete);}
   if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal'),hora_entrada:String(e.horaEntrada||''),hora_salida:String(e.horaSalida||''),extra_nombre:String(e.extraNombre||''),extra_turno:String(e.extraTurno||'')}));
     await supabase.from('schedule').insert(rows);
@@ -1302,7 +1364,6 @@ async function apiSetGoal(p, res) {
   await supabase.from('settings').upsert({key:'DAILY_GOAL',value:String(goal)},{onConflict:'key'});
   return ok(res,{goal});
 }
-
 async function apiSetPin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const targetName=String(p.targetName||'').trim(),pin=String(p.pin||'').trim();
@@ -1310,7 +1371,6 @@ async function apiSetPin(p, res) {
   await supabase.from('reception_pins').upsert({user_name:targetName,pin,updated_at:new Date().toISOString()},{onConflict:'user_name'});
   return ok(res,{});
 }
-
 async function apiDeletePin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const targetName=String(p.targetName||'').trim();
@@ -1318,13 +1378,11 @@ async function apiDeletePin(p, res) {
   await supabase.from('reception_pins').delete().eq('user_name',targetName);
   return ok(res,{});
 }
-
 async function apiGetPins(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const{data}=await supabase.from('reception_pins').select('user_name, pin');
   return ok(res,{pins:(data||[]).map(r=>({userName:r.user_name,hasPin:!!String(r.pin||'').trim()}))});
 }
-
 async function apiChangeAdminPin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const cur=String(p.currentPin||''),nw=String(p.newPin||'');
@@ -1348,12 +1406,11 @@ async function apiRoomHistory(p, res) {
     roomId,
     stateHistory:(stateRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,fromState:r.from_state,toState:r.to_state,userName:r.user_name,meta:(()=>{try{return JSON.parse(r.meta_json||'{}');}catch(e){return{};}})()})),
     salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)})),
-    taxiHistory:(taxiRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),amount:Number(r.amount||0)}))
+    taxiHistory:(taxiRes.data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),amount:Number(r.amount||0)}))
   });
 }
 
-// ==================== NUEVOS v3 ====================
-
+// ==================== BAR / GASTOS ====================
 async function apiAddBarSale(p, res) {
   const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
   const userRole=String(p.userRole||'').toUpperCase();
@@ -1363,18 +1420,16 @@ async function apiAddBarSale(p, res) {
   await supabase.from('bar_sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,amount_nequi:nequi,total:cash+card+nequi});
   return ok(res,{tsMs:now,total:cash+card+nequi,shiftId:shift});
 }
-
 async function apiGetBarSales(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   const shiftFilter=String(p.shiftId||'');
   let q=supabase.from('bar_sales').select('*').eq('business_day',bDay).order('ts_ms');
   if(shiftFilter)q=q.eq('shift_id',shiftFilter);
   const{data}=await q;
- const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amountCash:Number(r.amount_cash||0),amountCard:Number(r.amount_card||0),amountNequi:Number(r.amount_nequi||0),total:Number(r.total||0)}));
+  const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amountCash:Number(r.amount_cash||0),amountCard:Number(r.amount_card||0),amountNequi:Number(r.amount_nequi||0),total:Number(r.total||0)}));
   const totals=list.reduce((acc,r)=>({cash:acc.cash+r.amountCash,card:acc.card+r.amountCard,nequi:acc.nequi+r.amountNequi,total:acc.total+r.total}),{cash:0,card:0,nequi:0,total:0});
   return ok(res,{sales:list,totals});
 }
-
 async function apiAddGeneralExpense(p, res) {
   const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
   const userRole=String(p.userRole||'').toUpperCase();
@@ -1385,7 +1440,6 @@ async function apiAddGeneralExpense(p, res) {
   await supabase.from('general_expenses').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:desc,amount,category:String(p.category||'Otro').trim()});
   return ok(res,{tsMs:now,amount,shiftId:shift});
 }
-
 async function apiGetGeneralExpenses(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   const shiftFilter=String(p.shiftId||'');
@@ -1398,12 +1452,11 @@ async function apiGetGeneralExpenses(p, res) {
 
 async function apiGetDailyCuadre(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
-  // Por defecto: ayer (business day anterior)
   const defaultDay=businessDay(Date.now()-86400000);
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id').eq('business_day',bDay),
+    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3').eq('business_day',bDay),
     supabase.from('taxi_expenses').select('amount,shift_id').eq('business_day',bDay),
     supabase.from('extra_staff').select('payment,shift_id').eq('business_day',bDay),
     supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
@@ -1428,11 +1481,12 @@ async function apiGetDailyCuadre(p, res) {
       else if(pm==='MIXTO'){c[sid].efectivoHab+=Number(r.amount_1||0);c[sid].tarjetaHab+=Number(r.amount_2||0);c[sid].nequiHab=(c[sid].nequiHab||0)+Number(r.amount_3||0);}
       else{c[sid].efectivoHab+=habVal;c[sid].efectivoPersonas+=epv;}
     }
-   if(r.type==='EXTENSION'||r.type==='RENEWAL'){
+    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
       if(pm==='TARJETA')c[sid].tarjetaHoras+=t;
       else if(pm==='MIXTO'){c[sid].efectivoHoras+=Number(r.amount_1||0);c[sid].tarjetaHoras+=Number(r.amount_2||0);}
       else c[sid].efectivoHoras+=t;
     }
+    if(r.type==='REFUND'){c[sid].efectivoHab+=t;} // negativo, se resta automaticamente
   });
   (barRes.data||[]).forEach(r=>{const sid=r.shift_id;if(!c[sid])return;c[sid].tarjetaBar+=Number(r.amount_card||0);c[sid].efectivoBar+=Number(r.amount_cash||0);c[sid].nequiBar+=Number(r.amount_nequi||0);});
   (taxiRes.data||[]).forEach(r=>{const sid=r.shift_id;if(c[sid])c[sid].taxis+=Number(r.amount||0);});
@@ -1468,6 +1522,8 @@ async function apiAddExtraPerson(p, res) {
   await supabase.from('sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
   return ok(res,{roomId,newPeople,extraPersonCost:cost});
 }
+
+// ITEM 8: Cambio de habitacion - transfiere venta original a nueva habitacion
 async function apiRoomChange(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
@@ -1485,7 +1541,6 @@ async function apiRoomChange(p, res) {
   if(fromRoom.state !== 'OCCUPIED') return err(res, 'Habitacion origen no esta ocupada');
   if(toRoom.state !== 'AVAILABLE') return err(res, 'Habitacion destino no esta disponible');
 
-  // Calcular diferencia de precio
   const fromCfg = MASTER_PRICING[fromRoom.category] || MASTER_PRICING['Junior'];
   const toCfg = MASTER_PRICING[toRoom.category] || MASTER_PRICING['Junior'];
   const durationHrs = Number(p.durationHrs || 3);
@@ -1509,52 +1564,73 @@ async function apiRoomChange(p, res) {
     state: 'AVAILABLE', retoque: true, state_since_ms: now,
     people: 0, due_ms: 0, last_checkout_ms: now,
     arrival_type: '', arrival_plate: '',
-    checkout_obs: 'CAMBIO DE HABITACION a '+toRoomId,
+    checkout_obs: 'CAMBIO DE HABITACION a ' + toRoomId,
     updated_at: new Date().toISOString()
   }).eq('room_id', fromRoomId);
 
-  // Check-in en habitacion destino
-  const newDueMs = now + durationHrs * 3600000;
+  // Check-in en habitacion destino con mismo tiempo que tenia la original
+  const originalCheckInMs = Number(fromRoom.check_in_ms || now);
+  const originalDueMs = Number(fromRoom.due_ms || (now + durationHrs * 3600000));
+
   await supabase.from('rooms').update({
     state: 'OCCUPIED', state_since_ms: now, people,
-    check_in_ms: now, due_ms: newDueMs,
+    check_in_ms: originalCheckInMs, due_ms: originalDueMs,
     arrival_type: fromRoom.arrival_type || 'WALK',
     arrival_plate: fromRoom.arrival_plate || '',
     alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
     checkout_obs: '', contaminated_since_ms: 0,
+    pay_method: fromRoom.payMethod || payMethod,
     updated_at: new Date().toISOString()
   }).eq('room_id', toRoomId);
 
-  // Registrar diferencia si la hay
+  // ITEM 8: Transferir la venta original de fromRoom a toRoom
+  // Buscar la venta original de esta estadia
+  const { data: originalSale } = await supabase.from('sales')
+    .select('id')
+    .eq('room_id', fromRoomId)
+    .eq('type', 'SALE')
+    .eq('check_in_ms', originalCheckInMs)
+    .limit(1);
+
+  if(originalSale && originalSale.length) {
+    // Actualizar la venta original para que apunte a la nueva habitacion
+    await supabase.from('sales').update({
+      room_id: toRoomId,
+      category: toRoom.category
+    }).eq('id', originalSale[0].id);
+  }
+
+  // Registrar diferencia de precio si la hay
   if(diff > 0) {
     await supabase.from('sales').insert({
       ts_ms: now, business_day: bDay, shift_id: shift,
       user_role: 'RECEPTION', user_name: userName, type: 'SALE',
       room_id: toRoomId, category: toRoom.category, duration_hrs: durationHrs,
       base_price: diff, people, total: diff,
-      pay_method: payMethod, check_in_ms: now, due_ms: newDueMs,
+      pay_method: payMethod, check_in_ms: originalCheckInMs, due_ms: originalDueMs,
       arrival_type: fromRoom.arrival_type||'WALK'
     });
   } else if(diff < 0) {
     await supabase.from('sales').insert({
       ts_ms: now, business_day: bDay, shift_id: shift,
       user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
-      room_id: fromRoomId, category: fromRoom.category, total: diff,
-      pay_method: payMethod, refund_reason: 'CAMBIO DE HABITACION a '+toRoomId
+      room_id: toRoomId, category: fromRoom.category, total: diff,
+      pay_method: payMethod, refund_reason: 'CAMBIO DE HABITACION de ' + fromRoomId
     });
   }
 
-  return ok(res, { fromRoomId, toRoomId, diff, newDueMs });
+  return ok(res, { fromRoomId, toRoomId, diff, newDueMs: originalDueMs });
 }
+
 async function apiUpdatePayMethod(p, res) {
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
   const roomId=String(p.roomId||'').trim();
   const payMethod=String(p.payMethod||'EFECTIVO').toUpperCase();
-  if(!['EFECTIVO','TARJETA','NEQUI'].includes(payMethod))return err(res,'Método de pago inválido');
+  if(!['EFECTIVO','TARJETA','NEQUI'].includes(payMethod))return err(res,'Metodo de pago invalido');
   const room=await getRoom(roomId);
   if(!room)return err(res,'Habitacion no existe');
-  if(room.state!=='OCCUPIED')return err(res,'Solo se puede cambiar en habitación ocupada');
+  if(room.state!=='OCCUPIED')return err(res,'Solo se puede cambiar en habitacion ocupada');
   const now=Date.now();
   const bDay=businessDay(now);
   const shift=currentShiftId(now);
@@ -1563,6 +1639,7 @@ async function apiUpdatePayMethod(p, res) {
   await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,payMethod});
 }
+
 async function apiUpdateArrivalPlate(p, res) {
   const roomId=String(p.roomId||'').trim(),plate=String(p.plate||'').toUpperCase().trim();
   const arrivalType=String(p.arrivalType||'').toUpperCase().trim();
@@ -1576,6 +1653,8 @@ async function apiUpdateArrivalPlate(p, res) {
   await supabase.from('rooms').update(updates).eq('room_id',roomId);
   return ok(res,{roomId,plate,arrivalType});
 }
+
+// ==================== MANTENIMIENTO ====================
 async function apiGetMaintHistory(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
   const from=String(p.from||'');
@@ -1589,18 +1668,69 @@ async function apiGetMaintHistory(p, res) {
     userName:r.user_name||'', userRole:r.user_role||''
   }))});
 }
+async function apiClearMaintHistory(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const from=String(p.from||'');
+  const to=String(p.to||'');
+  if(!from||!to) return err(res,'Fechas requeridas');
+  await supabase.from('maintenance').delete().gte('business_day',from).lte('business_day',to);
+  return ok(res,{});
+}
+
+// ==================== ROOM ISSUES ====================
+async function apiGetRoomIssues(p, res) {
+  const roomId=String(p.roomId||'').trim();
+  const{data}=await supabase.from('room_issues').select('*').eq('room_id',roomId).order('created_at',{ascending:false});
+  return ok(res,{issues:(data||[]).map(r=>({id:r.id,roomId:r.room_id,type:r.type,description:r.description,resolved:!!r.resolved,resolvedAt:r.resolved_at||'',resolvedBy:r.resolved_by||'',createdAt:r.created_at||'',createdBy:r.created_by||''}))});
+}
+async function apiAddRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const roomId=String(p.roomId||'').trim();
+  const type=String(p.type||'dano').trim();
+  const description=String(p.description||'').trim();
+  if(!roomId)return err(res,'roomId requerido');
+  if(!description)return err(res,'Descripcion requerida');
+  await supabase.from('room_issues').insert({room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
+  return ok(res,{});
+}
+async function apiEditRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const id=Number(p.id||0);
+  const description=String(p.description||'').trim();
+  if(!id)return err(res,'id requerido');
+  if(!description)return err(res,'Descripcion requerida');
+  await supabase.from('room_issues').update({description}).eq('id',id);
+  return ok(res,{});
+}
+async function apiResolveRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
+  const id=Number(p.id||0);
+  if(!id)return err(res,'id requerido');
+  const hoy=new Date().toISOString().split('T')[0];
+  await supabase.from('room_issues').update({resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
+  return ok(res,{});
+}
+async function apiDeleteRoomIssue(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id=Number(p.id||0);
+  if(!id)return err(res,'id requerido');
+  await supabase.from('room_issues').delete().eq('id',id);
+  return ok(res,{});
+}
+
+// ==================== PROYECCION ====================
 async function apiGetProyeccion(p, res) {
   try {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const anio=Number(p.anio||new Date().getFullYear());
-  const[tareasRes,mesesRes]=await Promise.all([
-   supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes',{ascending:true}),
-    supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
-  ]);
-  return ok(res,{
-    tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||'',fechaEstado:r.fecha_estado||''})),
-    meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0),gastosAnterior:Number(r.gastos_anterior||0)}))
- });
+    if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+    const anio=Number(p.anio||new Date().getFullYear());
+    const[tareasRes,mesesRes]=await Promise.all([
+      supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes',{ascending:true}),
+      supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
+    ]);
+    return ok(res,{
+      tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||'',fechaEstado:r.fecha_estado||''})),
+      meses:(mesesRes.data||[]).map(r=>({id:r.id,anio:r.anio,mes:r.mes,meta:Number(r.meta||0),presupuesto:Number(r.presupuesto||0),observaciones:r.observaciones||'',ventasAnterior:Number(r.ventas_anterior||0),ventasActual:Number(r.ventas_actual||0),gastos:Number(r.gastos||0),gastosAnterior:Number(r.gastos_anterior||0)}))
+    });
   } catch(e) { return err(res, 'Error proyeccion: '+e.message); }
 }
 async function apiSaveTarea(p, res) {
@@ -1648,67 +1778,43 @@ async function apiSaveMesProyeccion(p, res) {
   },{onConflict:'anio,mes'});
   return ok(res,{anio,mes});
 }
-async function apiGetRoomIssues(p, res) {
-  const roomId=String(p.roomId||'').trim();
-  const{data}=await supabase.from('room_issues').select('*').eq('room_id',roomId).order('created_at',{ascending:false});
-  return ok(res,{issues:(data||[]).map(r=>({id:r.id,roomId:r.room_id,type:r.type,description:r.description,resolved:!!r.resolved,resolvedAt:r.resolved_at||'',resolvedBy:r.resolved_by||'',createdAt:r.created_at||'',createdBy:r.created_by||''}))});
-}
-async function apiAddRoomIssue(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
-  const roomId=String(p.roomId||'').trim();
-  const type=String(p.type||'dano').trim();
-  const description=String(p.description||'').trim();
-  if(!roomId)return err(res,'roomId requerido');
-  if(!description)return err(res,'Descripcion requerida');
-  await supabase.from('room_issues').insert({room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
-  return ok(res,{});
-}
-async function apiEditRoomIssue(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
-  const id=Number(p.id||0);
-  const description=String(p.description||'').trim();
-  if(!id)return err(res,'id requerido');
-  if(!description)return err(res,'Descripcion requerida');
-  await supabase.from('room_issues').update({description}).eq('id',id);
-  return ok(res,{});
-}
-async function apiResolveRoomIssue(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN'&&String(p.userRole||'').toUpperCase()!=='RECEPTION') return err(res,'Solo ADMIN o RECEPTION');
-  const id=Number(p.id||0);
-  if(!id)return err(res,'id requerido');
-  const hoy=new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
-  return ok(res,{});
-}
-async function apiDeleteRoomIssue(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const id=Number(p.id||0);
-  if(!id)return err(res,'id requerido');
-  await supabase.from('room_issues').delete().eq('id',id);
-  return ok(res,{});
-}
-async function apiClearMaintHistory(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const from=String(p.from||'');
-  const to=String(p.to||'');
-  if(!from||!to) return err(res,'Fechas requeridas');
-  await supabase.from('maintenance').delete().gte('business_day',from).lte('business_day',to);
-  return ok(res,{});
-}
+
+// ==================== MAID LOG ====================
 async function apiClearMaidLog(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const bDay=String(p.businessDay||businessDay(Date.now()));
   await supabase.from('maid_log').delete().eq('business_day',bDay);
   return ok(res,{businessDay:bDay});
 }
+async function apiMaidCancel(p, res) {
+  const now=Date.now();
+  const bDay=businessDay(now);
+  const roomId=String(p.roomId||'').trim();
+  const maidName=String(p.maidName||p.userName||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  const room=await getRoom(roomId);
+  if(!room) return err(res,'Habitacion no existe');
+  await supabase.from('maid_log')
+    .delete()
+    .eq('maid_name',maidName).eq('room_id',roomId)
+    .eq('business_day',bDay).eq('action','START').eq('finished_ms',0);
+  await supabase.from('rooms').update({
+    maid_in_progress:false,
+    maid_name_progress:'',
+    state: room.state==='CONTAMINATED'?'DIRTY':room.state,
+    contaminated_since_ms: 0,
+    updated_at:new Date().toISOString()
+  }).eq('room_id',roomId);
+  return ok(res,{roomId,cancelled:true});
+}
 
+// ==================== CALENDARIO EXTRAS ====================
 async function apiGetExtras(p, res) {
   const mes=String(p.mes||'').trim();
   if(!mes) return err(res,'mes requerido');
   const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
- return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||''}))});
+  return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||''}))});
 }
-
 async function apiSaveExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
@@ -1721,20 +1827,18 @@ async function apiSaveExtra(p, res) {
   const vacInicio=String(p.vacInicio||'').trim();
   const vacFin=String(p.vacFin||'').trim();
   if(!fecha||!area||!nombre) return err(res,'Datos incompletos');
-  // Verificar limite por area
   if(!id){
     const limite=area==='Camareria'?4:area==='Patio'?2:10;
     const{data:existing}=await supabase.from('schedule_extras').select('id').eq('fecha',fecha).eq('area',area);
-    if(existing&&existing.length>=limite) return err(res,'Límite de extras alcanzado para este día ('+limite+')');
+    if(existing&&existing.length>=limite) return err(res,'Limite de extras alcanzado para este dia ('+limite+')');
   }
   if(id){
-   await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
+    await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
   } else {
     await supabase.from('schedule_extras').insert({fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')});
   }
   return ok(res,{ok:true});
 }
-
 async function apiDeleteScheduleExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
@@ -1742,26 +1846,39 @@ async function apiDeleteScheduleExtra(p, res) {
   await supabase.from('schedule_extras').delete().eq('id',id);
   return ok(res,{ok:true});
 }
-async function apiMaidCancel(p, res) {
+
+// ITEM 10: Fallas de recepcionistas
+async function apiSaveShiftFailure(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const now=Date.now();
-  const bDay=businessDay(now);
-  const roomId=String(p.roomId||'').trim();
-  const maidName=String(p.maidName||p.userName||'').trim();
-  if(!roomId) return err(res,'roomId requerido');
-  const room=await getRoom(roomId);
-  if(!room) return err(res,'Habitacion no existe');
-  // Borrar registro START abierto
-  await supabase.from('maid_log')
-    .delete()
-    .eq('maid_name',maidName).eq('room_id',roomId)
-    .eq('business_day',bDay).eq('action','START').eq('finished_ms',0);
-  // Quitar en proceso de la habitacion
-  await supabase.from('rooms').update({
-    maid_in_progress:false,
-    maid_name_progress:'',
-    state: room.state==='CONTAMINATED'?'DIRTY':room.state,
-    contaminated_since_ms: 0,
-    updated_at:new Date().toISOString()
-  }).eq('room_id',roomId);
-  return ok(res,{roomId,cancelled:true});
+  const bDay=String(p.businessDay||businessDay(now));
+  const shiftId=String(p.shiftId||'');
+  const userName=String(p.userName||'').trim();
+  const failures=p.failures||[];
+  if(!userName) return err(res,'userName requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  await supabase.from('shift_failures').insert({
+    ts_ms:now, business_day:bDay, shift_id:shiftId,
+    user_name:userName, failures:JSON.stringify(failures),
+    created_by:String(p.createdBy||'ADMIN')
+  });
+  return ok(res,{saved:true});
+}
+async function apiGetShiftFailures(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const yearMonth=String(p.yearMonth||'');
+  let query=supabase.from('shift_failures').select('*').order('ts_ms',{ascending:false});
+  if(yearMonth) query=query.like('business_day',yearMonth+'%');
+  const{data}=await query.limit(200);
+  // Agrupar por recepcionista
+  const byUser={};
+  (data||[]).forEach(r=>{
+    const nm=r.user_name||'?';
+    if(!byUser[nm])byUser[nm]={nombre:nm,totalFallas:0,detalle:[]};
+    const fallas=JSON.parse(r.failures||'[]');
+    byUser[nm].totalFallas+=fallas.length;
+    byUser[nm].detalle.push({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id,failures:fallas,createdBy:r.created_by||''});
+  });
+  const ranking=Object.values(byUser).sort((a,b)=>b.totalFallas-a.totalFallas);
+  return ok(res,{ranking,raw:(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id,userName:r.user_name,failures:JSON.parse(r.failures||'[]'),createdBy:r.created_by||''}))});
 }
