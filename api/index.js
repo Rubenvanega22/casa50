@@ -344,22 +344,22 @@ async function apiLogin(p, res) {
 }
 
 // ==================== CHECK-IN ====================
-var drawerPending=false;
 async function apiOpenDrawer(p, res) {
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Sin permiso');
-  drawerPending=true;
+  await supabase.from('settings').upsert({key:'DRAWER_PENDING',value:'true'});
   return ok(res,{opened:true});
 }
 async function apiDrawerPoll(p,res){
-  return ok(res,{open:drawerPending});
+  const {data}=await supabase.from('settings').select('value').eq('key','DRAWER_PENDING').single();
+  return ok(res,{open:(data&&data.value==='true')});
 }
 async function apiDrawerAck(p,res){
-  drawerPending=false;
+  await supabase.from('settings').upsert({key:'DRAWER_PENDING',value:'false'});
   return ok(res,{ack:true});
 }
 async function openCashDrawer() {
-  drawerPending=true;
+  await supabase.from('settings').upsert({key:'DRAWER_PENDING',value:'true'});
 }
 
 async function apiCheckIn(p, res) {
