@@ -2125,86 +2125,19 @@ h+='</div></div>';
     }
     h+='<div class="sec">Cierre de Turno</div><label>Efectivo en billetes</label><input type="number" id="cashBilletes" placeholder="Total en billetes" min="0" oninput="calcFaltante()"><label>Efectivo en monedas</label><input type="number" id="cashMonedas" placeholder="Total en monedas" min="0" oninput="calcFaltante()"><input type="hidden" id="cashIn2"><input type="hidden" id="_esperadoEfectivo" value="0"><div id="faltanteBox" style="display:none;margin-top:8px;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:500"></div><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
     h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div></div>';
-    function printC(){
-  if(window._cuadrePrintData){
-    window._cuadrePrintData.billetes=Number((document.getElementById('cashBilletes')||{}).value||0);
-    window._cuadrePrintData.monedas=Number((document.getElementById('cashMonedas')||{}).value||0);
-    window._cuadrePrintData.notas=(document.getElementById('closeN2')||{}).value||'';
-  }
-  if(!window._cuadrePrintData){toast('Carga el cuadre primero.','err');return;}
-  var d=window._cuadrePrintData;
-  var sn={SHIFT_1:'T1 (6am-2pm)',SHIFT_2:'T2 (2pm-9pm)',SHIFT_3:'T3 (9pm-6am)'};
-  function fmtP(n){return '$'+Number(n||0).toLocaleString('es-CO');}
-  function row(left,right){var sp=Math.max(1,32-left.length-String(right).length);return '<div>'+left+' '.repeat(sp)+right+'</div>';}
-  var h='';
-  h+='<div style="text-align:center;font-weight:900;font-size:13px">CASA 50 - SPA MOTEL</div>';
-  h+='<div style="text-align:center">================================</div>';
-  h+=row('Fecha:',d.businessDay);
-  h+=row('Turno:',(sn[d.shiftId]||d.shiftId));
-  h+=row('Recepc:',d.userName);
-  h+='<div>================================</div>';
-  var ventas=(d.sales||[]).filter(function(s){return s.type==='SALE';});
-  if(ventas.length){
-    h+='<div style="font-weight:700">VENTAS</div>';
-    h+='<div>--------------------------------</div>';
-    ventas.forEach(function(s,i){
-      var pm={EFECTIVO:'EF',TARJETA:'TA',NEQUI:'NQ',MIXTO:'MX'}[s.payMethod]||s.payMethod;
-      var left='#'+(i+1)+'  '+s.roomId+'  '+pm+'  '+s.durationHrs+'h';
-      h+=row(left,fmtP(s.total));
-    });
-  }
-  var exts=(d.sales||[]).filter(function(s){return s.type==='EXTENSION'||s.type==='RENEWAL';});
-  if(exts.length){
-    h+='<div style="margin-top:4px;font-weight:700">H. ADICIONALES</div>';
-    h+='<div>--------------------------------</div>';
-    exts.forEach(function(s){
-      var pm={EFECTIVO:'EF',TARJETA:'TA',NEQUI:'NQ'}[s.payMethod]||s.payMethod;
-      var left=(s.type==='RENEWAL'?'Renov':'Ext')+'  '+s.roomId+'  +'+s.durationHrs+'h  '+pm;
-      h+=row(left,fmtP(s.total));
-    });
-  }
-  h+='<div style="margin-top:4px">================================</div>';
-  h+='<div style="font-weight:700">RESUMEN</div>';
-  h+='<div>--------------------------------</div>';
-  h+=row('Efectivo',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd));
-  if(d.barEf)h+=row('Bar EF',fmtP(d.barEf));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL EF',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf));
-  h+=row('Tarjeta',fmtP(d.tj_hab+d.tj_hadd));
-  if(d.barTj)h+=row('Bar TA',fmtP(d.barTj));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL TA',fmtP(d.tj_hab+d.tj_hadd+d.barTj));
-  h+=row('Nequi',fmtP(d.nq_hab+d.nq_hadd));
-  if(d.barNq)h+=row('Bar NQ',fmtP(d.barNq));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL NQ',fmtP(d.nq_hab+d.nq_hadd+d.barNq));
-  h+='<div>================================</div>';
-  h+='<div style="font-weight:700">GASTOS</div>';
-  h+='<div>--------------------------------</div>';
-  (d.loans||[]).forEach(function(l){h+=row(esc(l.borrowerName||'')+(l.note?' '+esc(l.note):''),'-'+fmtP(l.amount));});
-  if(d.taxis)h+=row('Taxis ('+d.taxiCount+')','-'+fmtP(d.taxis));
-  if(d.turnos)h+=row('Turnos','-'+fmtP(d.turnos));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL GASTOS','-'+fmtP(d.totalGastos));
-  h+='<div>================================</div>';
-  var entrega2=d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf-d.totalGastos;
-  h+='<div style="display:flex;justify-content:space-between;font-weight:900;font-size:13px"><span>ENTREGA</span><span>'+fmtP(entrega2)+'</span></div>';
-  h+='<div>================================</div>';
-  if(d.billetes||d.monedas){
-    h+=row('Billetes',fmtP(d.billetes));
-    if(d.monedas)h+=row('Monedas',fmtP(d.monedas));
-    var diff2=(d.billetes+d.monedas)-entrega2;
-    h+=row('Diferencia',(diff2>=0?'+':'')+fmtP(diff2));
-  }
-  if(d.notas){h+='<div>Notas: '+esc(d.notas)+'</div>';}
-  h+='<div>================================</div>';
-  h+='<div style="text-align:center;font-size:10px">Impreso: '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'</div>';
-  var w=window.open('','_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>Cuadre</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:11px;color:#000;width:72mm;padding:2mm}div{line-height:1.5;white-space:pre}b{font-weight:900}@media print{body{width:72mm}}</style></head><body>');
-  w.document.write(h);
-  w.document.write('</body></html>');
-  w.document.close();setTimeout(function(){w.print();},400);
+    window._cuadrePrintData={
+      businessDay:sess.businessDay,shiftId:sess.shiftId,userName:sess.userName,
+      sales:sl,loans:loans,taxiCount:taxiList.length,taxis:taxis,turnos:turnos,
+      totalGastos:totalGastos,barEf:Number(barEf)||0,barTj:Number(barTj)||0,barNq:Number(barNq)||0,
+      ef_hab:ef_hab,ef_padd:ef_padd,ef_hadd:ef_hadd,
+      tj_hab:tj_hab,tj_padd:tj_padd,tj_hadd:tj_hadd,
+      nq_hab:nq_hab,nq_padd:nq_padd,nq_hadd:nq_hadd,
+      billetes:0,monedas:0,notas:''
+    };
+    el.innerHTML=h;
+  });
 }
+ function toggleAdmDesCell(id){
   var el=document.getElementById(id);
   if(!el)return;
   el.style.display=el.style.display==='none'?'block':'none';
