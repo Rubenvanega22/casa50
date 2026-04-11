@@ -3818,21 +3818,31 @@ function renderDashboard(m,hourly,maid,month,day){
   // ── BLOQUE 4+5: RENDIMIENTO PERSONAL ──
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
 
-  // Recepcionistas
+  // Recepcionistas — Ranking Errores
+  var errMes=(month&&month.errorRanking)||[];
   h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:14px">';
-  h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:12px">👩‍💼 Rendimiento Recepción</div>';
-  if(!recepList.length){h+='<p style="font-size:12px;color:#6b7280">Sin ventas hoy.</p>';}
+  h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:12px">👩‍💼 Ranking Recepcionistas</div>';
+  if(!recepList.length){h+='<p style="font-size:12px;color:#6b7280">Sin datos hoy.</p>';}
   var maxRecep=recepList.length?recepList[0].total:1;
   recepList.forEach(function(r,i){
     var pct=Math.round((r.total/maxRecep)*100);
     var col=i===0?'#22c55e':i===1?'#3b82f6':'#6b7280';
     var badge=i===0?'🥇':i===1?'🥈':'🥉';
+    var errInfo=errMes.find(function(e){return e.nombre===r.nombre;})||{total:0};
+    var errCol=errInfo.total===0?'#22c55e':errInfo.total<=2?'#f59e0b':'#ef4444';
     h+='<div style="margin-bottom:10px">';
     h+='<div style="display:flex;justify-content:space-between;margin-bottom:4px">';
     h+='<span style="font-size:12px;font-weight:700;color:#e5e7eb">'+badge+' '+esc(r.nombre)+'</span>';
-    h+='<span style="font-size:11px;color:#9ca3af"><b style="color:'+col+'">'+r.habs+' hab</b> — '+fmt(r.total)+'</span>';
-    h+='</div>';
+    h+='<div style="display:flex;gap:8px;align-items:center">';
+    h+='<span style="font-size:10px;color:'+errCol+';font-weight:700;background:rgba('+(errInfo.total===0?'34,197,94':errInfo.total<=2?'245,158,11':'239,68,68')+',.15);padding:1px 6px;border-radius:10px">'+(errInfo.total===0?'✓ Sin errores':errInfo.total+' error(es)')+'</span>';
+    h+='<span style="font-size:11px;color:#9ca3af"><b style="color:'+col+'">'+r.habs+' hab</b></span>';
+    h+='</div></div>';
     h+='<div style="background:#22222c;border-radius:20px;height:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:20px"></div></div>';
+    if(errInfo.total>0){
+      var allF={};
+      (errInfo.detalles||[]).forEach(function(d){(d.fallas||[]).forEach(function(f){allF[f]=(allF[f]||0)+1;});});
+      Object.keys(allF).forEach(function(f){h+='<div style="font-size:10px;color:#9ca3af;margin-top:2px">• '+esc(f)+' (x'+allF[f]+')</div>';});
+    }
     h+='</div>';
   });
   h+='</div>';
