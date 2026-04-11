@@ -2329,7 +2329,10 @@ function printC(){
   h+=sep();
   h+=fila('Habitaciones NQ',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd));
   if(d.barNq)h+=fila('Bar Nequi',fmtP(d.barNq));
-  h+=fila('TOTAL NEQUI',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq),true);
+ h+=fila('TOTAL NEQUI',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq),true);
+  h+=sep();
+  var efNq=(d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf)+(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq);
+  h+=fila('EF + NQ',fmtP(efNq),true);
   h+=sep();
 
   // GASTOS
