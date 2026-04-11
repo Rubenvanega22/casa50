@@ -2282,77 +2282,91 @@ function printC(){
   var d=window._cuadrePrintData;
   var sn={SHIFT_1:'T1 (6am-2pm)',SHIFT_2:'T2 (2pm-9pm)',SHIFT_3:'T3 (9pm-6am)'};
   function fmtP(n){return '$'+Number(n||0).toLocaleString('es-CO');}
-  function row(left,right){var sp=Math.max(1,32-left.length-String(right).length);return '<div>'+left+' '.repeat(sp)+right+'</div>';}
+  function fila(left,right,bold){return '<tr'+(bold?' style="font-weight:bold"':'')+"><td style='padding:2px 0'>"+left+"</td><td style='text-align:right;padding:2px 0'>"+right+"</td></tr>";}
+  function sep(){return "<tr><td colspan='2'><hr style='border:none;border-top:1px dashed #000;margin:3px 0'></td></tr>";}
+  function tit(txt){return "<tr><td colspan='2' style='font-weight:bold;padding:4px 0 2px;font-size:12px'>"+txt+"</td></tr>";}
   var h='';
-  h+='<div style="text-align:center;font-weight:900;font-size:13px">CASA 50 - SPA MOTEL</div>';
-  h+='<div style="text-align:center">================================</div>';
-  h+=row('Fecha:',d.businessDay);
-  h+=row('Turno:',(sn[d.shiftId]||d.shiftId));
-  h+=row('Recepc:',d.userName);
-  h+='<div>================================</div>';
+  h+='<div style="text-align:center;font-weight:900;font-size:14px;margin-bottom:2px">CASA 50</div>';
+  h+='<div style="text-align:center;font-size:11px;margin-bottom:2px">SPA MOTEL</div>';
+  h+='<hr style="border:none;border-top:2px solid #000;margin:4px 0">';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  h+=fila('Fecha:',d.businessDay);
+  h+=fila('Turno:',(sn[d.shiftId]||d.shiftId));
+  h+=fila('Recep:',esc(d.userName));
+  h+=sep();
+
+  // VENTAS
   var ventas=(d.sales||[]).filter(function(s){return s.type==='SALE';});
   if(ventas.length){
-    h+='<div style="font-weight:700">VENTAS</div>';
-    h+='<div>--------------------------------</div>';
+    h+=tit('VENTAS ('+ventas.length+')');
     ventas.forEach(function(s,i){
       var pm={EFECTIVO:'EF',TARJETA:'TA',NEQUI:'NQ',MIXTO:'MX'}[s.payMethod]||s.payMethod;
-      var left='#'+(i+1)+'  '+s.roomId+'  '+pm+'  '+s.durationHrs+'h';
-      h+=row(left,fmtP(s.total));
+      h+=fila('#'+(i+1)+' Hab '+s.roomId+' '+s.durationHrs+'h '+pm,fmtP(s.total));
     });
+    h+=sep();
   }
+
+  // H. ADICIONALES
   var exts=(d.sales||[]).filter(function(s){return s.type==='EXTENSION'||s.type==='RENEWAL';});
   if(exts.length){
-    h+='<div style="margin-top:4px;font-weight:700">H. ADICIONALES</div>';
-    h+='<div>--------------------------------</div>';
+    h+=tit('H. ADICIONALES');
     exts.forEach(function(s){
       var pm={EFECTIVO:'EF',TARJETA:'TA',NEQUI:'NQ'}[s.payMethod]||s.payMethod;
-      var left=(s.type==='RENEWAL'?'Renov':'Ext')+'  '+s.roomId+'  +'+s.durationHrs+'h  '+pm;
-      h+=row(left,fmtP(s.total));
+      h+=fila((s.type==='RENEWAL'?'Renov':'Ext')+' Hab '+s.roomId+' +'+s.durationHrs+'h '+pm,fmtP(s.total));
     });
+    h+=sep();
   }
-  h+='<div style="margin-top:4px">================================</div>';
-  h+='<div style="font-weight:700">RESUMEN</div>';
-  h+='<div>--------------------------------</div>';
-  h+=row('Efectivo',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd));
-  if(d.barEf)h+=row('Bar EF',fmtP(d.barEf));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL EF',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf));
-  h+=row('Tarjeta',fmtP(d.tj_hab+d.tj_hadd));
-  if(d.barTj)h+=row('Bar TA',fmtP(d.barTj));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL TA',fmtP(d.tj_hab+d.tj_hadd+d.barTj));
-  h+=row('Nequi',fmtP(d.nq_hab+d.nq_hadd));
-  if(d.barNq)h+=row('Bar NQ',fmtP(d.barNq));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL NQ',fmtP(d.nq_hab+d.nq_hadd+d.barNq));
-  h+='<div>================================</div>';
-  h+='<div style="font-weight:700">GASTOS</div>';
-  h+='<div>--------------------------------</div>';
-  (d.loans||[]).forEach(function(l){h+=row(esc(l.borrowerName||'')+(l.note?' '+esc(l.note):''),'-'+fmtP(l.amount));});
-  if(d.taxis)h+=row('Taxis ('+d.taxiCount+')','-'+fmtP(d.taxis));
-  if(d.turnos)h+=row('Turnos','-'+fmtP(d.turnos));
-  h+='<div style="border-top:1px dashed #000"></div>';
-  h+=row('TOTAL GASTOS','-'+fmtP(d.totalGastos));
-  h+='<div>================================</div>';
+
+  // RESUMEN
+  h+=tit('RESUMEN');
+  h+=fila('Habitaciones EF',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd));
+  if(d.barEf)h+=fila('Bar Efectivo',fmtP(d.barEf));
+  h+=fila('TOTAL EFECTIVO',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf),true);
+  h+=sep();
+  h+=fila('Habitaciones TA',fmtP(d.tj_hab+d.tj_padd+d.tj_hadd));
+  if(d.barTj)h+=fila('Bar Tarjeta',fmtP(d.barTj));
+  h+=fila('TOTAL TARJETA',fmtP(d.tj_hab+d.tj_padd+d.tj_hadd+d.barTj),true);
+  h+=sep();
+  h+=fila('Habitaciones NQ',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd));
+  if(d.barNq)h+=fila('Bar Nequi',fmtP(d.barNq));
+  h+=fila('TOTAL NEQUI',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq),true);
+  h+=sep();
+
+  // GASTOS
+  if(d.totalGastos>0){
+    h+=tit('GASTOS');
+    (d.loans||[]).forEach(function(l){h+=fila(esc(l.borrowerName||'')+(l.note?' - '+esc(l.note):''),'-'+fmtP(l.amount));});
+    if(d.taxis)h+=fila('Taxis ('+d.taxiCount+')','-'+fmtP(d.taxis));
+    if(d.turnos)h+=fila('Turnos','-'+fmtP(d.turnos));
+    h+=fila('TOTAL GASTOS','-'+fmtP(d.totalGastos),true);
+    h+=sep();
+  }
+
+  // ENTREGA
   var entrega2=d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf-d.totalGastos;
-  h+='<div style="display:flex;justify-content:space-between;font-weight:900;font-size:13px"><span>ENTREGA</span><span>'+fmtP(entrega2)+'</span></div>';
-  h+='<div>================================</div>';
+  h+="<tr><td colspan='2'><div style='text-align:center;font-size:14px;font-weight:900;padding:4px 0'>ENTREGA: "+fmtP(entrega2)+"</div></td></tr>";
+  h+=sep();
+
+  // CONTEO
   if(d.billetes||d.monedas){
-    h+=row('Billetes',fmtP(d.billetes));
-    if(d.monedas)h+=row('Monedas',fmtP(d.monedas));
+    h+=tit('CONTEO');
+    h+=fila('Billetes',fmtP(d.billetes));
+    if(d.monedas)h+=fila('Monedas',fmtP(d.monedas));
     var diff2=(d.billetes+d.monedas)-entrega2;
-    h+=row('Diferencia',(diff2>=0?'+':'')+fmtP(diff2));
+    h+=fila('Diferencia',(diff2>=0?'+':'')+fmtP(diff2),true);
+    h+=sep();
   }
-  if(d.notas){h+='<div>Notas: '+esc(d.notas)+'</div>';}
-  h+='<div>================================</div>';
-  h+='<div style="text-align:center;font-size:10px">Impreso: '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'</div>';
+
+  if(d.notas)h+="<tr><td colspan='2' style='font-size:10px;padding-top:4px'>Notas: "+esc(d.notas)+"</td></tr>";
+  h+="<tr><td colspan='2' style='text-align:center;font-size:10px;padding-top:6px'>Impreso: "+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+"</td></tr>";
+  h+='</table>';
+
   var w=window.open('','_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>Cuadre</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:11px;color:#000;width:72mm;padding:2mm}div{line-height:1.5;white-space:pre}b{font-weight:900}@media print{body{width:72mm}}</style></head><body>');
+  w.document.write('<!DOCTYPE html><html><head><title>Cuadre</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#000;width:76mm;padding:3mm}@media print{body{width:76mm}}</style></head><body>');
   w.document.write(h);
   w.document.write('</body></html>');
   w.document.close();setTimeout(function(){w.print();},400);
 }
-
 // ---- HORARIOS (recepcion) ----
 function loadHor(){var ws=getWS(new Date());rpc('getSchedule',{weekStart:ws},function(data){document.getElementById('horCont').innerHTML=renderSchedView(data.schedule||[],ws);});}
 function renderSchedView(sched, ws) {
