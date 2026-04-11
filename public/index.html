@@ -3761,18 +3761,26 @@ function loadM(){
   var el=document.getElementById('metCont');
  if(!el.innerHTML.trim())el.innerHTML='<div style="color:#9ca3af;padding:20px;text-align:center">Cargando dashboard...</div>';
   clearInterval(dashInterval);
-  Promise.all([
+ 
+    Promise.all([
     new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:''},r,function(){r({});});}),
     new Promise(function(r){rpc('metricsHourly',{businessDay:day},r,function(){r({});});}),
     new Promise(function(r){rpc('maidPanel',{userRole:sess.userRole,businessDay:day},r,function(){r({});});}),
-    new Promise(function(r){rpc('monthMetrics',{yearMonth:day.substring(0,7)},r,function(){r({});}); })
+    new Promise(function(r){rpc('monthMetrics',{yearMonth:day.substring(0,7)},r,function(){r({});}); }),
+    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:'SHIFT_1'},r,function(){r({});});}),
+    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:'SHIFT_2'},r,function(){r({});});}),
+    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:'SHIFT_3'},r,function(){r({});});})
   ]).then(function(res){
-    el.innerHTML=renderDashboard(res[0],res[1],res[2],res[3],day);
+    var barEf=Number(((res[4]||{}).totals||{}).shiftBarEfectivo||0)+Number(((res[5]||{}).totals||{}).shiftBarEfectivo||0)+Number(((res[6]||{}).totals||{}).shiftBarEfectivo||0);
+    var barTj=Number(((res[4]||{}).totals||{}).shiftBarTarjeta||0)+Number(((res[5]||{}).totals||{}).shiftBarTarjeta||0)+Number(((res[6]||{}).totals||{}).shiftBarTarjeta||0);
+    var barNq=Number(((res[4]||{}).totals||{}).shiftBarNequi||0)+Number(((res[5]||{}).totals||{}).shiftBarNequi||0)+Number(((res[6]||{}).totals||{}).shiftBarNequi||0);
+    el.innerHTML=renderDashboard(res[0],res[1],res[2],res[3],day,barEf,barTj,barNq);
     dashInterval=setInterval(function(){loadM();},30000);
   });
 }
 
-function renderDashboard(m,hourly,maid,month,day){
+function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
+  barEf=barEf||0;barTj=barTj||0;barNq=barNq||0;
   var t=(m&&m.totals)||{};
   var sales=m&&m.allSalesList||[];
   var onlySales=sales.filter(function(s){return s.type==='SALE';});
@@ -3840,16 +3848,17 @@ function renderDashboard(m,hourly,maid,month,day){
   // ── BLOQUE 1: RESUMEN GENERAL ──
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:14px">';
   h+=_dash_card('💰 Ventas del día',fmt(t.sales||0),'#22c55e');
+  h+=_dash_card('💰 Total c/bar',fmt((t.sales||0)+barEf+barTj+barNq),'#a78bfa');
   h+=_dash_card('🏨 Hab. vendidas',onlySales.length,'#a78bfa');
   h+=_dash_card('🔴 Ocupadas ahora',ocupadas+' / '+totalRooms,'#ef4444');
   h+=_dash_card('🟢 Disponibles',disponibles,'#22c55e');
-  h+=_dash_card('💵 Efectivo',fmt(t.totalEfectivo||0),'#22c55e');
-  h+=_dash_card('💳 Tarjeta',fmt(t.totalTarjeta||0),'#3b82f6');
-  h+=_dash_card('📱 Nequi',fmt(t.totalNequi||0),'#a78bfa');
+  h+=_dash_card('💵 Efectivo',fmt((t.totalEfectivo||0)+barEf),'#22c55e');
+  h+=_dash_card('💳 Tarjeta',fmt((t.totalTarjeta||0)+barTj),'#3b82f6');
+  h+=_dash_card('📱 Nequi',fmt((t.totalNequi||0)+barNq),'#a78bfa');
   h+=_dash_card('📅 Mes actual',fmt((month&&month.monthTotals&&month.monthTotals.sales)||0),'#f59e0b');
   h+='</div>';
-
-  // Meta
+  //
+ Meta
   if(metaPct!=null){
     h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#9ca3af;margin-bottom:6px"><span>🎯 Meta del día: <b style="color:#e5e7eb">'+fmt(m.dailyGoal)+'</b></span><span style="color:'+(metaPct>=100?'#22c55e':'#a78bfa')+';font-weight:800">'+m.goalProgress+'%</span></div>';
