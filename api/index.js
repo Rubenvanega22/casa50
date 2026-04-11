@@ -317,7 +317,12 @@ async function apiLogin(p, res) {
           .limit(1);
 
         if(!prevReleased || !prevReleased.length) {
-          return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
+          // Si es la misma persona del turno anterior, dejarla entrar para cerrar
+          if(userName.toLowerCase() === prevLogin[0].user_name.toLowerCase()) {
+            // La misma recepcionista puede re-entrar a cerrar su turno
+          } else {
+            return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
+          }
         }
       }
     }
@@ -1040,8 +1045,8 @@ async function apiGetNoteHistory(p, res) {
 // ITEM 2: Al cerrar con cuadre, marca released=true para liberar el siguiente turno
 async function apiCloseShift(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
   const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.businessDay||'').trim()||businessDay(now);
   const userName = String(p.userName || '');
 
   // Marcar turno como cerrado Y liberado (released=true)
