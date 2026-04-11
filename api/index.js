@@ -1234,9 +1234,7 @@ async function apiMonthMetrics(p, res) {
   (taxi||[]).forEach(r=>{ed(r.business_day).taxi+=Number(r.amount||0);});
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
   days.forEach(d=>{d.net=d.sales+d.refunds-d.taxi;});
-  const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
-  const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
-  const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
+ 
   const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
   const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
   const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
