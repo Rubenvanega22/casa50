@@ -3857,8 +3857,7 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
   h+=_dash_card('📱 Nequi',fmt((t.totalNequi||0)+barNq),'#a78bfa');
   h+=_dash_card('📅 Mes actual',fmt((month&&month.monthTotals&&month.monthTotals.sales)||0),'#f59e0b');
   h+='</div>';
-  //
- Meta
+  //Meta
   if(metaPct!=null){
     h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#9ca3af;margin-bottom:6px"><span>🎯 Meta del día: <b style="color:#e5e7eb">'+fmt(m.dailyGoal)+'</b></span><span style="color:'+(metaPct>=100?'#22c55e':'#a78bfa')+';font-weight:800">'+m.goalProgress+'%</span></div>';
