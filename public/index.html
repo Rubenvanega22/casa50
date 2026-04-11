@@ -250,7 +250,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt" id="mPinT">Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><input type="hidden" id="pOldName"><label>Nombre</label><input type="text" id="pName" placeholder="Nombre completo"><label>PIN</label><input type="password" id="pVal" maxlength="10" placeholder="PIN numérico"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
 <div class="ov" id="mChPin"><div class="modal"><div class="mh"><div class="mt">Cambiar PIN Admin</div><button class="mc" onclick="closeM('mChPin')">✕</button></div><label>PIN actual</label><input type="password" id="cpCur"><label>Nuevo PIN</label><input type="password" id="cpNew"><button class="btn br full" style="margin-top:8px" onclick="doChPin()">Cambiar</button></div></div>
 <div class="ov" id="mMaidLog"><div class="modal"><div class="mh"><div class="mt">Registrar Actividad</div><button class="mc" onclick="closeM('mMaidLog')">✕</button></div><label>Habitacion</label><input type="text" id="mlRoom" placeholder="Ej: 201"><label>Estado</label><select id="mlState"><option value="DIRTY">Sucia</option><option value="AVAILABLE">Lista</option><option value="CONTAMINATED">Contaminada</option></select><label>Nota</label><input type="text" id="mlNote" placeholder="Opcional"><button class="btn ba full" style="margin-top:8px" onclick="saveMaidLog()">Registrar</button></div></div>
-
+<div class="ov" id="mFallas"><div class="modal"><div class="mh"><div class="mt" id="mFallasT">Registrar Fallas</div><button class="mc" onclick="closeM('mFallas')">✕</button></div>
+<div id="mFallasInfo" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
+<div id="mFallasOpts"></div>
+<button class="btn br full" style="margin-top:10px" onclick="saveFallas()">Registrar Fallas</button></div></div>
 <!-- LOGIN -->
 <div id="ls">
 <div class="card">
@@ -559,11 +562,26 @@ function entrar(){
   tog('lerr',false);
   if(!nm){showLE('Ingresa tu nombre.');return;}
   var btn=document.getElementById('lbtn');btn.disabled=true;btn.textContent='Verificando...';
-  rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up},function(res){
+  var fe=window._forceEntry===true;window._forceEntry=false;
+  rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
     if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
     else showLE('Error al ingresar.');
-  },function(e){btn.disabled=false;btn.textContent='Ingresar';showLE(e.message||String(e));});
+  },function(e){
+    btn.disabled=false;btn.textContent='Ingresar';
+    var msg=e.message||String(e);
+    if(msg.indexOf('TURNO_NO_CERRADO:')===0){
+      var quien=msg.replace('TURNO_NO_CERRADO:','');
+      var errEl=document.getElementById('lerr');
+      var errMsg='⏳ <b>'+quien+'</b> aún no ha cerrado su turno. Debe enviar el cuadre y cerrar primero.';
+      if(rol==='ADMIN'){errMsg+='<br><button class="btn br sm" style="margin-top:8px;width:100%" onclick="forzarEntrada()">⚡ Forzar Apertura (Admin)</button>';}
+      errEl.innerHTML=errMsg;tog('lerr',true);
+    } else {showLE(msg);}
+  });
+}
+function forzarEntrada(){
+  window._forceEntry=true;
+  entrar();
 }
 function showLE(m){var e=document.getElementById('lerr');e.textContent=m;tog('lerr',true);}
 
@@ -908,7 +926,8 @@ function openRoom(rid){
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Horas extra pagadas: '+extensiones.length+'</span><b style="color:#3b82f6">'+fmt(totalExt)+'</b></div>';
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Hora regalo aplicada</span><b style="color:'+(horaGratis?'#22c55e':'#6b7280')+'">'+(horaGratis?'Sí, 1 hora':'No')+'</b></div>';
       var taxiTotal=(data.taxiHistory||[]).reduce(function(a,t){return a+Number(t.amount||0);},0);
-      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Taxi</span><b style="color:'+(taxiTotal>0?'#f59e0b':'#6b7280')+'">'+fmt(taxiTotal)+'</b></div>';
+      var isRecepH=sess&&sess.userRole==='RECEPTION';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Taxi</span><div style="display:flex;align-items:center;gap:4px"><b style="color:'+(taxiTotal>0?'#f59e0b':'#6b7280')+'">'+fmt(taxiTotal)+'</b>'+(isRecepH?(data.taxiHistory||[]).map(function(tx){return tx.id?'<button class="btn br xs" onclick="doDeleteTaxi('+tx.id+')">✕taxi</button>':''}).join(''):'')+'</div></div>';
       var totalCobrado=sales.filter(function(s){return s.type!=='HORA_GRATIS';}).reduce(function(a,s){return a+Number(s.total||0);},0);
       h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e">'+fmt(totalCobrado)+'</span></div>';
       var box=document.getElementById('resumenEstadia');
@@ -1498,6 +1517,44 @@ function doTaxi(){
   conf('¿Registrar taxi $3.000 para Hab '+rid+'?',function(){
     rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
       function(){toast('Taxi $3.000 registrado.','ok');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+function doDeleteTaxi(id){
+  conf('¿Eliminar este taxi de $3.000?',function(){
+    rpc('deleteTaxi',{id:id,userRole:sess.userRole,userName:sess.userName},
+      function(){toast('Taxi eliminado.','ok');openRoom(curRoom.roomId);if(sess.userRole==='RECEPTION')loadCuadre();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+var fallasCurShift='',fallasCurUser='',fallasCurDay='';
+var FALLAS_OPCIONES=['Cuadre incompleto','Error en facturación','No facturó','Faltante de efectivo','Sobrante de efectivo','Método de pago incorrecto','Mal registrado','Error con el sistema','Descuadre de turno','Otro'];
+function openFallasModal(shiftId,userName,day){
+  fallasCurShift=shiftId;fallasCurUser=userName;fallasCurDay=day;
+  var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+  document.getElementById('mFallasT').textContent='Fallas — '+esc(userName)+' ('+sn[shiftId]+')';
+  document.getElementById('mFallasInfo').textContent='Selecciona los errores cometidos:';
+  var h='';
+  FALLAS_OPCIONES.forEach(function(f,i){
+    h+='<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2e2e3a;cursor:pointer;font-size:13px">';
+    h+='<input type="checkbox" id="falla_'+i+'" value="'+esc(f)+'" style="width:16px;height:16px"> '+esc(f);
+    h+='</label>';
+  });
+  document.getElementById('mFallasOpts').innerHTML=h;
+  openM('mFallas');
+}
+function saveFallas(){
+  var seleccionadas=[];
+  FALLAS_OPCIONES.forEach(function(f,i){
+    var el=document.getElementById('falla_'+i);
+    if(el&&el.checked)seleccionadas.push(f);
+  });
+  if(!seleccionadas.length){toast('Selecciona al menos una falla.','err');return;}
+  conf('¿Registrar '+seleccionadas.length+' falla(s) para '+fallasCurUser+'?',function(){
+    rpc('saveShiftFailure',{businessDay:fallasCurDay,shiftId:fallasCurShift,userName:fallasCurUser,failures:seleccionadas,createdBy:sess.userName,userRole:sess.userRole},
+      function(){toast('Fallas registradas.','ok');closeM('mFallas');},
       function(e){toast(e.message||String(e),'err');}
     );
   });
@@ -3599,6 +3656,16 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       }
     });
     h+='</tbody></table></div>';
+    // Botones fallas por turno
+    h+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
+    shifts.forEach(function(sid,i){
+      var resp=(ms[i].shiftUser)||'—';
+      if(resp!=='—'){
+        var snS={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+        h+='<button class="btn br xs" onclick="openFallasModal(\''+sid+'\',\''+esc(resp)+'\',\''+day+'\')">⚠ Fallas '+snS[sid]+' ('+esc(resp)+')</button>';
+      }
+    });
+    h+='</div>';
     el.innerHTML=h;
   });
 }
