@@ -3625,7 +3625,18 @@ function loadCuadreAdmin(){
     var loans=r[3].loans||[];
     var extras=r[4].extraStaff||[];
     var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
-    var h='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;table-layout:fixed">';
+    var totalDia=ms.reduce(function(a,m,i){
+      var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
+      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
+      var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
+      var nq=sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarNequi||0);
+      return a+ef+tj+nq;
+    },0);
+    var h='<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase">💰 Total del Día (con bar)</div>';
+    h+='<div style="font-size:24px;font-weight:900;color:#a78bfa">'+fmt(totalDia)+'</div>';
+    h+='</div>';
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;table-layout:fixed">';
 h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a">Concepto</th>';
     shifts.forEach(function(sid,i){
      var resp=(ms[i].shiftUser)||'—';
@@ -3690,6 +3701,13 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     dataRow('Taxis',function(m){return Number((m.totals||{}).shiftTaxi||0);},'#f59e0b');
     dataRow('Turnos',function(m,sl,ls,ex){return ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#f97316');
     dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
+   h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">💰 TOTAL TURNO</td></tr>';
+    dataRow('Total del Turno',function(m,sl,ls,ex){
+      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
+      var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
+      var nq=sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarNequi||0);
+      return ef+tj+nq;
+    },'#a78bfa');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
     dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);;var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#f59e0b;border:1px solid #2e2e3a">📋 CONTEO</td></tr>';
