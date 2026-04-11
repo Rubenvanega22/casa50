@@ -429,9 +429,9 @@ async function apiCheckIn(p, res) {
     arrival_type: arrivalType, arrival_plate: arrivalPlate,
     pay_method: payMethod, paid_with: paidWith, change_given: changeGiven,
     pay_method_2: payMethod==='MIXTO'?'MIXTO_EF_TJ_NQ':'',
-    amount_1: payMethod==='MIXTO'?mixtoEf:total,
-    amount_2: payMethod==='MIXTO'?mixtoTj:0,
-    amount_3: payMethod==='MIXTO'?mixtoNq:0,
+    amount_1: payMethod==='MIXTO'?mixtoEf:(payMethod==='EFECTIVO'?total:0),
+    amount_2: payMethod==='MIXTO'?mixtoTj:(payMethod==='TARJETA'?total:0),
+    amount_3: payMethod==='MIXTO'?mixtoNq:(payMethod==='NEQUI'?total:0),
     check_in_ms: now, due_ms: dueMs
   });
 
