@@ -1237,7 +1237,11 @@ async function apiMonthMetrics(p, res) {
   const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
   const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
   const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
+  const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
+  const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
+  const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
   const monthTotals = days.reduce((acc,d)=>{acc.sales+=d.sales;acc.refunds+=d.refunds;acc.taxi+=d.taxi;acc.net+=d.net;acc.people+=d.people;acc.roomsSold+=d.roomsSold;return acc;},{sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0});
+  monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
   monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
   (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
     const nm=r.user_name||'?';
