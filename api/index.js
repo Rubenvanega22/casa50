@@ -1225,6 +1225,8 @@ async function apiMonthMetrics(p, res) {
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
   const { data: sales } = await supabase.from('sales').select('business_day,type,total,people,user_name').like('business_day', ym + '%');
   const { data: taxi } = await supabase.from('taxi_expenses').select('business_day,amount').like('business_day', ym + '%');
+  const { data: loansMonth } = await supabase.from('loans').select('business_day,amount').like('business_day', ym + '%');
+  const { data: extraMonth } = await supabase.from('extra_staff').select('business_day,payment').like('business_day', ym + '%');
   const { data: maidLogsMonth } = await supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym + '%');
   const dayMap = {};
   const ed = d => { if(!dayMap[d])dayMap[d]={day:d,sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0}; return dayMap[d]; };
@@ -1232,8 +1234,11 @@ async function apiMonthMetrics(p, res) {
   (taxi||[]).forEach(r=>{ed(r.business_day).taxi+=Number(r.amount||0);});
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
   days.forEach(d=>{d.net=d.sales+d.refunds-d.taxi;});
+  const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
+  const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
+  const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
   const monthTotals = days.reduce((acc,d)=>{acc.sales+=d.sales;acc.refunds+=d.refunds;acc.taxi+=d.taxi;acc.net+=d.net;acc.people+=d.people;acc.roomsSold+=d.roomsSold;return acc;},{sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0});
-  const recepMes={};
+  monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
   (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
     const nm=r.user_name||'?';
     if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};
