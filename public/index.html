@@ -3863,17 +3863,21 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
   h+='<span style="font-size:10px;color:#6b7280">Auto 30s</span>';
   h+='</div></div>';
 
-  // ── BLOQUE 1: RESUMEN GENERAL ──
+ // ── BLOQUE 1: RESUMEN GENERAL ──
+  var gastosDay=(t.taxi||0)+(t.loans||0)+(t.extraStaff||0);
+  var netoDia=(t.sales||0)-gastosDay;
+  var netoConBar=(t.sales||0)+barEf+barTj+barNq-gastosDay;
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:14px">';
-  h+=_dash_card('💰 Ventas del día',fmt(t.sales||0),'#22c55e');
-  h+=_dash_card('💰 Total c/bar',fmt((t.sales||0)+barEf+barTj+barNq),'#a78bfa');
-  h+=_dash_card('🏨 Hab. vendidas',onlySales.length,'#a78bfa');
+  h+=_dash_card('💰 Ventas netas',fmt(netoDia),'#22c55e');
+  h+=_dash_card('💰 Total c/bar',fmt(netoConBar),'#a78bfa');
+  h+=_dash_card('📤 Gastos del día',fmt(gastosDay),'#ef4444');
   h+=_dash_card('🔴 Ocupadas ahora',ocupadas+' / '+totalRooms,'#ef4444');
   h+=_dash_card('🟢 Disponibles',disponibles,'#22c55e');
   h+=_dash_card('💵 Efectivo',fmt((t.totalEfectivo||0)+barEf),'#22c55e');
   h+=_dash_card('💳 Tarjeta',fmt((t.totalTarjeta||0)+barTj),'#3b82f6');
   h+=_dash_card('📱 Nequi',fmt((t.totalNequi||0)+barNq),'#a78bfa');
   h+=_dash_card('📅 Mes actual',fmt((month&&month.monthTotals&&month.monthTotals.sales)||0),'#f59e0b');
+  h+=_dash_card('📤 Gastos del mes',fmt((month&&month.monthTotals&&month.monthTotals.expenses)||0),'#ef4444');
   h+='</div>';
   //Meta
   if(metaPct!=null){
