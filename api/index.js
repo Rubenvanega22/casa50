@@ -344,22 +344,22 @@ async function apiLogin(p, res) {
 }
 
 // ==================== CHECK-IN ====================
+var drawerPending=false;
 async function apiOpenDrawer(p, res) {
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Sin permiso');
-  await supabase.from('settings').upsert({key:'DRAWER_PENDING',value:'true'});
+  drawerPending=true;
   return ok(res,{opened:true});
 }
 async function apiDrawerPoll(p,res){
-  const {data}=await supabase.from('settings').select('value').eq('key','DRAWER_PENDING').single();
-  return ok(res,{open:(data&&data.value==='true')});
+  return ok(res,{open:drawerPending});
 }
 async function apiDrawerAck(p,res){
-  await supabase.from('settings').upsert({key:'DRAWER_PENDING',value:'false'});
+  drawerPending=false;
   return ok(res,{ack:true});
 }
 async function openCashDrawer() {
-  await supabase.from('settings').upsert({key:'DRAWER_PENDING',value:'true'});
+  drawerPending=true;
 }
 
 async function apiCheckIn(p, res) {
@@ -1242,7 +1242,19 @@ async function apiMonthMetrics(p, res) {
     maidMes[nm].habs++;maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);
   });
   const maidRankingMes=Object.values(maidMes).sort((a,b)=>b.habs-a.habs);
-  return ok(res, { yearMonth: ym, monthTotals, days, recepRankingMes, maidRankingMes });
+  // Ranking de errores recepcionistas
+  const { data: failures } = await supabase.from('shift_failures').select('*').like('business_day', ym + '%');
+  const errorMap = {};
+  (failures||[]).forEach(f => {
+    const nm = f.user_name || '?';
+    if(!errorMap[nm]) errorMap[nm] = { nombre: nm, total: 0, detalles: [] };
+    let fallas = [];
+    try { fallas = Array.isArray(f.failures) ? f.failures : JSON.parse(f.failures || '[]'); } catch(e) {}
+    errorMap[nm].total += fallas.length;
+    errorMap[nm].detalles.push({ fecha: f.business_day, turno: f.shift_id, fallas, creadoPor: f.created_by || '' });
+  });
+  const errorRanking = Object.values(errorMap).sort((a, b) => b.total - a.total);
+  return ok(res, { yearMonth: ym, monthTotals, days, recepRankingMes, maidRankingMes, errorRanking });
 }
 
 // ==================== PANEL CAMARERAS ====================
