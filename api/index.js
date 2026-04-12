@@ -198,11 +198,13 @@ module.exports = async function handler(req, res) {
       case 'deleteScheduleExtra':return await apiDeleteScheduleExtra(payload, res);
       case 'saveShiftFailure':  return await apiSaveShiftFailure(payload, res);
       case 'getShiftFailures':  return await apiGetShiftFailures(payload, res);
-      
-case 'getProducts':        return await apiGetProducts(payload, res);
-      case 'saveProduct':        return await apiSaveProduct(payload, res);
-      case 'deleteProduct':      return await apiDeleteProduct(payload, res);
-      case 'addStock':           return await apiAddStock(payload, res);
+     case 'saveObservacionTurno':   return await apiSaveObservacionTurno(payload, res);
+      case 'getObservacionesTurno':  return await apiGetObservacionesTurno(payload, res);
+      case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
+      case 'getProducts':            return await apiGetProducts(payload, res);
+      case 'saveProduct':            return await apiSaveProduct(payload, res);
+      case 'deleteProduct':          return await apiDeleteProduct(payload, res);
+      case 'addStock':               return await apiAddStock(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -1173,7 +1175,13 @@ async function apiMetrics(p, res) {
     }
     if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;}
   });
-
+const {data:prodSales}=await supabase.from('room_products').select('*').eq('business_day',bDay);
+  const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
+  const totalProductos=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
+  const totalCortesiasProds=prodSalesFilt.filter(s=>s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
+  const totalProductosEf=prodSalesFilt.filter(s=>!s.is_cortesia&&s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0);
+  const totalProductosTa=prodSalesFilt.filter(s=>!s.is_cortesia&&s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0);
+  const totalProductosNq=prodSalesFilt.filter(s=>!s.is_cortesia&&s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0);
   const taxiList=[];
   (taxiRes.data||[]).forEach(r=>{
     const a=Number(r.amount||0);
@@ -1198,7 +1206,8 @@ async function apiMetrics(p, res) {
       barEfectivo:dayBarEfe,barTarjeta:dayBarTar,barNequi:dayBarNeq,
       shiftNet,shiftSales,shiftRoomsSold:shiftRooms,shiftPeople,shiftBar,shiftTaxi,shiftGastos,
       shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,
-      shiftBarEfectivo:shiftBarEfe,shiftBarTarjeta:shiftBarTar,shiftBarNequi:shiftBarNeq
+      shiftBarEfectivo:shiftBarEfe,shiftBarTarjeta:shiftBarTar,shiftBarNequi:shiftBarNeq,
+      totalProductos,totalCortesiasProds,totalProductosEf,totalProductosTa,totalProductosNq
     },
     loans:(loansRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,borrowerName:r.borrower_name,amount:Number(r.amount),note:r.note})),
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
@@ -1977,10 +1986,16 @@ async function apiAddStock(p, res) {
   const cantidad = Number(p.cantidad||0);
   if(!id) return err(res,'id requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', id).single();
+  const { data: prod } = await supabase.from('products').select('*').eq('id', id).single();
   if(!prod) return err(res,'Producto no existe');
   const nuevoStock = Number(prod.stock_actual||0) + cantidad;
   await supabase.from('products').update({ stock_actual: nuevoStock }).eq('id', id);
+  const now = Date.now();
+  await supabase.from('stock_entries').insert({
+    ts_ms: now, business_day: businessDay(now), shift_id: currentShiftId(now),
+    product_id: id, product_name: prod.nombre||'',
+    cantidad: cantidad, user_name: String(p.userName||'')
+  });
   return ok(res, { nuevoStock });
 }
 
@@ -2101,7 +2116,57 @@ async function apiSaveCortesia(p, res) {
   }).eq('id', productId);
   return ok(res, { stockRestante: Number(prod.stock_actual||0) - cantidad });
 }
+async function apiSaveObservacionTurno(p, res) {
+  if(!['ADMIN','RECEPTION'].includes(String(p.userRole||'').toUpperCase())) return err(res,'Sin permiso');
+  const now=Date.now();
+  const bd=String(p.businessDay||businessDay(now));
+  const shiftId=String(p.shiftId||'');
+  const observacion=String(p.observacion||'');
+  if(!shiftId) return err(res,'shiftId requerido');
+  const {data:existing}=await supabase.from('product_shift_obs').select('id').eq('business_day',bd).eq('shift_id',shiftId).maybeSingle();
+  if(existing){
+    await supabase.from('product_shift_obs').update({observacion,user_name:String(p.userName||''),ts_ms:now}).eq('id',existing.id);
+  } else {
+    await supabase.from('product_shift_obs').insert({business_day:bd,shift_id:shiftId,observacion,user_name:String(p.userName||''),ts_ms:now});
+  }
+  return ok(res,{saved:true});
+}
 
+async function apiGetObservacionesTurno(p, res) {
+  const bd=String(p.businessDay||businessDay(Date.now()));
+  const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
+  return ok(res,{obs:obs||[]});
+}
+
+async function apiGetInventarioByDay(p, res) {
+  const bd=String(p.businessDay||businessDay(Date.now()));
+  const {data:products}=await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  if(!products||!products.length) return ok(res,{rows:[],resumenTurnos:{},businessDay:bd});
+  const {data:entries}=await supabase.from('stock_entries').select('*').eq('business_day',bd);
+  const {data:sales}=await supabase.from('room_products').select('*').eq('business_day',bd);
+  const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
+  const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
+  const rows=products.map(function(prod){
+    const totalVentas=(sales||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
+    const totalCortesias=(sales||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
+    const totalEntradas=(entries||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
+    const saldoInicial=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalEntradas;
+    const turnosData={};
+    shifts.forEach(function(sid){
+      const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
+      const ven=(sales||[]).filter(s=>s.product_id===prod.id&&s.shift_id===sid&&!s.is_cortesia);
+      const cor=(sales||[]).filter(s=>s.product_id===prod.id&&s.shift_id===sid&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
+      turnosData[sid]={entradas:ent,ventas:ven.reduce((a,s)=>a+Number(s.cantidad||0),0),cortesias:cor,valorVendido:ven.reduce((a,s)=>a+Number(s.total||0),0),ef:ven.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),ta:ven.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),nq:ven.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0)};
+    });
+    return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial,saldoActual:Number(prod.stock_actual||0),turnos:turnosData};
+  });
+  const resumenTurnos={};
+  shifts.forEach(function(sid){
+    const venTurno=(sales||[]).filter(s=>s.shift_id===sid&&!s.is_cortesia);
+    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
+  });
+  return ok(res,{rows,resumenTurnos,businessDay:bd});
+}
 async function apiSaveRoomBarcode(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const roomId = String(p.roomId||'').trim();
