@@ -270,6 +270,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </select>
 <div id="nw" class="h"><label id="nlbl">Tu Nombre</label><input type="text" id="lnm" placeholder="Nombre completo" autocomplete="off" oninput="chkBtn()"></div>
 <div id="nwRec" class="h"><label>Tu Nombre</label><select id="lnmRec" onchange="selRecName()" style="margin-bottom:6px"><option value="">-- Selecciona tu nombre --</option></select></div>
+<div id="nwShift" class="h"><label>Tu Turno</label><select id="lShift" style="margin-bottom:6px"><option value="SHIFT_1">T1 (6am - 2pm)</option><option value="SHIFT_2">T2 (2pm - 9pm)</option><option value="SHIFT_3">T3 (9pm - 6am)</option></select></div>
 <div id="uw" class="h"><label>PIN Personal</label><input type="password" id="upin" placeholder="PIN (si tienes)" maxlength="10"></div>
 <div id="aw" class="h"><label>PIN Administrador</label><input type="password" id="apin" placeholder="PIN Admin" maxlength="10"></div>
 <button class="btn full ba" id="lbtn" onclick="entrar()" disabled style="margin-top:10px">Ingresar</button>
@@ -284,7 +285,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="brand">CASA 50</div>
 <div class="bdg" id="hsh">--</div>
 <div style="font-size:11px;color:#9ca3af" id="clk"></div>
-<<div id="proyAlerta" style="display:none;font-size:11px;font-weight:700;color:#ef4444;animation:pulse 1s infinite;cursor:pointer" onclick="openAlertaProy()"></div>
+<div id="proyAlerta" style="display:none;font-size:11px;font-weight:700;color:#ef4444;animation:pulse 1s infinite;cursor:pointer" onclick="openAlertaProy()"></div>
 </div>
 <div style="display:flex;gap:5px;align-items:center">
 <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">↻ Actualizar</button>
@@ -304,10 +305,18 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="sm2" id="smBar"></div>
 <div id="roomsCont"></div>
 </div>
+<!-- LISTADO CAMARERA -->
+<div class="pnl" id="pnl-listado">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+<h2 style="font-size:14px">Habitaciones Vendidas Hoy</h2>
+<button class="refresh-btn" onclick="loadListadoMaid()">↻ Actualizar</button>
+</div>
+<div id="listadoCont"></div>
+</div>
 <!-- CAMARERA -->
 <div class="pnl" id="pnl-maid">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
-<h2 style="font-size:14px">Habitaciones para Limpiar</h2>
+<div style="display:flex;...
 <div style="display:flex;gap:6px">
 <button class="refresh-btn" onclick="doMaidRefresh()">↻ Actualizar</button>
 <button class="btn ba sm" onclick="openM('mMaidLog')">+ Registrar</button>
@@ -523,6 +532,7 @@ function onRol(){
   var r=document.getElementById('lrol').value;
   tog('nw',!!r&&r!=='RECEPTION');
   tog('nwRec',r==='RECEPTION');
+  tog('nwShift',r==='RECEPTION');
   tog('uw',r==='RECEPTION');
   tog('aw',r==='ADMIN'&&adminTap);
   document.getElementById('nlbl').textContent=r==='MAID'?'Nombre de Camarera':'Tu Nombre';
@@ -563,7 +573,9 @@ function entrar(){
   if(!nm){showLE('Ingresa tu nombre.');return;}
   var btn=document.getElementById('lbtn');btn.disabled=true;btn.textContent='Verificando...';
   var fe=window._forceEntry===true;window._forceEntry=false;
-  rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe},function(res){
+  var shiftSel=document.getElementById('lShift');
+  var shiftId=shiftSel?shiftSel.value:'';
+  rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
     if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
     else showLE('Error al ingresar.');
@@ -631,9 +643,8 @@ function buildTabs(){
   if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
  if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'});
-if(r==='MAID')tabs.push({id:'sched',l:'Calendario'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'});
-  tabs.push({id:'notes',l:'Reportes'});
+if(r==='MAID')tabs.push({id:'listado',l:'Listado'},{id:'sched',l:'Calendario'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'});tabs.push({id:'notes',l:'Reportes'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';b.textContent=t.l;b.dataset.tab=t.id;
@@ -658,8 +669,7 @@ function sw(id){
   if(id==='loans')loadLoans();
   if(id==='cuadre')loadCuadre();
   if(id==='horarios')loadHor();
-  if(id==='maid'){renderMaid();}
-
+  if(id==='listado'){loadListadoMaid();}
   if(id==='metrics')loadM();
   if(id==='ventas')loadVentas();
 }
@@ -2083,17 +2093,16 @@ h+='</div></div>';
     h+=_cRow('Habitaciones',nq_hab,'#a78bfa');
     h+=_cRow('P. Adicional',nq_padd,'#a78bfa');
     h+=_cRow('H. Adicional',nq_hadd,'#a78bfa');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barNqInput" placeholder="0" value="'+(barNq?Number(barNq).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
-   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Nequi</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#a78bfa" id="totalNqDisp">'+fmt(nq_hab+nq_padd+nq_hadd+(Number(barNq)||0))+'</span><button class="btn bp xs" onclick="toggleDesgloseC(\'nq\')">Ver detalle</button></div></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Nequi</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#a78bfa" id="totalNqDisp">'+fmt(nq_hab+nq_padd+nq_hadd)+'</span><button class="btn bp xs" onclick="toggleDesgloseC(\'nq\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_nq" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
-h+=_desgloseRows(sl,'NEQUI',Number(barNq)||0,'#a78bfa');
+h+=_desgloseRows(sl,'NEQUI',0,'#a78bfa');
 h+='</div></div>';
    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
     h+='<div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:10px;text-transform:uppercase">💵 Efectivo</div>';
     h+=_cRow('Habitaciones',ef_hab,'#22c55e');
     h+=_cRow('P. Adicional',ef_padd,'#22c55e');
     h+=_cRow('H. Adicional',ef_hadd,'#22c55e');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barEfInput" placeholder="0" value="'+(barEf?Number(barEf).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar NQ (Ef+Nequi) <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barEfInput" placeholder="0" value="'+(barEf?Number(barEf).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Efectivo</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#22c55e" id="totalEfDisp">'+fmt(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))+'</span><button class="btn bg xs" onclick="toggleDesgloseC(\'ef\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_ef" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'EFECTIVO',Number(barEf)||0,'#22c55e');
@@ -4318,6 +4327,38 @@ function savePin(){
  } else {
     rpc('setReceptionPin',{targetName:nm,pin:pin,userRole:sess.userRole},done,function(e){toast(e.message||String(e),'err');});
   }
+}
+function loadListadoMaid(){
+  if(!sess)return;
+  var el=document.getElementById('listadoCont');
+  if(!el)return;
+  el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
+  rpc('metrics',{businessDay:sess.businessDay,shiftId:''},function(m){
+    var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
+    sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
+    if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
+    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    var num=1;
+    var h='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">'+sl.length+' habitaciones vendidas hoy</div>';
+    sl.forEach(function(s){
+      var col=turnoColor[s.shiftId]||'#6b7280';
+      var lbl=turnoLabel[s.shiftId]||'';
+      var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
+      h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
+      h+='<div><b style="font-size:15px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+esc(s.category)+'</span></div>';
+      h+='<span style="font-size:10px;font-weight:700;color:'+col+';background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px">'+lbl+'</span>';
+      h+='</div>';
+      h+='<div style="font-size:11px;color:#9ca3af;margin-top:4px;display:flex;flex-wrap:wrap;gap:8px">';
+      h+='<span>Ent: <b style="color:#e5e7eb">'+fT(s.checkInMs)+'</b></span>';
+      h+='<span>Sal: <b style="color:#e5e7eb">'+fT(s.dueMs)+'</b></span>';
+      h+='<span><b style="color:#e5e7eb">'+s.durationHrs+'h — '+s.people+'p'+extraI+'</b></span>';
+      h+='</div></div>';
+      num++;
+    });
+    el.innerHTML=h;
+  },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
 }
 </script>
 </body>
