@@ -4547,7 +4547,7 @@ function loadProductos(){
   rpc('getProducts',{userRole:sess.userRole},function(data){
     productosLista=data.products||[];
     renderProductos();
-    if(isAdmin){
+    if(isAdmin||sess.userRole==='RECEPTION'){
       var day=sess.businessDay||'';
       rpc('getInventarioByDay',{businessDay:day,userRole:sess.userRole},function(inv){
         renderInventario(inv,day);
