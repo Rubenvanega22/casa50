@@ -198,6 +198,17 @@ module.exports = async function handler(req, res) {
       case 'deleteScheduleExtra':return await apiDeleteScheduleExtra(payload, res);
       case 'saveShiftFailure':  return await apiSaveShiftFailure(payload, res);
       case 'getShiftFailures':  return await apiGetShiftFailures(payload, res);
+      
+case 'getProducts':        return await apiGetProducts(payload, res);
+      case 'saveProduct':        return await apiSaveProduct(payload, res);
+      case 'deleteProduct':      return await apiDeleteProduct(payload, res);
+      case 'addStock':           return await apiAddStock(payload, res);
+      case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
+      case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
+      case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
+      case 'deleteRoomProduct':  return await apiDeleteRoomProduct(payload, res);
+      case 'saveCortesia':       return await apiSaveCortesia(payload, res);
+      case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1914,4 +1925,189 @@ async function apiGetShiftFailures(p, res) {
   });
   const ranking=Object.values(byUser).sort((a,b)=>b.totalFallas-a.totalFallas);
   return ok(res,{ranking,raw:(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id,userName:r.user_name,failures:JSON.parse(r.failures||'[]'),createdBy:r.created_by||''}))});
+}
+// ==================== PRODUCTOS ====================
+async function apiGetProducts(p, res) {
+  const { data } = await supabase.from('products').select('*').order('categoria').order('nombre');
+  return ok(res, { products: (data || []).map(r => ({
+    id: r.id, nombre: r.nombre, codigoBarras: r.codigo_barras || '',
+    precio: Number(r.precio || 0), categoria: r.categoria || '',
+    stockActual: Number(r.stock_actual || 0), stockMinimo: Number(r.stock_minimo || 5),
+    activo: !!r.activo
+  })) });
+}
+
+async function apiSaveProduct(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id = Number(p.id || 0);
+  const nombre = String(p.nombre||'').trim();
+  const codigo = String(p.codigoBarras||'').trim();
+  const precio = Number(p.precio||0);
+  const categoria = String(p.categoria||'').trim();
+  const stockActual = Number(p.stockActual||0);
+  const stockMinimo = Number(p.stockMinimo||5);
+  if(!nombre) return err(res,'Nombre requerido');
+  if(!precio) return err(res,'Precio requerido');
+  if(id) {
+    await supabase.from('products').update({
+      nombre, codigo_barras: codigo||null, precio, categoria,
+      stock_actual: stockActual, stock_minimo: stockMinimo
+    }).eq('id', id);
+  } else {
+    await supabase.from('products').insert({
+      nombre, codigo_barras: codigo||null, precio, categoria,
+      stock_actual: stockActual, stock_minimo: stockMinimo, activo: true
+    });
+  }
+  return ok(res, {});
+}
+
+async function apiDeleteProduct(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id = Number(p.id||0);
+  if(!id) return err(res,'id requerido');
+  await supabase.from('products').update({ activo: false }).eq('id', id);
+  return ok(res, {});
+}
+
+async function apiAddStock(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
+  const id = Number(p.id||0);
+  const cantidad = Number(p.cantidad||0);
+  if(!id) return err(res,'id requerido');
+  if(cantidad<=0) return err(res,'Cantidad invalida');
+  const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', id).single();
+  if(!prod) return err(res,'Producto no existe');
+  const nuevoStock = Number(prod.stock_actual||0) + cantidad;
+  await supabase.from('products').update({ stock_actual: nuevoStock }).eq('id', id);
+  return ok(res, { nuevoStock });
+}
+
+async function apiGetRoomProducts(p, res) {
+  const roomId = String(p.roomId||'').trim();
+  const checkInMs = Number(p.checkInMs||0);
+  if(!roomId) return err(res,'roomId requerido');
+  let query = supabase.from('room_products').select('*').eq('room_id', roomId);
+  if(checkInMs) query = query.eq('check_in_ms', checkInMs);
+  const { data } = await query.order('ts_ms');
+  return ok(res, { products: (data||[]).map(r => ({
+    id: r.id, tsMs: Number(r.ts_ms), productId: r.product_id,
+    productName: r.product_name, cantidad: Number(r.cantidad||0),
+    precioUnit: Number(r.precio_unit||0), total: Number(r.total||0),
+    payMethod: r.pay_method||'EFECTIVO', userName: r.user_name||'',
+    isCortesia: !!r.is_cortesia
+  })) });
+}
+
+async function apiAddRoomProduct(p, res) {
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = currentShiftId(now);
+  const roomId = String(p.roomId||'').trim();
+  const productId = Number(p.productId||0);
+  const cantidad = Number(p.cantidad||1);
+  const payMethod = String(p.payMethod||'EFECTIVO').toUpperCase();
+  const isCortesia = !!(p.isCortesia);
+  const userName = String(p.userName||'').trim();
+  const checkInMs = Number(p.checkInMs||0);
+  if(!roomId) return err(res,'roomId requerido');
+  if(!productId) return err(res,'productId requerido');
+  if(cantidad<=0) return err(res,'Cantidad invalida');
+  const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
+  if(!prod) return err(res,'Producto no existe');
+  if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente. Quedan: '+prod.stock_actual);
+  const total = isCortesia ? 0 : Number(prod.precio||0) * cantidad;
+  await supabase.from('room_products').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    room_id: roomId, check_in_ms: checkInMs,
+    product_id: productId, product_name: prod.nombre,
+    cantidad, precio_unit: Number(prod.precio||0),
+    total, pay_method: payMethod,
+    user_name: userName, is_cortesia: isCortesia
+  });
+  await supabase.from('products').update({
+    stock_actual: Number(prod.stock_actual||0) - cantidad
+  }).eq('id', productId);
+  if(isCortesia) {
+    await supabase.from('cortesias').insert({
+      ts_ms: now, business_day: bDay, shift_id: shift,
+      product_id: productId, product_name: prod.nombre,
+      cantidad, precio_unit: Number(prod.precio||0),
+      total: Number(prod.precio||0) * cantidad,
+      user_name: userName
+    });
+  }
+  return ok(res, { total, stockRestante: Number(prod.stock_actual||0) - cantidad });
+}
+
+async function apiEditRoomProduct(p, res) {
+  const id = Number(p.id||0);
+  const nuevaCantidad = Number(p.cantidad||0);
+  if(!id) return err(res,'id requerido');
+  if(nuevaCantidad<=0) return err(res,'Cantidad invalida');
+  const { data: rp } = await supabase.from('room_products').select('*').eq('id', id).single();
+  if(!rp) return err(res,'Registro no existe');
+  const diff = nuevaCantidad - Number(rp.cantidad||0);
+  const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', rp.product_id).single();
+  if(!prod) return err(res,'Producto no existe');
+  if(diff > 0 && Number(prod.stock_actual||0) < diff) return err(res,'Stock insuficiente');
+  const nuevoTotal = rp.is_cortesia ? 0 : Number(rp.precio_unit||0) * nuevaCantidad;
+  await supabase.from('room_products').update({
+    cantidad: nuevaCantidad, total: nuevoTotal
+  }).eq('id', id);
+  await supabase.from('products').update({
+    stock_actual: Number(prod.stock_actual||0) - diff
+  }).eq('id', rp.product_id);
+  return ok(res, { nuevoTotal });
+}
+
+async function apiDeleteRoomProduct(p, res) {
+  const id = Number(p.id||0);
+  if(!id) return err(res,'id requerido');
+  const { data: rp } = await supabase.from('room_products').select('*').eq('id', id).single();
+  if(!rp) return err(res,'Registro no existe');
+  const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', rp.product_id).single();
+  if(prod) {
+    await supabase.from('products').update({
+      stock_actual: Number(prod.stock_actual||0) + Number(rp.cantidad||0)
+    }).eq('id', rp.product_id);
+  }
+  await supabase.from('room_products').delete().eq('id', id);
+  return ok(res, {});
+}
+
+async function apiSaveCortesia(p, res) {
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = currentShiftId(now);
+  const productId = Number(p.productId||0);
+  const cantidad = Number(p.cantidad||1);
+  const userName = String(p.userName||'').trim();
+  if(!productId) return err(res,'productId requerido');
+  if(cantidad<=0) return err(res,'Cantidad invalida');
+  const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
+  if(!prod) return err(res,'Producto no existe');
+  if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente');
+  await supabase.from('cortesias').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    product_id: productId, product_name: prod.nombre,
+    cantidad, precio_unit: Number(prod.precio||0),
+    total: Number(prod.precio||0) * cantidad,
+    user_name: userName
+  });
+  await supabase.from('products').update({
+    stock_actual: Number(prod.stock_actual||0) - cantidad
+  }).eq('id', productId);
+  return ok(res, { stockRestante: Number(prod.stock_actual||0) - cantidad });
+}
+
+async function apiSaveRoomBarcode(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const roomId = String(p.roomId||'').trim();
+  const barcode = String(p.barcode||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  if(!barcode) return err(res,'barcode requerido');
+  await supabase.from('rooms').update({ barcode }).eq('room_id', roomId);
+  return ok(res, { roomId, barcode });
 }
