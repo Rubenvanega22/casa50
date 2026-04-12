@@ -464,6 +464,18 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="pnl" id="pnl-proyeccion">
 <div id="proyCont"><p style="color:#9ca3af">Cargando...</p></div>
 </div>
+<!-- PRODUCTOS -->
+<div class="pnl" id="pnl-productos">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+<h2 style="font-size:14px">Productos</h2>
+<div style="display:flex;gap:6px">
+<button class="refresh-btn" onclick="loadProductos()">↻ Actualizar</button>
+<button class="btn bg sm" id="btnAddStock" onclick="openAddStock()">+ Ingresar Stock</button>
+<button class="btn ba sm" id="btnNuevoProducto" style="display:none" onclick="openNuevoProducto()">+ Nuevo Producto</button>
+</div>
+</div>
+<div id="productosCont"><p style="color:#9ca3af">Cargando...</p></div>
+</div>
 <!-- CONFIG (admin) -->
 <div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
@@ -642,9 +654,9 @@ function buildTabs(){
   var r=sess.userRole,tabs=[];
   if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
- if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'});
+ if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'},{id:'productos',l:'Productos'});
 if(r==='MAID')tabs.push({id:'listado',l:'Listado'},{id:'sched',l:'Calendario'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'});tabs.push({id:'notes',l:'Reportes'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'},{id:'productos',l:'Productos'});tabs.push({id:'notes',l:'Reportes'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';b.textContent=t.l;b.dataset.tab=t.id;
@@ -672,6 +684,7 @@ function sw(id){
   if(id==='listado'){loadListadoMaid();}
   if(id==='metrics')loadM();
   if(id==='ventas')loadVentas();
+  if(id==='productos')loadProductos();
 }
 
 function salir(){
@@ -4360,6 +4373,221 @@ function loadListadoMaid(){
     el.innerHTML=h;
   },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
 }
+// ==================== PRODUCTOS ====================
+var productosLista=[];
+var barcodeBuffer='',barcodeTimer=null;
+
+function initBarcodeScanner(){
+  document.addEventListener('keydown',function(e){
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+    clearTimeout(barcodeTimer);
+    if(e.key==='Enter'){
+      if(barcodeBuffer.length>=3)procesarCodigoBarras(barcodeBuffer);
+      barcodeBuffer='';return;
+    }
+    if(e.key.length===1)barcodeBuffer+=e.key;
+    barcodeTimer=setTimeout(function(){barcodeBuffer='';},100);
+  });
+}
+
+function procesarCodigoBarras(codigo){
+  codigo=codigo.trim().toUpperCase();
+  if(codigo.startsWith('HAB')){
+    var rid=codigo.replace('HAB','');
+    var room=rooms.find(function(r){return r.roomId===rid;});
+    if(room){openRoom(rid);toast('Hab '+rid+' abierta por código','ok');}
+    else toast('Habitación '+rid+' no encontrada','err');
+    return;
+  }
+  var prod=productosLista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
+  if(prod){
+    openVentaProducto(prod);
+  } else {
+    toast('Código no reconocido: '+codigo,'err');
+  }
+}
+
+function openVentaProducto(prod){
+  var ocupadas=rooms.filter(function(r){return r.state==='OCCUPIED';});
+  var h='<div class="mh"><div class="mt">Vender: '+esc(prod.nombre)+'</div><button class="mc" onclick="closeM(\'mVentaProd\')">✕</button></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px">';
+  h+='<div style="font-size:16px;font-weight:800;color:#22c55e">'+fmt(prod.precio)+'</div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Stock disponible: <b style="color:#e5e7eb">'+prod.stockActual+'</b></div>';
+  h+='</div>';
+  h+='<label>Habitación</label>';
+  h+='<select id="vpRoom" style="margin-bottom:8px">';
+  if(!ocupadas.length)h+='<option value="">Sin habitaciones ocupadas</option>';
+  ocupadas.forEach(function(r){h+='<option value="'+r.roomId+'">Hab '+r.roomId+' — '+r.category+'</option>';});
+  h+='</select>';
+  h+='<label>Cantidad</label>';
+  h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+  h+='<button class="pb" onclick="chVpCant(-1,'+prod.precio+')">-</button>';
+  h+='<span id="vpCant" style="font-size:18px;font-weight:800">1</span>';
+  h+='<button class="pb" onclick="chVpCant(1,'+prod.precio+')">+</button>';
+  h+='</div>';
+  h+='<div class="tb"><div class="tl">Total</div><div class="tv" id="vpTotal">'+fmt(prod.precio)+'</div></div>';
+  h+='<label>Método de pago</label>';
+  h+='<div class="pm" style="margin-bottom:10px"><div class="pmo on" id="vpPmEF" onclick="selVpPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="vpPmTA" onclick="selVpPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="vpPmNE" onclick="selVpPm(\'NEQUI\')">Nequi</div></div>';
+  h+='<button class="btn bg full" onclick="confirmarVentaProd('+prod.id+','+prod.precio+')">Confirmar Venta</button>';
+  var modal=document.getElementById('mVentaProd');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mVentaProd';div.innerHTML='<div class="modal"><div id="mVentaProdB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mVentaProd');});document.body.appendChild(div);}
+  document.getElementById('mVentaProdB').innerHTML=h;
+  vpCant=1;vpPm='EFECTIVO';
+  openM('mVentaProd');
+}
+var vpCant=1,vpPm='EFECTIVO';
+function chVpCant(d,precio){
+  vpCant=Math.max(1,vpCant+d);
+  var el=document.getElementById('vpCant');if(el)el.textContent=vpCant;
+  var el2=document.getElementById('vpTotal');if(el2)el2.textContent=fmt(vpCant*precio);
+}
+function selVpPm(pm){
+  vpPm=pm;
+  ['EF','TA','NE'].forEach(function(k){var el=document.getElementById('vpPm'+k);if(el)el.classList.toggle('on',{EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI'}[k]===pm);});
+}
+function confirmarVentaProd(productId,precio){
+  var roomId=(document.getElementById('vpRoom')||{}).value||'';
+  if(!roomId){toast('Selecciona una habitación.','err');return;}
+  var room=rooms.find(function(r){return r.roomId===roomId;});
+  conf('Vender '+vpCant+' × '+fmt(precio)+' a Hab '+roomId+'?',function(){
+    rpc('addRoomProduct',{roomId:roomId,productId:productId,cantidad:vpCant,payMethod:vpPm,userName:sess.userName,userRole:sess.userRole,checkInMs:room?room.checkInMs:0},
+      function(res){toast('✓ Producto vendido — '+fmt(res.total),'ok');closeM('mVentaProd');loadProductos();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+
+function loadProductos(){
+  if(!sess)return;
+  var isAdmin=sess.userRole==='ADMIN';
+  var btnNuevo=document.getElementById('btnNuevoProducto');
+  if(btnNuevo)btnNuevo.style.display=isAdmin?'':'none';
+  rpc('getProducts',{userRole:sess.userRole},function(data){
+    productosLista=data.products||[];
+    renderProductos();
+  });
+}
+
+function renderProductos(){
+  var el=document.getElementById('productosCont');if(!el)return;
+  var isAdmin=sess.userRole==='ADMIN';
+  if(!productosLista.length){el.innerHTML='<p style="color:#9ca3af">Sin productos registrados.</p>';return;}
+  var cats={};
+  productosLista.filter(function(p){return p.activo;}).forEach(function(p){
+    var c=p.categoria||'Sin categoría';
+    if(!cats[c])cats[c]=[];
+    cats[c].push(p);
+  });
+  var h='';
+  Object.keys(cats).sort().forEach(function(cat){
+    h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;text-transform:uppercase;margin:12px 0 6px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">'+esc(cat)+'</div>';
+    cats[cat].forEach(function(p){
+      var stockCol=p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+      h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">';
+      h+='<div style="flex:1"><div style="font-weight:700;font-size:13px">'+esc(p.nombre)+'</div>';
+      if(p.codigoBarras)h+='<div style="font-size:10px;color:#6b7280">Código: '+esc(p.codigoBarras)+'</div>';
+      h+='</div>';
+      h+='<div style="text-align:right">';
+      h+='<div style="font-size:16px;font-weight:800;color:#22c55e">'+fmt(p.precio)+'</div>';
+      h+='<div style="font-size:11px;color:'+stockCol+'">Stock: '+p.stockActual+'</div>';
+      h+='</div></div>';
+      h+='<div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">';
+      h+='<button class="btn bg xs" onclick="openVentaProducto(productosLista.find(function(x){return x.id==='+p.id+';}))">Vender</button>';
+      h+='<button class="btn bb xs" onclick="openAddStockModal('+p.id+',\''+esc(p.nombre)+'\')">+ Stock</button>';
+      if(isAdmin){
+        h+='<button class="btn bk xs" onclick="openEditProducto('+p.id+')">✏ Editar</button>';
+        h+='<button class="btn br xs" onclick="deleteProducto('+p.id+',\''+esc(p.nombre)+'\')">Retirar</button>';
+      }
+      h+='</div></div>';
+    });
+  });
+  el.innerHTML=h;
+}
+
+function openAddStock(){
+  var h='<div class="mh"><div class="mt">Ingresar Stock</div><button class="mc" onclick="closeM(\'mAddStock\')">✕</button></div>';
+  h+='<label>Producto</label><select id="asProducto" style="margin-bottom:8px">';
+  productosLista.filter(function(p){return p.activo;}).forEach(function(p){
+    h+='<option value="'+p.id+'">'+esc(p.nombre)+' (Stock: '+p.stockActual+')</option>';
+  });
+  h+='</select>';
+  h+='<label>Cantidad a ingresar</label>';
+  h+='<input type="number" id="asCantidad" min="1" placeholder="Cantidad" style="margin-bottom:10px">';
+  h+='<button class="btn bg full" onclick="confirmarAddStock()">Ingresar Stock</button>';
+  var modal=document.getElementById('mAddStock');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAddStock';div.innerHTML='<div class="modal"><div id="mAddStockB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAddStock');});document.body.appendChild(div);}
+  document.getElementById('mAddStockB').innerHTML=h;
+  openM('mAddStock');
+}
+
+function openAddStockModal(id,nombre){
+  var h='<div class="mh"><div class="mt">Stock: '+esc(nombre)+'</div><button class="mc" onclick="closeM(\'mAddStock\')">✕</button></div>';
+  h+='<input type="hidden" id="asProducto" value="'+id+'">';
+  h+='<label>Cantidad a ingresar</label>';
+  h+='<input type="number" id="asCantidad" min="1" placeholder="Cantidad" style="margin-bottom:10px">';
+  h+='<button class="btn bg full" onclick="confirmarAddStock()">Ingresar Stock</button>';
+  var modal=document.getElementById('mAddStock');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAddStock';div.innerHTML='<div class="modal"><div id="mAddStockB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAddStock');});document.body.appendChild(div);}
+  document.getElementById('mAddStockB').innerHTML=h;
+  openM('mAddStock');
+}
+
+function confirmarAddStock(){
+  var id=Number((document.getElementById('asProducto')||{}).value||0);
+  var cant=Number((document.getElementById('asCantidad')||{}).value||0);
+  if(!id){toast('Selecciona un producto.','err');return;}
+  if(cant<=0){toast('Cantidad inválida.','err');return;}
+  rpc('addStock',{id:id,cantidad:cant,userRole:sess.userRole,userName:sess.userName},
+    function(res){toast('Stock actualizado. Nuevo stock: '+res.nuevoStock,'ok');closeM('mAddStock');loadProductos();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+
+function openNuevoProducto(){openProductoModal({});}
+function openEditProducto(id){
+  var p=productosLista.find(function(x){return x.id===id;});
+  if(!p)return;
+  openProductoModal(p);
+}
+function openProductoModal(p){
+  var h='<div class="mh"><div class="mt">'+(p.id?'Editar Producto':'Nuevo Producto')+'</div><button class="mc" onclick="closeM(\'mProducto\')">✕</button></div>';
+  h+='<label>Nombre</label><input type="text" id="ppNombre" value="'+esc(p.nombre||'')+'" placeholder="Nombre del producto">';
+  h+='<label>Precio de venta</label><input type="number" id="ppPrecio" value="'+(p.precio||'')+'" min="0" placeholder="Precio">';
+  h+='<label>Categoría</label><input type="text" id="ppCategoria" value="'+esc(p.categoria||'')+'" placeholder="Ej: Bebidas, Snacks...">';
+  h+='<label>Código de barras (opcional)</label><input type="text" id="ppCodigo" value="'+esc(p.codigoBarras||'')+'" placeholder="Escanea o escribe el código">';
+  h+='<label>Stock inicial</label><input type="number" id="ppStock" value="'+(p.stockActual||0)+'" min="0">';
+  h+='<label>Stock mínimo (alerta)</label><input type="number" id="ppStockMin" value="'+(p.stockMinimo||5)+'" min="0">';
+  h+='<button class="btn ba full" style="margin-top:8px" onclick="guardarProducto('+(p.id||0)+')">Guardar</button>';
+  var modal=document.getElementById('mProducto');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mProducto';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mProductoB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mProducto');});document.body.appendChild(div);}
+  document.getElementById('mProductoB').innerHTML=h;
+  openM('mProducto');
+}
+function guardarProducto(id){
+  var nombre=(document.getElementById('ppNombre').value||'').trim();
+  var precio=Number(document.getElementById('ppPrecio').value||0);
+  var categoria=(document.getElementById('ppCategoria').value||'').trim();
+  var codigo=(document.getElementById('ppCodigo').value||'').trim();
+  var stock=Number(document.getElementById('ppStock').value||0);
+  var stockMin=Number(document.getElementById('ppStockMin').value||5);
+  if(!nombre){toast('Nombre requerido.','err');return;}
+  if(!precio){toast('Precio requerido.','err');return;}
+  rpc('saveProduct',{id:id||0,nombre:nombre,precio:precio,categoria:categoria,codigoBarras:codigo,stockActual:stock,stockMinimo:stockMin,userRole:sess.userRole},
+    function(){toast('Producto guardado.','ok');closeM('mProducto');loadProductos();},
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+function deleteProducto(id,nombre){
+  conf('¿Retirar el producto "'+nombre+'" del inventario?',function(){
+    rpc('deleteProduct',{id:id,userRole:sess.userRole},
+      function(){toast('Producto retirado.','ok');loadProductos();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+// Activar escaner al cargar
+initBarcodeScanner();
 </script>
 </body>
 </html>
