@@ -1085,15 +1085,17 @@ async function apiCloseShift(p, res) {
     .order('ts_ms', { ascending: false }).limit(1);
   const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
 
-  const [salesRes, taxiRes, loansRes, extraRes] = await Promise.all([
+  const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
     supabase.from('sales').select('type,total,pay_method,people,room_id').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('loans').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('extra_staff').select('payment').eq('shift_id', shift).gte('ts_ms', loginMs)
+    supabase.from('extra_staff').select('payment').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
 
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
   let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
+  let totalProductos=0, totalProductosEf=0, totalProductosTa=0, totalProductosNq=0;
 
   (salesRes.data || []).forEach(r => {
     if (String(r.room_id) === '304') return;
@@ -1103,6 +1105,15 @@ async function apiCloseShift(p, res) {
     if (r.type === 'EXTENSION' || r.type === 'RENEWAL') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
   });
   (taxiRes.data||[]).forEach(r=>{totalTaxi+=Number(r.amount||0);});
+  (prodRes.data||[]).forEach(r=>{
+    if(r.is_cortesia)return;
+    const t=Number(r.total||0);
+    const pm=String(r.pay_method||'').toUpperCase();
+    totalProductos+=t;
+    if(pm==='EFECTIVO')totalProductosEf+=t;
+    else if(pm==='TARJETA')totalProductosTa+=t;
+    else if(pm==='NEQUI')totalProductosNq+=t;
+  });
   (loansRes.data||[]).forEach(r=>{totalLoans+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{totalExtraStaff+=Number(r.payment||0);});
 
@@ -1116,7 +1127,11 @@ async function apiCloseShift(p, res) {
     cash_billetes: Number(p.cashBilletes||0),
     cash_monedas: Number(p.cashMonedas||0),
     notes: String(p.notes||''), total_efectivo: totalEfectivo,
-    total_tarjeta: totalTarjeta, total_nequi: totalNequi
+    total_tarjeta: totalTarjeta, total_nequi: totalNequi,
+    total_productos: totalProductos,
+    total_productos_ef: totalProductosEf,
+    total_productos_ta: totalProductosTa,
+    total_productos_nq: totalProductosNq
   });
 
   const barNQ=Number(p.barNQ||0),barTj=Number(p.barTarjeta||0);
@@ -1522,7 +1537,7 @@ async function apiGetDailyCuadre(p, res) {
 
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
   const c={};
-  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiBar:0,gastos:0,taxis:0,turnos:0};});
+  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiHab:0,nequiPersonas:0,nequiHoras:0,nequiBar:0,gastos:0,taxis:0,turnos:0};});
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
