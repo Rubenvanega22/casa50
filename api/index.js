@@ -232,7 +232,8 @@ async function apiGetRooms(req, res) {
 async function apiLogin(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  let shift = currentShiftId(now);
+  let shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shift)) shift=currentShiftId(now);
 
   // FIX T3 MEDIANOCHE (item 1):
   // Solo cambia a SHIFT_1 si el logout del T3 fue en la madrugada (0h-6h)
@@ -307,7 +308,6 @@ async function apiLogin(p, res) {
         .limit(1);
 
       if(prevLogin && prevLogin.length) {
-        // Hubo recepcionista en turno anterior - verificar si cerro con cuadre
         const { data: prevReleased } = await supabase.from('shift_log')
           .select('id')
           .eq('business_day', prevBDay)
@@ -317,11 +317,20 @@ async function apiLogin(p, res) {
           .limit(1);
 
         if(!prevReleased || !prevReleased.length) {
-          // Si es la misma persona del turno anterior, dejarla entrar para cerrar
-          if(userName.toLowerCase() === prevLogin[0].user_name.toLowerCase()) {
-            // La misma recepcionista puede re-entrar a cerrar su turno
-          } else {
-            return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
+          if(userName.toLowerCase() !== prevLogin[0].user_name.toLowerCase()) {
+            // Verificar si el nuevo turno ya fue abierto (nueva logica)
+            const { data: newShiftOpen } = await supabase.from('shift_log')
+              .select('id')
+              .eq('business_day', bDay)
+              .eq('shift_id', shift)
+              .eq('user_role', 'RECEPTION')
+              .in('action', ['LOGIN','RELOGIN'])
+              .limit(1);
+            // Si el nuevo turno NO estaba abierto aun, bloquear
+            if(!newShiftOpen || !newShiftOpen.length) {
+              return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
+            }
+            // Si ya estaba abierto, dejar pasar (turno anterior en pendiente cierre)
           }
         }
       }
@@ -1097,13 +1106,13 @@ async function apiCloseShift(p, res) {
     total_tarjeta: totalTarjeta, total_nequi: totalNequi
   });
 
-  const barEf=Number(p.barEfectivo||0),barTj=Number(p.barTarjeta||0),barNq=Number(p.barNequi||0);
-  if(barEf+barTj+barNq>0){
+  const barNQ=Number(p.barNQ||0),barTj=Number(p.barTarjeta||0);
+  if(barNQ+barTj>0){
     await supabase.from('bar_sales').insert({
       ts_ms:now,business_day:bDay,shift_id:shift,
       user_name:userName,description:'Bar turno cierre',
-      amount_cash:barEf,amount_card:barTj,amount_nequi:barNq,
-      total:barEf+barTj+barNq
+      amount_cash:barNQ,amount_card:barTj,amount_nequi:0,
+      total:barNQ+barTj
     });
   }
   return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
@@ -1240,7 +1249,7 @@ async function apiMonthMetrics(p, res) {
   const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
   const monthTotals = days.reduce((acc,d)=>{acc.sales+=d.sales;acc.refunds+=d.refunds;acc.taxi+=d.taxi;acc.net+=d.net;acc.people+=d.people;acc.roomsSold+=d.roomsSold;return acc;},{sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0});
   monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
-  monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
+  const recepMes={};
   (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
     const nm=r.user_name||'?';
     if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};
