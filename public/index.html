@@ -2248,6 +2248,7 @@ h+='</div></div>';
       businessDay:sess.businessDay,shiftId:sess.shiftId,userName:sess.userName,
       sales:sl,loans:loans,taxiCount:taxiList.length,taxis:taxis,turnos:turnos,
       totalGastos:totalGastos,barEf:Number(barEf)||0,barTj:Number(barTj)||0,barNq:Number(barNq)||0,
+      totProd:Number(t.totalProductos||0),totProdEf:Number(t.totalProductosEf||0),totProdTa:Number(t.totalProductosTa||0),totProdNq:Number(t.totalProductosNq||0),
       ef_hab:ef_hab,ef_padd:ef_padd,ef_hadd:ef_hadd,
       tj_hab:tj_hab,tj_padd:tj_padd,tj_hadd:tj_hadd,
       nq_hab:nq_hab,nq_padd:nq_padd,nq_hadd:nq_hadd,
@@ -2377,7 +2378,7 @@ function doCierre(){
     var barEfVal=parseFmtInput('barEfInput');
     var barTjVal=parseFmtInput('barTjInput');
     var barNqVal=parseFmtInput('barNqInput');
-    rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:barEfVal,barTarjeta:barTjVal,barNequi:barNqVal,shiftId:sess.shiftId,userRole:sess.userRole,userName:sess.userName},
+    rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:barEfVal,barTarjeta:barTjVal,barNequi:barNqVal,shiftId:sess.shiftId,businessDay:sess.businessDay,userRole:sess.userRole,userName:sess.userName},
       function(res){
         var bk=(document.getElementById('_barKey')||{}).value||'';
         try{sessionStorage.removeItem(bk);sessionStorage.setItem('turnoAlerta','1');sessionStorage.setItem('turnoVencido','1');}catch(e){}
@@ -2439,21 +2440,44 @@ function printC(){
 
   // RESUMEN
   h+=tit('RESUMEN');
-  h+=fila('Habitaciones EF',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd));
-  if(d.barEf)h+=fila('Bar Efectivo',fmtP(d.barEf));
+  // EFECTIVO
+  h+=fila('── EFECTIVO ──','',true);
+  h+=fila('  Habitaciones',fmtP(d.ef_hab));
+  if(d.ef_padd)h+=fila('  P. Adicional',fmtP(d.ef_padd));
+  if(d.ef_hadd)h+=fila('  H. Adicional',fmtP(d.ef_hadd));
+  if(d.barEf)h+=fila('  Bar',fmtP(d.barEf));
   h+=fila('TOTAL EFECTIVO',fmtP(d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf),true);
   h+=sep();
-  h+=fila('Habitaciones TA',fmtP(d.tj_hab+d.tj_padd+d.tj_hadd));
-  if(d.barTj)h+=fila('Bar Tarjeta',fmtP(d.barTj));
+  // TARJETA
+  h+=fila('── TARJETA ──','',true);
+  h+=fila('  Habitaciones',fmtP(d.tj_hab));
+  if(d.tj_padd)h+=fila('  P. Adicional',fmtP(d.tj_padd));
+  if(d.tj_hadd)h+=fila('  H. Adicional',fmtP(d.tj_hadd));
+  if(d.barTj)h+=fila('  Bar',fmtP(d.barTj));
   h+=fila('TOTAL TARJETA',fmtP(d.tj_hab+d.tj_padd+d.tj_hadd+d.barTj),true);
   h+=sep();
-  h+=fila('Habitaciones NQ',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd));
-  if(d.barNq)h+=fila('Bar Nequi',fmtP(d.barNq));
- h+=fila('TOTAL NEQUI',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq),true);
+  // NEQUI
+  h+=fila('── NEQUI ──','',true);
+  h+=fila('  Habitaciones',fmtP(d.nq_hab));
+  if(d.nq_padd)h+=fila('  P. Adicional',fmtP(d.nq_padd));
+  if(d.nq_hadd)h+=fila('  H. Adicional',fmtP(d.nq_hadd));
+  if(d.barNq)h+=fila('  Bar',fmtP(d.barNq));
+  h+=fila('TOTAL NEQUI',fmtP(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq),true);
   h+=sep();
   var efNq=(d.ef_hab+d.ef_padd+d.ef_hadd+d.barEf)+(d.nq_hab+d.nq_padd+d.nq_hadd+d.barNq);
   h+=fila('EF + NQ',fmtP(efNq),true);
   h+=sep();
+
+  // PRODUCTOS
+  if(d.totProd>0){
+    h+=sep();
+    h+=tit('PRODUCTOS VENDIDOS');
+    if(d.totProdEf)h+=fila('  Efectivo',fmtP(d.totProdEf));
+    if(d.totProdTa)h+=fila('  Tarjeta',fmtP(d.totProdTa));
+    if(d.totProdNq)h+=fila('  Nequi',fmtP(d.totProdNq));
+    h+=fila('TOTAL PRODUCTOS',fmtP(d.totProd),true);
+    h+=sep();
+  }
 
   // GASTOS
   if(d.totalGastos>0){
