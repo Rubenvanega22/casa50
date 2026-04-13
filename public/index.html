@@ -964,7 +964,9 @@ function openRoom(rid){
       var isRecepH=sess&&sess.userRole==='RECEPTION';
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Taxi</span><div style="display:flex;align-items:center;gap:4px"><b style="color:'+(taxiTotal>0?'#f59e0b':'#6b7280')+'">'+fmt(taxiTotal)+'</b>'+(isRecepH?(data.taxiHistory||[]).map(function(tx){return tx.id?'<button class="btn br xs" onclick="doDeleteTaxi('+tx.id+')">✕taxi</button>':''}).join(''):'')+'</div></div>';
       var totalCobrado=sales.filter(function(s){return s.type!=='HORA_GRATIS';}).reduce(function(a,s){return a+Number(s.total||0);},0);
-      h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e">'+fmt(totalCobrado)+'</span></div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Productos</span><span style="color:#f97316;font-weight:700" id="resumenProdTotal">$0</span></div>';
+h+='<div id="resumenProdLineas" style="padding-left:8px"></div>';
+h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e" id="resumenTotalFinal">'+fmt(totalCobrado)+'</span></div>';
       var box=document.getElementById('resumenEstadia');
       if(box)box.innerHTML=h;
     });
@@ -1006,15 +1008,14 @@ function buildRoomB(r){
       h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos</div>';
       h+='<b style="color:#f97316;font-size:13px" id="roomProdTotal">$0</b>';
       h+='</div>';
-      h+='<div id="roomProdList"></div>';
-      h+='<div style="margin-top:8px;border-top:1px solid #2e2e3a;padding-top:8px">';
-      h+='<div style="display:flex;gap:6px;margin-bottom:6px">';
-      h+='<input type="text" id="roomProdBuscar" placeholder="🔍 Buscar producto..." style="flex:1;margin:0;font-size:12px;padding:6px 9px" oninput="buscarProductoPorNombre(this.value)">';
-      h+='<input type="text" id="roomProdEscaner" placeholder="📷 Escanear código" style="width:130px;margin:0;font-size:12px;padding:6px 9px;border-color:#a78bfa" onkeydown="if(event.key===\'Enter\'){procesarCodigoBarras(this.value);this.value=\'\'}">';
-      h+='</div>';
-      h+='<div id="roomProdResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto"></div>';
-      h+='<div id="roomProdPendiente"></div>';
-      h+='</div></div>';
+      h+='<div id="roomProdList" style="margin-bottom:6px"></div>';
+h+='<div style="margin-top:4px;border-top:1px solid #2e2e3a;padding-top:8px">';
+h+='<input type="text" id="roomProdBuscar" placeholder="🔍 Buscar producto por nombre..." style="width:100%;margin:0 0 8px 0;font-size:12px;padding:6px 9px;box-sizing:border-box" oninput="buscarProductoPorNombre(this.value)">';
+h+='<button onclick="togRoomCats()" style="padding:4px 12px;background:#22222c;border:1px solid #7c5cfc;border-radius:20px;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px">📂 Buscar por Categoría</button>';
+h+='<div id="roomCats" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
+h+='<div id="roomProdResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
+h+='<div id="roomProdPendiente"></div>';
+h+='</div></div>';
       h+='<div id="coF" style="display:none;margin-top:9px"><label>Observacion salida (opcional)</label><input type="text" id="coObs" placeholder="Ej: dejo ropa sucia"><button class="btn br full sm" style="margin-top:6px" onclick="doCheckOut()">Confirmar Salida</button></div>';
       h+='<div id="extP" style="display:none;margin-top:9px">';
       h+='<div class="ext-tabs"><div class="ext-tab'+(selExtMode==='ext'?' on':'')+'" id="extTabExt" onclick="setExtMode(\'ext\')">Extender (hrs sueltas)</div><div class="ext-tab'+(selExtMode==='renew'?' on':'')+'" id="extTabRew" onclick="setExtMode(\'renew\')">Renovar (bloque)</div></div>';
@@ -1080,10 +1081,7 @@ function buildRoomB(r){
     h+='<div class="pr"><button class="pb" onclick="chP(-1,\''+r.category+'\')">-</button><div class="pc" id="pcnt">'+selPpl+'</div><button class="pb" onclick="chP(1,\''+r.category+'\')">+</button></div>';
     h+='<div id="extraPeopleInfo" style="font-size:11px;color:#9ca3af;margin-bottom:4px"></div>';
     // Llegada: WALK, CAR, MOTO
-    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Llegaron en:</div>';
-    h+='<div class="ar"><div class="abtn2'+(selArr==='WALK'?' on':'')+'" id="aWALK" onclick="selAr(\'WALK\')">A pie</div><div class="abtn2'+(selArr==='TAXI'?' on':'')+'" id="aTAXI" onclick="selAr(\'TAXI\')">Taxi</div><div class="abtn2'+(selArr==='CAR'?' on':'')+'" id="aCAR" onclick="selAr(\'CAR\')">Carro</div><div class="abtn2'+(selArr==='MOTO'?' on':'')+'" id="aMOTO" onclick="selAr(\'MOTO\')">Moto</div></div>';
-    h+='<div id="plW" class="'+(selArr==='CAR'||selArr==='MOTO'?'':'h')+'"><label>Placa <span id="plateReqLabel" style="color:'+(selArr==='CAR'?'#ef4444':'#9ca3af')+'">'+(selArr==='CAR'?'(obligatoria)':'(opcional)')+'</span></label><input type="text" id="plIn" placeholder="ABC123" maxlength="10" oninput="this.value=this.value.toUpperCase()"></div>';
-    
+   
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Metodo de pago:</div>';
     h+='<div class="pm"><div class="pmo'+(selPay==='EFECTIVO'?' on':'')+'" id="pmEFECTIVO" onclick="selPm(\'EFECTIVO\')">Efectivo</div><div class="pmo'+(selPay==='TARJETA'?' on':'')+'" id="pmTARJETA" onclick="selPm(\'TARJETA\')">Tarjeta</div><div class="pmo'+(selPay==='NEQUI'?' on':'')+'" id="pmNEQUI" onclick="selPm(\'NEQUI\')">Nequi</div><div class="pmo'+(selPay==='MIXTO'?' on':'')+'" id="pmMIXTO" onclick="selPm(\'MIXTO\')">Mixto</div></div>';
 h+='<div id="mixtoDiv" class="'+(selPay==='MIXTO'?'':'h')+'" style="margin-top:6px">';
@@ -1096,6 +1094,18 @@ h+='</div>';
     h+='<div class="chg h" id="chgBox">Cambio: <span id="chgAmt">$0</span></div>';
     h+='<div class="tb"><div class="tl">Total a cobrar</div><div class="tv" id="totD">'+fmt(calcTot(selDur,selPpl,cfg))+'</div></div>';
     h+='<button class="btn bg full" onclick="doCI()">Confirmar Check-In</button>';
+    h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.5);border-radius:10px;padding:10px;margin-top:10px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos al ingreso</div>';
+    h+='<b style="color:#f97316;font-size:12px" id="ciProdTotal">$0</b>';
+    h+='</div>';
+    h+='<div id="ciProdList" style="margin-bottom:6px"></div>';
+    h+='<input type="text" id="ciProdBuscar" placeholder="🔍 Buscar producto por nombre..." style="width:100%;margin:0 0 8px 0;font-size:12px;padding:6px 9px;box-sizing:border-box" oninput="ciRl(this.value)">';
+    h+='<button onclick="togCiCats()" style="padding:4px 12px;background:#22222c;border:1px solid #7c5cfc;border-radius:20px;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px">📂 Buscar por Categoría</button>';
+    h+='<div id="ciCats" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
+    h+='<div id="ciProdRes" style="background:#22222c;border-radius:6px;max-height:130px;overflow-y:auto;margin-bottom:6px"></div>';
+    h+='<div id="ciPendiente"></div>';
+    h+='</div>';
     updExtraPeopleInfo(r.category);
   }
 
@@ -1107,6 +1117,12 @@ h+='</div>';
     h+='<div style="margin-top:10px">';
     h+='<button onclick="toggleAcordeon()" style="width:100%;background:#22222c;border:1px solid #2e2e3a;border-radius:8px;padding:8px 12px;color:#9ca3af;font-size:11px;font-weight:700;cursor:pointer;text-align:left" id="btnAcordeon">▼ Opciones adicionales</button>';
     h+='<div id="acordeonBody" style="display:none;border:1px solid #2e2e3a;border-top:none;border-radius:0 0 8px 8px;padding:10px;background:#18181f">';
+    if(eff==='AV'&&isR){
+      h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Llegaron en:</div>';
+      h+='<div class="ar" style="margin-bottom:6px"><div class="abtn2'+(selArr==='WALK'?' on':'')+'" id="aWALK" onclick="selAr(\'WALK\')">A pie</div><div class="abtn2'+(selArr==='TAXI'?' on':'')+'" id="aTAXI" onclick="selAr(\'TAXI\')">Taxi</div><div class="abtn2'+(selArr==='CAR'?' on':'')+'" id="aCAR" onclick="selAr(\'CAR\')">Carro</div><div class="abtn2'+(selArr==='MOTO'?' on':'')+'" id="aMOTO" onclick="selAr(\'MOTO\')">Moto</div></div>';
+      h+='<div id="plW" class="'+(selArr==='CAR'||selArr==='MOTO'?'':'h')+'"><label>Placa <span id="plateReqLabel" style="color:'+(selArr==='CAR'?'#ef4444':'#9ca3af')+'">'+(selArr==='CAR'?'(obligatoria)':'(opcional)')+'</span></label><input type="text" id="plIn" placeholder="ABC123" maxlength="10" oninput="this.value=this.value.toUpperCase()"></div>';
+      h+='<hr>';
+    }
 
     // Nota
     if(isR||isA){
@@ -1249,7 +1265,18 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
  
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
-      function(res){toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
+      function(res){
+  toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
+  var prodsCI=[..._ciProds];_ciProds=[];
+  var checkInMs=res.checkInMs||Date.now();
+  function saveNext(i){
+    if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
+    var p=prodsCI[i];
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,checkInMs:checkInMs},
+      function(){saveNext(i+1);},function(){saveNext(i+1);});
+  }
+  saveNext(0);
+},
       function(e){toast(e.message||String(e),'err');}
     );
   });
@@ -1355,7 +1382,7 @@ function selEditPm(pm){
 }
 function confirmEditPayMethod(){
   if(!curRoom)return;
-  rpc('updatePayMethod',{roomId:curRoom.roomId,payMethod:editPayMethod,userName:sess.userName,userRole:sess.userRole},
+  rpc('updatePayMethod',{roomId:curRoom.roomId,payMethod:editPayMethod,checkInMs:curRoom.checkInMs||0,userName:sess.userName,userRole:sess.userRole},
     function(){toast('Método de pago actualizado.','ok');closeM('mEditPay');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
     function(e){toast(e.message||String(e),'err');}
   );
@@ -4677,7 +4704,8 @@ function guardarObsInv(shiftId){
 function guardarProducto(id){
   var nombre=(document.getElementById('ppNombre').value||'').trim();
   var precio=Number(document.getElementById('ppPrecio').value||0);
-  var categoria=(document.getElementById('ppCategoria').value||'').trim();
+  var catSel=document.getElementById('ppCategoria').value||'';
+var categoria=catSel==='__nueva__'?(document.getElementById('ppCategoriaNew').value||'').trim():catSel;
   var codigo=(document.getElementById('ppCodigo').value||'').trim();
   var stock=Number(document.getElementById('ppStock').value||0);
   var stockMin=Number(document.getElementById('ppStockMin').value||5);
@@ -4709,6 +4737,7 @@ function loadRoomProductos(roomId,checkInMs){
     if(!prods.length){
       cont.innerHTML='<p style="font-size:11px;color:#6b7280;margin:6px 0">Sin productos aún.</p>';
       if(totEl)totEl.textContent='$0';
+      updResumenProds([]);
       return;
     }
     var total=0;
@@ -4729,7 +4758,25 @@ function loadRoomProductos(roomId,checkInMs){
     });
     cont.innerHTML=h;
     if(totEl)totEl.textContent=fmt(total);
+    updResumenProds(prods);
   });
+}
+function updResumenProds(prods){
+  var el=document.getElementById('resumenProdTotal');
+  var lineas=document.getElementById('resumenProdLineas');
+  if(!el)return;
+  var tp=prods.reduce(function(a,p){return a+Number(p.total||0);},0);
+  el.textContent=fmt(tp);
+  el.style.color=tp>0?'#f97316':'#6b7280';
+  if(lineas){
+    if(!prods.length){lineas.innerHTML='';return;}
+    lineas.innerHTML=prods.map(function(p){
+      var pc={EFECTIVO:'#22c55e',TARJETA:'#3b82f6',NEQUI:'#a78bfa'}[p.payMethod]||'#9ca3af';
+      return '<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px">'+
+        '<span style="color:#9ca3af">'+esc(p.productName)+' <span style="color:'+pc+'">×'+p.cantidad+'</span></span>'+
+        '<b style="color:#f97316">'+fmt(p.total)+'</b></div>';
+    }).join('');
+  }
 }
 
 function eliminarRoomProd(id){
@@ -4948,7 +4995,13 @@ function openProductoModal(p){
   var h='<div class="mh"><div class="mt">'+(p.id?'Editar Producto':'Nuevo Producto')+'</div><button class="mc" onclick="closeM(\'mProducto\')">✕</button></div>';
   h+='<label>Nombre</label><input type="text" id="ppNombre" value="'+esc(p.nombre||'')+'" placeholder="Nombre del producto">';
   h+='<label>Precio de venta</label><input type="number" id="ppPrecio" value="'+(p.precio||'')+'" min="0" placeholder="Precio">';
-  h+='<label>Categoría</label><input type="text" id="ppCategoria" value="'+esc(p.categoria||'')+'" placeholder="Ej: Bebidas, Snacks...">';
+  var categoriasExistentes=[...new Set(productosLista.map(function(x){return x.categoria||'';}).filter(Boolean))].sort();
+h+='<label>Categoría</label><select id="ppCategoria" style="margin-bottom:6px">';
+categoriasExistentes.forEach(function(c){h+='<option value="'+esc(c)+'"'+(p.categoria===c?' selected':'')+'>'+esc(c)+'</option>';});
+h+='<option value="__nueva__">+ Nueva categoría...</option>';
+h+='</select>';
+h+='<input type="text" id="ppCategoriaNew" placeholder="Escribe la nueva categoría" style="display:none;margin-bottom:6px">';
+h+='<script>document.getElementById(\'ppCategoria\').onchange=function(){document.getElementById(\'ppCategoriaNew\').style.display=this.value===\'__nueva__\'?\'block\':\'none\';}<\/script>';
   h+='<label>Código de barras (opcional)</label><input type="text" id="ppCodigo" value="'+esc(p.codigoBarras||'')+'" placeholder="Escanea o escribe el código">';
   h+='<label>Stock inicial</label><input type="number" id="ppStock" value="'+(p.stockActual||0)+'" min="0">';
   h+='<label>Stock mínimo (alerta)</label><input type="number" id="ppStockMin" value="'+(p.stockMinimo||5)+'" min="0">';
@@ -4957,6 +5010,119 @@ function openProductoModal(p){
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mProducto';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mProductoB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mProducto');});document.body.appendChild(div);}
   document.getElementById('mProductoB').innerHTML=h;
   openM('mProducto');
+}
+var _ciProds=[];
+function ciRl(txt){
+  var lista=productosLista.filter(function(p){return p.activo&&(!txt||p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0);});
+  var el=document.getElementById('ciProdRes');if(!el)return;
+  if(!txt){el.innerHTML='';return;}
+  el.innerHTML=lista.slice(0,6).map(function(p){
+    var sc=p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+    return '<div onclick="selCiProd('+p.id+')" style="padding:7px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
+      '<div><b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>'+
+      '<div style="text-align:right"><b style="font-size:13px;color:#22c55e">'+fmt(p.precio)+'</b><div style="font-size:10px;color:'+sc+'">Stock: '+p.stockActual+'</div></div></div>';
+  }).join('');
+}
+function togCiCats(){
+  var el=document.getElementById('ciCats');if(!el)return;
+  var vis=el.style.display==='flex';
+  if(vis){el.style.display='none';return;}
+  var cats=[...new Set(productosLista.filter(function(p){return p.activo;}).map(function(p){return p.categoria||'';}).filter(Boolean))].sort();
+  el.innerHTML=cats.map(function(c){return '<div onclick="filCiCat(\''+esc(c)+'\')" style="padding:3px 10px;background:#22222c;color:#9ca3af;border:1px solid #2e2e3a;border-radius:20px;font-size:11px;cursor:pointer">'+esc(c)+'</div>';}).join('');
+  el.style.display='flex';
+}
+function filCiCat(cat){
+  var lista=productosLista.filter(function(p){return p.activo&&p.categoria===cat;});
+  var el=document.getElementById('ciProdRes');if(!el)return;
+  el.innerHTML=lista.map(function(p){
+    var sc=p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+    return '<div onclick="selCiProd('+p.id+')" style="padding:7px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
+      '<div><b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b></div>'+
+      '<div style="text-align:right"><b style="font-size:13px;color:#22c55e">'+fmt(p.precio)+'</b><div style="font-size:10px;color:'+sc+'">Stock: '+p.stockActual+'</div></div></div>';
+  }).join('');
+  document.getElementById('ciCats').style.display='none';
+}
+var _ciSel=null,_ciCant=1,_ciPm='EFECTIVO';
+function selCiProd(id){
+  _ciSel=productosLista.find(function(x){return x.id===id;});
+  _ciCant=1;_ciPm='EFECTIVO';
+  document.getElementById('ciProdRes').innerHTML='';
+  document.getElementById('ciProdBuscar').value='';
+  var h='<div style="background:#1a1a24;border:1px solid #f97316;border-radius:8px;padding:10px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  h+='<div><b style="color:#e5e7eb">'+esc(_ciSel.nombre)+'</b> <span style="font-size:11px;color:#9ca3af">'+fmt(_ciSel.precio)+' c/u</span></div>';
+  h+='<span onclick="document.getElementById(\'ciPendiente\').innerHTML=\'\'" style="color:#6b7280;cursor:pointer;font-size:18px">✕</span>';
+  h+='</div>';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h+='<span style="font-size:11px;color:#9ca3af;font-weight:700">Cantidad:</span>';
+  h+='<button onclick="chCiCant(-1)" style="width:28px;height:28px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb;line-height:1">-</button>';
+  h+='<span id="ciCantDisp" style="font-size:18px;font-weight:800;min-width:24px;text-align:center;color:#e5e7eb">1</span>';
+  h+='<button onclick="chCiCant(1)" style="width:28px;height:28px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb;line-height:1">+</button>';
+  h+='<b id="ciSubDisp" style="color:#22c55e;font-size:14px;margin-left:6px">'+fmt(_ciSel.precio)+'</b>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:4px;margin-bottom:8px">';
+  h+='<div onclick="selCiPm(\'EFECTIVO\')" id="ciEF" style="flex:1;padding:5px 4px;background:rgba(34,197,94,.1);border:2px solid #22c55e;border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:#22c55e;cursor:pointer">Efectivo</div>';
+  h+='<div onclick="selCiPm(\'TARJETA\')" id="ciTA" style="flex:1;padding:5px 4px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:#e5e7eb;cursor:pointer">Tarjeta</div>';
+  h+='<div onclick="selCiPm(\'NEQUI\')" id="ciNE" style="flex:1;padding:5px 4px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:#e5e7eb;cursor:pointer">Nequi</div>';
+  h+='</div>';
+  h+='<button onclick="agCiProd()" style="width:100%;padding:7px;background:#f97316;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">+ Agregar al ingreso</button>';
+  h+='</div>';
+  document.getElementById('ciPendiente').innerHTML=h;
+}
+function chCiCant(d){_ciCant=Math.max(1,_ciCant+d);var el=document.getElementById('ciCantDisp');if(el)el.textContent=_ciCant;var el2=document.getElementById('ciSubDisp');if(el2&&_ciSel)el2.textContent=fmt(_ciSel.precio*_ciCant);}
+function selCiPm(pm){_ciPm=pm;['EF','TA','NE'].forEach(function(k){var map={EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI'};var el=document.getElementById('ci'+k);var on=map[k]===pm;if(el){el.style.background=on?'rgba(34,197,94,.1)':'#22222c';el.style.borderColor=on?'#22c55e':'#2e2e3a';el.style.color=on?'#22c55e':'#e5e7eb';}});}
+function agCiProd(){
+  if(!_ciSel)return;
+  var ex=_ciProds.find(function(x){return x.id===_ciSel.id&&x.pm===_ciPm;});
+  if(ex)ex.cant+=_ciCant;
+  else _ciProds.push({id:_ciSel.id,nombre:_ciSel.nombre,precio:_ciSel.precio,cant:_ciCant,pm:_ciPm});
+  document.getElementById('ciPendiente').innerHTML='';
+  _ciSel=null;_ciCant=1;
+  renderCiProds();
+}
+function quitCiProd(id,pm){_ciProds=_ciProds.filter(function(x){return!(x.id===id&&x.pm===pm);});renderCiProds();}
+function renderCiProds(){
+  var list=document.getElementById('ciProdList');
+  var tot=document.getElementById('ciProdTotal');
+  var total=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);
+  if(tot)tot.textContent=fmt(total);
+  if(!list)return;
+  if(!_ciProds.length){list.innerHTML='';return;}
+  list.innerHTML=_ciProds.map(function(x){
+    var pc={EFECTIVO:'#22c55e',TARJETA:'#3b82f6',NEQUI:'#a78bfa'}[x.pm]||'#9ca3af';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.3);font-size:11px">'+
+      '<span style="color:#e5e7eb">'+esc(x.nombre)+' <span style="color:'+pc+'">×'+x.cant+'</span></span>'+
+      '<div style="display:flex;align-items:center;gap:6px"><b style="color:#22c55e">'+fmt(x.precio*x.cant)+'</b>'+
+      '<span onclick="quitCiProd('+x.id+',\''+x.pm+'\')" style="color:#ef4444;cursor:pointer;font-size:13px">✕</span></div></div>';
+  }).join('');
+}
+function togRoomCats(){
+  var el=document.getElementById('roomCats');
+  if(!el)return;
+  var vis=el.style.display==='flex';
+  if(vis){el.style.display='none';return;}
+  var cats=[...new Set(productosLista.filter(function(p){return p.activo;}).map(function(p){return p.categoria||'';}).filter(Boolean))].sort();
+  el.innerHTML=cats.map(function(c){
+    return '<div onclick="filRoomCat(\''+esc(c)+'\')" style="padding:3px 10px;background:#22222c;color:#9ca3af;border:1px solid #2e2e3a;border-radius:20px;font-size:11px;cursor:pointer">'+esc(c)+'</div>';
+  }).join('');
+  el.style.display='flex';
+}
+function filRoomCat(cat){
+  var lista=productosLista.filter(function(p){return p.activo&&p.categoria===cat;});
+  var cont=document.getElementById('roomProdResultados');
+  if(!cont)return;
+  var h='';
+  lista.forEach(function(p){
+    var sc=p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+    h+='<div onclick="seleccionarRoomProd('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">';
+    h+='<div><b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>';
+    h+='<div style="text-align:right"><div style="font-size:13px;font-weight:800;color:#22c55e">'+fmt(p.precio)+'</div>';
+    h+='<div style="font-size:10px;color:'+sc+'">Stock: '+p.stockActual+'</div></div></div>';
+  });
+  if(!h)h='<p style="font-size:11px;color:#6b7280;padding:6px">Sin productos en esta categoría</p>';
+  cont.innerHTML=h;
+  var el=document.getElementById('roomCats');
+  if(el)el.style.display='none';
 }
 // Activar escaner al cargar
 initBarcodeScanner();
