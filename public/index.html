@@ -302,7 +302,13 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="font-size:12px;font-weight:700;color:#ef4444">Por vencer (15 min o vencidas)</div>
 <div class="al" id="alarmList"></div>
 </div>
-<div class="sm2" id="smBar"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+<div class="sm2" id="smBar" style="margin-bottom:0"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<div id="ocupadasBadge" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;color:#ef4444"></div>
+<button class="btn ba sm" id="btnCortesia" style="display:none" onclick="openCortesia()">🎁 Cortesía</button>
+</div>
+</div>
 <div id="roomsCont"></div>
 </div>
 <!-- LISTADO CAMARERA -->
@@ -918,6 +924,11 @@ function renderSM(){
   var c={AV:0,OC:0,DI:0,CO:0,BL:0,RT:0};
   rooms.forEach(function(r){if(r.disabled){c.BL++;return;}if(r.retoque){c.RT++;return;}var k=r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';c[k]++;});
   document.getElementById('smBar').innerHTML=[['Disp',c.AV,'#22c55e'],['Ocup',c.OC,'#ef4444'],['Suci',c.DI,'#f59e0b'],['Cont',c.CO,'#3b82f6'],['Bloq',c.BL,'#6b7280'],['Retoque',c.RT,'#e5e7eb']].map(function(x){return '<div class="chip"><b style="color:'+x[2]+'">'+x[1]+'</b><span style="color:#9ca3af">'+x[0]+'</span></div>';}).join('');
+  var isRec=sess&&sess.userRole==='RECEPTION';
+  var badge=document.getElementById('ocupadasBadge');
+  var btnC=document.getElementById('btnCortesia');
+  if(badge){badge.style.display=isRec&&c.OC>0?'':'none';badge.textContent='🔴 '+c.OC+' ocupadas';}
+  if(btnC)btnC.style.display=isRec?'':'none';
 }
 
 // ---- MODAL HABITACION ----
@@ -2443,7 +2454,11 @@ function printC(){
   h+=tit('RESUMEN');
   // EFECTIVO
   h+=fila('── EFECTIVO ──','',true);
-  h+=fila('  Habitaciones',fmtP(d.ef_hab));
+  var cntEf=(d.sales||[]).filter(function(s){return s.type==='SALE'&&s.payMethod==='EFECTIVO';}).length;
+  var cntTj=(d.sales||[]).filter(function(s){return s.type==='SALE'&&s.payMethod==='TARJETA';}).length;
+  var cntNq=(d.sales||[]).filter(function(s){return s.type==='SALE'&&s.payMethod==='NEQUI';}).length;
+  var cntMx=(d.sales||[]).filter(function(s){return s.type==='SALE'&&s.payMethod==='MIXTO';}).length;
+  h+=fila('  Habitaciones ('+cntEf+')',fmtP(d.ef_hab));
   if(d.ef_padd)h+=fila('  P. Adicional',fmtP(d.ef_padd));
   if(d.ef_hadd)h+=fila('  H. Adicional',fmtP(d.ef_hadd));
   if(d.barEf)h+=fila('  Bar',fmtP(d.barEf));
@@ -2451,7 +2466,7 @@ function printC(){
   h+=sep();
   // TARJETA
   h+=fila('── TARJETA ──','',true);
-  h+=fila('  Habitaciones',fmtP(d.tj_hab));
+  h+=fila('  Habitaciones ('+cntTj+')',fmtP(d.tj_hab));
   if(d.tj_padd)h+=fila('  P. Adicional',fmtP(d.tj_padd));
   if(d.tj_hadd)h+=fila('  H. Adicional',fmtP(d.tj_hadd));
   if(d.barTj)h+=fila('  Bar',fmtP(d.barTj));
@@ -2459,7 +2474,7 @@ function printC(){
   h+=sep();
   // NEQUI
   h+=fila('── NEQUI ──','',true);
-  h+=fila('  Habitaciones',fmtP(d.nq_hab));
+  h+=fila('  Habitaciones ('+cntNq+')',fmtP(d.nq_hab));
   if(d.nq_padd)h+=fila('  P. Adicional',fmtP(d.nq_padd));
   if(d.nq_hadd)h+=fila('  H. Adicional',fmtP(d.nq_hadd));
   if(d.barNq)h+=fila('  Bar',fmtP(d.barNq));
@@ -4487,7 +4502,85 @@ function loadListadoMaid(){
   var el=document.getElementById('listadoCont');
   if(!el)return;
   el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
-  rpc('metrics',{businessDay:sess.businessDay,shiftId:''},function(m){
+  Promise.all([
+    new Promise(function(r){rpc('metrics',{businessDay:sess.businessDay,shiftId:''},r,function(){r({});});}),
+    new Promise(function(r){rpc('getMaidLog',{businessDay:sess.businessDay},r,function(){r({logs:[]});}); })
+  ]).then(function(res){
+    var m=res[0]||{};
+    var maidLogs=res[1].logs||[];
+    var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
+    sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
+    if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
+    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    // Resumen
+    var cnt={SHIFT_1:0,SHIFT_2:0,SHIFT_3:0};
+    sl.forEach(function(s){if(cnt[s.shiftId]!==undefined)cnt[s.shiftId]++;});
+    var h='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">';
+    h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:8px;text-align:center"><div style="font-size:9px;color:#9ca3af;text-transform:uppercase">Total</div><div style="font-size:18px;font-weight:700;color:#a78bfa">'+sl.length+'</div></div>';
+    ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
+      var col=turnoColor[sid];
+      var lbl=turnoLabel[sid];
+      h+='<div style="background:#18181f;border:1px solid '+col+';border-radius:8px;padding:8px;text-align:center"><div style="font-size:9px;color:'+col+';text-transform:uppercase">'+lbl+'</div><div style="font-size:18px;font-weight:700;color:'+col+'">'+cnt[sid]+'</div></div>';
+    });
+    h+='</div>';
+    var num=1;
+    sl.forEach(function(s){
+      var col=turnoColor[s.shiftId]||'#6b7280';
+      var lbl=turnoLabel[s.shiftId]||'';
+      // Hora real de salida
+      var checkoutReal=0;
+      var roomState=rooms.find(function(r){return r.roomId===s.roomId;});
+      if(roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
+      // Aseo
+      var maidLog=maidLogs.find(function(l){
+        return l.roomId===s.roomId&&Number(l.checkInMs||0)===Number(s.checkInMs||0)&&Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE';
+      });
+      h+='<div style="background:#18181f;border:0.5px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px">';
+      // Top
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+      h+='<div><b style="font-size:14px">Hab '+s.roomId+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(s.category)+'</span></div>';
+      h+='<span style="font-size:9px;font-weight:700;color:'+col+';background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px">'+lbl+'</span>';
+      h+='</div>';
+      // Horas en 2 columnas
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:7px">';
+      h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px"><div style="font-size:9px;color:#9ca3af">Ingresó</div><div style="font-size:12px;font-weight:500">'+fT(s.checkInMs)+'</div></div>';
+      h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px"><div style="font-size:9px;color:#9ca3af">Debía salir</div><div style="font-size:12px;color:#9ca3af">'+fT(s.dueMs)+'</div></div>';
+      h+='</div>';
+      // Salida real
+      if(checkoutReal){
+        var salioTarde=checkoutReal>s.dueMs;
+        var sCol=salioTarde?'#ef4444':'#22c55e';
+        var sIcon=salioTarde?'↓ tarde':'↑ antes';
+        h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center">';
+        h+='<div style="font-size:9px;color:#9ca3af">Salió real</div>';
+        h+='<div style="font-size:12px;font-weight:500;color:'+sCol+'">'+fT(checkoutReal)+' <span style="font-size:9px">'+sIcon+'</span></div>';
+        h+='</div>';
+      } else {
+        h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center">';
+        h+='<div style="font-size:9px;color:#9ca3af">Salió real</div>';
+        h+='<div style="font-size:11px;color:#f59e0b">— aún ocupada</div>';
+        h+='</div>';
+      }
+      // Aseo
+      if(maidLog){
+        var cleanMins=Math.round((Number(maidLog.finishedMs)-Number(maidLog.startedMs))/60000);
+        h+='<div style="background:#22222c;border-radius:6px;padding:6px 8px">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">';
+        h+='<span style="font-size:11px;font-weight:500;color:#a78bfa">'+esc(maidLog.maidName)+'</span>';
+        h+='<span style="font-size:10px;font-weight:500;color:#22c55e;background:rgba(34,197,94,.1);padding:2px 7px;border-radius:20px">'+cleanMins+' min</span>';
+        h+='</div>';
+        h+='<div style="font-size:10px;color:#9ca3af">Aseo: '+fT(maidLog.startedMs)+' → '+fT(maidLog.finishedMs)+'</div>';
+        h+='</div>';
+      } else {
+        h+='<div style="background:#22222c;border-radius:6px;padding:6px 8px;font-size:10px;color:#6b7280;font-style:italic">Sin aseo registrado aún</div>';
+      }
+      h+='</div>';
+      num++;
+    });
+    el.innerHTML=h;
+  });
+}
     var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
     sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
     if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
@@ -5081,6 +5174,75 @@ function updInfoTraslado(){
   var rec=opt?opt.getAttribute('data-rec'):0;
   var b=document.getElementById('trSaldoBod');if(b)b.textContent=bod;
   var r=document.getElementById('trSaldoRec');if(r)r.textContent=rec;
+}
+function openCortesia(){
+  if(!productosLista.length){
+    rpc('getProducts',{},function(data){productosLista=data.products||[];openCortesia();});
+    return;
+  }
+  var h='<div class="mh"><div class="mt">🎁 Registrar Cortesía</div><button class="mc" onclick="closeM(\'mCortesia\')">✕</button></div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">El producto se descuenta del inventario. No suma al cuadre.</div>';
+  h+='<div style="background:rgba(124,92,252,.1);border:0.5px solid #7c5cfc;border-radius:8px;padding:6px 10px;font-size:10px;color:#a78bfa;margin-bottom:10px">📷 Puedes escanear el código de barras del producto directamente</div>';
+  h+='<label>Buscar producto</label>';
+  h+='<input type="text" id="cortesiaBuscar" placeholder="Escribe el nombre o escanea..." oninput="buscarCortesia(this.value)" style="margin-bottom:8px">';
+  h+='<div id="cortesiaResultados" style="background:#22222c;border-radius:6px;max-height:160px;overflow-y:auto;margin-bottom:8px"></div>';
+  h+='<div id="cortesiaPendiente"></div>';
+  h+='<button class="btn ba full" onclick="confirmarCortesia()">Confirmar Cortesía</button>';
+  var modal=document.getElementById('mCortesia');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mCortesia';div.innerHTML='<div class="modal"><div id="mCortesiaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mCortesia');});document.body.appendChild(div);}
+  document.getElementById('mCortesiaB').innerHTML=h;
+  window._cortesiaSel=null;window._cortesiaCant=1;
+  openM('mCortesia');
+}
+function buscarCortesia(txt){
+  var cont=document.getElementById('cortesiaResultados');
+  if(!cont)return;
+  if(!txt){cont.innerHTML='';return;}
+  var lista=productosLista.filter(function(p){return p.activo&&p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;}).slice(0,6);
+  if(!lista.length){cont.innerHTML='<p style="font-size:11px;color:#6b7280;padding:6px">Sin resultados</p>';return;}
+  cont.innerHTML=lista.map(function(p){
+    var sc=p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+    return '<div onclick="selCortesia('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
+      '<div><b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>'+
+      '<div style="text-align:right"><div style="font-size:10px;color:'+sc+'">Stock: '+p.stockActual+'</div></div></div>';
+  }).join('');
+}
+function selCortesia(id){
+  window._cortesiaSel=productosLista.find(function(x){return x.id===id;});
+  window._cortesiaCant=1;
+  document.getElementById('cortesiaResultados').innerHTML='';
+  document.getElementById('cortesiaBuscar').value='';
+  renderCortesiaPend();
+}
+function renderCortesiaPend(){
+  var prod=window._cortesiaSel;
+  var cont=document.getElementById('cortesiaPendiente');
+  if(!cont||!prod)return;
+  var cant=window._cortesiaCant||1;
+  var h='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  h+='<b style="font-size:13px">'+esc(prod.nombre)+'</b>';
+  h+='<span onclick="window._cortesiaSel=null;renderCortesiaPend()" style="color:#6b7280;cursor:pointer">✕</span>';
+  h+='</div>';
+  h+='<div style="display:flex;align-items:center;gap:8px">';
+  h+='<span style="font-size:11px;color:#9ca3af">Cantidad:</span>';
+  h+='<button onclick="window._cortesiaCant=Math.max(1,window._cortesiaCant-1);renderCortesiaPend()" style="width:28px;height:28px;background:#18181f;border:1px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">-</button>';
+  h+='<span style="font-size:18px;font-weight:700;min-width:24px;text-align:center">'+cant+'</span>';
+  h+='<button onclick="window._cortesiaCant=Math.min('+prod.stockActual+',window._cortesiaCant+1);renderCortesiaPend()" style="width:28px;height:28px;background:#18181f;border:1px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">+</button>';
+  h+='<span style="font-size:11px;color:#9ca3af">Stock: '+prod.stockActual+'</span>';
+  h+='</div></div>';
+  cont.innerHTML=h;
+}
+function confirmarCortesia(){
+  var prod=window._cortesiaSel;
+  if(!prod){toast('Selecciona un producto.','err');return;}
+  var cant=window._cortesiaCant||1;
+  conf('¿Dar '+cant+' '+prod.nombre+' como cortesía?',function(){
+    rpc('addRoomProduct',{roomId:'CORTESIA',productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,userName:sess.userName,userRole:sess.userRole,checkInMs:0},
+      function(){toast('✓ Cortesía registrada — '+cant+' '+prod.nombre,'ok');closeM('mCortesia');loadProductos();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
 }
 function openAddStock(){
   var h='<div class="mh"><div class="mt">Ingresar Stock</div><button class="mc" onclick="closeM(\'mAddStock\')">✕</button></div>';
