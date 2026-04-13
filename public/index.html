@@ -4730,8 +4730,7 @@ function guardarObsInv(shiftId){
 function guardarProducto(id){
   var nombre=(document.getElementById('ppNombre').value||'').trim();
   var precio=Number(document.getElementById('ppPrecio').value||0);
-  var catSel=document.getElementById('ppCategoria').value||'';
-var categoria=catSel==='__nueva__'?(document.getElementById('ppCategoriaNew').value||'').trim():catSel;
+  var categoria=(document.getElementById('ppCategoria').value||'').trim();
   var codigo=(document.getElementById('ppCodigo').value||'').trim();
   var stock=Number(document.getElementById('ppStock').value||0);
   var stockMin=Number(document.getElementById('ppStockMin').value||5);
@@ -5031,12 +5030,12 @@ function openProductoModal(p){
   h+='<label>Nombre</label><input type="text" id="ppNombre" value="'+esc(p.nombre||'')+'" placeholder="Nombre del producto">';
   h+='<label>Precio de venta</label><input type="number" id="ppPrecio" value="'+(p.precio||'')+'" min="0" placeholder="Precio">';
   var categoriasExistentes=[...new Set(productosLista.map(function(x){return x.categoria||'';}).filter(Boolean))].sort();
-h+='<label>Categoría</label><select id="ppCategoria" style="margin-bottom:6px" onchange="ppCatChange()">';
-categoriasExistentes.forEach(function(c){h+='<option value="'+esc(c)+'"'+(p.categoria===c?' selected':'')+'>'+esc(c)+'</option>';});
-h+='<option value="__nueva__">+ Nueva categoría...</option>';
+h+='<label>Categoría</label>';
+h+='<select id="ppCategoria" style="margin-bottom:6px">';
+h+='<option value="">-- Selecciona --</option>';
+['Cervezas','Licores','Bebidas gaseosas','Aguas','Energizantes','Jugos','Snacks','Productos íntimos','Aseo personal'].forEach(function(c){h+='<option value="'+c+'"'+(p.categoria===c?' selected':'')+'>'+c+'</option>';});
 h+='</select>';
-var sinCats=!categoriasExistentes.length;
-h+='<input type="text" id="ppCategoriaNew" placeholder="Escribe la nueva categoría" style="display:'+(sinCats?'block':'none')+';margin-bottom:6px">';
+var sinCats=false;
   h+='<label>Código de barras (opcional)</label><input type="text" id="ppCodigo" value="'+esc(p.codigoBarras||'')+'" placeholder="Escanea o escribe el código">';
   h+='<label>Stock inicial</label><input type="number" id="ppStock" value="'+(p.stockActual||0)+'" min="0">';
   h+='<label>Stock mínimo (alerta)</label><input type="number" id="ppStockMin" value="'+(p.stockMinimo||5)+'" min="0">';
@@ -5044,10 +5043,9 @@ h+='<input type="text" id="ppCategoriaNew" placeholder="Escribe la nueva categor
   var modal=document.getElementById('mProducto');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mProducto';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mProductoB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mProducto');});document.body.appendChild(div);}
   document.getElementById('mProductoB').innerHTML=h;
-  if(sinCats){var sel=document.getElementById('ppCategoria');if(sel)sel.value='__nueva__';}
   openM('mProducto');
 }
-function ppCatChange(){var sel=document.getElementById('ppCategoria');var inp=document.getElementById('ppCategoriaNew');if(inp)inp.style.display=sel&&sel.value==='__nueva__'?'block':'none';}
+
 var _ciProds=[];
 function ciRl(txt){
   var lista=productosLista.filter(function(p){return p.activo&&(!txt||p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0);});
