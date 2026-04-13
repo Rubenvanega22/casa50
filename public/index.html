@@ -4581,32 +4581,7 @@ function loadListadoMaid(){
     el.innerHTML=h;
   });
 }
-    var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
-    sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
-    if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
-    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
-    var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-    var num=1;
-    var h='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">'+sl.length+' habitaciones vendidas hoy</div>';
-    sl.forEach(function(s){
-      var col=turnoColor[s.shiftId]||'#6b7280';
-      var lbl=turnoLabel[s.shiftId]||'';
-      var extraI=Number(s.extraPeople||0)>0?' +'+s.extraPeople+'p':'';
-      h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:6px">';
-      h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
-      h+='<div><b style="font-size:15px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:11px;color:#9ca3af">'+esc(s.category)+'</span></div>';
-      h+='<span style="font-size:10px;font-weight:700;color:'+col+';background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px">'+lbl+'</span>';
-      h+='</div>';
-      h+='<div style="font-size:11px;color:#9ca3af;margin-top:4px;display:flex;flex-wrap:wrap;gap:8px">';
-      h+='<span>Ent: <b style="color:#e5e7eb">'+fT(s.checkInMs)+'</b></span>';
-      h+='<span>Sal: <b style="color:#e5e7eb">'+fT(s.dueMs)+'</b></span>';
-      h+='<span><b style="color:#e5e7eb">'+s.durationHrs+'h — '+s.people+'p'+extraI+'</b></span>';
-      h+='</div></div>';
-      num++;
-    });
-    el.innerHTML=h;
-  },function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
-}
+   
 // ==================== PRODUCTOS ====================
 var productosLista=[];
 var barcodeBuffer='',barcodeTimer=null;
