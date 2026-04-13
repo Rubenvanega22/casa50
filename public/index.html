@@ -474,7 +474,9 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div style="display:flex;gap:6px">
 <button class="refresh-btn" onclick="loadProductos()">↻ Actualizar</button>
-<button class="btn bg sm" id="btnAddStock" onclick="openAddStock()">+ Ingresar Stock</button>
+<button class="btn bb sm" id="btnIngresoBodega" onclick="openIngresoBodega()">+ Ingreso Bodega</button>
+<button class="btn by sm" id="btnTrasladoRec" onclick="openTrasladoRecepcion()">↓ Bajar a Recepción</button>
+<button class="btn bg sm" id="btnAddStock" style="display:none" onclick="openAddStock()">+ Ingresar Stock</button>
 <button class="btn ba sm" id="btnNuevoProducto" style="display:none" onclick="openNuevoProducto()">+ Nuevo Producto</button>
 </div>
 </div>
@@ -4513,6 +4515,7 @@ function procesarCodigoBarras(codigo){
     else toast('Habitación '+rid+' no encontrada','err');
     return;
   }
+
   function buscarYProcesar(lista){
     var prod=lista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
     if(prod){
@@ -4595,10 +4598,15 @@ function confirmarVentaProd(productId,precio){
 function loadProductos(){
   if(!sess)return;
   var isAdmin=sess.userRole==='ADMIN';
+  var isRec=sess.userRole==='RECEPTION';
   var btnNuevo=document.getElementById('btnNuevoProducto');
   if(btnNuevo)btnNuevo.style.display=isAdmin?'':'none';
   var btnStock=document.getElementById('btnAddStock');
-  if(btnStock)btnStock.style.display=(isAdmin||sess.userRole==='RECEPTION')?'':'none';
+  if(btnStock)btnStock.style.display='none';
+  var btnBodega=document.getElementById('btnIngresoBodega');
+  if(btnBodega)btnBodega.style.display=(isAdmin||isRec)?'':'none';
+  var btnTraslado=document.getElementById('btnTrasladoRec');
+  if(btnTraslado)btnTraslado.style.display=(isAdmin||isRec)?'':'none';
   rpc('getProducts',{userRole:sess.userRole},function(data){
     productosLista=data.products||[];
     renderProductos();
@@ -4649,7 +4657,8 @@ function renderInventario(inv,day){
   shifts.forEach(function(sh){
     h+='<th colspan="3" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
   });
-  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">Saldo</th>';
+  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#1D9E75;border:1px solid #2e2e3a;text-align:center">Saldo REC</th>';
+  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#7F77DD;border:1px solid #2e2e3a;text-align:center">Saldo BOD</th>';
   h+='</tr><tr>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
@@ -4659,6 +4668,7 @@ function renderInventario(inv,day){
       h+='<th style="padding:3px 4px;background:#1a1a24;font-size:9px;color:#6b7280;border:1px solid #2e2e3a;text-align:center">'+sub+'</th>';
     });
   });
+  h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='</tr></thead><tbody>';
   Object.keys(cats).sort().forEach(function(cat){
@@ -4682,11 +4692,16 @@ function renderInventario(inv,day){
           if(td.cortesias>0)vStr+='<span style="background:rgba(249,115,22,.2);color:#f97316;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+td.cortesias+' cor</span>';
         } else {vStr='<span style="color:#2e2e3a">—</span>';}
         var sStr=td.valorVendido>0?'<span style="color:#e5e7eb;font-size:10px">'+fmt(td.valorVendido)+'</span>':'<span style="color:#2e2e3a">—</span>';
-        h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eStr+'</td>';
+        var traslado=td.trasladoRecepcion||0;
+        var eTot=traslado;
+        var eTotStr=eTot>0?'<span style="color:#f59e0b;font-weight:700">+'+eTot+'</span>':'<span style="color:#2e2e3a">—</span>';
+        h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;vertical-align:top">'+vStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+sStr+'</td>';
       });
+      var bodCol=r.stockBodega<=0?'#ef4444':r.stockBodega<=r.stockMinimo?'#f59e0b':'#a78bfa';
       h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+saldoCol+';text-align:center">'+r.saldoActual+'</td>';
+      h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+bodCol+';text-align:center">'+(r.stockBodega||0)+'</td>';
       h+='</tr>';
     });
   });
@@ -4975,6 +4990,73 @@ function renderProductos(){
   el.innerHTML=h;
 }
 
+function openIngresoBodega(){
+  var h='<div class="mh"><div class="mt">Ingreso a Bodega</div><button class="mc" onclick="closeM(\'mIngresoBodega\')">✕</button></div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Registra lo que compraste. Entra primero a bodega.</div>';
+  h+='<label>Producto</label><select id="ibProducto" style="margin-bottom:8px" onchange="updInfoBodega()">';
+  productosLista.filter(function(p){return p.activo;}).forEach(function(p){
+    h+='<option value="'+p.id+'" data-bodega="'+(p.stockBodega||0)+'" data-rec="'+p.stockActual+'">'+esc(p.nombre)+'</option>';
+  });
+  h+='</select>';
+  h+='<div id="ibInfo" style="background:#22222c;border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between"><span>Bodega: <b id="ibSaldoBod" style="color:#a78bfa">0</b></span><span>Recepción: <b id="ibSaldoRec" style="color:#22c55e">0</b></span></div>';
+  h+='<label>Cantidad que llegó</label><input type="number" id="ibCantidad" min="1" placeholder="Ej: 24">';
+  h+='<label>Nota (opcional)</label><input type="text" id="ibNota" placeholder="Ej: Compra semanal">';
+  h+='<button class="btn bb full" style="margin-top:10px" onclick="confirmarIngresoBodega()">Registrar ingreso a bodega</button>';
+  var modal=document.getElementById('mIngresoBodega');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mIngresoBodega';div.innerHTML='<div class="modal"><div id="mIngresoBodegaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mIngresoBodega');});document.body.appendChild(div);}
+  document.getElementById('mIngresoBodegaB').innerHTML=h;
+  updInfoBodega();
+  openM('mIngresoBodega');
+}
+function updInfoBodega(){
+  var sel=document.getElementById('ibProducto');
+  if(!sel)return;
+  var opt=sel.options[sel.selectedIndex];
+  var bod=opt?opt.getAttribute('data-bodega'):0;
+  var rec=opt?opt.getAttribute('data-rec'):0;
+  var b=document.getElementById('ibSaldoBod');if(b)b.textContent=bod;
+  var r=document.getElementById('ibSaldoRec');if(r)r.textContent=rec;
+}
+function confirmarIngresoBodega(){
+  var productId=Number((document.getElementById('ibProducto')||{}).value||0);
+  var cantidad=Number((document.getElementById('ibCantidad')||{}).value||0);
+  var nota=(document.getElementById('ibNota')||{}).value||'';
+  if(!productId){toast('Selecciona un producto.','err');return;}
+  if(cantidad<=0){toast('Ingresa la cantidad.','err');return;}
+  conf('¿Registrar '+cantidad+' unidades en bodega?',function(){
+    rpc('ingresoBodega',{productId:productId,cantidad:cantidad,nota:nota,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId},
+      function(res){toast('✓ '+cantidad+' unidades en bodega. Total bodega: '+res.nuevoBodega,'ok');closeM('mIngresoBodega');loadProductos();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+function openTrasladoRecepcion(){
+  var h='<div class="mh"><div class="mt">Bajar a Recepción</div><button class="mc" onclick="closeM(\'mTrasladoRec\')">✕</button></div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Mueve unidades de bodega a recepción para poder venderlas.</div>';
+  h+='<label>Producto</label><select id="trProducto" style="margin-bottom:8px" onchange="updInfoTraslado()">';
+  productosLista.filter(function(p){return p.activo;}).forEach(function(p){
+    h+='<option value="'+p.id+'" data-bodega="'+(p.stockBodega||0)+'" data-rec="'+p.stockActual+'">'+esc(p.nombre)+'</option>';
+  });
+  h+='</select>';
+  h+='<div id="trInfo" style="background:#22222c;border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between"><span>Bodega: <b id="trSaldoBod" style="color:#a78bfa">0</b></span><span>Recepción: <b id="trSaldoRec" style="color:#22c55e">0</b></span></div>';
+  h+='<label>Cantidad a bajar</label><input type="number" id="trCantidad" min="1" placeholder="Ej: 12">';
+  h+='<label>Nota (opcional)</label><input type="text" id="trNota" placeholder="Ej: Turno 2">';
+  h+='<button class="btn by full" style="margin-top:10px" onclick="confirmarTrasladoRec()">Confirmar traslado</button>';
+  var modal=document.getElementById('mTrasladoRec');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mTrasladoRec';div.innerHTML='<div class="modal"><div id="mTrasladoRecB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mTrasladoRec');});document.body.appendChild(div);}
+  document.getElementById('mTrasladoRecB').innerHTML=h;
+  updInfoTraslado();
+  openM('mTrasladoRec');
+}
+function updInfoTraslado(){
+  var sel=document.getElementById('trProducto');
+  if(!sel)return;
+  var opt=sel.options[sel.selectedIndex];
+  var bod=opt?opt.getAttribute('data-bodega'):0;
+  var rec=opt?opt.getAttribute('data-rec'):0;
+  var b=document.getElementById('trSaldoBod');if(b)b.textContent=bod;
+  var r=document.getElementById('trSaldoRec');if(r)r.textContent=rec;
+}
 function openAddStock(){
   var h='<div class="mh"><div class="mt">Ingresar Stock</div><button class="mc" onclick="closeM(\'mAddStock\')">✕</button></div>';
   h+='<label>Producto</label><select id="asProducto" style="margin-bottom:8px">';
