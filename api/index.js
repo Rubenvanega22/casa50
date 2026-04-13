@@ -51,6 +51,12 @@ function currentShiftId(ms) {
   return 'SHIFT_3';
 }
 
+function normalizeShiftId(shiftId) {
+  if (shiftId === 'SHIFT_1_12') return 'SHIFT_1';
+  if (shiftId === 'SHIFT_2_12') return 'SHIFT_2';
+  return shiftId || 'SHIFT_1';
+}
+
 function calcPrice(durationHrs, cfg) {
   if (durationHrs === 3)  return Number(cfg.h3  || 0);
   if (durationHrs === 6)  return Number(cfg.h6  || 0);
@@ -246,6 +252,7 @@ async function apiLogin(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   let shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  shift = normalizeShiftId(shift);
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shift)) shift=currentShiftId(now);
 
   // FIX T3 MEDIANOCHE (item 1):
