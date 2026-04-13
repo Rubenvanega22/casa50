@@ -2172,9 +2172,9 @@ sl.forEach(function(s){
     var totalGastos=gastos_gen+taxis+turnos;
     var barKey='bar_'+sess.businessDay+'_'+sess.shiftId;
     var barSaved={};try{barSaved=JSON.parse(sessionStorage.getItem(barKey)||'{}');}catch(e){}
-    var barEf=barSaved.ef!==undefined?barSaved.ef:(Number(t.shiftBarEfectivo||0)||'');
-    var barTj=barSaved.tj!==undefined?barSaved.tj:(Number(t.shiftBarTarjeta||0)||'');
-    var barNq=barSaved.nq!==undefined?barSaved.nq:(Number(t.shiftBarNequi||0)||'');
+    var barEf=Number(t.totalProductosEf||0);
+    var barTj=Number(t.totalProductosTa||0);
+    var barNq=Number(t.totalProductosNq||0);
     var h='<div id="cuadreRep">';
     h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="font-size:18px;font-weight:900;color:#a78bfa">CASA 50 — SPA MOTEL</div>';
@@ -2187,7 +2187,7 @@ sl.forEach(function(s){
     h+=_cRow('Habitaciones',tj_hab,'#3b82f6');
     h+=_cRow('P. Adicional',tj_padd,'#3b82f6');
     h+=_cRow('H. Adicional',tj_hadd,'#3b82f6');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barTjInput" placeholder="0" value="'+(barTj?Number(barTj).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+=_cRow('Bar (productos)',barTj,'#3b82f6');
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0))+'</span><button class="btn bb xs" onclick="toggleDesgloseC(\'tj\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_tj" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'TARJETA',Number(barTj)||0,'#3b82f6');
@@ -2206,7 +2206,7 @@ h+='</div></div>';
     h+=_cRow('Habitaciones',ef_hab,'#22c55e');
     h+=_cRow('P. Adicional',ef_padd,'#22c55e');
     h+=_cRow('H. Adicional',ef_hadd,'#22c55e');
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">Bar NQ (Ef+Nequi) <span style="color:#ef4444;font-size:10px">*obligatorio</span></span><input type="text" inputmode="numeric" id="barEfInput" placeholder="0" value="'+(barEf?Number(barEf).toLocaleString('es-CO'):'')+'" oninput="fmtBarInput(this);updCuadre()" style="width:120px;padding:4px 8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;font-size:13px;text-align:right"></div>';
+    h+=_cRow('Bar (productos)',barEf,'#22c55e');
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Efectivo</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#22c55e" id="totalEfDisp">'+fmt(ef_hab+ef_padd+ef_hadd+(Number(barEf)||0))+'</span><button class="btn bg xs" onclick="toggleDesgloseC(\'ef\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_ef" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'EFECTIVO',Number(barEf)||0,'#22c55e');
@@ -2232,6 +2232,9 @@ h+='</div></div>';
     h+='<input type="hidden" id="_nq_base" value="'+(nq_hab+nq_padd+nq_hadd)+'">';
     h+='<input type="hidden" id="_tGastos" value="'+totalGastos+'">';
     h+='<input type="hidden" id="_barKey" value="'+barKey+'">';
+    h+='<input type="hidden" id="_ef_bar_auto" value="'+barEf+'">';
+    h+='<input type="hidden" id="_tj_bar_auto" value="'+barTj+'">';
+    h+='<input type="hidden" id="_nq_bar_auto" value="'+barNq+'">';
     if(sl.length){
       h+='<div class="sec">Detalle Ventas del Turno</div>';
       sl.forEach(function(s){
@@ -2368,16 +2371,14 @@ function calcFaltante(){
 function doCierre(){
   var barEfEl=document.getElementById('barEfInput');
   var barTjEl=document.getElementById('barTjInput');
-  if(!barEfEl||barEfEl.value===''){toast('Debes ingresar el Bar en Efectivo para cerrar el turno.','err');if(barEfEl)barEfEl.focus();return;}
-  if(!barTjEl||barTjEl.value===''){toast('Debes ingresar el Bar en Tarjeta para cerrar el turno.','err');if(barTjEl)barTjEl.focus();return;}
   var n=(document.getElementById('closeN2')||{}).value||'';
   var ca=Number((document.getElementById('cashIn2')||{}).value||0);
   conf('Confirmar cierre del turno?',function(){
     var cashBilletes=Number((document.getElementById('cashBilletes')||{}).value||0);
     var cashMonedas=Number((document.getElementById('cashMonedas')||{}).value||0);
-    var barEfVal=parseFmtInput('barEfInput');
-    var barTjVal=parseFmtInput('barTjInput');
-    var barNqVal=parseFmtInput('barNqInput');
+    var barEfVal=Number((document.getElementById('_ef_bar_auto')||{}).value||0);
+    var barTjVal=Number((document.getElementById('_tj_bar_auto')||{}).value||0);
+    var barNqVal=Number((document.getElementById('_nq_bar_auto')||{}).value||0);
     rpc('closeShift',{notes:n,cashCount:ca,cashBilletes:cashBilletes,cashMonedas:cashMonedas,barEfectivo:barEfVal,barTarjeta:barTjVal,barNequi:barNqVal,shiftId:sess.shiftId,businessDay:sess.businessDay,userRole:sess.userRole,userName:sess.userName},
       function(res){
         var bk=(document.getElementById('_barKey')||{}).value||'';
