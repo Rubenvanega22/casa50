@@ -270,7 +270,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </select>
 <div id="nw" class="h"><label id="nlbl">Tu Nombre</label><input type="text" id="lnm" placeholder="Nombre completo" autocomplete="off" oninput="chkBtn()"></div>
 <div id="nwRec" class="h"><label>Tu Nombre</label><select id="lnmRec" onchange="selRecName()" style="margin-bottom:6px"><option value="">-- Selecciona tu nombre --</option></select></div>
-<div id="nwShift" class="h"><label>Tu Turno</label><select id="lShift" style="margin-bottom:6px"><option value="SHIFT_1">T1 (6am - 2pm)</option><option value="SHIFT_2">T2 (2pm - 9pm)</option><option value="SHIFT_3">T3 (9pm - 6am)</option></select></div>
+<div id="nwShift" class="h"><label>Tu Turno</label><select id="lShift" style="margin-bottom:6px"><option value="SHIFT_1">T1 (6am - 2pm)</option><option value="SHIFT_2">T2 (2pm - 9pm)</option><option value="SHIFT_3">T3 (9pm - 6am)</option><option value="SHIFT_1_12">1T12 (6am - 6pm)</option><option value="SHIFT_2_12">2T12 (6pm - 6am)</option></select></div>
 <div id="uw" class="h"><label>PIN Personal</label><input type="password" id="upin" placeholder="PIN (si tienes)" maxlength="10"></div>
 <div id="aw" class="h"><label>PIN Administrador</label><input type="password" id="apin" placeholder="PIN Admin" maxlength="10"></div>
 <button class="btn full ba" id="lbtn" onclick="entrar()" disabled style="margin-top:10px">Ingresar</button>
@@ -592,6 +592,25 @@ function entrar(){
   var fe=window._forceEntry===true;window._forceEntry=false;
   var shiftSel=document.getElementById('lShift');
   var shiftId=shiftSel?shiftSel.value:'';
+// Validacion de horario por turno
+if(rol==='RECEPTION'&&shiftId){
+  var horaActual=new Date().getHours()*60+new Date().getMinutes();
+  var horarios={
+    SHIFT_1:{min:5*60+30,max:14*60+30,label:'T1 (desde 5:30am)'},
+    SHIFT_2:{min:13*60+30,max:21*60+30,label:'T2 (desde 1:30pm)'},
+    SHIFT_3:{min:20*60+30,max:23*60+59,label:'T3 (desde 8:30pm)'},
+    SHIFT_1_12:{min:5*60+30,max:14*60+30,label:'1T12 (desde 5:30am)'},
+    SHIFT_2_12:{min:17*60+30,max:23*60+59,label:'2T12 (desde 5:30pm)'}
+  };
+  var h=horarios[shiftId];
+  var esT3=shiftId==='SHIFT_3';
+  var esTardio=esT3&&horaActual<6*60;
+  if(h&&!esTardio&&(horaActual<h.min||horaActual>h.max)){
+    showLE('Este turno no está disponible a esta hora. '+h.label+' para ingresar.');
+    btn.disabled=false;btn.textContent='Ingresar';
+    return;
+  }
+}
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
     if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
@@ -839,7 +858,7 @@ function mostrarAlertaTurno(msg,urgente,finMs){
     h+='<button class="btn br full" style="margin-bottom:8px" onclick="closeM(\'mTurnoAlert\');sw(\'cuadre\')">Ir a Cuadre para Cerrar</button>';
   } else {
     h+='<button class="btn bg full" style="margin-bottom:8px" onclick="closeM(\'mTurnoAlert\')">Entendido</button>';
-    h+='<button class="btn bb full" onclick="activarTurno12h('+finMs+')">Continuar en Turno 12 Horas</button>';
+    h+='<button class="btn bb full" onclick="activarTurno12h('+finMs+')">Continuar Turno Extendido</button>';
   }
   h+='</div>';
   document.getElementById('mTurnoAlertB').innerHTML=h;
@@ -847,18 +866,10 @@ function mostrarAlertaTurno(msg,urgente,finMs){
 }
 
 function activarTurno12h(finActual){
-  // Calcular nueva hora = inicio del turno + 12h
-  var sid=sess.shiftId;
-  var inicioH={SHIFT_1:6,SHIFT_2:14,SHIFT_3:21};
-  var d=new Date();
-  d.setHours(inicioH[sid],0,0,0);
-  if(sid==='SHIFT_3'&&new Date().getHours()<6)d.setDate(d.getDate()-1);
-  var nuevaFin=d.getTime()+12*3600000;
   turnoAlertaMostrada=false;
   turnoVencidoMostrado=false;
   closeM('mTurnoAlert');
-  toast('Turno extendido a 12 horas. Nueva salida: '+fT(nuevaFin),'ok');
-  // Reprogramar alerta
+  toast('Turno extendido. Cierra cuando termines.','ok');
   setTimeout(function(){
     turnoAlertaMostrada=false;
     turnoVencidoMostrado=false;
@@ -962,7 +973,8 @@ function openRoom(rid){
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Hora regalo aplicada</span><b style="color:'+(horaGratis?'#22c55e':'#6b7280')+'">'+(horaGratis?'Sí, 1 hora':'No')+'</b></div>';
       var taxiTotal=(data.taxiHistory||[]).reduce(function(a,t){return a+Number(t.amount||0);},0);
       var isRecepH=sess&&sess.userRole==='RECEPTION';
-      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Taxi</span><div style="display:flex;align-items:center;gap:4px"><b style="color:'+(taxiTotal>0?'#f59e0b':'#6b7280')+'">'+fmt(taxiTotal)+'</b>'+(isRecepH?(data.taxiHistory||[]).map(function(tx){return tx.id?'<button class="btn br xs" onclick="doDeleteTaxi('+tx.id+')">✕taxi</button>':''}).join(''):'')+'</div></div>';
+      var taxiIds=(data.taxiHistory||[]).filter(function(tx){return tx.id;});
+h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Taxi</span><div style="display:flex;align-items:center;gap:4px"><b style="color:'+(taxiTotal>0?'#f59e0b':'#6b7280')+'">'+fmt(taxiTotal)+'</b>'+(isRecepH&&taxiIds.length?'<button class="btn br xs" onclick="doDeleteTaxi('+taxiIds[taxiIds.length-1].id+')">✕taxi</button>':'')+'</div></div>';
       var totalCobrado=sales.filter(function(s){return s.type!=='HORA_GRATIS';}).reduce(function(a,s){return a+Number(s.total||0);},0);
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Productos</span><span style="color:#f97316;font-weight:700" id="resumenProdTotal">$0</span></div>';
 h+='<div id="resumenProdLineas" style="padding-left:8px"></div>';
@@ -1090,6 +1102,7 @@ h+='<label>Monto en Tarjeta</label><input type="number" id="mixtotj" placeholder
 h+='<label>Monto en Nequi</label><input type="number" id="mixtoNq" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
 h+='</div>';
+h+='<div style="background:#22222c;border-radius:8px;padding:8px;margin-bottom:6px;min-height:36px"><div style="font-size:11px;color:#f97316;font-weight:700;text-transform:uppercase;margin-bottom:4px">🛒 Productos seleccionados</div><div id="ciProdResumen"><p style="font-size:11px;color:#6b7280;margin:0">Sin productos aún.</p></div></div>';
     h+='<div id="cashDiv" class="'+(selPay==='EFECTIVO'?'':'h')+'"><label>Cliente paga con:</label><input type="number" id="paidWith" placeholder="Monto recibido" min="0" oninput="updChg(\''+r.category+'\')"></div>';
     h+='<div class="chg h" id="chgBox">Cambio: <span id="chgAmt">$0</span></div>';
     h+='<div class="tb"><div class="tl">Total a cobrar</div><div class="tv" id="totD">'+fmt(calcTot(selDur,selPpl,cfg))+'</div></div>';
@@ -4057,21 +4070,34 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
   // ── BLOQUE 4+5: RENDIMIENTO PERSONAL ──
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
 
-  // Recepcionistas
+  // ── BLOQUE 4+5: RENDIMIENTO PERSONAL ──
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
+
+  // Recepcionistas — Ranking Errores
+  var errMes=(month&&month.errorRanking)||[];
   h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:14px">';
-  h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:12px">👩‍💼 Rendimiento Recepción</div>';
-  if(!recepList.length){h+='<p style="font-size:12px;color:#6b7280">Sin ventas hoy.</p>';}
-  var maxRecep=recepList.length?recepList[0].total:1;
+  h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-bottom:12px">👩‍💼 Ranking Recepcionistas</div>';
+  if(!recepList.length){h+='<p style="font-size:12px;color:#6b7280">Sin datos.</p>';}
   recepList.forEach(function(r,i){
-    var pct=Math.round((r.total/maxRecep)*100);
-    var col=i===0?'#22c55e':i===1?'#3b82f6':'#6b7280';
     var badge=i===0?'🥇':i===1?'🥈':'🥉';
-    h+='<div style="margin-bottom:10px">';
-    h+='<div style="display:flex;justify-content:space-between;margin-bottom:4px">';
+    var errInfo=errMes.find(function(e){return e.nombre===r.nombre;})||{total:0,failures:[]};
+    var errCol=errInfo.total===0?'#22c55e':errInfo.total<=2?'#f59e0b':'#ef4444';
+    h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:8px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
     h+='<span style="font-size:12px;font-weight:700;color:#e5e7eb">'+badge+' '+esc(r.nombre)+'</span>';
-    h+='<span style="font-size:11px;color:#9ca3af"><b style="color:'+col+'">'+r.habs+' hab</b> — '+fmt(r.total)+'</span>';
+    h+='<span style="font-size:11px;font-weight:700;color:'+errCol+'">'+(errInfo.total===0?'✓ Sin errores':errInfo.total+' error(es)')+'</span>';
     h+='</div>';
-    h+='<div style="background:#22222c;border-radius:20px;height:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:20px"></div></div>';
+    h+='<div style="font-size:10px;color:#9ca3af">'+r.habs+' hab — '+fmt(r.total)+'</div>';
+    if(errInfo.total>0&&errInfo.failures&&errInfo.failures.length){
+      errInfo.failures.slice(0,3).forEach(function(f){
+        var esAuto=f.tipo==='auto';
+        h+='<div style="font-size:10px;padding:2px 0;border-top:1px solid rgba(46,46,58,.3);margin-top:3px">';
+        h+='<span style="color:'+(esAuto?'#ef4444':'#f59e0b')+'">'+(esAuto?'⚡ Auto':'⚠ Manual')+'</span> ';
+        h+='<span style="color:#9ca3af">'+esc(f.descripcion||f.tipo||'')+'</span>';
+        if(f.businessDay)h+='<span style="color:#6b7280;margin-left:4px">'+f.businessDay+'</span>';
+        h+='</div>';
+      });
+    }
     h+='</div>';
   });
   h+='</div>';
@@ -4985,7 +5011,16 @@ function confirmarAddStock(){
   );
 }
 
-function openNuevoProducto(){openProductoModal({});}
+function openNuevoProducto(){
+  if(!productosLista.length){
+    rpc('getProducts',{userRole:sess.userRole},function(data){
+      productosLista=data.products||[];
+      openProductoModal({});
+    });
+  } else {
+    openProductoModal({});
+  }
+}
 function openEditProducto(id){
   var p=productosLista.find(function(x){return x.id===id;});
   if(!p)return;
@@ -5095,6 +5130,14 @@ function renderCiProds(){
       '<div style="display:flex;align-items:center;gap:6px"><b style="color:#22c55e">'+fmt(x.precio*x.cant)+'</b>'+
       '<span onclick="quitCiProd('+x.id+',\''+x.pm+'\')" style="color:#ef4444;cursor:pointer;font-size:13px">✕</span></div></div>';
   }).join('');
+  var res=document.getElementById('ciProdResumen');
+  if(res){
+    if(!_ciProds.length){res.innerHTML='<p style="font-size:11px;color:#6b7280;margin:0">Sin productos aún.</p>';return;}
+    res.innerHTML=_ciProds.map(function(x){
+      var pc={EFECTIVO:'#22c55e',TARJETA:'#3b82f6',NEQUI:'#a78bfa'}[x.pm]||'#9ca3af';
+      return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:#e5e7eb">'+esc(x.nombre)+' <span style="color:'+pc+'">×'+x.cant+'</span></span><b style="color:#22c55e">'+fmt(x.precio*x.cant)+'</b></div>';
+    }).join('');
+  }
 }
 function togRoomCats(){
   var el=document.getElementById('roomCats');
