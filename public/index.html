@@ -4513,18 +4513,20 @@ function procesarCodigoBarras(codigo){
     else toast('Habitación '+rid+' no encontrada','err');
     return;
   }
-  var prod=productosLista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
-  if(prod){
-    // Si hay modal de habitación abierto y está ocupada, agregar directo
-    var modalAbierto=document.getElementById('mRoom')&&document.getElementById('mRoom').classList.contains('op');
-    if(modalAbierto&&curRoom&&curRoom.state==='OCCUPIED'){
-      agregarProductoDesdeEscaner(prod);
+  function buscarYProcesar(lista){
+    var prod=lista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
+    if(prod){
+      var modalAbierto=document.getElementById('mRoom')&&document.getElementById('mRoom').classList.contains('op');
+      if(modalAbierto&&curRoom&&curRoom.state==='OCCUPIED'){agregarProductoDesdeEscaner(prod);}
+      else{openVentaProducto(prod);}
     } else {
-      openVentaProducto(prod);
+      toast('Código no reconocido: '+codigo,'err');
     }
-  } else {
-    toast('Código no reconocido: '+codigo,'err');
   }
+  rpc('getProducts',{},function(data){
+    productosLista=data.products||[];
+    buscarYProcesar(productosLista);
+  },function(){toast('Error cargando productos.','err');});
 }
 
 function agregarProductoDesdeEscaner(prod){
