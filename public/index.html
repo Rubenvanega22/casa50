@@ -1131,20 +1131,7 @@ h+='</div>';
     h+='<div id="cashDiv" class="'+(selPay==='EFECTIVO'?'':'h')+'"><label>Cliente paga con:</label><input type="number" id="paidWith" placeholder="Monto recibido" min="0" oninput="updChg(\''+r.category+'\')"></div>';
     h+='<div class="chg h" id="chgBox">Cambio: <span id="chgAmt">$0</span></div>';
     h+='<div class="tb"><div class="tl">Total a cobrar</div><div class="tv" id="totD">'+fmt(calcTot(selDur,selPpl,cfg))+'</div></div>';
-    h+='<button class="btn bg full" onclick="doCI()">Confirmar Check-In</button>';
-    updExtraPeopleInfo(r.category);
-  }
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-    h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos al ingreso</div>';
-    h+='<b style="color:#f97316;font-size:12px" id="ciProdTotal">$0</b>';
-    h+='</div>';
-    h+='<div id="ciProdList" style="margin-bottom:6px"></div>';
-    h+='<input type="text" id="ciProdBuscar" placeholder="🔍 Buscar producto por nombre..." style="width:100%;margin:0 0 8px 0;font-size:12px;padding:6px 9px;box-sizing:border-box" oninput="ciRl(this.value)">';
-    h+='<button onclick="togCiCats()" style="padding:4px 12px;background:#22222c;border:1px solid #7c5cfc;border-radius:20px;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px">📂 Buscar por Categoría</button>';
-    h+='<div id="ciCats" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
-    h+='<div id="ciProdRes" style="background:#22222c;border-radius:6px;max-height:130px;overflow-y:auto;margin-bottom:6px"></div>';
-    h+='<div id="ciPendiente"></div>';
-    h+='</div>';
+   h+='<button class="btn bg full" onclick="doCI()">Confirmar Check-In</button>';
     updExtraPeopleInfo(r.category);
   }
 
