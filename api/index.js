@@ -962,8 +962,7 @@ async function apiCheckoutExtra(p, res) {
   const { data } = await supabase.from('extra_staff').select('id').eq('person_name', personName).eq('active', true).order('ts_ms', { ascending: false }).limit(1);
   if (!data || !data.length) return err(res, `No se encontro "${personName}" activo`);
 
-  const payShift = String(p.shiftId||'').trim()||currentShiftId(now);
-  await supabase.from('extra_staff').update({ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy, shift_id: payShift }).eq('id', data[0].id);
+  await supabase.from('extra_staff').update({ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy }).eq('id', data[0].id);
   return ok(res, { personName, payment, paidBy });
 }
 
@@ -1198,7 +1197,7 @@ async function apiMetrics(p, res) {
         }
       }
     }
-    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;}
+    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;allSalesList.push({tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
   });
 const {data:prodSales}=await supabase.from('room_products').select('*').eq('business_day',bDay);
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
@@ -1238,7 +1237,6 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
     allSalesList:allSalesList.sort((a,b)=>a.tsMs-b.tsMs),
     taxiList,
-    cortesiasList:(prodSales||[]).filter(s=>s.is_cortesia&&(!shiftFilter||s.shift_id===shiftFilter)).map(s=>({shiftId:s.shift_id,productName:s.product_name,cantidad:Number(s.cantidad||0),precioUnit:Number(s.precio_unit||0),total:Number(s.precio_unit||0)*Number(s.cantidad||0),destinatario:s.cortesia_destinatario||'',userName:s.user_name,tsMs:Number(s.ts_ms||0)})),
     dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null,
     shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—',
     shiftClose:(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===(shiftFilter||'').toUpperCase()).map(r=>({cashCount:Number(r.cash_count||0),cashBilletes:Number(r.cash_billetes||0),cashMonedas:Number(r.cash_monedas||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0),tsMs:Number(r.ts_ms||0)}))[0]||null
