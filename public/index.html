@@ -5247,19 +5247,6 @@ function renderCortesiaPend(){
   h+='</div></div>';
   cont.innerHTML=h;
 }
-function confirmarCortesia(){
-  var prod=window._cortesiaSel;
-  if(!prod){toast('Selecciona un producto.','err');return;}
-  var cant=window._cortesiaCant||1;
-  var destinatario=(document.getElementById('cortesiaDestinatario')||{}).value||'';
-  if(!destinatario.trim()){toast('Escribe a quién se le da la cortesía.','err');return;}
-  conf('¿Dar '+cant+' '+prod.nombre+' a '+destinatario+'?',function(){
-    rpc('addRoomProduct',{roomId:'CORTESIA',productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,cortesiaDestinatario:destinatario.trim(),userName:sess.userName,userRole:sess.userRole,checkInMs:0},
-      function(){toast('✓ Cortesía registrada — '+cant+' '+prod.nombre+' → '+destinatario,'ok');closeM('mCortesia');loadProductos();},
-      function(e){toast(e.message||String(e),'err');}
-    );
-  });
-}
 function openAddStock(){
   var h='<div class="mh"><div class="mt">Ingresar Stock</div><button class="mc" onclick="closeM(\'mAddStock\')">✕</button></div>';
   h+='<label>Producto</label><select id="asProducto" style="margin-bottom:8px">';
