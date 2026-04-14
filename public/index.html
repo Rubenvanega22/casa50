@@ -477,6 +477,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="display:flex;gap:6px;margin-left:auto">
 <button class="btn bk sm" id="btnTabProductos" onclick="swProdTab('productos')" style="border-color:#7c5cfc;color:#a78bfa">Lista</button>
 <button class="btn bk sm" id="btnTabInventario" onclick="swProdTab('inventario')">Inventario</button>
+<button class="btn bo sm" onclick="openAnalisisProductos()">📊 Análisis</button>
 </div>
 <div style="display:flex;gap:6px">
 <button class="refresh-btn" onclick="loadProductos()">↻ Actualizar</button>
@@ -1027,7 +1028,7 @@ function buildRoomB(r){
     h+='</div>';
    h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
     if(isR){
-      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
+     h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button><button class="btn br sm" onclick="doAnularVenta()">🗑 Anular Venta</button></div>';
       // FRANJA PRODUCTOS
       h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-top:10px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -1511,6 +1512,29 @@ function confirmAddPerson(){
       );
     }
     next();
+  });
+}
+function doAnularVenta(){
+  if(!curRoom)return;
+  var h='<div class="mh"><div class="mt">🗑 Anular Venta — Hab '+curRoom.roomId+'</div><button class="mc" onclick="closeM(\'mAnularVenta\')">✕</button></div>';
+  h+='<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#fca5a5">⚠️ Esta acción anula la venta completamente. La habitación quedará disponible y la venta no sumará al cuadre.</div>';
+  h+='<label>Motivo de anulación (obligatorio)</label>';
+  h+='<textarea id="anularMotivo" rows="3" placeholder="Explica por qué se anula esta venta..." style="margin-bottom:10px"></textarea>';
+  h+='<button class="btn br full" onclick="confirmarAnularVenta()">Confirmar Anulación</button>';
+  var modal=document.getElementById('mAnularVenta');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAnularVenta';div.innerHTML='<div class="modal"><div id="mAnularVentaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAnularVenta');});document.body.appendChild(div);}
+  document.getElementById('mAnularVentaB').innerHTML=h;
+  openM('mAnularVenta');
+}
+function confirmarAnularVenta(){
+  var motivo=(document.getElementById('anularMotivo')||{}).value||'';
+  if(!motivo.trim()||motivo.trim().length<5){toast('El motivo es obligatorio (mínimo 5 caracteres).','err');return;}
+  if(!curRoom)return;
+  conf('¿Anular la venta de Hab '+curRoom.roomId+'? Esta acción no se puede deshacer.',function(){
+    rpc('anularVenta',{roomId:curRoom.roomId,motivo:motivo.trim(),userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
+      function(){toast('✓ Venta anulada.','ok');closeM('mAnularVenta');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});loadCuadre();},
+      function(e){toast(e.message||String(e),'err');}
+    );
   });
 }
 function doCheckOut(){
@@ -4683,15 +4707,9 @@ function procesarCodigoBarras(codigo){
     var prod=lista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
     if(prod){
       var modalAbierto=document.getElementById('mRoom')&&document.getElementById('mRoom').classList.contains('op');
-      if(modalAbierto&&curRoom&&curRoom.state==='OCCUPIED'){agregarProductoDesdeEscaner(prod);}
-      else if(modalAbierto&&curRoom&&curRoom.state==='AVAILABLE'){
-        var _pm=selPay||'EFECTIVO';
-        var ex=_ciProds.find(function(x){return x.id===prod.id&&x.pm===_pm;});
-        if(ex)ex.cant+=1;
-        else _ciProds.push({id:prod.id,nombre:prod.nombre,precio:prod.precio,cant:1,pm:_pm});
-        renderCiProds();
-        toast('✓ '+prod.nombre+' agregado al ingreso','ok');
-      }
+   if(modalAbierto&&curRoom&&curRoom.state==='OCCUPIED'){agregarProductoDesdeEscaner(prod);}
+      else if(modalAbierto&&curRoom&&curRoom.state==='AVAILABLE'){selCiProd(prod.id);}
+      else if(document.getElementById('mCortesia')&&document.getElementById('mCortesia').classList.contains('op')){selCortesia(prod.id);}
       else{openVentaProducto(prod);}
     } else {
       toast('Código no reconocido: '+codigo,'err');
@@ -4706,14 +4724,13 @@ function procesarCodigoBarras(codigo){
 function agregarProductoDesdeEscaner(prod){
   if(!curRoom)return;
   if(Number(prod.stockActual||0)<=0){toast('Sin stock: '+prod.nombre,'err');return;}
-  var pm=window._roomProdPm||'EFECTIVO';
-  rpc('addRoomProduct',{roomId:curRoom.roomId,productId:prod.id,cantidad:1,payMethod:pm,userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
-    function(res){
-      toast('✓ '+prod.nombre+' agregado — '+fmt(res.total),'ok');
-      loadRoomProductos(curRoom.roomId,curRoom.checkInMs||0);
-    },
-    function(e){toast(e.message||String(e),'err');}
-  );
+  window._roomProdPendiente=prod;
+  window._roomProdCant=1;
+  var cont=document.getElementById('roomProdResultados');
+  if(cont)cont.innerHTML='';
+  var inp=document.getElementById('roomProdBuscar');
+  if(inp)inp.value='';
+  renderRoomProdPendiente();
 }
 
 function openVentaProducto(prod){
@@ -4820,7 +4837,19 @@ function renderInventario(inv,day){
     if(!cats[c])cats[c]=[];
     cats[c].push(r);
   });
+  var totalVentasHoy=rows.reduce(function(a,r){return a+Object.values(r.turnos||{}).reduce(function(b,t){return b+Number(t.valorVendido||0);},0);},0);
+  var ym=day?day.substring(0,7):'';
   var h='<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;text-transform:uppercase">Inventario / Productos</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+  h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.4);border-radius:10px;padding:12px;text-align:center">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos hoy</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:#f97316">'+fmt(totalVentasHoy)+'</div>';
+  h+='</div>';
+  h+='<div style="background:#18181f;border:1px solid rgba(167,139,250,.4);border-radius:10px;padding:12px;text-align:center" id="invVentasMes">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:#a78bfa">Cargando...</div>';
+  h+='</div>';
+  h+='</div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-bottom:10px">';
   h+='<span style="color:#9ca3af">Referencias:</span>';
   h+='<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:3px"></span>Efectivo</span>';
@@ -4913,14 +4942,38 @@ function renderInventario(inv,day){
   shifts.forEach(function(sh){
     var obs=resumen[sh.id]?resumen[sh.id].observacion||'':'';
     h+='<div style="background:#18181f;border:1px solid '+sh.color+';border-top:3px solid '+sh.color+';border-radius:10px;padding:10px">';
-    h+='<div style="font-size:10px;font-weight:700;color:'+sh.color+';margin-bottom:6px">'+sh.label.toUpperCase()+'</div>';
+  h+='<div style="font-size:10px;font-weight:700;color:'+sh.color+';margin-bottom:6px">'+sh.label.toUpperCase()+'</div>';
+    var cors=(resumen[sh.id]&&resumen[sh.id].cortesiasDetalle)||[];
+    if(cors.length){
+      h+='<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:#f97316;margin-bottom:4px">🎁 Cortesías dadas:</div>';
+      cors.forEach(function(c){h+='<div style="font-size:11px;color:#9ca3af;padding:2px 0">• <b style="color:#e5e7eb">'+c.cantidad+'</b> '+esc(c.nombre||'')+(c.destinatario?' → <b style="color:#f97316">'+esc(c.destinatario)+'</b>':'')+'</div>';});
+      h+='</div>';
+    }
     h+='<div style="font-size:12px;color:#9ca3af;font-style:italic;min-height:40px">'+esc(obs||'Sin observaciones aún...')+'</div>';
     h+='<textarea id="obsInv_'+sh.id+'" placeholder="Agregar observación..." style="width:100%;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px;font-size:11px;margin-top:6px;resize:none;height:50px">'+esc(obs)+'</textarea>';
     h+='<button class="btn ba xs" style="margin-top:4px;width:100%" onclick="guardarObsInv(\''+sh.id+'\')">Guardar obs. '+sh.label.split(' ')[1]+'</button>';
     h+='</div>';
   });
   h+='</div>';
-  el.innerHTML=h;
+el.innerHTML=h;
+  // Cargar ventas del mes
+  if(ym){
+    rpc('monthMetrics',{yearMonth:ym},function(data){
+      var totalMes=0;
+      (data.days||[]).forEach(function(d){
+        // No tenemos desglose de productos por dia en monthMetrics, usamos approximacion
+      });
+      // Buscar en room_products del mes
+      var elMes=document.getElementById('invVentasMes');
+      if(elMes){
+        rpc('getInventarioByDay',{businessDay:day,userRole:sess&&sess.userRole||'ADMIN'},function(inv2){
+          // totalVentasHoy ya lo tenemos, para el mes sumamos todos los dias disponibles
+          var elMes2=document.getElementById('invVentasMes');
+          if(elMes2){elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div><div style="font-size:20px;font-weight:900;color:#a78bfa">Ver en Análisis 📊</div>';}
+        });
+      }
+    });
+  }
 }
 function guardarObsInv(shiftId){
   var el=document.getElementById('obsInv_'+shiftId);
@@ -5328,7 +5381,69 @@ function openAddStock(){
   document.getElementById('mAddStockB').innerHTML=h;
   openM('mAddStock');
 }
-
+function openAnalisisProductos(){
+  var modal=document.getElementById('mAnalisis');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAnalisis';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mAnalisisB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAnalisis');});document.body.appendChild(div);}
+  document.getElementById('mAnalisisB').innerHTML='<div class="mh"><div class="mt">📊 Análisis de Productos</div><button class="mc" onclick="closeM(\'mAnalisis\')">✕</button></div><p style="color:#9ca3af">Cargando...</p>';
+  openM('mAnalisis');
+  var bDay=sess?sess.businessDay:'';
+  var ym=bDay?bDay.substring(0,7):'';
+  Promise.all([
+    new Promise(function(r){rpc('getProducts',{},r,function(){r({products:[]});});}),
+    new Promise(function(r){rpc('getInventarioByDay',{businessDay:bDay,userRole:sess.userRole},r,function(){r({rows:[]});});}),
+    new Promise(function(r){rpc('monthMetrics',{yearMonth:ym},r,function(){r({});});})
+  ]).then(function(res){
+    var prods=res[0].products||[];
+    var rows=res[1].rows||[];
+    var monthDays=res[2].days||[];
+    var h='<div class="mh"><div class="mt">📊 Análisis de Productos</div><button class="mc" onclick="closeM(\'mAnalisis\')">✕</button></div>';
+    // AGOTADOS Y PROXIMOS
+    var agotados=prods.filter(function(p){return p.activo&&p.stockActual<=0;});
+    var proximos=prods.filter(function(p){return p.activo&&p.stockActual>0&&p.stockActual<=p.stockMinimo;});
+    h+='<div style="font-size:12px;font-weight:700;color:#ef4444;text-transform:uppercase;margin-bottom:8px">🔴 Agotados ('+agotados.length+')</div>';
+    if(!agotados.length){h+='<p style="font-size:12px;color:#6b7280;margin-bottom:10px">Sin productos agotados ✓</p>';}
+    agotados.forEach(function(p){
+      h+='<div style="background:#22222c;border-left:3px solid #ef4444;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
+      h+='<div><b style="font-size:12px">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>';
+      h+='<span style="color:#ef4444;font-weight:700;font-size:12px">AGOTADO</span></div>';
+    });
+    h+='<div style="font-size:12px;font-weight:700;color:#f59e0b;text-transform:uppercase;margin:12px 0 8px">🟡 Próximos a agotarse ('+proximos.length+')</div>';
+    if(!proximos.length){h+='<p style="font-size:12px;color:#6b7280;margin-bottom:10px">Sin productos próximos a agotarse ✓</p>';}
+    proximos.forEach(function(p){
+      h+='<div style="background:#22222c;border-left:3px solid #f59e0b;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
+      h+='<div><b style="font-size:12px">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>';
+      h+='<span style="color:#f59e0b;font-weight:700;font-size:12px">Stock: '+p.stockActual+' / Min: '+p.stockMinimo+'</span></div>';
+    });
+    // MAS VENDIDOS HOY
+    var vendidosHoy=rows.filter(function(r){
+      var total=Object.values(r.turnos||{}).reduce(function(a,t){return a+Number(t.ventas||0);},0);
+      return total>0;
+    }).map(function(r){
+      var total=Object.values(r.turnos||{}).reduce(function(a,t){return a+Number(t.ventas||0);},0);
+      var valor=Object.values(r.turnos||{}).reduce(function(a,t){return a+Number(t.valorVendido||0);},0);
+      return{nombre:r.nombre,categoria:r.categoria,total:total,valor:valor};
+    }).sort(function(a,b){return b.total-a.total;}).slice(0,10);
+    h+='<div style="font-size:12px;font-weight:700;color:#22c55e;text-transform:uppercase;margin:12px 0 8px">🟢 Más vendidos hoy</div>';
+    if(!vendidosHoy.length){h+='<p style="font-size:12px;color:#6b7280;margin-bottom:10px">Sin ventas hoy.</p>';}
+    vendidosHoy.forEach(function(p,i){
+      var badge=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+      h+='<div style="background:#22222c;border-left:3px solid #22c55e;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
+      h+='<div><b style="font-size:12px">'+badge+' '+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>';
+      h+='<div style="text-align:right"><b style="color:#22c55e">'+p.total+' uds</b><div style="font-size:10px;color:#9ca3af">'+fmt(p.valor)+'</div></div></div>';
+    });
+    // LISTA DE COMPRAS SUGERIDA
+    var compras=agotados.concat(proximos).sort(function(a,b){return a.stockActual-b.stockActual;});
+    h+='<div style="font-size:12px;font-weight:700;color:#a78bfa;text-transform:uppercase;margin:12px 0 8px">🛒 Lista de compras sugerida</div>';
+    if(!compras.length){h+='<p style="font-size:12px;color:#6b7280">No hay productos que pedir por ahora.</p>';}
+    compras.forEach(function(p){
+      var necesita=Math.max(0,p.stockMinimo*3-p.stockActual);
+      h+='<div style="background:#22222c;border-left:3px solid #a78bfa;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
+      h+='<div><b style="font-size:12px">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">Stock actual: '+p.stockActual+'</div></div>';
+      h+='<span style="color:#a78bfa;font-weight:700;font-size:12px">Pedir ~'+necesita+' uds</span></div>';
+    });
+    document.getElementById('mAnalisisB').innerHTML=h;
+  });
+}
 function openAddStockModal(id,nombre){
   var h='<div class="mh"><div class="mt">Stock: '+esc(nombre)+'</div><button class="mc" onclick="closeM(\'mAddStock\')">✕</button></div>';
   h+='<input type="hidden" id="asProducto" value="'+id+'">';
