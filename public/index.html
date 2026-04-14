@@ -4634,6 +4634,14 @@ function procesarCodigoBarras(codigo){
     if(prod){
       var modalAbierto=document.getElementById('mRoom')&&document.getElementById('mRoom').classList.contains('op');
       if(modalAbierto&&curRoom&&curRoom.state==='OCCUPIED'){agregarProductoDesdeEscaner(prod);}
+      else if(modalAbierto&&curRoom&&curRoom.state==='AVAILABLE'){
+        var _pm=selPay||'EFECTIVO';
+        var ex=_ciProds.find(function(x){return x.id===prod.id&&x.pm===_pm;});
+        if(ex)ex.cant+=1;
+        else _ciProds.push({id:prod.id,nombre:prod.nombre,precio:prod.precio,cant:1,pm:_pm});
+        renderCiProds();
+        toast('✓ '+prod.nombre+' agregado al ingreso','ok');
+      }
       else{openVentaProducto(prod);}
     } else {
       toast('Código no reconocido: '+codigo,'err');
