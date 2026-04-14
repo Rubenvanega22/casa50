@@ -3904,6 +3904,15 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     dataRow('Productos Efectivo',function(m){return Number((m.totals||{}).totalProductosEf||0);},'#22c55e');
     dataRow('Productos Tarjeta',function(m){return Number((m.totals||{}).totalProductosTa||0);},'#3b82f6');
     dataRow('Productos Nequi',function(m){return Number((m.totals||{}).totalProductosNq||0);},'#a78bfa');
+    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">🎁 CORTESÍAS</td></tr>';
+    dataRow('Valor cortesías',function(m){return Number((m.totals||{}).totalCortesiasProds||0);},'#a78bfa');
+    shifts.forEach(function(sid,i){
+      var cors=(ms[i].cortesiasList||[]);
+      if(!cors.length)return;
+      var cols=['','',''];
+      cols[i]=cors.map(function(c){return '<span style="display:block;font-size:10px;color:#a78bfa">'+c.cantidad+' '+esc(c.productName)+(c.destinatario?' → '+esc(c.destinatario):'')+'</span>';}).join('');
+      h+='<tr><td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af">Detalle</td>'+cols.map(function(c){return '<td style="padding:3px 6px;border:1px solid #2e2e3a;vertical-align:top">'+c+'</td>';}).join('')+'<td style="border:1px solid #2e2e3a"></td></tr>';
+    });
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#f59e0b;border:1px solid #2e2e3a">📋 CONTEO</td></tr>';
     shifts.forEach(function(sid,i){
       var sc=(ms[i].totals||{}).shiftClose||null;
@@ -4802,7 +4811,16 @@ function renderInventario(inv,day){
           if(td.ef>0)vStr+='<span style="background:rgba(34,197,94,.2);color:#22c55e;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+Math.round(td.ef/r.precio)+' ef</span>';
           if(td.ta>0)vStr+='<span style="background:rgba(59,130,246,.2);color:#3b82f6;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+Math.round(td.ta/r.precio)+' ta</span>';
           if(td.nq>0)vStr+='<span style="background:rgba(124,92,252,.2);color:#a78bfa;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+Math.round(td.nq/r.precio)+' nq</span>';
-          if(td.cortesias>0)vStr+='<span style="background:rgba(249,115,22,.2);color:#f97316;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+td.cortesias+' cor</span>';
+          if(td.cortesias>0){
+  var detalle=(td.cortesiasDetalle||[]);
+  if(detalle.length){
+    detalle.forEach(function(c){
+      vStr+='<span style="background:rgba(249,115,22,.2);color:#f97316;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+c.cantidad+' cor'+(c.destinatario?' — '+c.destinatario:'')+'</span>';
+    });
+  } else {
+    vStr+='<span style="background:rgba(249,115,22,.2);color:#f97316;font-size:9px;padding:1px 3px;border-radius:2px;display:block">'+td.cortesias+' cor</span>';
+  }
+}
         } else {vStr='<span style="color:#2e2e3a">—</span>';}
         var sStr=td.valorVendido>0?'<span style="color:#e5e7eb;font-size:10px">'+fmt(td.valorVendido)+'</span>':'<span style="color:#2e2e3a">—</span>';
         var traslado=td.trasladoRecepcion||0;
@@ -5176,14 +5194,14 @@ function openCortesia(){
     return;
   }
   var h='<div class="mh"><div class="mt">🎁 Registrar Cortesía</div><button class="mc" onclick="closeM(\'mCortesia\')">✕</button></div>';
-  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">El producto se descuenta del inventario. No suma al cuadre.</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Se descuenta del inventario. No suma al cuadre.</div>';
   h+='<label>¿A quién se le da?</label>';
-  h+='<input type="text" id="cortesiaDestinatario" placeholder="Nombre de la persona" style="margin-bottom:8px">';
-  h+='<label>Buscar producto</label>';
-  h+='<input type="text" id="cortesiaBuscar" placeholder="Escribe el nombre o escanea..." oninput="buscarCortesia(this.value)" style="margin-bottom:8px">';
-  h+='<div id="cortesiaResultados" style="background:#22222c;border-radius:6px;max-height:160px;overflow-y:auto;margin-bottom:8px"></div>';
+  h+='<input type="text" id="cortesiaDestinatario" placeholder="Nombre de la persona" style="margin-bottom:12px">';
+  h+='<label>Buscar producto o escanear</label>';
+  h+='<input type="text" id="cortesiaBuscar" placeholder="Escribe o escanea el código..." oninput="buscarCortesia(this.value)" style="margin-bottom:6px">';
+  h+='<div id="cortesiaResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:8px"></div>';
   h+='<div id="cortesiaPendiente"></div>';
-  h+='<button class="btn ba full" onclick="confirmarCortesia()">Confirmar Cortesía</button>';
+  h+='<button class="btn ba full" style="margin-top:8px" onclick="confirmarCortesia()">Confirmar Cortesía</button>';
   var modal=document.getElementById('mCortesia');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mCortesia';div.innerHTML='<div class="modal"><div id="mCortesiaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mCortesia');});document.body.appendChild(div);}
   document.getElementById('mCortesiaB').innerHTML=h;
