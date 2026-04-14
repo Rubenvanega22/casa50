@@ -3808,11 +3808,13 @@ function loadCuadreAdmin(){
     new Promise(function(res){rpc('metrics',{businessDay:day,shiftId:'SHIFT_2'},res,function(){res({});});}),
     new Promise(function(res){rpc('metrics',{businessDay:day,shiftId:'SHIFT_3'},res,function(){res({});});}),
     new Promise(function(res){rpc('getLoans',{businessDay:day},res,function(){res({loans:[]});});}),
-    new Promise(function(res){rpc('getExtraStaff',{businessDay:day},res,function(){res({extraStaff:[]});});})
+   new Promise(function(res){rpc('getExtraStaff',{businessDay:day},res,function(){res({extraStaff:[]});});}),
+    new Promise(function(res){rpc('getMaidLog',{businessDay:day},res,function(){res({logs:[]});});})
   ]).then(function(r){
     var ms=[r[0]||{},r[1]||{},r[2]||{}];
     var loans=r[3].loans||[];
     var extras=r[4].extraStaff||[];
+    var maidLogs=r[5].logs||[];
     var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
     var totalDia=ms.reduce(function(a,m,i){
       var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
@@ -3966,14 +3968,61 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
         var snS={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
         h+='<button class="btn br xs" onclick="openFallasModal(\''+sid+'\',\''+esc(resp)+'\',\''+day+'\')">⚠ Fallas '+snS[sid]+' ('+esc(resp)+')</button>';
       }
+    });h+='</div>';
+h+='</div>';
+    // LISTADO DE VENTAS DETALLADO
+    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    var todasVentas=[];
+    ms.forEach(function(m,i){
+      var sid=shifts[i];
+      var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
+      sl.forEach(function(s){todasVentas.push(s);});
     });
-    h+='</div>';
-    el.innerHTML=h;
+    todasVentas.sort(function(a,b){return a.checkInMs-b.checkInMs;});
+    var num=1;
+    if(todasVentas.length){
+      h+='<div class="sec">Ventas del Día</div>';
+      todasVentas.forEach(function(s){
+        var col=turnoColor[s.shiftId]||'#6b7280';
+        var lbl=turnoLabel[s.shiftId]||'';
+        var checkoutReal=0;
+        var roomState=rooms.find(function(r){return r.roomId===s.roomId;});
+        if(roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
+        var maidLog=maidLogs.find(function(l){return l.roomId===s.roomId&&Number(l.checkInMs||0)===Number(s.checkInMs||0)&&Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE';});
+        var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
+        h+='<div style="background:#18181f;border:0.5px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+        h+='<div><b style="font-size:14px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(s.category)+'</span></div>';
+        h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+pmB+'">'+s.payMethod+'</span>';
+        h+='<span style="font-size:9px;font-weight:700;color:'+col+';background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px">'+lbl+'</span>';
+        h+='<b style="color:#22c55e">'+fmt(s.total)+'</b></div></div>';
+        h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:7px">';
+        h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px"><div style="font-size:9px;color:#9ca3af">Ingresó</div><div style="font-size:12px;font-weight:500">'+fT(s.checkInMs)+'</div></div>';
+        h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px"><div style="font-size:9px;color:#9ca3af">Debía salir</div><div style="font-size:12px;color:#9ca3af">'+fT(s.dueMs)+'</div></div>';
+        h+='</div>';
+        if(checkoutReal){
+          var salioTarde=checkoutReal>s.dueMs;
+          var sCol=salioTarde?'#ef4444':'#22c55e';
+          var sIcon=salioTarde?'↓ tarde':'↑ antes';
+          h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:#9ca3af">Salió real</div><div style="font-size:12px;font-weight:500;color:'+sCol+'">'+fT(checkoutReal)+' <span style="font-size:9px">'+sIcon+'</span></div></div>';
+        } else {
+          h+='<div style="background:#22222c;border-radius:6px;padding:5px 8px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:9px;color:#9ca3af">Salió real</div><div style="font-size:11px;color:#f59e0b">— aún ocupada</div></div>';
+        }
+        if(maidLog){
+          var cleanMins=Math.round((Number(maidLog.finishedMs)-Number(maidLog.startedMs))/60000);
+          h+='<div style="background:#22222c;border-radius:6px;padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px"><span style="font-size:11px;font-weight:500;color:#a78bfa">'+esc(maidLog.maidName)+'</span><span style="font-size:10px;font-weight:500;color:#22c55e;background:rgba(34,197,94,.1);padding:2px 7px;border-radius:20px">'+cleanMins+' min</span></div>';
+          h+='<div style="font-size:10px;color:#9ca3af">Aseo: '+fT(maidLog.startedMs)+' → '+fT(maidLog.finishedMs)+'</div></div>';
+        } else {
+          h+='<div style="background:#22222c;border-radius:6px;padding:6px 8px;font-size:10px;color:#6b7280;font-style:italic">Sin aseo registrado aún</div>';
+        }
+        h+='</div>';
+        num++;
+      });
+    }
+ el.innerHTML=h;
   });
 }
-
-
-
 // ---- DASHBOARD INTEGRAL (admin) ----
 var dashInterval=null;
 function loadM(){
