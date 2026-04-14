@@ -1237,6 +1237,7 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
     allSalesList:allSalesList.sort((a,b)=>a.tsMs-b.tsMs),
     taxiList,
+    cortesiasList:(prodSales||[]).filter(s=>s.is_cortesia&&(!shiftFilter||s.shift_id===shiftFilter)).map(s=>({shiftId:s.shift_id,productName:s.product_name,cantidad:Number(s.cantidad||0),precioUnit:Number(s.precio_unit||0),total:Number(s.precio_unit||0)*Number(s.cantidad||0),destinatario:s.cortesia_destinatario||'',userName:s.user_name,tsMs:Number(s.ts_ms||0)})),
     dailyGoal,goalProgress:dailyGoal>0?Math.round((dayTotal/dailyGoal)*100):null,
     shiftUser:shiftFilter?(shiftLogRes.data||[]).filter(r=>r.shift_id===shiftFilter).map(r=>r.user_name)[0]||'—':'—',
     shiftClose:(shiftCloseRes.data||[]).filter(r=>(r.shift_id||'').toUpperCase()===(shiftFilter||'').toUpperCase()).map(r=>({cashCount:Number(r.cash_count||0),cashBilletes:Number(r.cash_billetes||0),cashMonedas:Number(r.cash_monedas||0),net:Number(r.net||0),totalEfectivo:Number(r.total_efectivo||0),tsMs:Number(r.ts_ms||0)}))[0]||null
@@ -2048,6 +2049,7 @@ async function apiAddRoomProduct(p, res) {
   const cantidad = Number(p.cantidad||1);
   const payMethod = String(p.payMethod||'EFECTIVO').toUpperCase();
   const isCortesia = !!(p.isCortesia);
+  const cortesiaDestinatario = String(p.cortesiaDestinatario||'').trim();
   const userName = String(p.userName||'').trim();
   const checkInMs = Number(p.checkInMs||0);
   if(!roomId) return err(res,'roomId requerido');
@@ -2063,7 +2065,8 @@ async function apiAddRoomProduct(p, res) {
     product_id: productId, product_name: prod.nombre,
     cantidad, precio_unit: Number(prod.precio||0),
     total, pay_method: payMethod,
-    user_name: userName, is_cortesia: isCortesia
+    user_name: userName, is_cortesia: isCortesia,
+    cortesia_destinatario: cortesiaDestinatario
   });
   await supabase.from('products').update({
     stock_actual: Number(prod.stock_actual||0) - cantidad
@@ -2074,7 +2077,8 @@ async function apiAddRoomProduct(p, res) {
       product_id: productId, product_name: prod.nombre,
       cantidad, precio_unit: Number(prod.precio||0),
       total: Number(prod.precio||0) * cantidad,
-      user_name: userName
+      user_name: userName,
+      destinatario: cortesiaDestinatario
     });
   }
   return ok(res, { total, stockRestante: Number(prod.stock_actual||0) - cantidad });
@@ -2180,8 +2184,10 @@ async function apiGetInventarioByDay(p, res) {
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
       const ven=(sales||[]).filter(s=>s.product_id===prod.id&&s.shift_id===sid&&!s.is_cortesia);
-      const cor=(sales||[]).filter(s=>s.product_id===prod.id&&s.shift_id===sid&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
-      turnosData[sid]={entradas:ent,ventas:ven.reduce((a,s)=>a+Number(s.cantidad||0),0),cortesias:cor,valorVendido:ven.reduce((a,s)=>a+Number(s.total||0),0),ef:ven.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),ta:ven.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),nq:ven.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0)};
+      const corItems=(sales||[]).filter(s=>s.product_id===prod.id&&s.shift_id===sid&&s.is_cortesia);
+      const cor=corItems.reduce((a,s)=>a+Number(s.cantidad||0),0);
+      const cortesiasDetalle=corItems.map(s=>({cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''}));
+      turnosData[sid]={entradas:ent,ventas:ven.reduce((a,s)=>a+Number(s.cantidad||0),0),cortesias:cor,cortesiasDetalle,valorVendido:ven.reduce((a,s)=>a+Number(s.total||0),0),ef:ven.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),ta:ven.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),nq:ven.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0)};
     });
     const movsProd=(movements||[]).filter(m=>m.product_id===prod.id);
 const ingBodegaTotal=movsProd.filter(m=>m.tipo==='ingreso_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
