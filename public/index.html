@@ -2172,6 +2172,7 @@ sl.forEach(function(s){
       var pm=s.payMethod||'EFECTIVO';
       var tot=Number(s.total||0);
       var tipo=s.type||'SALE';
+      if(tipo==='REFUND'){ef_hab+=tot;continue;}
       if(tipo==='EXTENSION'||tipo==='RENEWAL'){
         // Horas adicionales
         if(pm==='TARJETA')tj_hadd+=tot;
