@@ -3976,7 +3976,7 @@ h+='</div>';
     var todasVentas=[];
     ms.forEach(function(m,i){
       var sid=shifts[i];
-      var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
+      var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304'&&s.shiftId===sid;});
       sl.forEach(function(s){todasVentas.push(s);});
     });
     todasVentas.sort(function(a,b){return a.checkInMs-b.checkInMs;});
@@ -4578,7 +4578,7 @@ function loadListadoMaid(){
   ]).then(function(res){
     var m=res[0]||{};
     var maidLogs=res[1].logs||[];
-    var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
+  var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304';});
     sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
     if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
     var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
