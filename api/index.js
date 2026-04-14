@@ -219,6 +219,7 @@ module.exports = async function handler(req, res) {
       case 'deleteRoomProduct':  return await apiDeleteRoomProduct(payload, res);
       case 'saveCortesia':       return await apiSaveCortesia(payload, res);
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
+      case 'anularVenta':        return await apiAnularVenta(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -2201,7 +2202,8 @@ return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:p
   const resumenTurnos={};
   shifts.forEach(function(sid){
     const venTurno=(sales||[]).filter(s=>s.shift_id===sid&&!s.is_cortesia);
-    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
+    const corTurno=(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia);
+    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.total||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
   });
   return ok(res,{rows,resumenTurnos,businessDay:bd});
 }
@@ -2254,7 +2256,41 @@ async function apiTrasladoRecepcion(p, res) {
   });
   return ok(res,{productId,nuevoBodega,nuevoRecepcion});
 }
-
+async function apiAnularVenta(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='RECEPTION'&&userRole!=='ADMIN') return err(res,'Sin permiso');
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = currentShiftId(now);
+  const roomId = String(p.roomId||'').trim();
+  const motivo = String(p.motivo||'').trim();
+  const checkInMs = Number(p.checkInMs||0);
+  const userName = String(p.userName||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo requerido');
+  const room = await getRoom(roomId);
+  if(!room) return err(res,'Habitacion no existe');
+  if(room.state!=='OCCUPIED') return err(res,'Solo se puede anular si está ocupada');
+  // Marcar todas las ventas de esta estadia como ANULADA
+  await supabase.from('sales').update({type:'ANULADA',note:motivo}).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  // Devolver habitacion a disponible
+  await supabase.from('rooms').update({
+    state:'AVAILABLE', state_since_ms:now, people:0,
+    due_ms:0, check_in_ms:0, last_checkout_ms:now,
+    arrival_type:'', arrival_plate:'',
+    alarm_silenced_ms:0, alarm_silenced_for_due_ms:0,
+    checkout_obs:'ANULADA: '+motivo, pay_method:'',
+    updated_at:new Date().toISOString()
+  }).eq('room_id',roomId);
+  // Registrar en historial
+  await supabase.from('state_history').insert({
+    ts_ms:now, business_day:bDay, shift_id:shift,
+    user_role:userRole, user_name:userName, room_id:roomId,
+    from_state:'OCCUPIED', to_state:'AVAILABLE', people:0,
+    meta_json:JSON.stringify({accion:'ANULADA',motivo,checkInMs,userName})
+  });
+  return ok(res,{roomId,anulada:true});
+}
 async function apiSaveRoomBarcode(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const roomId = String(p.roomId||'').trim();
