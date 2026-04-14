@@ -495,7 +495,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 
 <script>
-// ---- ESTADO GLOBAL ---- v2
+// ---- ESTADO GLOBAL ----
 var BS={},rooms=[],sess=null,curRoom=null,multiMaidMode=false,maidSelected='',maidHasTaken=false,maidNamesInShift=[];
 var selDur=3,selPpl=2,selArr='WALK',selPay='EFECTIVO';
 var totalHabDia=0;
@@ -2110,7 +2110,7 @@ function saveExCo(){
   var exitMs=Date.now();
   if(exitTime){var parts=exitTime.split(':');var d=new Date();d.setHours(Number(parts[0]),Number(parts[1]),0,0);exitMs=d.getTime();}
   conf('Pagar '+fmt(p)+' a '+exCoName+'?',function(){
-    rpc('checkoutExtraStaff',{personName:exCoName,payment:p,exitMs:exitMs,paidBy:sess.userName,userRole:sess.userRole,userName:sess.userName},
+    rpc('checkoutExtraStaff',{personName:exCoName,payment:p,exitMs:exitMs,paidBy:sess.userName,userRole:sess.userRole,userName:sess.userName,shiftId:sess.shiftId},
       function(){toast(exCoName+' — Pago: '+fmt(p),'ok');closeM('mExCo');loadExtra();loadCuadre();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -5009,12 +5009,9 @@ function renderRoomProdPendiente(){
   h+='<button class="pb" onclick="chRoomProdCant(1,'+prod.precio+')">+</button>';
   h+='<b style="color:#22c55e;margin-left:8px">'+fmt(total)+'</b>';
   h+='</div>';
-  h+='<div class="pm" style="margin-bottom:8px">';
-  ['EFECTIVO','TARJETA','NEQUI'].forEach(function(pm){
-    var lbl={EFECTIVO:'Efectivo',TARJETA:'Tarjeta',NEQUI:'Nequi'}[pm];
-    h+='<div class="pmo'+(window._roomProdPm===pm?' on':'')+'" onclick="selRoomProdPm(\''+pm+'\')">'+lbl+'</div>';
-  });
-  h+='</div>';
+  var pm=curRoom&&curRoom.payMethod?curRoom.payMethod:'EFECTIVO';
+  window._roomProdPm=pm;
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:8px">Método de pago: <b style="color:#e5e7eb">'+pm+'</b></div>';
   h+='<div style="display:flex;gap:6px">';
   h+='<button class="btn bg full" onclick="confirmarRoomProd()">+ Agregar</button>';
   h+='<button class="btn bp xs" onclick="confirmarRoomProdCortesia()">Cortesía</button>';
