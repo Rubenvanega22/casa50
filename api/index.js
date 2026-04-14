@@ -962,7 +962,8 @@ async function apiCheckoutExtra(p, res) {
   const { data } = await supabase.from('extra_staff').select('id').eq('person_name', personName).eq('active', true).order('ts_ms', { ascending: false }).limit(1);
   if (!data || !data.length) return err(res, `No se encontro "${personName}" activo`);
 
-  await supabase.from('extra_staff').update({ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy }).eq('id', data[0].id);
+  const payShift = String(p.shiftId||'').trim()||currentShiftId(now);
+  await supabase.from('extra_staff').update({ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy, shift_id: payShift }).eq('id', data[0].id);
   return ok(res, { personName, payment, paidBy });
 }
 
