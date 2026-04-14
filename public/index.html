@@ -1116,12 +1116,24 @@ h+='<label>Monto en Tarjeta</label><input type="number" id="mixtotj" placeholder
 h+='<label>Monto en Nequi</label><input type="number" id="mixtoNq" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
 h+='</div>';
-h+='<div style="background:#22222c;border-radius:8px;padding:8px;margin-bottom:6px;min-height:36px"><div style="font-size:11px;color:#f97316;font-weight:700;text-transform:uppercase;margin-bottom:4px">🛒 Productos seleccionados</div><div id="ciProdResumen"><p style="font-size:11px;color:#6b7280;margin:0">Sin productos aún.</p></div></div>';
+    h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.5);border-radius:10px;padding:10px;margin-bottom:8px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos al ingreso</div>';
+    h+='<b style="color:#f97316;font-size:12px" id="ciProdTotal">$0</b>';
+    h+='</div>';
+    h+='<div id="ciProdList" style="margin-bottom:6px"></div>';
+    h+='<input type="text" id="ciProdBuscar" placeholder="🔍 Buscar producto por nombre..." style="width:100%;margin:0 0 6px 0;font-size:12px;padding:6px 9px;box-sizing:border-box" oninput="ciRl(this.value)">';
+    h+='<button onclick="togCiCats()" style="padding:4px 12px;background:#22222c;border:1px solid #7c5cfc;border-radius:20px;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px">📂 Por Categoría</button>';
+    h+='<div id="ciCats" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
+    h+='<div id="ciProdRes" style="background:#22222c;border-radius:6px;max-height:130px;overflow-y:auto;margin-bottom:6px"></div>';
+    h+='<div id="ciPendiente"></div>';
+    h+='</div>';
     h+='<div id="cashDiv" class="'+(selPay==='EFECTIVO'?'':'h')+'"><label>Cliente paga con:</label><input type="number" id="paidWith" placeholder="Monto recibido" min="0" oninput="updChg(\''+r.category+'\')"></div>';
     h+='<div class="chg h" id="chgBox">Cambio: <span id="chgAmt">$0</span></div>';
     h+='<div class="tb"><div class="tl">Total a cobrar</div><div class="tv" id="totD">'+fmt(calcTot(selDur,selPpl,cfg))+'</div></div>';
     h+='<button class="btn bg full" onclick="doCI()">Confirmar Check-In</button>';
-    h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.5);border-radius:10px;padding:10px;margin-top:10px">';
+    updExtraPeopleInfo(r.category);
+  }
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos al ingreso</div>';
     h+='<b style="color:#f97316;font-size:12px" id="ciProdTotal">$0</b>';
@@ -1253,7 +1265,7 @@ function selPm(t){
 }
 function calcP(h,cfg){if(h===3)return cfg.h3||0;if(h===6)return cfg.h6||0;if(h===8)return cfg.h8||(Number(cfg.h6||0)+2*Number(cfg.extraHour||0));if(h===12)return cfg.h12||0;return 0;}
 function calcTot(h,ppl,cfg){var base=calcP(h,cfg),incl=Number(cfg.included||2),ex=Math.max(0,ppl-incl);return base+ex*Number(cfg.extraPerson||0);}
-function updTot(cat){var cfg=MP[cat]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);var el=document.getElementById('totD');if(el)el.textContent=fmt(tot);if(selPay==='EFECTIVO')updChg(cat);}
+function updTot(cat){var cfg=MP[cat]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);var barTot=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);var el=document.getElementById('totD');if(el)el.textContent=fmt(tot+barTot);if(selPay==='EFECTIVO')updChg(cat);}
 function updMixto(cat){
   var cfg=MP[cat]||MP['Junior'];
   var tot=calcTot(selDur,selPpl,cfg);
@@ -5379,11 +5391,8 @@ function selCiProd(id){
   h+='<button onclick="chCiCant(1)" style="width:28px;height:28px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb;line-height:1">+</button>';
   h+='<b id="ciSubDisp" style="color:#22c55e;font-size:14px;margin-left:6px">'+fmt(_ciSel.precio)+'</b>';
   h+='</div>';
-  h+='<div style="display:flex;gap:4px;margin-bottom:8px">';
-  h+='<div onclick="selCiPm(\'EFECTIVO\')" id="ciEF" style="flex:1;padding:5px 4px;background:rgba(34,197,94,.1);border:2px solid #22c55e;border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:#22c55e;cursor:pointer">Efectivo</div>';
-  h+='<div onclick="selCiPm(\'TARJETA\')" id="ciTA" style="flex:1;padding:5px 4px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:#e5e7eb;cursor:pointer">Tarjeta</div>';
-  h+='<div onclick="selCiPm(\'NEQUI\')" id="ciNE" style="flex:1;padding:5px 4px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:#e5e7eb;cursor:pointer">Nequi</div>';
-  h+='</div>';
+  _ciPm=selPay||'EFECTIVO';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:8px">Método de pago: <b style="color:#e5e7eb">'+_ciPm+'</b></div>';
   h+='<button onclick="agCiProd()" style="width:100%;padding:7px;background:#f97316;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">+ Agregar al ingreso</button>';
   h+='</div>';
   document.getElementById('ciPendiente').innerHTML=h;
@@ -5405,6 +5414,8 @@ function renderCiProds(){
   var tot=document.getElementById('ciProdTotal');
   var total=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);
   if(tot)tot.textContent=fmt(total);
+  var catEl=document.getElementById('totD');
+  if(catEl&&curRoom){var cfg=MP[curRoom.category]||MP['Junior'];var habTot=calcTot(selDur,selPpl,cfg);catEl.textContent=fmt(habTot+total);}
   if(!list)return;
   if(!_ciProds.length){list.innerHTML='';return;}
   list.innerHTML=_ciProds.map(function(x){
