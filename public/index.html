@@ -4976,8 +4976,15 @@ function renderInventario(inv,day){
     {id:'SHIFT_2',label:'Turno 2',color:'#22c55e'},
     {id:'SHIFT_3',label:'Turno 3',color:'#f59e0b'}
   ];
-  var el=document.getElementById('inventarioCont');
-  if(!el)return;
+  var el=document.getElementById('invTableCont');
+  if(!el){
+    var ic=document.getElementById('inventarioCont');
+    if(!ic)return;
+    var nd=document.createElement('div');
+    nd.id='invTableCont';
+    ic.appendChild(nd);
+    el=nd;
+  };
   var cats={};
   rows.forEach(function(r){
     var c=r.categoria||'Sin categoría';
