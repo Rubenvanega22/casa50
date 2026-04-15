@@ -4387,8 +4387,114 @@ function _dash_card(label,val,color){
 function _dash_trophy(label,val,sub,color){
   return '<div style="background:#22222c;border-radius:10px;padding:10px;border-left:3px solid '+color+'"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">'+label+'</div><div style="font-size:14px;font-weight:800;color:'+color+'">'+esc(String(val))+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">'+esc(String(sub))+'</div></div>';
 }
-function loadMo(){var ym=document.getElementById('moPick').value;if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}var el=document.getElementById('moCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';rpc('monthMetrics',{yearMonth:ym},function(data){el.innerHTML=renderMo(data);},function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});}
-function renderMo(data){var mt=data.monthTotals||{};var h='<div class="mg"><div class="mc2"><div class="ml">Ventas Mes</div><div class="mv g">'+fmt(mt.sales||0)+'</div></div><div class="mc2"><div class="ml">Neto</div><div class="mv '+(mt.net>=0?'g':'r')+'">'+fmt(mt.net||0)+'</div></div><div class="mc2"><div class="ml">Hab.</div><div class="mv a">'+mt.roomsSold+'</div></div><div class="mc2"><div class="ml">Personas</div><div class="mv a">'+mt.people+'</div></div></div>';if(data.days&&data.days.length){var mx=Math.max.apply(null,data.days.map(function(d){return d.sales||0;}));if(mx<1)mx=1;h+='<div class="chart-wrap"><div class="chart-title">Ventas por dia</div><div class="bc" style="height:75px">';data.days.forEach(function(d){var p=Math.round(((d.sales||0)/mx)*100),dn=d.day.split('-')[2];h+='<div class="bco"><div class="bf" style="height:'+p+'%;background:'+(d.sales>0?'#7c5cfc':'#2e2e3a')+'"></div><div class="bl">'+Number(dn)+'</div></div>';});h+='</div></div><table><thead><tr><th>Dia</th><th>Ventas</th><th>Hab.</th><th>Neto</th></tr></thead><tbody>';data.days.forEach(function(d){h+='<tr><td><b>'+d.day+'</b></td><td>'+fmt(d.sales)+'</td><td>'+d.roomsSold+'</td><td style="color:'+(d.net>=0?'#22c55e':'#ef4444')+'">'+fmt(d.net)+'</td></tr>';});h+='</tbody></table>';}return h;}
+function loadMo(){
+  var ym=document.getElementById('moPick').value;
+  if(!ym){var n=new Date();ym=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+  var el=document.getElementById('moCont');
+  el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
+  rpc('monthMetrics',{yearMonth:ym},function(data){el.innerHTML=renderMo(data,ym);},function(e){el.innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+}
+function renderMo(data,ym){
+  var mt=data.monthTotals||{};
+  var days=data.days||[];
+  var SHIFTS=['SHIFT_1','SHIFT_2','SHIFT_3'];
+  var SL={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+  var SC={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+  var h='';
+  // Tarjetas resumen
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-bottom:14px">';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#9ca3af;text-transform:uppercase;margin-bottom:3px">Ventas mes</div><div style="font-size:14px;font-weight:700;color:#22c55e">'+fmt(mt.sales||0)+'</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#3b82f6;text-transform:uppercase;margin-bottom:3px">Tarjeta</div><div style="font-size:14px;font-weight:700;color:#3b82f6">'+fmt(mt.tarjeta||0)+'</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#22c55e;text-transform:uppercase;margin-bottom:3px">Efectivo</div><div style="font-size:14px;font-weight:700;color:#22c55e">'+fmt(mt.efectivo||0)+'</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;margin-bottom:3px">Nequi</div><div style="font-size:14px;font-weight:700;color:#a78bfa">'+fmt(mt.nequi||0)+'</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#ef4444;text-transform:uppercase;margin-bottom:3px">Gastos mes</div><div style="font-size:14px;font-weight:700;color:#ef4444">'+fmt(mt.gastos||0)+'</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#f59e0b;text-transform:uppercase;margin-bottom:3px">Neto mes</div><div style="font-size:14px;font-weight:700;color:#f59e0b">'+fmt(mt.neto||0)+'</div></div>';
+  h+='</div>';
+  if(!days.length){h+='<p style="color:#9ca3af">Sin datos para este mes.</p>';return h;}
+  // Tabla
+  h+='<div style="overflow-x:auto">';
+  h+='<table style="border-collapse:collapse;min-width:1050px;width:100%">';
+  h+='<thead>';
+  h+='<tr style="background:#22222c">';
+  h+='<th rowspan="2" style="text-align:left;padding:4px 6px;color:#9ca3af;min-width:28px;border:1px solid #2e2e3a">Día</th>';
+  h+='<th rowspan="2" style="padding:4px 6px;color:#9ca3af;min-width:32px;border:1px solid #2e2e3a">Hab</th>';
+  h+='<th rowspan="2" style="padding:4px 6px;color:#9ca3af;min-width:38px;border:1px solid #2e2e3a">Turno</th>';
+  h+='<th colspan="4" style="padding:4px 6px;color:#3b82f6;border:1px solid #2e2e3a;text-align:center">— Tarjeta —</th>';
+  h+='<th colspan="4" style="padding:4px 6px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">— Efectivo —</th>';
+  h+='<th colspan="4" style="padding:4px 6px;color:#a78bfa;border:1px solid #2e2e3a;text-align:center">— Nequi —</th>';
+  h+='<th colspan="3" style="padding:4px 6px;color:#ef4444;border:1px solid #2e2e3a;text-align:center">— Gastos —</th>';
+  h+='<th rowspan="2" style="padding:4px 6px;color:#f59e0b;border:1px solid #2e2e3a;text-align:center;min-width:70px">Neto turno</th>';
+  h+='</tr>';
+  h+='<tr style="background:#1a1a24">';
+  h+='<th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">Hab</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
+  h+='<th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px">Hab</th><th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
+  h+='<th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px">Hab</th><th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
+  h+='<th style="padding:3px 5px;color:#ef4444;border:1px solid #2e2e3a;font-size:9px">Gral</th><th style="padding:3px 5px;color:#f59e0b;border:1px solid #2e2e3a;font-size:9px">Taxi</th><th style="padding:3px 5px;color:#f97316;border:1px solid #2e2e3a;font-size:9px">Turno</th>';
+  h+='</tr></thead><tbody>';
+
+  function fmtC(n){return n?'<span style="color:inherit">'+fmt(n)+'</span>':'<span style="color:#2e2e3a">—</span>';}
+
+  days.forEach(function(d){
+    var dn=Number(d.day.split('-')[2]);
+    SHIFTS.forEach(function(sid,si){
+      var s=d[sid]||{};
+      var bg=si===0?'#1a1a26':si===1?'#1a221a':'#1f1a18';
+      var tc=SC[sid];
+      var isFirst=si===0;
+      h+='<tr style="background:'+bg+'">';
+      if(isFirst){
+        h+='<td rowspan="5" style="font-weight:700;color:#a78bfa;text-align:center;vertical-align:top;padding-top:6px;border:1px solid #2e2e3a;border-left:3px solid #a78bfa">'+dn+'</td>';
+        h+='<td rowspan="5" style="text-align:center;vertical-align:top;padding-top:6px;font-weight:700;color:#e5e7eb;border:1px solid #2e2e3a">'+d.roomsSold+'</td>';
+      }
+      h+='<td style="color:'+tc+';font-weight:700;border:1px solid #2e2e3a;border-left:2px solid '+tc+';padding:3px 5px;font-size:10px">'+SL[sid]+'<br><span style="font-size:9px;color:#6b7280">'+esc(s.responsable||'—')+'</span></td>';
+      h+='<td style="color:#3b82f6;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.tj_hab)+'</td>';
+      h+='<td style="color:#3b82f6;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.tj_padd)+'</td>';
+      h+='<td style="color:#3b82f6;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.tj_had)+'</td>';
+      h+='<td style="color:#3b82f6;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right;background:rgba(59,130,246,.08)">'+fmtC(s.totalTarjeta)+'</td>';
+      h+='<td style="color:#22c55e;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.ef_hab)+'</td>';
+      h+='<td style="color:#22c55e;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.ef_padd)+'</td>';
+      h+='<td style="color:#22c55e;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.ef_had)+'</td>';
+      h+='<td style="color:#22c55e;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right;background:rgba(34,197,94,.08)">'+fmtC(s.totalEfectivo)+'</td>';
+      h+='<td style="color:#a78bfa;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.nq_hab)+'</td>';
+      h+='<td style="color:#a78bfa;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.nq_padd)+'</td>';
+      h+='<td style="color:#a78bfa;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.nq_had)+'</td>';
+      h+='<td style="color:#a78bfa;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right;background:rgba(167,139,250,.08)">'+fmtC(s.totalNequi)+'</td>';
+      h+='<td style="color:#ef4444;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.gastos)+'</td>';
+      h+='<td style="color:#f59e0b;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.taxis)+'</td>';
+      h+='<td style="color:#f97316;border:1px solid #2e2e3a;padding:3px 5px;font-size:10px;text-align:right">'+fmtC(s.turnos)+'</td>';
+      h+='<td style="color:#f59e0b;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:11px;text-align:right">'+fmtC(s.netoTurno)+'</td>';
+      h+='</tr>';
+    });
+    // Fila suma T1+T2+T3 por método de pago
+    var sumTj=SHIFTS.reduce(function(a,sid){return a+(d[sid]?d[sid].totalTarjeta:0);},0);
+    var sumEf=SHIFTS.reduce(function(a,sid){return a+(d[sid]?d[sid].totalEfectivo:0);},0);
+    var sumNq=SHIFTS.reduce(function(a,sid){return a+(d[sid]?d[sid].totalNequi:0);},0);
+    h+='<tr style="background:#1e1e2e;border-top:1px solid #3b82f6">';
+    h+='<td style="color:#9ca3af;font-size:9px;border:1px solid #2e2e3a;padding:3px 5px">T1+T2+T3</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="color:#3b82f6;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:11px;text-align:right;background:rgba(59,130,246,.15)">'+fmt(sumTj)+'</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="color:#22c55e;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:11px;text-align:right;background:rgba(34,197,94,.15)">'+fmt(sumEf)+'</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="color:#a78bfa;font-weight:700;border:1px solid #2e2e3a;padding:3px 5px;font-size:11px;text-align:right;background:rgba(167,139,250,.15)">'+fmt(sumNq)+'</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="border:1px solid #2e2e3a"></td>';
+    h+='</tr>';
+    // Fila Total día neto
+    h+='<tr style="background:#2a2a14;border-top:2px solid #f59e0b">';
+    h+='<td colspan="4" style="color:#f59e0b;font-weight:700;font-size:11px;border:1px solid #2e2e3a;padding:4px 6px;border-left:3px solid #f59e0b">Total día '+dn+'</td>';
+    h+='<td style="color:#3b82f6;font-weight:700;font-size:12px;border:1px solid #2e2e3a;padding:4px 5px;text-align:right;background:rgba(59,130,246,.2)">'+fmt(d.totalTarjeta)+'</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="color:#22c55e;font-weight:700;font-size:12px;border:1px solid #2e2e3a;padding:4px 5px;text-align:right;background:rgba(34,197,94,.2)">'+fmt(d.totalEfectivo)+'</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="color:#a78bfa;font-weight:700;font-size:12px;border:1px solid #2e2e3a;padding:4px 5px;text-align:right;background:rgba(167,139,250,.2)">'+fmt(d.totalNequi)+'</td>';
+    h+='<td colspan="3" style="border:1px solid #2e2e3a"></td>';
+    h+='<td style="color:#f59e0b;font-weight:700;font-size:13px;border:1px solid #2e2e3a;padding:4px 5px;text-align:right;background:rgba(245,158,11,.2);border-left:2px solid #f59e0b">'+fmt(d.netodia)+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
 // ---- NOTAS ----
 var SUPA_URL='https://fojffyncxrrxevavshod.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvamZmeW5jeHJyeGV2YXZzaG9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzQ1MDQsImV4cCI6MjA4NzQ1MDUwNH0.dNBs_7iJOtNUfTwSsEwL-snON9OoOudf6T9Bjxc80hI';
