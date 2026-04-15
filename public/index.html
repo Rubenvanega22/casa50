@@ -4798,7 +4798,6 @@ function initBarcodeScanner(){
     barcodeTimer=setTimeout(function(){barcodeBuffer='';},100);
   });
 }
-
 function procesarCodigoBarras(codigo){
   codigo=codigo.trim().toUpperCase();
   if(codigo.startsWith('HAB')){
@@ -4808,7 +4807,34 @@ function procesarCodigoBarras(codigo){
     else toast('Habitación '+rid+' no encontrada','err');
     return;
   }
-
+  // Si modal de ingreso bodega está abierto — buscar ahí
+  var modalBodega=document.getElementById('mIngresoBodega');
+  if(modalBodega&&modalBodega.classList.contains('op')){
+    var prod=productosLista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
+    if(prod){
+      var sel=document.getElementById('ibProducto');
+      if(sel){
+        sel.value=prod.id;
+        updInfoBodega();
+        toast('✓ '+prod.nombre+' seleccionado','ok');
+      }
+    } else {
+      toast('Código no reconocido: '+codigo,'err');
+    }
+    return;
+  }
+  // Si modal de traslado recepción está abierto — buscar ahí
+  var modalTraslado=document.getElementById('mTrasladoRec');
+  if(modalTraslado&&modalTraslado.classList.contains('op')){
+    var prod2=productosLista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
+    if(prod2){
+      selTraslado(prod2.id);
+      toast('✓ '+prod2.nombre+' seleccionado','ok');
+    } else {
+      toast('Código no reconocido: '+codigo,'err');
+    }
+    return;
+  }
   function buscarYProcesar(lista){
     var prod=lista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
     if(prod){
