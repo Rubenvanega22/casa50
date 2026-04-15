@@ -1990,7 +1990,7 @@ async function apiSaveProduct(p, res) {
   } else {
     await supabase.from('products').insert({
       nombre, codigo_barras: codigo||null, precio, categoria,
-      stock_actual: stockActual, stock_minimo: stockMinimo, activo: true
+      stock_actual: 0, stock_bodega: stockActual, stock_minimo: stockMinimo, activo: true
     });
   }
   return ok(res, {});
