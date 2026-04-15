@@ -5247,9 +5247,14 @@ function renderRoomProdPendiente(){
   h+='<button class="pb" onclick="chRoomProdCant(1,'+prod.precio+')">+</button>';
   h+='<b style="color:#22c55e;margin-left:8px">'+fmt(total)+'</b>';
   h+='</div>';
-  var pm=curRoom&&curRoom.payMethod?curRoom.payMethod:'EFECTIVO';
+  var pm=window._roomProdPm||(curRoom&&curRoom.payMethod?curRoom.payMethod:'EFECTIVO');
   window._roomProdPm=pm;
-  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:8px">Método de pago: <b style="color:#e5e7eb">'+pm+'</b></div>';
+  h+='<div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:6px">Método de pago:</div>';
+  h+='<div style="display:flex;gap:4px;margin-bottom:8px">';
+  h+='<div onclick="selRoomProdPm(\'EFECTIVO\')" style="flex:1;padding:5px 4px;background:'+(pm==='EFECTIVO'?'rgba(34,197,94,.1)':'#18181f')+';border:2px solid '+(pm==='EFECTIVO'?'#22c55e':'#2e2e3a')+';border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:'+(pm==='EFECTIVO'?'#22c55e':'#e5e7eb')+';cursor:pointer">Efectivo</div>';
+  h+='<div onclick="selRoomProdPm(\'TARJETA\')" style="flex:1;padding:5px 4px;background:'+(pm==='TARJETA'?'rgba(59,130,246,.1)':'#18181f')+';border:2px solid '+(pm==='TARJETA'?'#3b82f6':'#2e2e3a')+';border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:'+(pm==='TARJETA'?'#3b82f6':'#e5e7eb')+';cursor:pointer">Tarjeta</div>';
+  h+='<div onclick="selRoomProdPm(\'NEQUI\')" style="flex:1;padding:5px 4px;background:'+(pm==='NEQUI'?'rgba(167,139,250,.1)':'#18181f')+';border:2px solid '+(pm==='NEQUI'?'#a78bfa':'#2e2e3a')+';border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:'+(pm==='NEQUI'?'#a78bfa':'#e5e7eb')+';cursor:pointer">Nequi</div>';
+  h+='</div>';
   h+='<div style="display:flex;gap:6px">';
   h+='<button class="btn bg full" onclick="confirmarRoomProd()">+ Agregar</button>';
   h+='<button class="btn bp xs" onclick="confirmarRoomProdCortesia()">Cortesía</button>';
