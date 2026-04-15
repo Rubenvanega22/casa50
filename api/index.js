@@ -1277,50 +1277,130 @@ async function apiMetricsHourly(p, res) {
 async function apiMonthMetrics(p, res) {
   const ym = String(p.yearMonth || '');
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
-  const { data: sales } = await supabase.from('sales').select('business_day,type,total,people,user_name').like('business_day', ym + '%');
-  const { data: taxi } = await supabase.from('taxi_expenses').select('business_day,amount').like('business_day', ym + '%');
-  const { data: loansMonth } = await supabase.from('loans').select('business_day,amount').like('business_day', ym + '%');
-  const { data: extraMonth } = await supabase.from('extra_staff').select('business_day,payment').like('business_day', ym + '%');
-  const { data: maidLogsMonth } = await supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym + '%');
+
+  const [salesRes, taxiRes, loansRes, extraRes, maidLogsRes, failuresRes, shiftLogRes, roomProdsRes] = await Promise.all([
+    supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id').like('business_day', ym+'%'),
+    supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
+    supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
+    supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
+    supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym+'%'),
+    supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
+    supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
+    supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%')
+  ]);
+
+  const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
+  const mkShift = () => ({
+    responsable:'—',
+    tj_hab:0,tj_padd:0,tj_had:0,tj_bar:0,
+    ef_hab:0,ef_padd:0,ef_had:0,ef_bar:0,
+    nq_hab:0,nq_padd:0,nq_had:0,nq_bar:0,
+    gastos:0,taxis:0,turnos:0,
+    roomsSold:0
+  });
+  const mkDay = (d) => {
+    const o = {day:d,roomsSold:0,people:0};
+    SHIFTS.forEach(s=>{o[s]=mkShift();});
+    return o;
+  };
+
   const dayMap = {};
-  const ed = d => { if(!dayMap[d])dayMap[d]={day:d,sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0}; return dayMap[d]; };
-  (sales||[]).forEach(r=>{const d=ed(r.business_day),t=Number(r.total||0);if(['SALE','EXTENSION','RENEWAL'].includes(r.type)){d.sales+=t;if(r.type==='SALE'){d.roomsSold++;d.people+=Number(r.people||0);}}if(r.type==='REFUND')d.refunds+=t;});
-  (taxi||[]).forEach(r=>{ed(r.business_day).taxi+=Number(r.amount||0);});
+  const getDay = d => { if(!dayMap[d])dayMap[d]=mkDay(d); return dayMap[d]; };
+
+  // Responsables por turno/día
+  (shiftLogRes.data||[]).forEach(r=>{
+    const d=getDay(r.business_day);
+    const sid=r.shift_id;
+    if(SHIFTS.includes(sid)&&d[sid].responsable==='—') d[sid].responsable=r.user_name||'—';
+  });
+
+  // Ventas
+  (salesRes.data||[]).forEach(r=>{
+    if(String(r.room_id)==='304') return;
+    const d=getDay(r.business_day);
+    const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
+    const s=d[sid];
+    const t=Number(r.total||0), pm=String(r.pay_method||'EFECTIVO').toUpperCase();
+    const epv=Number(r.extra_people_value||0);
+    if(r.type==='SALE'){
+      d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
+      const base=t-epv;
+      if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
+      else if(pm==='NEQUI'){s.nq_hab+=base;s.nq_padd+=epv;}
+      else if(pm==='MIXTO'){s.ef_hab+=Number(r.amount_1||0);s.tj_hab+=Number(r.amount_2||0);s.nq_hab+=Number(r.amount_3||0);}
+      else{s.ef_hab+=base;s.ef_padd+=epv;}
+    }
+    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
+      if(pm==='TARJETA')s.tj_had+=t;
+      else if(pm==='NEQUI')s.nq_had+=t;
+      else if(pm==='MIXTO'){s.ef_had+=Number(r.amount_1||0);s.tj_had+=Number(r.amount_2||0);s.nq_had+=Number(r.amount_3||0);}
+      else s.ef_had+=t;
+    }
+  });
+
+  // Bar productos
+  (roomProdsRes.data||[]).forEach(r=>{
+    if(r.is_cortesia)return;
+    const d=getDay(r.business_day);
+    const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
+    const s=d[sid], pm=String(r.pay_method||'EFECTIVO').toUpperCase(), t=Number(r.total||0);
+    if(pm==='TARJETA')s.tj_bar+=t;
+    else if(pm==='NEQUI')s.nq_bar+=t;
+    else s.ef_bar+=t;
+  });
+
+  // Gastos
+  (taxiRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
+  (loansRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
+  (extraRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].turnos+=Number(r.payment||0);});
+
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
-  days.forEach(d=>{d.net=d.sales+d.refunds-d.taxi;});
- 
-  const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
-  const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
-  const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
-  const monthTotals = days.reduce((acc,d)=>{acc.sales+=d.sales;acc.refunds+=d.refunds;acc.taxi+=d.taxi;acc.net+=d.net;acc.people+=d.people;acc.roomsSold+=d.roomsSold;return acc;},{sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0});
-  monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
+
+  // Calcular netos por turno y totales por día
+  days.forEach(d=>{
+    d.totalTarjeta=0;d.totalEfectivo=0;d.totalNequi=0;d.totalGastos=0;d.netodia=0;
+    SHIFTS.forEach(sid=>{
+      const s=d[sid];
+      s.totalTarjeta=s.tj_hab+s.tj_padd+s.tj_had+s.tj_bar;
+      s.totalEfectivo=s.ef_hab+s.ef_padd+s.ef_had+s.ef_bar;
+      s.totalNequi=s.nq_hab+s.nq_padd+s.nq_had+s.nq_bar;
+      s.totalGastos=s.gastos+s.taxis+s.turnos;
+      s.netoTurno=s.totalTarjeta+s.totalEfectivo+s.totalNequi-s.totalGastos;
+      d.totalTarjeta+=s.totalTarjeta;
+      d.totalEfectivo+=s.totalEfectivo;
+      d.totalNequi+=s.totalNequi;
+      d.totalGastos+=s.totalGastos;
+    });
+    d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;
+  });
+
+  const monthTotals={sales:0,tarjeta:0,efectivo:0,nequi:0,gastos:0,neto:0,roomsSold:0,people:0,expenses:0};
+  days.forEach(d=>{
+    monthTotals.tarjeta+=d.totalTarjeta;
+    monthTotals.efectivo+=d.totalEfectivo;
+    monthTotals.nequi+=d.totalNequi;
+    monthTotals.gastos+=d.totalGastos;
+    monthTotals.neto+=d.netodia;
+    monthTotals.roomsSold+=d.roomsSold;
+    monthTotals.people+=d.people||0;
+  });
+  monthTotals.sales=monthTotals.tarjeta+monthTotals.efectivo+monthTotals.nequi;
+  monthTotals.expenses=monthTotals.gastos;
+
+  // Rankings
   const recepMes={};
-  (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
-    const nm=r.user_name||'?';
-    if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};
-    recepMes[nm].habs++;recepMes[nm].total+=Number(r.total||0);
-  });
+  (salesRes.data||[]).filter(r=>r.type==='SALE').forEach(r=>{const nm=r.user_name||'?';if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};recepMes[nm].habs++;recepMes[nm].total+=Number(r.total||0);});
   const recepRankingMes=Object.values(recepMes).sort((a,b)=>b.total-a.total);
+
   const maidMes={};
-  (maidLogsMonth||[]).filter(r=>Number(r.finished_ms||0)>0&&r.state_to==='AVAILABLE').forEach(r=>{
-    const nm=r.maid_name||'?';
-    if(!maidMes[nm])maidMes[nm]={nombre:nm,habs:0,totalMins:0};
-    maidMes[nm].habs++;maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);
-  });
+  (maidLogsRes.data||[]).filter(r=>Number(r.finished_ms||0)>0&&r.state_to==='AVAILABLE').forEach(r=>{const nm=r.maid_name||'?';if(!maidMes[nm])maidMes[nm]={nombre:nm,habs:0,totalMins:0};maidMes[nm].habs++;maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);});
   const maidRankingMes=Object.values(maidMes).sort((a,b)=>b.habs-a.habs);
-  // Ranking de errores recepcionistas
-  const { data: failures } = await supabase.from('shift_failures').select('*').like('business_day', ym + '%');
-  const errorMap = {};
-  (failures||[]).forEach(f => {
-    const nm = f.user_name || '?';
-    if(!errorMap[nm]) errorMap[nm] = { nombre: nm, total: 0, detalles: [] };
-    let fallas = [];
-    try { fallas = Array.isArray(f.failures) ? f.failures : JSON.parse(f.failures || '[]'); } catch(e) {}
-    errorMap[nm].total += fallas.length;
-    errorMap[nm].detalles.push({ fecha: f.business_day, turno: f.shift_id, fallas, creadoPor: f.created_by || '' });
-  });
-  const errorRanking = Object.values(errorMap).sort((a, b) => b.total - a.total);
-  return ok(res, { yearMonth: ym, monthTotals, days, recepRankingMes, maidRankingMes, errorRanking });
+
+  const errorMap={};
+  (failuresRes.data||[]).forEach(f=>{const nm=f.user_name||'?';if(!errorMap[nm])errorMap[nm]={nombre:nm,total:0,detalles:[]};let fallas=[];try{fallas=Array.isArray(f.failures)?f.failures:JSON.parse(f.failures||'[]');}catch(e){}errorMap[nm].total+=fallas.length;errorMap[nm].detalles.push({fecha:f.business_day,turno:f.shift_id,fallas,creadoPor:f.created_by||''});});
+  const errorRanking=Object.values(errorMap).sort((a,b)=>b.total-a.total);
+
+  return ok(res, { yearMonth:ym, monthTotals, days, recepRankingMes, maidRankingMes, errorRanking });
 }
 
 // ==================== PANEL CAMARERAS ====================
