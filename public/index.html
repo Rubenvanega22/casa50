@@ -5271,22 +5271,78 @@ function confirmarIngresoBodega(){
 function openTrasladoRecepcion(){
   var h='<div class="mh"><div class="mt">Bajar a Recepción</div><button class="mc" onclick="closeM(\'mTrasladoRec\')">✕</button></div>';
   h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Mueve unidades de bodega a recepción para poder venderlas.</div>';
-h+='<label>Buscar producto</label>';
+  h+='<label>Buscar producto</label>';
   h+='<input type="text" id="trBuscar" placeholder="🔍 Nombre o escanea código..." style="margin-bottom:6px" oninput="buscarTraslado(this.value)">';
   h+='<div id="trResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
-  h+='<div id="trInfo" style="background:#22222c;border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between;display:none"><span>Bodega: <b id="trSaldoBod" style="color:#a78bfa">0</b></span><span>Recepción: <b id="trSaldoRec" style="color:#22c55e">0</b></span></div>';
   h+='<input type="hidden" id="trProducto" value="">';
-  h+='<label>Cantidad a bajar</label><input type="number" id="trCantidad" min="1" placeholder="Ej: 12">';
-  h+='<label>Nota (opcional)</label><input type="text" id="trNota" placeholder="Ej: Turno 2">';
-  h+='<button class="btn by full" style="margin-top:10px" onclick="confirmarTrasladoRec()">Confirmar traslado</button>';
+  h+='<div id="trCard" style="display:none;background:#22222c;border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:10px;margin-bottom:8px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b id="trNombre" style="font-size:13px;color:#e5e7eb"></b><span id="trCat" style="font-size:10px;color:#9ca3af"></span></div>';
+  h+='<div style="display:flex;gap:8px;margin-bottom:10px">';
+  h+='<div style="flex:1;background:#18181f;border-radius:6px;padding:7px;text-align:center"><div style="font-size:9px;color:#9ca3af;margin-bottom:2px">Bodega</div><div style="font-size:15px;font-weight:700;color:#a78bfa" id="trSaldoBod">0</div></div>';
+  h+='<div style="flex:1;background:#18181f;border-radius:6px;padding:7px;text-align:center"><div style="font-size:9px;color:#9ca3af;margin-bottom:2px">Recepción actual</div><div style="font-size:15px;font-weight:700;color:#22c55e" id="trSaldoRec">0</div></div>';
+  h+='</div>';
+  h+='<div style="border-top:0.5px solid #2e2e3a;padding-top:10px;margin-bottom:10px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#f97316;margin-bottom:6px">Bajar cantidad</div>';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h+='<button onclick="chTrCant(-1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">-</button>';
+  h+='<span id="trCantDisp" style="font-size:18px;font-weight:700;color:#e5e7eb;min-width:24px;text-align:center">1</span>';
+  h+='<button onclick="chTrCant(1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">+</button>';
+  h+='<span style="font-size:11px;color:#9ca3af">unidades a bajar</span>';
+  h+='</div>';
+  h+='<label>Nota (opcional)</label><input type="text" id="trNota" placeholder="Ej: Turno 2" style="margin-bottom:8px">';
+  h+='<button class="btn bo full" onclick="confirmarTrasladoRec()">Confirmar traslado</button>';
+  h+='</div>';
+  h+='<div style="border-top:0.5px solid #2e2e3a;padding-top:10px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#3b82f6;margin-bottom:6px">Corregir cantidad en recepción</div>';
+  h+='<div style="display:flex;gap:6px;align-items:center">';
+  h+='<input type="number" id="trCorregir" placeholder="Nueva cantidad" min="0" style="flex:1;margin:0">';
+  h+='<button class="btn bb" onclick="confirmarCorreccionRec()">Corregir</button>';
+  h+='</div>';
+  h+='<div style="font-size:10px;color:#6b7280;margin-top:4px">Usa esto solo si la cantidad en recepción está incorrecta.</div>';
+  h+='</div>';
+  h+='</div>';
   var modal=document.getElementById('mTrasladoRec');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mTrasladoRec';div.innerHTML='<div class="modal"><div id="mTrasladoRecB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mTrasladoRec');});document.body.appendChild(div);}
- document.getElementById('mTrasladoRecB').innerHTML=h;
+  document.getElementById('mTrasladoRecB').innerHTML=h;
+  window._trCant=1;
   openM('mTrasladoRec');
+}function buscarTraslado(txt){
+  var cont=document.getElementById('trResultados');
+  if(!cont)return;
+  if(!txt){cont.innerHTML='';return;}
+  var lista=productosLista.filter(function(p){return p.activo&&p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;}).slice(0,6);
+  if(!lista.length){cont.innerHTML='<p style="font-size:11px;color:#6b7280;padding:6px">Sin resultados</p>';return;}
+  cont.innerHTML=lista.map(function(p){
+    var sc=p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+    return '<div onclick="selTraslado('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
+      '<b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b>'+
+      '<span style="font-size:10px;color:'+sc+'">Rec: '+p.stockActual+'</span></div>';
+  }).join('');
+}
+function selTraslado(id){
+  var prod=productosLista.find(function(p){return p.id===id;});
+  if(!prod)return;
+  window._trProdSel=prod;
+  window._trCant=1;
+  document.getElementById('trProducto').value=id;
+  document.getElementById('trResultados').innerHTML='';
+  document.getElementById('trBuscar').value=prod.nombre;
+  var card=document.getElementById('trCard');if(card)card.style.display='block';
+  var nm=document.getElementById('trNombre');if(nm)nm.textContent=prod.nombre;
+  var cat=document.getElementById('trCat');if(cat)cat.textContent=prod.categoria||'';
+  var bod=document.getElementById('trSaldoBod');if(bod)bod.textContent=prod.stockBodega||0;
+  var rec=document.getElementById('trSaldoRec');if(rec)rec.textContent=prod.stockActual||0;
+  var disp=document.getElementById('trCantDisp');if(disp)disp.textContent=1;
+}
+function chTrCant(d){
+  var prod=window._trProdSel;
+  var max=prod?Number(prod.stockBodega||0):99;
+  window._trCant=Math.max(1,Math.min(max,(window._trCant||1)+d));
+  var el=document.getElementById('trCantDisp');if(el)el.textContent=window._trCant;
 }
 function confirmarTrasladoRec(){
   var productId=Number((document.getElementById('trProducto')||{}).value||0);
-  var cantidad=Number((document.getElementById('trCantidad')||{}).value||0);
+  var cantidad=window._trCant||0;
   var nota=(document.getElementById('trNota')||{}).value||'';
   if(!productId){toast('Selecciona un producto.','err');return;}
   if(cantidad<=0){toast('Ingresa la cantidad.','err');return;}
@@ -5297,31 +5353,33 @@ function confirmarTrasladoRec(){
     );
   });
 }
- function buscarTraslado(txt){
-  var cont=document.getElementById('trResultados');if(!cont)return;
-  if(!txt){cont.innerHTML='';return;}
-  var lista=productosLista.filter(function(p){return p.activo&&p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;}).slice(0,6);
-  cont.innerHTML=lista.map(function(p){
-    return '<div onclick="selTraslado('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between"><b style="color:#e5e7eb">'+esc(p.nombre)+'</b><span style="color:#a78bfa;font-size:10px">Bodega: '+(p.stockBodega||0)+'</span></div>';
-  }).join('');
+function confirmarCorreccionRec(){
+  var productId=Number((document.getElementById('trProducto')||{}).value||0);
+  var nuevaCant=Number((document.getElementById('trCorregir')||{}).value||0);
+  if(!productId){toast('Selecciona un producto.','err');return;}
+  if(nuevaCant<0){toast('Cantidad inválida.','err');return;}
+  var prod=window._trProdSel;
+  conf('¿Corregir stock de recepción a '+nuevaCant+' unidades?',function(){
+    rpc('corregirStockRecepcion',{productId:productId,nuevoStock:nuevaCant,userName:sess.userName,userRole:sess.userRole},
+      function(){toast('✓ Stock corregido a '+nuevaCant,'ok');closeM('mTrasladoRec');loadProductos();},
+     function(e){toast(e.message||String(e),'err');}
+    );
+  });
 }
 function selTraslado(id){
-  var prod=productosLista.find(function(p){return p.id===id;});if(!prod)return;
+  var prod=productosLista.find(function(p){return p.id===id;});
+  if(!prod)return;
+  window._trProdSel=prod;
+  window._trCant=1;
   document.getElementById('trProducto').value=id;
   document.getElementById('trBuscar').value=prod.nombre;
   document.getElementById('trResultados').innerHTML='';
-  document.getElementById('trSaldoBod').textContent=prod.stockBodega||0;
-  document.getElementById('trSaldoRec').textContent=prod.stockActual||0;
-  document.getElementById('trInfo').style.display='flex';
-}
-function updInfoTraslado(){
-  var sel=document.getElementById('trProducto');
-  if(!sel)return;
-  var opt=sel.options[sel.selectedIndex];
-  var bod=opt?opt.getAttribute('data-bodega'):0;
-  var rec=opt?opt.getAttribute('data-rec'):0;
-  var b=document.getElementById('trSaldoBod');if(b)b.textContent=bod;
-  var r=document.getElementById('trSaldoRec');if(r)r.textContent=rec;
+  var card=document.getElementById('trCard');if(card)card.style.display='block';
+  var nm=document.getElementById('trNombre');if(nm)nm.textContent=prod.nombre;
+  var cat=document.getElementById('trCat');if(cat)cat.textContent=prod.categoria||'';
+  var bod=document.getElementById('trSaldoBod');if(bod)bod.textContent=prod.stockBodega||0;
+  var rec=document.getElementById('trSaldoRec');if(rec)rec.textContent=prod.stockActual||0;
+  var disp=document.getElementById('trCantDisp');if(disp)disp.textContent=1;
 }
 function openCortesia(){
   if(!productosLista.length){
