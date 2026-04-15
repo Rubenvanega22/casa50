@@ -5385,6 +5385,10 @@ function openIngresoBodega(){
   window._ibCant=1;
   window._ibProdSel=null;
   openM('mIngresoBodega');
+  setTimeout(function(){
+    var inp=document.getElementById('ibBuscar');
+    if(inp)inp.focus();
+  },300);
 }
 function buscarBodega(txt){
   var cont=document.getElementById('ibResultados');
@@ -5401,7 +5405,8 @@ function buscarBodega(txt){
 }
 function selBodega(id){
   var prod=productosLista.find(function(p){return p.id===id;});
-  if(!prod)return;
+  if(!prod){console.log('selBodega: prod no encontrado id='+id);return;}
+  console.log('selBodega OK:',prod.nombre,'ibCard=',document.getElementById('ibCard'));
   window._ibProdSel=prod;
   window._ibCant=1;
   document.getElementById('ibProducto').value=id;
@@ -5474,8 +5479,12 @@ function openTrasladoRecepcion(){
   var modal=document.getElementById('mTrasladoRec');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mTrasladoRec';div.innerHTML='<div class="modal"><div id="mTrasladoRecB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mTrasladoRec');});document.body.appendChild(div);}
   document.getElementById('mTrasladoRecB').innerHTML=h;
-  window._trCant=1;
+ window._trCant=1;
   openM('mTrasladoRec');
+  setTimeout(function(){
+    var inp=document.getElementById('trBuscar');
+    if(inp)inp.focus();
+  },300);
 }function buscarTraslado(txt){
   var cont=document.getElementById('trResultados');
   if(!cont)return;
