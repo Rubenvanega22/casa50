@@ -4812,12 +4812,8 @@ function procesarCodigoBarras(codigo){
   if(modalBodega&&modalBodega.classList.contains('op')){
     var prod=productosLista.find(function(p){return p.codigoBarras&&p.codigoBarras.toUpperCase()===codigo&&p.activo;});
     if(prod){
-      var sel=document.getElementById('ibProducto');
-      if(sel){
-        sel.value=prod.id;
-        updInfoBodega();
-        toast('✓ '+prod.nombre+' seleccionado','ok');
-      }
+      selBodega(prod.id);
+      toast('✓ '+prod.nombre+' seleccionado','ok');
     } else {
       toast('Código no reconocido: '+codigo,'err');
     }
