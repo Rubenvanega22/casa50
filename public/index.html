@@ -4412,13 +4412,13 @@ function renderMo(data,ym){
   h+='</div>';
   if(!days.length){h+='<p style="color:#9ca3af">Sin datos para este mes.</p>';return h;}
   // Tabla
-  h+='<div style="overflow-x:auto">';
+  h+='<div style="overflow-x:auto;max-height:70vh;overflow-y:auto">';
   h+='<table style="border-collapse:collapse;min-width:1050px;width:100%">';
-  h+='<thead>';
+ h+='<thead style="position:sticky;top:0;z-index:10">';
   h+='<tr style="background:#22222c">';
-  h+='<th rowspan="2" style="text-align:left;padding:4px 6px;color:#9ca3af;min-width:28px;border:1px solid #2e2e3a">Día</th>';
-  h+='<th rowspan="2" style="padding:4px 6px;color:#9ca3af;min-width:32px;border:1px solid #2e2e3a">Hab</th>';
-  h+='<th rowspan="2" style="padding:4px 6px;color:#9ca3af;min-width:38px;border:1px solid #2e2e3a">Turno</th>';
+ h+='<th rowspan="2" style="text-align:left;padding:4px 6px;color:#9ca3af;min-width:28px;border:1px solid #2e2e3a;background:#22222c">Día</th>';
+ h+='<th rowspan="2" style="padding:4px 6px;color:#9ca3af;min-width:32px;border:1px solid #2e2e3a;background:#22222c">Hab</th>';
+ h+='<th rowspan="2" style="padding:4px 6px;color:#9ca3af;min-width:38px;border:1px solid #2e2e3a;background:#22222c">Turno</th>';
   h+='<th colspan="4" style="padding:4px 6px;color:#3b82f6;border:1px solid #2e2e3a;text-align:center">— Tarjeta —</th>';
   h+='<th colspan="4" style="padding:4px 6px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">— Efectivo —</th>';
   h+='<th colspan="4" style="padding:4px 6px;color:#a78bfa;border:1px solid #2e2e3a;text-align:center">— Nequi —</th>';
@@ -4426,7 +4426,7 @@ function renderMo(data,ym){
   h+='<th rowspan="2" style="padding:4px 6px;color:#f59e0b;border:1px solid #2e2e3a;text-align:center;min-width:70px">Neto turno</th>';
   h+='</tr>';
   h+='<tr style="background:#1a1a24">';
-  h+='<th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">Hab</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
+  h+='<th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px;background:#1a1a24">Hab</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#3b82f6;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
   h+='<th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px">Hab</th><th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#22c55e;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
   h+='<th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px">Hab</th><th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px">P.ad</th><th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px">H.ad</th><th style="padding:3px 5px;color:#a78bfa;border:1px solid #2e2e3a;font-size:9px;font-weight:900">Total</th>';
   h+='<th style="padding:3px 5px;color:#ef4444;border:1px solid #2e2e3a;font-size:9px">Gral</th><th style="padding:3px 5px;color:#f59e0b;border:1px solid #2e2e3a;font-size:9px">Taxi</th><th style="padding:3px 5px;color:#f97316;border:1px solid #2e2e3a;font-size:9px">Turno</th>';
