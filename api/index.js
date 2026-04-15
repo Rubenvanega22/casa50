@@ -2255,11 +2255,19 @@ async function apiGetInventarioByDay(p, res) {
   const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
   const {data:movements}=await supabase.from('stock_movements').select('*').eq('business_day',bd);
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
+ const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
+  const ayerStr=ayer.getFullYear()+'-'+String(ayer.getMonth()+1).padStart(2,'0')+'-'+String(ayer.getDate()).padStart(2,'0');
+  const {data:salesAyer}=await supabase.from('room_products').select('product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
+  const {data:entriesAyer}=await supabase.from('stock_entries').select('product_id,cantidad').eq('business_day',ayerStr);
   const rows=products.map(function(prod){
     const totalVentas=(sales||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const totalCortesias=(sales||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const totalEntradas=(entries||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
+    const ventasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
+    const cortesiasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
+    const entradasAyer=(entriesAyer||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
     const saldoInicial=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalEntradas;
+    const saldoInicialReal=saldoInicial+ventasAyer+cortesiasAyer-entradasAyer;
     const turnosData={};
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
@@ -2277,7 +2285,7 @@ shifts.forEach(function(sid){
   turnosData[sid].ingresoBodega=movsSid.filter(m=>m.tipo==='ingreso_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
   turnosData[sid].trasladoRecepcion=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
 });
-return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial,saldoActual:Number(prod.stock_actual||0),stockBodega:Number(prod.stock_bodega||0),turnos:turnosData};
+return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial:saldoInicialReal,
   });
   const resumenTurnos={};
   shifts.forEach(function(sid){
