@@ -5271,19 +5271,17 @@ function confirmarIngresoBodega(){
 function openTrasladoRecepcion(){
   var h='<div class="mh"><div class="mt">Bajar a Recepción</div><button class="mc" onclick="closeM(\'mTrasladoRec\')">✕</button></div>';
   h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Mueve unidades de bodega a recepción para poder venderlas.</div>';
-  h+='<label>Producto</label><select id="trProducto" style="margin-bottom:8px" onchange="updInfoTraslado()">';
-  productosLista.filter(function(p){return p.activo;}).forEach(function(p){
-    h+='<option value="'+p.id+'" data-bodega="'+(p.stockBodega||0)+'" data-rec="'+p.stockActual+'">'+esc(p.nombre)+'</option>';
-  });
-  h+='</select>';
-  h+='<div id="trInfo" style="background:#22222c;border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between"><span>Bodega: <b id="trSaldoBod" style="color:#a78bfa">0</b></span><span>Recepción: <b id="trSaldoRec" style="color:#22c55e">0</b></span></div>';
+h+='<label>Buscar producto</label>';
+  h+='<input type="text" id="trBuscar" placeholder="🔍 Nombre o escanea código..." style="margin-bottom:6px" oninput="buscarTraslado(this.value)">';
+  h+='<div id="trResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
+  h+='<div id="trInfo" style="background:#22222c;border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between;display:none"><span>Bodega: <b id="trSaldoBod" style="color:#a78bfa">0</b></span><span>Recepción: <b id="trSaldoRec" style="color:#22c55e">0</b></span></div>';
+  h+='<input type="hidden" id="trProducto" value="">';
   h+='<label>Cantidad a bajar</label><input type="number" id="trCantidad" min="1" placeholder="Ej: 12">';
   h+='<label>Nota (opcional)</label><input type="text" id="trNota" placeholder="Ej: Turno 2">';
   h+='<button class="btn by full" style="margin-top:10px" onclick="confirmarTrasladoRec()">Confirmar traslado</button>';
   var modal=document.getElementById('mTrasladoRec');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mTrasladoRec';div.innerHTML='<div class="modal"><div id="mTrasladoRecB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mTrasladoRec');});document.body.appendChild(div);}
-  document.getElementById('mTrasladoRecB').innerHTML=h;
-  updInfoTraslado();
+ document.getElementById('mTrasladoRecB').innerHTML=h;
   openM('mTrasladoRec');
 }
 function confirmarTrasladoRec(){
@@ -5298,6 +5296,23 @@ function confirmarTrasladoRec(){
       function(e){toast(e.message||String(e),'err');}
     );
   });
+}
+ function buscarTraslado(txt){
+  var cont=document.getElementById('trResultados');if(!cont)return;
+  if(!txt){cont.innerHTML='';return;}
+  var lista=productosLista.filter(function(p){return p.activo&&p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;}).slice(0,6);
+  cont.innerHTML=lista.map(function(p){
+    return '<div onclick="selTraslado('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between"><b style="color:#e5e7eb">'+esc(p.nombre)+'</b><span style="color:#a78bfa;font-size:10px">Bodega: '+(p.stockBodega||0)+'</span></div>';
+  }).join('');
+}
+function selTraslado(id){
+  var prod=productosLista.find(function(p){return p.id===id;});if(!prod)return;
+  document.getElementById('trProducto').value=id;
+  document.getElementById('trBuscar').value=prod.nombre;
+  document.getElementById('trResultados').innerHTML='';
+  document.getElementById('trSaldoBod').textContent=prod.stockBodega||0;
+  document.getElementById('trSaldoRec').textContent=prod.stockActual||0;
+  document.getElementById('trInfo').style.display='flex';
 }
 function updInfoTraslado(){
   var sel=document.getElementById('trProducto');
