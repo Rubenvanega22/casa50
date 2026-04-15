@@ -5286,6 +5286,19 @@ function openTrasladoRecepcion(){
   updInfoTraslado();
   openM('mTrasladoRec');
 }
+function confirmarTrasladoRec(){
+  var productId=Number((document.getElementById('trProducto')||{}).value||0);
+  var cantidad=Number((document.getElementById('trCantidad')||{}).value||0);
+  var nota=(document.getElementById('trNota')||{}).value||'';
+  if(!productId){toast('Selecciona un producto.','err');return;}
+  if(cantidad<=0){toast('Ingresa la cantidad.','err');return;}
+  conf('¿Bajar '+cantidad+' unidades a Recepción?',function(){
+    rpc('trasladoRecepcion',{productId:productId,cantidad:cantidad,nota:nota,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId},
+      function(res){toast('✓ '+cantidad+' unidades bajadas. Recepción: '+res.nuevoRecepcion,'ok');closeM('mTrasladoRec');loadProductos();},
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
 function updInfoTraslado(){
   var sel=document.getElementById('trProducto');
   if(!sel)return;
