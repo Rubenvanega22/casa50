@@ -5363,33 +5363,75 @@ function renderProductos(){
 function openIngresoBodega(){
   var h='<div class="mh"><div class="mt">Ingreso a Bodega</div><button class="mc" onclick="closeM(\'mIngresoBodega\')">✕</button></div>';
   h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Registra lo que compraste. Entra primero a bodega.</div>';
-  h+='<label>Producto</label><select id="ibProducto" style="margin-bottom:8px" onchange="updInfoBodega()">';
-  productosLista.filter(function(p){return p.activo;}).forEach(function(p){
-    h+='<option value="'+p.id+'" data-bodega="'+(p.stockBodega||0)+'" data-rec="'+p.stockActual+'">'+esc(p.nombre)+'</option>';
-  });
-  h+='</select>';
-  h+='<div id="ibInfo" style="background:#22222c;border-radius:8px;padding:8px;font-size:11px;margin-bottom:8px;display:flex;justify-content:space-between"><span>Bodega: <b id="ibSaldoBod" style="color:#a78bfa">0</b></span><span>Recepción: <b id="ibSaldoRec" style="color:#22c55e">0</b></span></div>';
-  h+='<label>Cantidad que llegó</label><input type="number" id="ibCantidad" min="1" placeholder="Ej: 24">';
-  h+='<label>Nota (opcional)</label><input type="text" id="ibNota" placeholder="Ej: Compra semanal">';
-  h+='<button class="btn bb full" style="margin-top:10px" onclick="confirmarIngresoBodega()">Registrar ingreso a bodega</button>';
+  h+='<label>Buscar producto</label>';
+  h+='<input type="text" id="ibBuscar" placeholder="🔍 Nombre o escanea código..." style="margin-bottom:6px" oninput="buscarBodega(this.value)">';
+  h+='<div id="ibResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
+  h+='<input type="hidden" id="ibProducto" value="">';
+  h+='<div id="ibCard" style="display:none;background:#22222c;border:1px solid rgba(59,130,246,.4);border-radius:8px;padding:10px;margin-bottom:8px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b id="ibNombre" style="font-size:13px;color:#e5e7eb"></b><span id="ibCat" style="font-size:10px;color:#9ca3af"></span></div>';
+  h+='<div style="display:flex;gap:8px;margin-bottom:10px">';
+  h+='<div style="flex:1;background:#18181f;border-radius:6px;padding:7px;text-align:center"><div style="font-size:9px;color:#9ca3af;margin-bottom:2px">Bodega actual</div><div style="font-size:15px;font-weight:700;color:#a78bfa" id="ibSaldoBod">0</div></div>';
+  h+='<div style="flex:1;background:#18181f;border-radius:6px;padding:7px;text-align:center"><div style="font-size:9px;color:#9ca3af;margin-bottom:2px">Recepción</div><div style="font-size:15px;font-weight:700;color:#22c55e" id="ibSaldoRec">0</div></div>';
+  h+='</div>';
+  h+='<div style="font-size:11px;font-weight:700;color:#3b82f6;margin-bottom:6px">Cantidad que llegó</div>';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h+='<button onclick="chIbCant(-1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">-</button>';
+  h+='<span id="ibCantDisp" style="font-size:18px;font-weight:700;color:#e5e7eb;min-width:24px;text-align:center">1</span>';
+  h+='<button onclick="chIbCant(1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">+</button>';
+  h+='<span style="font-size:11px;color:#9ca3af">unidades a ingresar</span>';
+  h+='</div>';
+  h+='<label>Nota (opcional)</label><input type="text" id="ibNota" placeholder="Ej: Compra semanal" style="margin-bottom:8px">';
+  h+='<button class="btn bb full" onclick="confirmarIngresoBodega()">Registrar ingreso a bodega</button>';
+  h+='</div>';
   var modal=document.getElementById('mIngresoBodega');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mIngresoBodega';div.innerHTML='<div class="modal"><div id="mIngresoBodegaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mIngresoBodega');});document.body.appendChild(div);}
   document.getElementById('mIngresoBodegaB').innerHTML=h;
-  updInfoBodega();
+  window._ibCant=1;
+  window._ibProdSel=null;
   openM('mIngresoBodega');
 }
+function buscarBodega(txt){
+  var cont=document.getElementById('ibResultados');
+  if(!cont)return;
+  if(!txt){cont.innerHTML='';return;}
+  var lista=productosLista.filter(function(p){return p.activo&&p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;}).slice(0,6);
+  if(!lista.length){cont.innerHTML='<p style="font-size:11px;color:#6b7280;padding:6px">Sin resultados</p>';return;}
+  cont.innerHTML=lista.map(function(p){
+    var sc=p.stockBodega<=0?'#ef4444':'#a78bfa';
+    return '<div onclick="selBodega('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
+      '<b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b>'+
+      '<span style="font-size:10px;color:'+sc+'">Bodega: '+(p.stockBodega||0)+'</span></div>';
+  }).join('');
+}
+function selBodega(id){
+  var prod=productosLista.find(function(p){return p.id===id;});
+  if(!prod)return;
+  window._ibProdSel=prod;
+  window._ibCant=1;
+  document.getElementById('ibProducto').value=id;
+  document.getElementById('ibBuscar').value=prod.nombre;
+  document.getElementById('ibResultados').innerHTML='';
+  var card=document.getElementById('ibCard');if(card)card.style.display='block';
+  var nm=document.getElementById('ibNombre');if(nm)nm.textContent=prod.nombre;
+  var cat=document.getElementById('ibCat');if(cat)cat.textContent=prod.categoria||'';
+  var bod=document.getElementById('ibSaldoBod');if(bod)bod.textContent=prod.stockBodega||0;
+  var rec=document.getElementById('ibSaldoRec');if(rec)rec.textContent=prod.stockActual||0;
+  var disp=document.getElementById('ibCantDisp');if(disp)disp.textContent=1;
+}
+function chIbCant(d){
+  window._ibCant=Math.max(1,(window._ibCant||1)+d);
+  var el=document.getElementById('ibCantDisp');if(el)el.textContent=window._ibCant;
+}
 function updInfoBodega(){
-  var sel=document.getElementById('ibProducto');
-  if(!sel)return;
-  var opt=sel.options[sel.selectedIndex];
-  var bod=opt?opt.getAttribute('data-bodega'):0;
-  var rec=opt?opt.getAttribute('data-rec'):0;
-  var b=document.getElementById('ibSaldoBod');if(b)b.textContent=bod;
-  var r=document.getElementById('ibSaldoRec');if(r)r.textContent=rec;
+  var id=Number((document.getElementById('ibProducto')||{}).value||0);
+  if(!id)return;
+  var prod=productosLista.find(function(p){return p.id===id;});
+  if(!prod)return;
+  selBodega(id);
 }
 function confirmarIngresoBodega(){
   var productId=Number((document.getElementById('ibProducto')||{}).value||0);
-  var cantidad=Number((document.getElementById('ibCantidad')||{}).value||0);
+  var cantidad=window._ibCant||0;
   var nota=(document.getElementById('ibNota')||{}).value||'';
   if(!productId){toast('Selecciona un producto.','err');return;}
   if(cantidad<=0){toast('Ingresa la cantidad.','err');return;}
