@@ -4844,7 +4844,14 @@ function procesarCodigoBarras(codigo){
     if(prod){
       var modalAbierto=document.getElementById('mRoom')&&document.getElementById('mRoom').classList.contains('op');
    if(modalAbierto&&curRoom&&curRoom.state==='OCCUPIED'){agregarProductoDesdeEscaner(prod);}
-      else if(modalAbierto&&curRoom&&curRoom.state==='AVAILABLE'){selCiProd(prod.id);}
+      else if(modalAbierto&&curRoom&&curRoom.state==='AVAILABLE'){
+  _ciSel=prod;_ciCant=1;_ciPm=selPay||'EFECTIVO';
+  var exCI=_ciProds.find(function(x){return x.id===prod.id&&x.pm===_ciPm;});
+  if(exCI)exCI.cant+=1;
+  else _ciProds.push({id:prod.id,nombre:prod.nombre,precio:prod.precio,cant:1,pm:_ciPm});
+  renderCiProds();
+  toast('✓ '+prod.nombre+' agregado','ok');
+}
       else if(document.getElementById('mCortesia')&&document.getElementById('mCortesia').classList.contains('op')){selCortesia(prod.id);}
       else{openVentaProducto(prod);}
     } else {
