@@ -1352,15 +1352,7 @@ async function apiMonthMetrics(p, res) {
     else s.ef_bar+=t;
   });
 
- // Bar manual (bar_sales)
-  (barSalesRes.data||[]).forEach(r=>{
-    const d=getDay(r.business_day);
-    const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
-    const s=d[sid];
-    s.tj_bar+=Number(r.amount_card||0);
-    s.ef_bar+=Number(r.amount_cash||0);
-    s.nq_bar+=Number(r.amount_nequi||0);
-  });
+
   // Gastos
   (taxiRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
   (loansRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
