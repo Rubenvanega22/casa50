@@ -4875,10 +4875,7 @@ function agregarProductoDesdeEscaner(prod){
 function openVentaProducto(prod){
   var modalRoomAbierto=document.getElementById('mRoom')&&document.getElementById('mRoom').classList.contains('op');
   if(modalRoomAbierto&&curRoom&&curRoom.state==='OCCUPIED'){
-    window._roomProdPendiente=prod;
-    window._roomProdCant=1;
-    window._roomProdPm='EFECTIVO';
-    renderRoomProdPendiente();
+    agregarProductoDesdeEscaner(prod);
     return;
   }
   var ocupadas=rooms.filter(function(r){return r.state==='OCCUPIED';});
