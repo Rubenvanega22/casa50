@@ -1288,7 +1288,7 @@ async function apiMonthMetrics(p, res) {
     supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym+'%'),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-    supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%')
+    supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%').limit(5000)
   ]);
 
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
