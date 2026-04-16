@@ -1401,7 +1401,8 @@ async function apiMonthMetrics(p, res) {
   const errorMap={};
   (failuresRes.data||[]).forEach(f=>{const nm=f.user_name||'?';if(!errorMap[nm])errorMap[nm]={nombre:nm,total:0,detalles:[]};let fallas=[];try{fallas=Array.isArray(f.failures)?f.failures:JSON.parse(f.failures||'[]');}catch(e){}errorMap[nm].total+=fallas.length;errorMap[nm].detalles.push({fecha:f.business_day,turno:f.shift_id,fallas,creadoPor:f.created_by||''});});
   const errorRanking=Object.values(errorMap).sort((a,b)=>b.total-a.total);
-
+const dia15=days.find(d=>d.day==='2026-04-15');
+  if(dia15)console.log('DIA15 roomsSold:',dia15.roomsSold,'T1:',dia15.SHIFT_1?.roomsSold,'T2:',dia15.SHIFT_2?.roomsSold,'T3:',dia15.SHIFT_3?.roomsSold);
   return ok(res, { yearMonth:ym, monthTotals, days, recepRankingMes, maidRankingMes, errorRanking });
 }
 
