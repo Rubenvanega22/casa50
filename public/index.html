@@ -5037,7 +5037,7 @@ function renderInventario(inv,day){
   h+='</tr></thead><tbody>';
  var groupSaldos={};
   rows.forEach(function(r){
-    var fw=r.nombre.trim().split(/\s+/)[0].toLowerCase();
+   var fw=r.nombre.trim().split(' ')[0].toLowerCase();
     if(!groupSaldos[fw])groupSaldos[fw]={SHIFT_1:0,SHIFT_2:0,SHIFT_3:0};
     var sa=r.saldoInicial||0;
     shifts.forEach(function(sh){
@@ -5082,7 +5082,7 @@ function renderInventario(inv,day){
        saldoAcum=saldoAcum+eTot-Number(td.ventas||0)-Number(td.cortesias||0);
         var saldoColor=saldoAcum<=0?'#ef4444':saldoAcum<=r.stockMinimo?'#f59e0b':'#22c55e';
         var sStr='<span style="color:'+saldoColor+';font-weight:700">'+saldoAcum+'</span>';
-      var fw=r.nombre.trim().split(/\s+/)[0].toLowerCase();
+      var fw=r.nombre.trim().split(' ')[0].toLowerCase();
         var gVal=groupSaldos[fw]?groupSaldos[fw][sh.id]:0;
         var gStr=gVal>0?'<span style="color:#f59e0b;font-weight:900">'+gVal+'</span>':'<span style="color:#2e2e3a">—</span>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
