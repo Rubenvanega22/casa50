@@ -5020,7 +5020,7 @@ function renderInventario(inv,day){
   shifts.forEach(function(sh){
     h+='<th colspan="3" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
   });
-  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#1D9E75;border:1px solid #2e2e3a;text-align:center">Saldo REC</th>';
+ h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#1D9E75;border:1px solid #2e2e3a;text-align:center">REC+BOD</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#7F77DD;border:1px solid #2e2e3a;text-align:center">Saldo BOD</th>';
   h+='</tr><tr>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
@@ -5075,7 +5075,7 @@ function renderInventario(inv,day){
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+sStr+'</td>';
       });
       var bodCol=r.stockBodega<=0?'#ef4444':r.stockBodega<=r.stockMinimo?'#f59e0b':'#a78bfa';
-      h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+saldoCol+';text-align:center">'+r.saldoActual+'</td>';
+     h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+saldoCol+';text-align:center">'+(r.saldoActual+(r.stockBodega||0))+'</td>';
       h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+bodCol+';text-align:center">'+(r.stockBodega||0)+'</td>';
       h+='</tr>';
     });
