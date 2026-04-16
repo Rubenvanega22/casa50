@@ -5281,49 +5281,62 @@ function buscarProductoPorNombre(texto){
   cont.innerHTML=h;
 }
 
+window._roomProdCarrito=window._roomProdCarrito||[];
 function seleccionarRoomProd(id){
   var prod=productosLista.find(function(p){return p.id===id;});
   if(!prod)return;
-  window._roomProdPendiente=prod;
-  window._roomProdCant=1;
+  var ex=window._roomProdCarrito.find(function(x){return x.id===id;});
+  if(ex){ex.cant+=1;}
+  else{window._roomProdCarrito.push({id:prod.id,nombre:prod.nombre,precio:prod.precio,stockActual:prod.stockActual,cant:1});}
   var cont=document.getElementById('roomProdResultados');
   if(cont)cont.innerHTML='';
   var inp=document.getElementById('roomProdBuscar');
   if(inp)inp.value='';
   renderRoomProdPendiente();
 }
-
 function renderRoomProdPendiente(){
-  var prod=window._roomProdPendiente;
   var cont=document.getElementById('roomProdPendiente');
   if(!cont)return;
-  if(!prod){cont.innerHTML='';return;}
-  var cant=window._roomProdCant||1;
-  var total=prod.isCortesia?0:prod.precio*cant;
-  var h='<div style="background:#22222c;border-radius:8px;padding:10px;margin-top:6px">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-  h+='<div><b style="font-size:13px">'+esc(prod.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+fmt(prod.precio)+' c/u — Stock: '+prod.stockActual+'</div></div>';
-  h+='<button onclick="window._roomProdPendiente=null;renderRoomProdPendiente()" style="background:none;border:none;color:#6b7280;font-size:16px;cursor:pointer">✕</button>';
-  h+='</div>';
-  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
-  h+='<button class="pb" onclick="chRoomProdCant(-1,'+prod.precio+')">-</button>';
-  h+='<span id="roomProdCantDisp" style="font-size:16px;font-weight:800">'+cant+'</span>';
-  h+='<button class="pb" onclick="chRoomProdCant(1,'+prod.precio+')">+</button>';
-  h+='<b style="color:#22c55e;margin-left:8px">'+fmt(total)+'</b>';
-  h+='</div>';
+  var carrito=window._roomProdCarrito||[];
+  if(!carrito.length){cont.innerHTML='';return;}
   var pm=window._roomProdPm||(curRoom&&curRoom.payMethod?curRoom.payMethod:'EFECTIVO');
   window._roomProdPm=pm;
+  var total=carrito.reduce(function(a,x){return a+x.precio*x.cant;},0);
+  var h='<div style="background:#22222c;border-radius:8px;padding:10px;margin-top:6px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px">🛒 Productos a agregar</div>';
+  h+='<table style="width:100%;font-size:11px;border-collapse:collapse;margin-bottom:8px">';
+  h+='<tr style="color:#6b7280"><td>Producto</td><td style="text-align:center">Cant</td><td style="text-align:right">Precio</td><td style="text-align:right">Subtotal</td><td></td></tr>';
+  carrito.forEach(function(x,i){
+    h+='<tr style="border-top:1px solid rgba(46,46,58,.5)">';
+    h+='<td style="padding:3px 0;color:#e5e7eb">'+esc(x.nombre)+'</td>';
+    h+='<td style="text-align:center"><button onclick="chCarritoCant('+i+',-1)" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:14px">-</button><span style="color:#e5e7eb;font-weight:700">'+x.cant+'</span><button onclick="chCarritoCant('+i+',1)" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:14px">+</button></td>';
+    h+='<td style="text-align:right;color:#9ca3af">'+fmt(x.precio)+'</td>';
+    h+='<td style="text-align:right;color:#22c55e;font-weight:700">'+fmt(x.precio*x.cant)+'</td>';
+    h+='<td><button onclick="quitarCarrito('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer">✕</button></td>';
+    h+='</tr>';
+  });
+  h+='</table>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:#9ca3af">Total:</span><b style="color:#22c55e;font-size:16px">'+fmt(total)+'</b></div>';
   h+='<div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:6px">Método de pago:</div>';
   h+='<div style="display:flex;gap:4px;margin-bottom:8px">';
   h+='<div onclick="selRoomProdPm(\'EFECTIVO\')" style="flex:1;padding:5px 4px;background:'+(pm==='EFECTIVO'?'rgba(34,197,94,.1)':'#18181f')+';border:2px solid '+(pm==='EFECTIVO'?'#22c55e':'#2e2e3a')+';border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:'+(pm==='EFECTIVO'?'#22c55e':'#e5e7eb')+';cursor:pointer">Efectivo</div>';
   h+='<div onclick="selRoomProdPm(\'TARJETA\')" style="flex:1;padding:5px 4px;background:'+(pm==='TARJETA'?'rgba(59,130,246,.1)':'#18181f')+';border:2px solid '+(pm==='TARJETA'?'#3b82f6':'#2e2e3a')+';border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:'+(pm==='TARJETA'?'#3b82f6':'#e5e7eb')+';cursor:pointer">Tarjeta</div>';
   h+='<div onclick="selRoomProdPm(\'NEQUI\')" style="flex:1;padding:5px 4px;background:'+(pm==='NEQUI'?'rgba(167,139,250,.1)':'#18181f')+';border:2px solid '+(pm==='NEQUI'?'#a78bfa':'#2e2e3a')+';border-radius:7px;text-align:center;font-size:11px;font-weight:700;color:'+(pm==='NEQUI'?'#a78bfa':'#e5e7eb')+';cursor:pointer">Nequi</div>';
   h+='</div>';
-  h+='<div style="display:flex;gap:6px">';
-  h+='<button class="btn bg full" onclick="confirmarRoomProd()">+ Agregar</button>';
-  h+='<button class="btn bp xs" onclick="confirmarRoomProdCortesia()">Cortesía</button>';
-  h+='</div></div>';
+  h+='<button class="btn bg full" onclick="confirmarRoomProd()">+ Agregar al ingreso</button>';
+  h+='</div>';
   cont.innerHTML=h;
+}
+function chCarritoCant(i,d){
+  var c=window._roomProdCarrito||[];
+  if(!c[i])return;
+  c[i].cant=Math.max(1,c[i].cant+d);
+  renderRoomProdPendiente();
+}
+function quitarCarrito(i){
+  var c=window._roomProdCarrito||[];
+  c.splice(i,1);
+  renderRoomProdPendiente();
 }
 
 function chRoomProdCant(d,precio){
@@ -5339,20 +5352,24 @@ function selRoomProdPm(pm){
 }
 
 function confirmarRoomProd(){
-  var prod=window._roomProdPendiente;
-  if(!prod||!curRoom)return;
-  var cant=window._roomProdCant||1;
+  var carrito=window._roomProdCarrito||[];
+  if(!carrito.length||!curRoom)return;
   var pm=window._roomProdPm||'EFECTIVO';
-  rpc('addRoomProduct',{roomId:curRoom.roomId,productId:prod.id,cantidad:cant,payMethod:pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
-    function(res){
-      toast('✓ '+prod.nombre+' × '+cant+' — '+fmt(res.total),'ok');
-      window._roomProdPendiente=null;
-      window._roomProdCant=1;
+  var i=0;
+  function next(){
+    if(i>=carrito.length){
+      window._roomProdCarrito=[];
       renderRoomProdPendiente();
       loadRoomProductos(curRoom.roomId,curRoom.checkInMs||0);
-    },
-    function(e){toast(e.message||String(e),'err');}
-  );
+      toast('✓ Productos agregados','ok');
+      return;
+    }
+    var p=carrito[i];i++;
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
+      function(){next();},function(e){toast(e.message||String(e),'err');next();}
+    );
+  }
+  next();
 }
 
 function confirmarRoomProdCortesia(){
