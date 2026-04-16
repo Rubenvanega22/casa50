@@ -2306,7 +2306,7 @@ return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:p
   shifts.forEach(function(sid){
     const venTurno=(sales||[]).filter(s=>s.shift_id===sid&&!s.is_cortesia);
     const corTurno=(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia);
-    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.total||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
+    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.cantidad||0)*Number(s.precio_unit||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
   });
   return ok(res,{rows,resumenTurnos,businessDay:bd});
 }
