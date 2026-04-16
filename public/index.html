@@ -5125,7 +5125,8 @@ function renderInventario(inv,day){
     }
     h+='<div style="font-size:12px;color:#9ca3af;font-style:italic;min-height:40px">'+esc(obs||'Sin observaciones aún...')+'</div>';
     h+='<textarea id="obsInv_'+sh.id+'" placeholder="Agregar observación..." style="width:100%;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px;font-size:11px;margin-top:6px;resize:none;height:50px">'+esc(obs)+'</textarea>';
-    h+='<button class="btn ba xs" style="margin-top:4px;width:100%" onclick="guardarObsInv(\''+sh.id+'\')">Guardar obs. '+sh.label.split(' ')[1]+'</button>';
+    var turnoNum=sh.label.split(' ')[1]||'';
+    h+='<button class="btn ba xs" style="margin-top:4px;width:100%" onclick="guardarObsInv(\''+sh.id+'\')">Guardar obs. '+turnoNum+'</button>';
     h+='</div>';
   });
   h+='</div>';
