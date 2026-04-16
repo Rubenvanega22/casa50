@@ -1281,7 +1281,7 @@ async function apiMonthMetrics(p, res) {
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
 
   const [salesRes, taxiRes, loansRes, extraRes, maidLogsRes, failuresRes, shiftLogRes, roomProdsRes] = await Promise.all([
-    supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id').like('business_day', ym+'%'),
+  supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs').like('business_day', ym+'%'),
     supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
