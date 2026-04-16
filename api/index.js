@@ -2048,8 +2048,8 @@ async function apiGetProducts(p, res) {
   return ok(res, { products: (data || []).map(r => ({
     id: r.id, nombre: r.nombre, codigoBarras: r.codigo_barras || '',
     precio: Number(r.precio || 0), categoria: r.categoria || '',
-    stockActual: Number(r.stock_actual || 0), stockMinimo: Number(r.stock_minimo || 5),
-    activo: !!r.activo
+    stockActual: Number(r.stock_actual || 0), stockBodega: Number(r.stock_bodega || 0),
+    stockMinimo: Number(r.stock_minimo || 5), activo: !!r.activo
   })) });
 }
 
