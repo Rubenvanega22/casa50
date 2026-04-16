@@ -4994,7 +4994,7 @@ function renderInventario(inv,day){
  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">';
   h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.4);border-radius:10px;padding:12px;text-align:center">';
   h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos hoy</div>';
- h+='<div style="font-size:20px;font-weight:900;color:#f97316">'+fmt(totalVentasHoy)+'</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:#f97316">'+fmt(totalVentasHoy)+'</div>';
   h+='</div>';
   h+='<div style="background:#18181f;border:1px solid rgba(167,139,250,.4);border-radius:10px;padding:12px;text-align:center" id="invVentasMes">';
   h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>';
@@ -5018,7 +5018,7 @@ function renderInventario(inv,day){
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">Precio</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">S.I.</th>';
   shifts.forEach(function(sh){
-    h+='<th colspan="4" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
+    h+='<th colspan="3" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
   });
  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#1D9E75;border:1px solid #2e2e3a;text-align:center">REC+BOD</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#7F77DD;border:1px solid #2e2e3a;text-align:center">Saldo BOD</th>';
@@ -5027,17 +5027,15 @@ function renderInventario(inv,day){
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   shifts.forEach(function(sh){
-   ['E','V','S','G'].forEach(function(sub){
-      var gc=sub==='G'?'rgba(245,158,11,.1)':'#1a1a24';
-      var tc=sub==='G'?'#f59e0b':'#6b7280';
-      h+='<th style="padding:3px 4px;background:'+gc+';font-size:9px;color:'+tc+';border:1px solid #2e2e3a;text-align:center;font-weight:'+(sub==='G'?'900':'400')+'">'+sub+'</th>';
+    ['E','V','S'].forEach(function(sub){
+      h+='<th style="padding:3px 4px;background:#1a1a24;font-size:9px;color:#6b7280;border:1px solid #2e2e3a;text-align:center">'+sub+'</th>';
     });
+  });
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='</tr></thead><tbody>';
-
   Object.keys(cats).sort().forEach(function(cat){
-   h+='<tr><td colspan="12" style="padding:4px 8px;background:rgba(124,92,252,.15);font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a;text-align:center;letter-spacing:1px">'+esc(cat.toUpperCase())+'</td></tr>';
+    h+='<tr><td colspan="12" style="padding:4px 8px;background:rgba(124,92,252,.15);font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a;text-align:center;letter-spacing:1px">'+esc(cat.toUpperCase())+'</td></tr>';
     cats[cat].forEach(function(r){
       var saldoCol=r.saldoActual<=0?'#ef4444':r.saldoActual<=r.stockMinimo?'#f59e0b':'#22c55e';
       var siDiff=r.saldoInicial-r.saldoActual;
@@ -5069,13 +5067,12 @@ function renderInventario(inv,day){
        var traslado=td.trasladoRecepcion||0;
         var eTot=traslado;
         var eTotStr=eTot>0?'<span style="color:#22c55e;font-weight:700">+'+eTot+'</span>':'<span style="color:#2e2e3a">—</span>';
-       saldoAcum=saldoAcum+eTot-Number(td.ventas||0)-Number(td.cortesias||0);
+        saldoAcum=saldoAcum-Number(td.ventas||0)-Number(td.cortesias||0);
         var saldoColor=saldoAcum<=0?'#ef4444':saldoAcum<=r.stockMinimo?'#f59e0b':'#22c55e';
         var sStr='<span style="color:'+saldoColor+';font-weight:700">'+saldoAcum+'</span>';
-     h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
+        h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;vertical-align:top">'+vStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+sStr+'</td>';
-      
       });
       var bodCol=r.stockBodega<=0?'#ef4444':r.stockBodega<=r.stockMinimo?'#f59e0b':'#a78bfa';
      h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+saldoCol+';text-align:center">'+(r.saldoActual+(r.stockBodega||0))+'</td>';
@@ -5112,8 +5109,7 @@ function renderInventario(inv,day){
     }
     h+='<div style="font-size:12px;color:#9ca3af;font-style:italic;min-height:40px">'+esc(obs||'Sin observaciones aún...')+'</div>';
     h+='<textarea id="obsInv_'+sh.id+'" placeholder="Agregar observación..." style="width:100%;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px;font-size:11px;margin-top:6px;resize:none;height:50px">'+esc(obs)+'</textarea>';
-    var turnoNum=sh.label.split(' ')[1]||'';
-    h+='<button class="btn ba xs" style="margin-top:4px;width:100%" onclick="guardarObsInv(\''+sh.id+'\')">Guardar obs. '+turnoNum+'</button>';
+    h+='<button class="btn ba xs" style="margin-top:4px;width:100%" onclick="guardarObsInv(\''+sh.id+'\')">Guardar obs. '+sh.label.split(' ')[1]+'</button>';
     h+='</div>';
   });
   h+='</div>';
@@ -5128,13 +5124,13 @@ el.innerHTML=h;
      var elMes=document.getElementById('invVentasMes');
       if(elMes){
         var ym=day?day.substring(0,7):'';
-      rpc('getProductosMes',{yearMonth:ym},function(mesData){
+       rpc('getProductosMes',{yearMonth:ym},function(mesData){
           var elMes2=document.getElementById('invVentasMes');
           if(elMes2)elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>'+
             '<div style="font-size:20px;font-weight:900;color:#a78bfa">'+fmt(mesData.totalVentas||0)+'</div>'+
             '<div style="font-size:10px;color:#9ca3af;margin-top:4px">'+
-       '<span style="color:#22c55e">EF '+fmt(mesData.totalEf||0)+'</span> - '+
-            '<span style="color:#3b82f6">TA '+fmt(mesData.totalTa||0)+'</span> - '+
+            '<span style="color:#22c55e">EF '+fmt(mesData.totalEf||0)+'</span> · '+
+            '<span style="color:#3b82f6">TA '+fmt(mesData.totalTa||0)+'</span> · '+
             '<span style="color:#a78bfa">NQ '+fmt(mesData.totalNq||0)+'</span></div>';
           var elCor=document.getElementById('invCortesiasMes');
           if(elCor)elCor.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Cortesías mes</div>'+
