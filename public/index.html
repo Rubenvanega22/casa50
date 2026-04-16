@@ -5121,16 +5121,17 @@ el.innerHTML=h;
      var elMes=document.getElementById('invVentasMes');
       if(elMes){
         var ym=day?day.substring(0,7):'';
-        rpc('getProductosMes',{yearMonth:ym},function(mesData){
+       rpc('getProductosMes',{yearMonth:ym},function(mesData){
           var elMes2=document.getElementById('invVentasMes');
-          if(!elMes2)return;
-          elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>'+
+          if(elMes2)elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>'+
             '<div style="font-size:20px;font-weight:900;color:#a78bfa">'+fmt(mesData.totalVentas||0)+'</div>'+
             '<div style="font-size:10px;color:#9ca3af;margin-top:4px">'+
             '<span style="color:#22c55e">EF '+fmt(mesData.totalEf||0)+'</span> · '+
             '<span style="color:#3b82f6">TA '+fmt(mesData.totalTa||0)+'</span> · '+
-            '<span style="color:#a78bfa">NQ '+fmt(mesData.totalNq||0)+'</span></div>'+
-            '<div style="font-size:10px;color:#f97316;margin-top:2px">Cortesías: '+fmt(mesData.totalCortesias||0)+'</div>';
+            '<span style="color:#a78bfa">NQ '+fmt(mesData.totalNq||0)+'</span></div>';
+          var elCor=document.getElementById('invCortesiasMes');
+          if(elCor)elCor.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Cortesías mes</div>'+
+            '<div style="font-size:20px;font-weight:900;color:#f97316">'+fmt(mesData.totalCortesias||0)+'</div>';
         });
       }
     });
