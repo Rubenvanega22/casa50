@@ -2282,7 +2282,7 @@ async function apiGetInventarioByDay(p, res) {
     const cortesiasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const entradasAyer=(entriesAyer||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
     const saldoInicial=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalEntradas;
-    const saldoInicialReal=saldoInicial+ventasAyer+cortesiasAyer-entradasAyer;
+    const saldoInicialReal=saldoInicial;
     const turnosData={};
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
