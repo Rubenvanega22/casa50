@@ -5728,21 +5728,21 @@ function openAnalisisProductos(){
     var monthDays=res[2].days||[];
     var h='<div class="mh"><div class="mt">📊 Análisis de Productos</div><button class="mc" onclick="closeM(\'mAnalisis\')">✕</button></div>';
     // AGOTADOS Y PROXIMOS
-    var agotados=prods.filter(function(p){return p.activo&&p.stockActual<=0;});
-    var proximos=prods.filter(function(p){return p.activo&&p.stockActual>0&&p.stockActual<=p.stockMinimo;});
+   var agotados=prods.filter(function(p){return p.activo&&(p.stockActual||0)+(p.stockBodega||0)<=0;});
+    var proximos=prods.filter(function(p){var tot=(p.stockActual||0)+(p.stockBodega||0);return p.activo&&tot>0&&tot<=p.stockMinimo;});
     h+='<div style="font-size:12px;font-weight:700;color:#ef4444;text-transform:uppercase;margin-bottom:8px">🔴 Agotados ('+agotados.length+')</div>';
     if(!agotados.length){h+='<p style="font-size:12px;color:#6b7280;margin-bottom:10px">Sin productos agotados ✓</p>';}
     agotados.forEach(function(p){
       h+='<div style="background:#22222c;border-left:3px solid #ef4444;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
       h+='<div><b style="font-size:12px">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>';
-      h+='<span style="color:#ef4444;font-weight:700;font-size:12px">AGOTADO</span></div>';
+     h+='<span style="color:#ef4444;font-weight:700;font-size:12px">REC:'+p.stockActual+' BOD:'+(p.stockBodega||0)+'</span></div>';
     });
     h+='<div style="font-size:12px;font-weight:700;color:#f59e0b;text-transform:uppercase;margin:12px 0 8px">🟡 Próximos a agotarse ('+proximos.length+')</div>';
     if(!proximos.length){h+='<p style="font-size:12px;color:#6b7280;margin-bottom:10px">Sin productos próximos a agotarse ✓</p>';}
     proximos.forEach(function(p){
       h+='<div style="background:#22222c;border-left:3px solid #f59e0b;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">';
       h+='<div><b style="font-size:12px">'+esc(p.nombre)+'</b><div style="font-size:10px;color:#9ca3af">'+esc(p.categoria||'')+'</div></div>';
-      h+='<span style="color:#f59e0b;font-weight:700;font-size:12px">Stock: '+p.stockActual+' / Min: '+p.stockMinimo+'</span></div>';
+     h+='<span style="color:#f59e0b;font-weight:700;font-size:12px">Total: '+((p.stockActual||0)+(p.stockBodega||0))+' / Min: '+p.stockMinimo+'</span></div>';
     });
     // MAS VENDIDOS HOY
     var vendidosHoy=rows.filter(function(r){
