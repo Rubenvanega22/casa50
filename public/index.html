@@ -5054,8 +5054,7 @@ function renderInventario(inv,day){
     h+='<tr><td colspan="12" style="padding:4px 8px;background:rgba(124,92,252,.15);font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a;text-align:center;letter-spacing:1px">'+esc(cat.toUpperCase())+'</td></tr>';
     cats[cat].forEach(function(r){
       var saldoCol=r.saldoActual<=0?'#ef4444':r.saldoActual<=r.stockMinimo?'#f59e0b':'#22c55e';
-      var siDiff=r.saldoInicial-r.saldoActual;
-      var siStr=siDiff>0?'<span style="color:#22c55e">+'+siDiff+'</span>':(siDiff<0?'<span style="color:#ef4444">'+siDiff+'</span>':'0');
+     var siStr='<span style="color:#e5e7eb;font-weight:700">'+r.saldoInicial+'</span>';
       h+='<tr>';
       h+='<td style="padding:4px 8px;border:1px solid #2e2e3a;font-size:11px;color:#e5e7eb">'+esc(r.nombre)+'</td>';
       h+='<td style="padding:4px 4px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af;text-align:center">'+fmt(r.precio)+'</td>';
