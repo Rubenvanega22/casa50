@@ -5018,7 +5018,7 @@ function renderInventario(inv,day){
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">Precio</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">S.I.</th>';
   shifts.forEach(function(sh){
-    h+='<th colspan="3" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
+    h+='<th colspan="4" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
   });
  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#1D9E75;border:1px solid #2e2e3a;text-align:center">REC+BOD</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#7F77DD;border:1px solid #2e2e3a;text-align:center">Saldo BOD</th>';
@@ -5027,13 +5027,29 @@ function renderInventario(inv,day){
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   shifts.forEach(function(sh){
-    ['E','V','S'].forEach(function(sub){
-      h+='<th style="padding:3px 4px;background:#1a1a24;font-size:9px;color:#6b7280;border:1px solid #2e2e3a;text-align:center">'+sub+'</th>';
+    ['E','V','S','G'].forEach(function(sub){
+      var bg=sub==='G'?'rgba(245,158,11,.1)':'#1a1a24';
+      var tc=sub==='G'?'#f59e0b':'#6b7280';
+      var fw=sub==='G'?'900':'400';
+      h+='<th style="padding:3px 4px;background:'+bg+';font-size:9px;color:'+tc+';border:1px solid #2e2e3a;text-align:center;font-weight:'+fw+'">'+sub+'</th>';
     });
   });
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='<th style="background:#1a1a24;border:1px solid #2e2e3a"></th>';
   h+='</tr></thead><tbody>';
+  var grp={};
+  rows.forEach(function(r){
+    var fw=r.nombre.trim().split(' ')[0].toLowerCase();
+    if(!grp[fw]){grp[fw]={S1:0,S2:0,S3:0};}
+    var sa=r.saldoInicial||0;
+    var sids=['SHIFT_1','SHIFT_2','SHIFT_3'];
+    var keys=['S1','S2','S3'];
+    for(var i=0;i<3;i++){
+      var td2=r.turnos[sids[i]]||{ventas:0,cortesias:0,trasladoRecepcion:0};
+      sa=sa+Number(td2.trasladoRecepcion||0)-Number(td2.ventas||0)-Number(td2.cortesias||0);
+      grp[fw][keys[i]]+=sa;
+    }
+  });
   Object.keys(cats).sort().forEach(function(cat){
     h+='<tr><td colspan="12" style="padding:4px 8px;background:rgba(124,92,252,.15);font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a;text-align:center;letter-spacing:1px">'+esc(cat.toUpperCase())+'</td></tr>';
     cats[cat].forEach(function(r){
@@ -5070,9 +5086,14 @@ function renderInventario(inv,day){
        saldoAcum=saldoAcum+eTot-Number(td.ventas||0)-Number(td.cortesias||0);
         var saldoColor=saldoAcum<=0?'#ef4444':saldoAcum<=r.stockMinimo?'#f59e0b':'#22c55e';
         var sStr='<span style="color:'+saldoColor+';font-weight:700">'+saldoAcum+'</span>';
+        var fw2=r.nombre.trim().split(' ')[0].toLowerCase();
+        var gKeys={SHIFT_1:'S1',SHIFT_2:'S2',SHIFT_3:'S3'};
+        var gVal=grp[fw2]?grp[fw2][gKeys[sh.id]]:0;
+        var gStr=gVal>0?'<b style="color:#f59e0b">'+gVal+'</b>':'<span style="color:#2e2e3a">—</span>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;vertical-align:top">'+vStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+sStr+'</td>';
+        h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;background:rgba(245,158,11,.06)">'+gStr+'</td>';
       });
       var bodCol=r.stockBodega<=0?'#ef4444':r.stockBodega<=r.stockMinimo?'#f59e0b':'#a78bfa';
      h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+saldoCol+';text-align:center">'+(r.saldoActual+(r.stockBodega||0))+'</td>';
