@@ -5067,7 +5067,7 @@ function renderInventario(inv,day){
        var traslado=td.trasladoRecepcion||0;
         var eTot=traslado;
         var eTotStr=eTot>0?'<span style="color:#22c55e;font-weight:700">+'+eTot+'</span>':'<span style="color:#2e2e3a">—</span>';
-        saldoAcum=saldoAcum-Number(td.ventas||0)-Number(td.cortesias||0);
+       saldoAcum=saldoAcum+eTot-Number(td.ventas||0)-Number(td.cortesias||0);
         var saldoColor=saldoAcum<=0?'#ef4444':saldoAcum<=r.stockMinimo?'#f59e0b':'#22c55e';
         var sStr='<span style="color:'+saldoColor+';font-weight:700">'+saldoAcum+'</span>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
