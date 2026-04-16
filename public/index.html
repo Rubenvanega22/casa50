@@ -5044,6 +5044,7 @@ function renderInventario(inv,day){
       h+='<td style="padding:4px 8px;border:1px solid #2e2e3a;font-size:11px;color:#e5e7eb">'+esc(r.nombre)+'</td>';
       h+='<td style="padding:4px 4px;border:1px solid #2e2e3a;font-size:11px;color:#9ca3af;text-align:center">'+fmt(r.precio)+'</td>';
       h+='<td style="padding:4px 4px;border:1px solid #2e2e3a;font-size:11px;text-align:center">'+siStr+'</td>';
+     var saldoAcum=r.saldoInicial||0;
       shifts.forEach(function(sh){
         var td=r.turnos[sh.id]||{entradas:0,ventas:0,cortesias:0,ef:0,ta:0,nq:0};
         var eStr=td.entradas>0?'<span style="color:#22c55e;font-weight:700">+'+td.entradas+'</span>':'<span style="color:#2e2e3a">—</span>';
@@ -5063,10 +5064,12 @@ function renderInventario(inv,day){
   }
 }
         } else {vStr='<span style="color:#2e2e3a">—</span>';}
-        var sStr=td.valorVendido>0?'<span style="color:#e5e7eb;font-size:10px">'+fmt(td.valorVendido)+'</span>':'<span style="color:#2e2e3a">—</span>';
-        var traslado=td.trasladoRecepcion||0;
+       var traslado=td.trasladoRecepcion||0;
         var eTot=traslado;
         var eTotStr=eTot>0?'<span style="color:#f59e0b;font-weight:700">+'+eTot+'</span>':'<span style="color:#2e2e3a">—</span>';
+        saldoAcum+=eTot-td.ventas-td.cortesias;
+        var saldoColor=saldoAcum<=0?'#ef4444':saldoAcum<=r.stockMinimo?'#f59e0b':'#22c55e';
+        var sStr='<span style="color:'+saldoColor+';font-weight:700">'+saldoAcum+'</span>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;vertical-align:top">'+vStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+sStr+'</td>';
