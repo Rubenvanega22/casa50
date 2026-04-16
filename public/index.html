@@ -4860,13 +4860,16 @@ function procesarCodigoBarras(codigo){
 function agregarProductoDesdeEscaner(prod){
   if(!curRoom)return;
   if(Number(prod.stockActual||0)<=0){toast('Sin stock: '+prod.nombre,'err');return;}
-  window._roomProdPendiente=prod;
-  window._roomProdCant=1;
+  window._roomProdCarrito=window._roomProdCarrito||[];
+  var ex=window._roomProdCarrito.find(function(x){return x.id===prod.id;});
+  if(ex){ex.cant+=1;}
+  else{window._roomProdCarrito.push({id:prod.id,nombre:prod.nombre,precio:prod.precio,stockActual:prod.stockActual,cant:1});}
   var cont=document.getElementById('roomProdResultados');
   if(cont)cont.innerHTML='';
   var inp=document.getElementById('roomProdBuscar');
   if(inp)inp.value='';
   renderRoomProdPendiente();
+  toast('✓ '+prod.nombre+' agregado al carrito','ok');
 }
 
 function openVentaProducto(prod){
