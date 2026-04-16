@@ -351,8 +351,8 @@ async function apiLogin(p, res) {
               .in('action', ['LOGIN','RELOGIN'])
               .limit(1);
             // Si el nuevo turno NO estaba abierto aun, bloquear
-            if(!newShiftOpen || !newShiftOpen.length) {
-              return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
+           if(!newShiftOpen || !newShiftOpen.length) {
+              // No bloquear — registrar advertencia y dejar entrar
             }
             // Si ya estaba abierto, dejar pasar (turno anterior en pendiente cierre)
           }
@@ -363,10 +363,9 @@ async function apiLogin(p, res) {
     const { data: existing } = await supabase.from('shift_log').select('user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
     if (existing && existing.user_name.toLowerCase() !== userName.toLowerCase()) {
       const { data: logout } = await supabase.from('shift_log').select('id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
-      if (!logout || !logout.length) {
-        return err(res, 'Este turno ya tiene recepcionista: ' + existing.user_name);
+     if (!logout || !logout.length) {
+        // No bloquear — permitir reingreso
       }
-    }
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
