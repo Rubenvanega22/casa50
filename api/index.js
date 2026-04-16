@@ -367,8 +367,7 @@ async function apiLogin(p, res) {
         // No bloquear — permitir reingreso
       }
     }
-    await supabase.from('shift_log')
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
+ await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now, fromMs } });
