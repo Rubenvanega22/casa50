@@ -1280,7 +1280,7 @@ async function apiMonthMetrics(p, res) {
   const ym = String(p.yearMonth || '');
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
 
-  const [salesRes, taxiRes, loansRes, extraRes, maidLogsRes, failuresRes, shiftLogRes, roomProdsRes] = await Promise.all([
+  const [salesRes, taxiRes, loansRes, extraRes, maidLogsRes, failuresRes, shiftLogRes, roomProdsRes, barSalesRes] = await Promise.all([
   supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs').like('business_day', ym+'%').limit(5000),
     supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
@@ -1288,7 +1288,8 @@ async function apiMonthMetrics(p, res) {
     supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym+'%'),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-    supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%').limit(5000)
+  supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%').limit(5000),
+    supabase.from('bar_sales').select('business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
   ]);
 
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
@@ -1351,6 +1352,15 @@ async function apiMonthMetrics(p, res) {
     else s.ef_bar+=t;
   });
 
+ // Bar manual (bar_sales)
+  (barSalesRes.data||[]).forEach(r=>{
+    const d=getDay(r.business_day);
+    const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
+    const s=d[sid];
+    s.tj_bar+=Number(r.amount_card||0);
+    s.ef_bar+=Number(r.amount_cash||0);
+    s.nq_bar+=Number(r.amount_nequi||0);
+  });
   // Gastos
   (taxiRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
   (loansRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
