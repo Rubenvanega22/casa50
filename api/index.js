@@ -1324,7 +1324,7 @@ async function apiMonthMetrics(p, res) {
     const s=d[sid];
     const t=Number(r.total||0), pm=String(r.pay_method||'EFECTIVO').toUpperCase();
     const epv=Number(r.extra_people_value||0);
-    if(r.type==='SALE'){
+   if(r.type==='SALE'&&Number(r.duration_hrs||0)>0){
       d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
       const base=t-epv;
       if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
