@@ -4991,7 +4991,7 @@ function renderInventario(inv,day){
   var totalVentasHoy=rows.reduce(function(a,r){return a+Object.values(r.turnos||{}).reduce(function(b,t){return b+Number(t.valorVendido||0);},0);},0);
   var ym=day?day.substring(0,7):'';
   var h='<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;text-transform:uppercase">Inventario / Productos</div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+ h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">';
   h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.4);border-radius:10px;padding:12px;text-align:center">';
   h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos hoy</div>';
   h+='<div style="font-size:20px;font-weight:900;color:#f97316">'+fmt(totalVentasHoy)+'</div>';
@@ -4999,6 +4999,10 @@ function renderInventario(inv,day){
   h+='<div style="background:#18181f;border:1px solid rgba(167,139,250,.4);border-radius:10px;padding:12px;text-align:center" id="invVentasMes">';
   h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>';
   h+='<div style="font-size:20px;font-weight:900;color:#a78bfa">Cargando...</div>';
+ h+='</div>';
+  h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.4);border-radius:10px;padding:12px;text-align:center" id="invCortesiasMes">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Cortesías mes</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:#f97316">Cargando...</div>';
   h+='</div>';
   h+='</div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-bottom:10px">';
@@ -5114,13 +5118,19 @@ el.innerHTML=h;
       (data.days||[]).forEach(function(d){
         // No tenemos desglose de productos por dia en monthMetrics, usamos approximacion
       });
-      // Buscar en room_products del mes
-      var elMes=document.getElementById('invVentasMes');
+     var elMes=document.getElementById('invVentasMes');
       if(elMes){
-        rpc('getInventarioByDay',{businessDay:day,userRole:sess&&sess.userRole||'ADMIN'},function(inv2){
-          // totalVentasHoy ya lo tenemos, para el mes sumamos todos los dias disponibles
+        var ym=day?day.substring(0,7):'';
+        rpc('getProductosMes',{yearMonth:ym},function(mesData){
           var elMes2=document.getElementById('invVentasMes');
-          if(elMes2){elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div><div style="font-size:20px;font-weight:900;color:#a78bfa">Ver en Análisis 📊</div>';}
+          if(!elMes2)return;
+          elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>'+
+            '<div style="font-size:20px;font-weight:900;color:#a78bfa">'+fmt(mesData.totalVentas||0)+'</div>'+
+            '<div style="font-size:10px;color:#9ca3af;margin-top:4px">'+
+            '<span style="color:#22c55e">EF '+fmt(mesData.totalEf||0)+'</span> · '+
+            '<span style="color:#3b82f6">TA '+fmt(mesData.totalTa||0)+'</span> · '+
+            '<span style="color:#a78bfa">NQ '+fmt(mesData.totalNq||0)+'</span></div>'+
+            '<div style="font-size:10px;color:#f97316;margin-top:2px">Cortesías: '+fmt(mesData.totalCortesias||0)+'</div>';
         });
       }
     });
