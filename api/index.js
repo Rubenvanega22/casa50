@@ -206,6 +206,7 @@ module.exports = async function handler(req, res) {
       case 'getShiftFailures':  return await apiGetShiftFailures(payload, res);
      case 'saveObservacionTurno':   return await apiSaveObservacionTurno(payload, res);
       case 'getObservacionesTurno':  return await apiGetObservacionesTurno(payload, res);
+      case 'getProductosMes':        return await apiGetProductosMes(payload, res);
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
@@ -2246,7 +2247,20 @@ async function apiGetObservacionesTurno(p, res) {
   const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
   return ok(res,{obs:obs||[]});
 }
-
+async function apiGetProductosMes(p, res) {
+  const ym=String(p.yearMonth||'');
+  if(!ym)return err(res,'yearMonth requerido');
+  const {data:prods}=await supabase.from('room_products').select('total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
+  const {data:cors}=await supabase.from('room_products').select('total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
+  const {data:prodsList}=await supabase.from('products').select('id,precio');
+  const totalVentas=(prods||[]).reduce((a,r)=>a+Number(r.total||0),0);
+  const totalEf=(prods||[]).filter(r=>r.pay_method==='EFECTIVO').reduce((a,r)=>a+Number(r.total||0),0);
+  const totalTa=(prods||[]).filter(r=>r.pay_method==='TARJETA').reduce((a,r)=>a+Number(r.total||0),0);
+  const totalNq=(prods||[]).filter(r=>r.pay_method==='NEQUI').reduce((a,r)=>a+Number(r.total||0),0);
+  const precioMap={};(prodsList||[]).forEach(p=>{precioMap[p.id]=Number(p.precio||0);});
+  const totalCortesias=(cors||[]).reduce((a,r)=>a+Number(r.cantidad||0)*Number(precioMap[r.product_id]||0),0);
+  return ok(res,{yearMonth:ym,totalVentas,totalEf,totalTa,totalNq,totalCortesias});
+}
 async function apiGetInventarioByDay(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
   const {data:products}=await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
