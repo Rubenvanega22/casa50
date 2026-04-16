@@ -5128,7 +5128,7 @@ el.innerHTML=h;
      var elMes=document.getElementById('invVentasMes');
       if(elMes){
         var ym=day?day.substring(0,7):'';
-       rpc('getProductosMes',{yearMonth:ym},function(mesData){
+      rpc('getProductosMes',{yearMonth:ym},function(mesData){
           var elMes2=document.getElementById('invVentasMes');
           if(elMes2)elMes2.innerHTML='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Ventas productos mes</div>'+
             '<div style="font-size:20px;font-weight:900;color:#a78bfa">'+fmt(mesData.totalVentas||0)+'</div>'+
