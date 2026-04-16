@@ -1367,7 +1367,11 @@ async function apiMonthMetrics(p, res) {
       s.totalEfectivo=s.ef_hab+s.ef_padd+s.ef_had+s.ef_bar;
       s.totalNequi=s.nq_hab+s.nq_padd+s.nq_had+s.nq_bar;
       s.totalGastos=s.gastos+s.taxis+s.turnos;
-      s.netoTurno=s.totalTarjeta+s.totalEfectivo+s.totalNequi-s.totalGastos;
+   s.netoTurno=s.totalTarjeta+s.totalEfectivo+s.totalNequi-s.totalGastos;
+      d.totalTarjeta+=s.totalTarjeta;
+      d.totalEfectivo+=s.totalEfectivo;
+      d.totalNequi+=s.totalNequi;
+      d.totalGastos+=s.totalGastos;
     });
     d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;
   });
