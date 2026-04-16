@@ -1301,7 +1301,8 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){
   toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
-  var prodsCI=[..._ciProds];_ciProds=[];
+ _ciProds.forEach(function(p){p.pm=selPay||p.pm;});
+var prodsCI=[..._ciProds];_ciProds=[];
   var checkInMs=res.checkInMs||Date.now();
   function saveNext(i){
     if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
