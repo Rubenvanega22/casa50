@@ -3933,11 +3933,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     },'#a78bfa');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💰 ENTREGA</td></tr>';
     dataRow('Entrega Diaria',function(m,sl,ls,ex){var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);;var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);return ef-gastos;},'#22c55e');
-    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#f97316;border:1px solid #2e2e3a">🛒 PRODUCTOS</td></tr>';
-    dataRow('Productos vendidos',function(m){return Number((m.totals||{}).totalProductos||0);},'#f97316');
-    dataRow('Productos Efectivo',function(m){return Number((m.totals||{}).totalProductosEf||0);},'#22c55e');
-    dataRow('Productos Tarjeta',function(m){return Number((m.totals||{}).totalProductosTa||0);},'#3b82f6');
-    dataRow('Productos Nequi',function(m){return Number((m.totals||{}).totalProductosNq||0);},'#a78bfa');
+   
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">🎁 CORTESÍAS</td></tr>';
     dataRow('Valor cortesías',function(m){return Number((m.totals||{}).totalCortesiasProds||0);},'#a78bfa');
     shifts.forEach(function(sid,i){
