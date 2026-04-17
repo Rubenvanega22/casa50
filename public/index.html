@@ -5465,7 +5465,7 @@ function openIngresoBodega(){
   h+='<div style="font-size:11px;font-weight:700;color:#3b82f6;margin-bottom:6px">Cantidad que llegó</div>';
   h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
   h+='<button onclick="chIbCant(-1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">-</button>';
-  h+='<span id="ibCantDisp" style="font-size:18px;font-weight:700;color:#e5e7eb;min-width:24px;text-align:center">1</span>';
+  h+='<input id="ibCantDisp" type="number" min="1" value="1" oninput="window._ibCant=Math.max(1,Number(this.value)||1)" style="width:60px;height:28px;font-size:18px;font-weight:700;color:#e5e7eb;text-align:center;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;padding:0">';
   h+='<button onclick="chIbCant(1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">+</button>';
   h+='<span style="font-size:11px;color:#9ca3af">unidades a ingresar</span>';
   h+='</div>';
