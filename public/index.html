@@ -2328,7 +2328,7 @@ h+='</div></div>';
   el.style.display=vis?'none':'block';
 }
 function _desgloseRows(sl,pm,barVal,color){
-  var ventas=sl.filter(function(s){return s.payMethod===pm&&s.type==='SALE'&&Number(s.durationHrs||0)>0;});
+  var ventas=sl.filter(function(s){return s.payMethod===pm&&s.type==='SALE';});
   var exts=sl.filter(function(s){return s.payMethod===pm&&(s.type==='EXTENSION'||s.type==='RENEWAL');});
   var h='';
   if(ventas.length){
@@ -4332,7 +4332,7 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
   }
 // ── BLOQUE 2: VENTAS EN TIEMPO REAL ──
   var sinCobro304M=onlySales.filter(function(s){return s.roomId==='304';});
-  var conCobro304M=onlySales.filter(function(s){return s.roomId!=='304' && Number(s.durationHrs||0) > 0;});
+  var conCobro304M=onlySales.filter(function(s){return s.roomId!=='304';});
   var num=1;
   var grupos={SHIFT_1:[],SHIFT_2:[],SHIFT_3:[]};
   conCobro304M.forEach(function(s){(grupos[s.shiftId]||(grupos[s.shiftId]=[])).push(s);});
