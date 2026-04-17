@@ -5510,7 +5510,7 @@ function selBodega(id){
   var cat=document.getElementById('ibCat');if(cat)cat.textContent=prod.categoria||'';
   var bod=document.getElementById('ibSaldoBod');if(bod)bod.textContent=prod.stockBodega||0;
   var rec=document.getElementById('ibSaldoRec');if(rec)rec.textContent=prod.stockActual||0;
-  var disp=document.getElementById('ibCantDisp');if(disp)disp.textContent=1;
+  var disp=document.getElementById('ibCantDisp');if(disp){if(disp.tagName==='INPUT')disp.value=1;else disp.textContent=1;}
 }
 function chIbCant(d){
   window._ibCant=Math.max(1,(window._ibCant||1)+d);
@@ -5553,7 +5553,7 @@ function openTrasladoRecepcion(){
   h+='<div style="font-size:11px;font-weight:700;color:#f97316;margin-bottom:6px">Bajar cantidad</div>';
   h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
   h+='<button onclick="chTrCant(-1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">-</button>';
-  h+='<span id="trCantDisp" style="font-size:18px;font-weight:700;color:#e5e7eb;min-width:24px;text-align:center">1</span>';
+  h+='<input id="trCantDisp" type="number" min="1" value="1" oninput="window._trCant=Math.max(1,Number(this.value)||1)" style="width:60px;height:28px;font-size:18px;font-weight:700;color:#e5e7eb;text-align:center;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;padding:0">';
   h+='<button onclick="chTrCant(1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">+</button>';
   h+='<span style="font-size:11px;color:#9ca3af">unidades a bajar</span>';
   h+='</div>';
@@ -5604,13 +5604,13 @@ function selTraslado(id){
   var cat=document.getElementById('trCat');if(cat)cat.textContent=prod.categoria||'';
   var bod=document.getElementById('trSaldoBod');if(bod)bod.textContent=prod.stockBodega||0;
   var rec=document.getElementById('trSaldoRec');if(rec)rec.textContent=prod.stockActual||0;
-  var disp=document.getElementById('trCantDisp');if(disp)disp.textContent=1;
+  var disp=document.getElementById('trCantDisp');if(disp){if(disp.tagName==='INPUT')disp.value=1;else disp.textContent=1;}
 }
 function chTrCant(d){
   var prod=window._trProdSel;
   var max=prod?Number(prod.stockBodega||0):99;
   window._trCant=Math.max(1,Math.min(max,(window._trCant||1)+d));
-  var el=document.getElementById('trCantDisp');if(el)el.textContent=window._trCant;
+  var el=document.getElementById('trCantDisp');if(el){if(el.tagName==='INPUT')el.value=window._trCant;else el.textContent=window._trCant;}
 }
 function confirmarTrasladoRec(){
   var productId=Number((document.getElementById('trProducto')||{}).value||0);
@@ -5651,7 +5651,7 @@ function selTraslado(id){
   var cat=document.getElementById('trCat');if(cat)cat.textContent=prod.categoria||'';
   var bod=document.getElementById('trSaldoBod');if(bod)bod.textContent=prod.stockBodega||0;
   var rec=document.getElementById('trSaldoRec');if(rec)rec.textContent=prod.stockActual||0;
-  var disp=document.getElementById('trCantDisp');if(disp)disp.textContent=1;
+  var disp=document.getElementById('trCantDisp');if(disp){if(disp.tagName==='INPUT')disp.value=1;else disp.textContent=1;}
 }
 function openCortesia(){
   if(!productosLista.length){
