@@ -2328,15 +2328,29 @@ h+='</div></div>';
   el.style.display=vis?'none':'block';
 }
 function _desgloseRows(sl,pm,barVal,color){
-  var ventas=sl.filter(function(s){return s.payMethod===pm&&s.type==='SALE';});
-  var exts=sl.filter(function(s){return s.payMethod===pm&&(s.type==='EXTENSION'||s.type==='RENEWAL');});
+  var ventas=sl.filter(function(s){return s.payMethod===pm&&(s.type==='SALE'||s.type==='RENEWAL');});
+  var exts=sl.filter(function(s){return s.payMethod===pm&&s.type==='EXTENSION';});
   var h='';
   if(ventas.length){
     h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin-bottom:5px">Ventas base</div>';
     ventas.forEach(function(s){
+      var epv=Number(s.extraPeopleValue||0);
+      var habVal=Number(s.total||0)-epv;
       h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
       h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+esc(s.category)+' '+s.durationHrs+'h</span>';
-      h+='<span style="color:'+color+'">'+fmt(s.total)+'</span>';
+      h+='<span style="color:'+color+'">'+fmt(habVal)+'</span>';
+      h+='</div>';
+    });
+  }
+  var ventasConPersonas=ventas.filter(function(s){return Number(s.extraPeopleValue||0)>0;});
+  if(ventasConPersonas.length){
+    h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin:8px 0 5px">P. Adicional</div>';
+    ventasConPersonas.forEach(function(s){
+      var epv=Number(s.extraPeopleValue||0);
+      var ep=Number(s.extraPeople||0);
+      h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
+      h+='<span style="color:#9ca3af">Hab '+s.roomId+' — +'+ep+' persona'+(ep>1?'s':'')+'</span>';
+      h+='<span style="color:'+color+'">'+fmt(epv)+'</span>';
       h+='</div>';
     });
   }
