@@ -1281,14 +1281,14 @@ async function apiMonthMetrics(p, res) {
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
 
   const [salesRes, taxiRes, loansRes, extraRes, maidLogsRes, failuresRes, shiftLogRes, roomProdsRes, barSalesRes] = await Promise.all([
-  supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs').like('business_day', ym+'%').order('business_day',{ascending:true}).limit(50000),
+  supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs').like('business_day', ym+'%').order('business_day',{ascending:true}).range(0, 49999),
     supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
     supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym+'%'),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-  supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%').order('business_day',{ascending:true}).limit(50000),
+  supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%').order('business_day',{ascending:true}).range(0, 49999),
     supabase.from('bar_sales').select('business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
   ]);
 
