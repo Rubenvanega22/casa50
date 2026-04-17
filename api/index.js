@@ -1113,8 +1113,7 @@ async function apiCloseShift(p, res) {
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
     if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'REFUND') totalRefunds += t;
-    if (r.type === 'RENEWAL') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
-    if (r.type === 'EXTENSION') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
+    if (r.type === 'EXTENSION' || r.type === 'RENEWAL') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
   });
   (taxiRes.data||[]).forEach(r=>{totalTaxi+=Number(r.amount||0);});
   (prodRes.data||[]).forEach(r=>{
@@ -1644,13 +1643,7 @@ async function apiGetDailyCuadre(p, res) {
       else if(pm==='MIXTO'){c[sid].efectivoHab+=Number(r.amount_1||0);c[sid].tarjetaHab+=Number(r.amount_2||0);c[sid].nequiHab=(c[sid].nequiHab||0)+Number(r.amount_3||0);}
       else{c[sid].efectivoHab+=habVal;c[sid].efectivoPersonas+=epv;}
     }
-    if(r.type==='RENEWAL'){
-      const habVal=t-epv;
-      if(pm==='TARJETA'){c[sid].tarjetaHab+=habVal;c[sid].tarjetaPersonas+=epv;}
-      else if(pm==='MIXTO'){c[sid].efectivoHab+=Number(r.amount_1||0);c[sid].tarjetaHab+=Number(r.amount_2||0);c[sid].nequiHab=(c[sid].nequiHab||0)+Number(r.amount_3||0);}
-      else{c[sid].efectivoHab+=habVal;c[sid].efectivoPersonas+=epv;}
-    }
-    if(r.type==='EXTENSION'){
+    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
       if(pm==='TARJETA')c[sid].tarjetaHoras+=t;
       else if(pm==='MIXTO'){c[sid].efectivoHoras+=Number(r.amount_1||0);c[sid].tarjetaHoras+=Number(r.amount_2||0);}
       else c[sid].efectivoHoras+=t;
