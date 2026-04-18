@@ -150,6 +150,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 
 <!-- MODALES -->
 <div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
+<div class="ov" id="mCalc" style="background:transparent"><div class="modal" style="max-width:280px;position:fixed;right:20px;bottom:80px;margin:0"><div class="mh"><div class="mt">🧮 Calculadora</div><button class="mc" onclick="closeM('mCalc')">✕</button></div><div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px"><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Habitación</span><b id="calcHab" style="color:#e5e7eb">$0</b></div><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Productos</span><b id="calcProd" style="color:#e5e7eb">$0</b></div><div style="border-top:1px solid #2e2e3a;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between"><b style="color:#a78bfa">Total a cobrar</b><b id="calcTotal" style="color:#a78bfa;font-size:14px">$0</b></div></div><label style="font-size:11px;color:#9ca3af">Paga con:</label><input type="number" id="calcPaga" placeholder="0" oninput="calcularVuelto()" style="width:100%;font-size:16px;text-align:right;margin-bottom:8px"><div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:#22c55e">VUELTO</div><div id="calcVuelto" style="font-size:22px;font-weight:900;color:#22c55e">$0</div></div></div></div>
 <div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
 <div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
@@ -534,6 +535,39 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function tog(id,show){var e=document.getElementById(id);if(e){if(show)e.classList.remove('h');else e.classList.add('h');}}
 function toast(msg,type){var e=document.getElementById('toast');e.textContent=msg;e.className='toast show '+(type||'');clearTimeout(e._t);e._t=setTimeout(function(){e.className='toast';},4000);}
 function openM(id){document.getElementById(id).classList.add('op');}
+function openCalc(habVal, prodVal){
+  habVal=Number(habVal||0);
+  prodVal=Number(prodVal||0);
+  var total=habVal+prodVal;
+  document.getElementById('calcHab').textContent=fmt(habVal);
+  document.getElementById('calcProd').textContent=fmt(prodVal);
+  document.getElementById('calcTotal').textContent=fmt(total);
+  document.getElementById('calcPaga').value='';
+  document.getElementById('calcVuelto').textContent=fmt(0);
+  window._calcTotal=total;
+  openM('mCalc');
+}
+function openCalcDesdeModal(){
+  var habVal=0, prodVal=0;
+  if(curRoom){
+    var cfg=MP[curRoom.category]||MP['Junior'];
+    habVal=Number((cfg&&cfg.p3)||0);
+  }
+  var totalEl=document.getElementById('roomProdTotal');
+  if(totalEl){
+    var txt=String(totalEl.textContent||'0').replace(/[^\d]/g,'');
+    prodVal=Number(txt||0);
+  }
+  openCalc(habVal, prodVal);
+}
+function calcularVuelto(){
+  var paga=Number(document.getElementById('calcPaga').value||0);
+  var total=Number(window._calcTotal||0);
+  var vuelto=paga-total;
+  var el=document.getElementById('calcVuelto');
+  el.textContent=fmt(vuelto);
+  el.style.color=vuelto<0?'#ef4444':'#22c55e';
+}
 function closeM(id){document.getElementById(id).classList.remove('op');}
 function conf(msg,cb){document.getElementById('mConfB').textContent=msg;confCb=cb;openM('mConf');document.getElementById('mConfOk').onclick=function(){closeM('mConf');if(confCb)confCb();};}
 document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this)closeM(this.id);});});
@@ -1035,7 +1069,7 @@ function buildRoomB(r){
     h+='</div>';
    h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
     if(isR){
-     h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
+     h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button><button class="btn bp sm" onclick="openCalcDesdeModal()">🧮</button></div>';
       // FRANJA PRODUCTOS
       h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-top:10px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -5086,8 +5120,7 @@ function renderInventario(inv,day){
       h+='<td style="padding:4px 4px;border:1px solid #2e2e3a;font-size:11px;text-align:center">'+siStr+'</td>';
     var saldoAcum=r.saldoInicial||0;
       var shiftOrder={SHIFT_1:1,SHIFT_2:2,SHIFT_3:3};
-     var esHoy=(day===sess.businessDay);
-      var activeShiftNum=esHoy?(shiftOrder[BS.currentShiftId||sess.shiftId]||1):3;
+      var activeShiftNum=shiftOrder[BS.currentShiftId||sess.shiftId]||1;
       shifts.forEach(function(sh){
         var td=r.turnos[sh.id]||{entradas:0,ventas:0,cortesias:0,ef:0,ta:0,nq:0};
         var eStr=td.entradas>0?'<span style="color:#22c55e;font-weight:700">+'+td.entradas+'</span>':'<span style="color:#2e2e3a">—</span>';
