@@ -140,69 +140,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .updating{color:#a78bfa}
 /* Tabs modo extension/renovacion */
 .ext-tabs{display:flex;gap:4px;margin-bottom:8px}
-.ext-tab{flex:1;padding:7px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;cursor:pointer;font-size:11px;font-weight:700}
-.ext-tab.on{border-color:#7c5cfc;background:rgba(124,92,252,.1);color:#a78bfa}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-</style>
-</head>
-<body>
-<div class="toast" id="toast"></div>
-
-<!-- MODALES -->
-<div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
-<div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
-<div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
-<div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
-<div class="ov" id="mExtra"><div class="modal"><div class="mh"><div class="mt">Registrar Personal Extra</div><button class="mc" onclick="closeM('mExtra')">✕</button></div>
-<label>Nombre</label><input type="text" id="exName" placeholder="Nombre completo">
-<label>Area</label><select id="exArea"><option value="Servicios">Servicios</option><option value="Camarera">Camarera</option><option value="Patiero">Patiero</option><option value="Mantenimiento">Mantenimiento</option><option value="Recepcion">Recepcion</option></select>
-<label>Turno</label><select id="exShift"><option value="SHIFT_1">Turno 1 (6am-2pm)</option><option value="SHIFT_2">Turno 2 (2pm-9pm)</option><option value="SHIFT_3">Turno 3 (9pm-6am)</option></select>
-<label>Hora de entrada</label><input type="time" id="exEntryTime">
-<label>¿Cuántas horas va a trabajar?</label><select id="exHours"><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="7">7 horas</option><option value="8">8 horas</option><option value="9">9 horas</option><option value="10">10 horas</option><option value="11">11 horas</option><option value="12">12 horas</option></select>
-<input type="hidden" id="exEditId" value="">
-<button class="btn ba full" style="margin-top:8px" onclick="saveExtra()">Registrar</button></div></div>
-<div class="ov" id="mExCo"><div class="modal"><div class="mh"><div class="mt" id="mExCoT">Pago y Salida</div><button class="mc" onclick="closeM('mExCo')">✕</button></div><div id="mExCoI" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
-<label>Hora de salida</label><input type="time" id="exExitTime">
-<label>Pago</label><input type="number" id="exPay" min="0" placeholder="Valor a pagar">
-<button class="btn bg full" style="margin-top:8px" onclick="saveExCo()">Registrar Salida y Pago</button></div></div>
-<div class="ov" id="mStaff"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt" id="mStaffT">Personal</div><button class="mc" onclick="closeM('mStaff')">✕</button></div>
-<input type="hidden" id="sEditId">
-<label>Nombre completo</label><input type="text" id="sName" placeholder="Nombre completo">
-<label>Cédula</label><input type="text" id="sCedula" placeholder="Número de cédula">
-<label>Celular</label><input type="text" id="sCelular" placeholder="Número de celular">
-<label>Área</label><select id="sArea"><option value="">Selecciona</option><option>Recepcion</option><option>Camarera</option><option>Patiero</option><option>Mantenimiento</option><option>Administrador</option></select>
-<label>Estado</label><select id="sActive"><option value="true">Activo</option><option value="false">Inactivo</option></select>
-<label>Fecha de nacimiento</label><input type="date" id="sFechaNac" onchange="updEdad()">
-<div id="edadDisp" style="font-size:11px;color:#a78bfa;margin-bottom:6px"></div>
-<label>Fecha de ingreso</label><input type="date" id="sFechaIngreso" onchange="updFechaSalida()">
-<div id="fechaSalidaDisp" style="font-size:11px;color:#22c55e;margin-bottom:6px"></div>
- <label>Dirección</label><input type="text" id="sDireccion" placeholder="Dirección de residencia">
-<label>Contacto de emergencia</label><input type="text" id="sContacto" placeholder="Nombre del contacto">
-<button class="btn ba full" style="margin-top:8px" onclick="saveStaff()">Guardar</button>
-</div></div>
- <div class="ov" id="mEnable"><div class="modal"><div class="mh"><div class="mt">Habilitar Habitacion</div><button class="mc" onclick="closeM('mEnable')">✕</button></div>
-<div id="mEnableInfo" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
-<label>Descripcion del arreglo (opcional)</label><input type="text" id="enableDesc" placeholder="Ej: Se cambio la chapa">
-<label>Costo del arreglo (opcional)</label><input type="number" id="enableCost" min="0" placeholder="0">
-<button class="btn bg full" style="margin-top:8px" onclick="doEnableConfirm()">Habilitar</button>
-</div></div>
- <div class="ov" id="mCalProg"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt">Programar persona del mes</div><button class="mc" onclick="closeM('mCalProg')">✕</button></div>
-<label>Area</label><select id="cp-area" onchange="ncalFiltrarPersonas()"><option value="Recepcion">Recepcion</option><option value="Camareria">Camareria</option><option value="Patio">Patio</option></select>
-<label>Nombre</label><select id="cp-nombre"><option value="">-- Selecciona --</option></select>
-<label>Turno y horario por semana</label>
-<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px">
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 1</div><select class="form-select" id="cs1-turno" onchange="ncalActHoras(1)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs1-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs1-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 2</div><select id="cs2-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(2)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs2-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs2-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 3</div><select id="cs3-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(3)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs3-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs3-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 4</div><select id="cs4-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(4)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs4-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs4-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-</div>
-<label>Dias de descanso recurrentes</label>
-<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px" id="cp-desc-days">
-<div class="abtn2" onclick="ncalToggleDesc(this,'Dom')">Dom</div><div class="abtn2" onclick="ncalToggleDesc(this,'Lun')">Lun</div><div class="abtn2" onclick="ncalToggleDesc(this,'Mar')">Mar</div><div class="abtn2" onclick="ncalToggleDesc(this,'Mie')">Mie</div><div class="abtn2" onclick="ncalToggleDesc(this,'Jue')">Jue</div><div class="abtn2" onclick="ncalToggleDesc(this,'Vie')">Vie</div><div class="abtn2" onclick="ncalToggleDesc(this,'Sab')">Sab</div>
-</div>
-<button class="btn ba full" style="margin-top:10px" onclick="ncalGuardarProg()">Guardar programacion del mes</button>
-</div></div>
-
+.<div class="ov" id="mCalc" style="background:transparent;pointer-events:none"><div class="modal" style="max-width:260px;position:fixed;right:20px;bottom:20px;margin:0;pointer-events:auto"><div class="mh"><div class="mt">🧮 Calculadora</div><button class="mc" onclick="closeM('mCalc')">✕</button></div><div id="calcDisp" style="width:100%;font-size:24px;text-align:right;padding:12px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;margin-bottom:8px;box-sizing:border-box;font-weight:500;min-height:32px;overflow:hidden">0</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px"><button onclick="calcT('C')" style="padding:12px 0;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:5px;color:#ef4444;font-size:15px;font-weight:500;cursor:pointer">C</button><button onclick="calcT('←')" style="padding:12px 0;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:5px;color:#f59e0b;font-size:15px;font-weight:500;cursor:pointer">←</button><button onclick="calcT('%')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#a78bfa;font-size:15px;font-weight:500;cursor:pointer">%</button><button onclick="calcT('÷')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">÷</button><button onclick="calcT('7')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">7</button><button onclick="calcT('8')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">8</button><button onclick="calcT('9')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">9</button><button onclick="calcT('×')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">×</button><button onclick="calcT('4')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">4</button><button onclick="calcT('5')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">5</button><button onclick="calcT('6')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">6</button><button onclick="calcT('-')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">−</button><button onclick="calcT('1')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">1</button><button onclick="calcT('2')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">2</button><button onclick="calcT('3')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">3</button><button onclick="calcT('+')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">+</button><button onclick="calcT('0')" style="grid-column:span 2;padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">0</button><button onclick="calcT('.')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">.</button><button onclick="calcT('=')" style="padding:12px 0;background:#7c3aed;border:none;border-radius:5px;color:#fff;font-size:17px;font-weight:500;cursor:pointer">=</button></div></div></div>
 <div class="ov" id="mCalDia"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt" id="mCalDiaT">Editar dia</div><button class="mc" onclick="closeM('mCalDia')">✕</button></div>
 <div id="mCalDiaInfo"></div>
 <label>Tipo de dia</label>
@@ -533,8 +471,124 @@ function fDur(ms){var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function tog(id,show){var e=document.getElementById(id);if(e){if(show)e.classList.remove('h');else e.classList.add('h');}}
 function toast(msg,type){var e=document.getElementById('toast');e.textContent=msg;e.className='toast show '+(type||'');clearTimeout(e._t);e._t=setTimeout(function(){e.className='toast';},4000);}
-function openM(id){document.getElementById(id).classList.add('op');}
-function closeM(id){document.getElementById(id).classList.remove('op');}
+function openM(id){
+  document.getElementById(id).classList.add('op');
+  if(id==='mRoom'){
+    var btn=document.getElementById('btnCalcFloat');
+    if(!btn){
+      btn=document.createElement('button');
+      btn.id='btnCalcFloat';
+      btn.innerHTML='🧮';
+      btn.onclick=function(){openCalcDesdeModal();};
+      btn.style.cssText='position:fixed;top:50%;right:20px;transform:translateY(-50%);width:50px;height:50px;background:transparent;border:1.5px solid #7c3aed;border-radius:8px;color:#a78bfa;font-size:20px;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center';
+      document.body.appendChild(btn);
+    }
+    btn.style.display='flex';
+  }
+}
+function openCalc(habVal, prodVal){
+  habVal=Number(habVal||0);
+  prodVal=Number(prodVal||0);
+  var total=habVal+prodVal;
+  document.getElementById('calcHab').textContent=fmt(habVal);
+  document.getElementById('calcProd').textContent=fmt(prodVal);
+  document.getElementById('calcTotal').textContent=fmt(total);
+  document.getElementById('calcPaga').textContent='0';
+  document.getElementById('calcVuelto').textContent=fmt(0);
+  window._calcTotal=total;
+  window._calcPaga=0;
+  openM('mCalc');
+}
+function calcTecla(n){
+  var actual=String(window._calcPaga||0);
+  if(actual==='0')actual='';
+  actual=actual+String(n);
+  window._calcPaga=Number(actual);
+  document.getElementById('calcPaga').textContent=fmt(window._calcPaga);
+  calcularVuelto();
+}
+function calcTeclaC(){
+  window._calcPaga=0;
+  document.getElementById('calcPaga').textContent='0';
+  calcularVuelto();
+}
+function calcTeclaBorrar(){
+  var actual=String(window._calcPaga||0);
+  if(actual.length<=1){
+    window._calcPaga=0;
+    document.getElementById('calcPaga').textContent='0';
+  } else {
+    actual=actual.substring(0,actual.length-1);
+    window._calcPaga=Number(actual);
+    document.getElementById('calcPaga').textContent=fmt(window._calcPaga);
+  }
+  calcularVuelto();
+}
+function openCalcDesdeModal(){
+  var habVal=0, prodVal=0;
+  if(curRoom){
+    var cfg=MP[curRoom.category]||MP['Junior'];
+    habVal=Number((cfg&&cfg.p3)||0);
+  }
+  var totalEl=document.getElementById('roomProdTotal');
+  if(totalEl){
+    var txt=String(totalEl.textContent||'0').replace(/[^\d]/g,'');
+    prodVal=Number(txt||0);
+  }
+  openCalc(habVal, prodVal);
+}
+function calcT(tecla){
+  var disp=document.getElementById('calcDisp');
+  var actual=disp.textContent||'0';
+  if(tecla==='C'){disp.textContent='0';window._calcAnt=null;window._calcOp=null;return;}
+  if(tecla==='←'){disp.textContent=actual.length<=1?'0':actual.substring(0,actual.length-1);return;}
+  if(tecla==='='){
+    if(window._calcOp&&window._calcAnt!==null){
+      var a=Number(window._calcAnt), b=Number(actual), r=0;
+      if(window._calcOp==='+')r=a+b;
+      else if(window._calcOp==='-')r=a-b;
+      else if(window._calcOp==='×')r=a*b;
+      else if(window._calcOp==='÷')r=b===0?0:a/b;
+      disp.textContent=String(Math.round(r*100)/100);
+      window._calcAnt=null;
+      window._calcOp=null;
+    }
+    return;
+  }
+  if(tecla==='%'){
+    disp.textContent=String(Number(actual)/100);
+    return;
+  }
+  if(tecla==='+'||tecla==='-'||tecla==='×'||tecla==='÷'){
+    window._calcAnt=Number(actual);
+    window._calcOp=tecla;
+    disp.textContent='0';
+    return;
+  }
+  if(tecla==='.'){
+    if(actual.indexOf('.')<0)disp.textContent=actual+'.';
+    return;
+  }
+  if(actual==='0')disp.textContent=String(tecla);
+  else disp.textContent=actual+String(tecla);
+}
+function calcularVuelto(){
+  var paga=Number(window._calcPaga||0);
+  var total=Number(window._calcTotal||0);
+  var vuelto=paga-total;
+  var el=document.getElementById('calcVuelto');
+  el.textContent=fmt(vuelto);
+  el.style.color=vuelto<0?'#ef4444':'#22c55e';
+}
+function closeM(id){
+  document.getElementById(id).classList.remove('op');
+  if(id==='mRoom'){
+    var btn=document.getElementById('btnCalcFloat');
+    if(btn)btn.style.display='none';
+    var calc=document.getElementById('mCalc');
+    if(calc)calc.classList.remove('op');
+  }
+}
 function conf(msg,cb){document.getElementById('mConfB').textContent=msg;confCb=cb;openM('mConf');document.getElementById('mConfOk').onclick=function(){closeM('mConf');if(confCb)confCb();};}
 document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this)closeM(this.id);});});
 
@@ -5086,8 +5140,7 @@ function renderInventario(inv,day){
       h+='<td style="padding:4px 4px;border:1px solid #2e2e3a;font-size:11px;text-align:center">'+siStr+'</td>';
     var saldoAcum=r.saldoInicial||0;
       var shiftOrder={SHIFT_1:1,SHIFT_2:2,SHIFT_3:3};
-     var esHoy=(day===sess.businessDay);
-      var activeShiftNum=esHoy?(shiftOrder[BS.currentShiftId||sess.shiftId]||1):3;
+      var activeShiftNum=shiftOrder[BS.currentShiftId||sess.shiftId]||1;
       shifts.forEach(function(sh){
         var td=r.turnos[sh.id]||{entradas:0,ventas:0,cortesias:0,ef:0,ta:0,nq:0};
         var eStr=td.entradas>0?'<span style="color:#22c55e;font-weight:700">+'+td.entradas+'</span>':'<span style="color:#2e2e3a">—</span>';
