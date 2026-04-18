@@ -150,7 +150,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 
 <!-- MODALES -->
 <div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
-<div class="ov" id="mCalc" style="background:transparent"><div class="modal" style="max-width:280px;position:fixed;right:20px;bottom:80px;margin:0"><div class="mh"><div class="mt">🧮 Calculadora</div><button class="mc" onclick="closeM('mCalc')">✕</button></div><div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px"><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Habitación</span><b id="calcHab" style="color:#e5e7eb">$0</b></div><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Productos</span><b id="calcProd" style="color:#e5e7eb">$0</b></div><div style="border-top:1px solid #2e2e3a;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between"><b style="color:#a78bfa">Total a cobrar</b><b id="calcTotal" style="color:#a78bfa;font-size:14px">$0</b></div></div><label style="font-size:11px;color:#9ca3af">Paga con:</label><input type="number" id="calcPaga" placeholder="0" oninput="calcularVuelto()" style="width:100%;font-size:16px;text-align:right;margin-bottom:8px"><div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:#22c55e">VUELTO</div><div id="calcVuelto" style="font-size:22px;font-weight:900;color:#22c55e">$0</div></div></div></div>
+<div class="ov" id="mCalc" style="background:transparent;pointer-events:none"><div class="modal" style="max-width:240px;position:fixed;right:20px;bottom:20px;margin:0;pointer-events:auto"><div class="mh"><div class="mt">🧮 Calculadora</div><button class="mc" onclick="closeM('mCalc')">✕</button></div><div style="background:#22222c;border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px"><div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#9ca3af">Habitación</span><b id="calcHab" style="color:#e5e7eb">$0</b></div><div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#9ca3af">Productos</span><b id="calcProd" style="color:#e5e7eb">$0</b></div><div style="border-top:1px solid #2e2e3a;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between"><b style="color:#a78bfa">Total</b><b id="calcTotal" style="color:#a78bfa">$0</b></div></div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Paga con:</div><div id="calcPaga" style="width:100%;font-size:18px;text-align:right;padding:8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;margin-bottom:8px;box-sizing:border-box;font-weight:500;min-height:20px">0</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px"><button onclick="calcTecla(7)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">7</button><button onclick="calcTecla(8)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">8</button><button onclick="calcTecla(9)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">9</button><button onclick="calcTecla(4)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">4</button><button onclick="calcTecla(5)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">5</button><button onclick="calcTecla(6)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">6</button><button onclick="calcTecla(1)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">1</button><button onclick="calcTecla(2)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">2</button><button onclick="calcTecla(3)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">3</button><button onclick="calcTeclaC()" style="padding:10px 0;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:5px;color:#ef4444;font-size:13px;font-weight:500;cursor:pointer">C</button><button onclick="calcTecla(0)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">0</button><button onclick="calcTeclaBorrar()" style="padding:10px 0;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:5px;color:#f59e0b;font-size:15px;font-weight:500;cursor:pointer">←</button></div><div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#22c55e">VUELTO</div><div id="calcVuelto" style="font-size:20px;font-weight:500;color:#22c55e">$0</div></div></div></div>
 <div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
 <div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
@@ -534,7 +534,21 @@ function fDur(ms){var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function tog(id,show){var e=document.getElementById(id);if(e){if(show)e.classList.remove('h');else e.classList.add('h');}}
 function toast(msg,type){var e=document.getElementById('toast');e.textContent=msg;e.className='toast show '+(type||'');clearTimeout(e._t);e._t=setTimeout(function(){e.className='toast';},4000);}
-function openM(id){document.getElementById(id).classList.add('op');}
+function openM(id){
+  document.getElementById(id).classList.add('op');
+  if(id==='mRoom'){
+    var btn=document.getElementById('btnCalcFloat');
+    if(!btn){
+      btn=document.createElement('button');
+      btn.id='btnCalcFloat';
+      btn.innerHTML='🧮';
+      btn.onclick=function(){openCalcDesdeModal();};
+      btn.style.cssText='position:fixed;top:50%;right:20px;transform:translateY(-50%);width:50px;height:50px;background:transparent;border:1.5px solid #7c3aed;border-radius:8px;color:#a78bfa;font-size:20px;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center';
+      document.body.appendChild(btn);
+    }
+    btn.style.display='flex';
+  }
+}
 function openCalc(habVal, prodVal){
   habVal=Number(habVal||0);
   prodVal=Number(prodVal||0);
@@ -542,10 +556,36 @@ function openCalc(habVal, prodVal){
   document.getElementById('calcHab').textContent=fmt(habVal);
   document.getElementById('calcProd').textContent=fmt(prodVal);
   document.getElementById('calcTotal').textContent=fmt(total);
-  document.getElementById('calcPaga').value='';
+  document.getElementById('calcPaga').textContent='0';
   document.getElementById('calcVuelto').textContent=fmt(0);
   window._calcTotal=total;
+  window._calcPaga=0;
   openM('mCalc');
+}
+function calcTecla(n){
+  var actual=String(window._calcPaga||0);
+  if(actual==='0')actual='';
+  actual=actual+String(n);
+  window._calcPaga=Number(actual);
+  document.getElementById('calcPaga').textContent=fmt(window._calcPaga);
+  calcularVuelto();
+}
+function calcTeclaC(){
+  window._calcPaga=0;
+  document.getElementById('calcPaga').textContent='0';
+  calcularVuelto();
+}
+function calcTeclaBorrar(){
+  var actual=String(window._calcPaga||0);
+  if(actual.length<=1){
+    window._calcPaga=0;
+    document.getElementById('calcPaga').textContent='0';
+  } else {
+    actual=actual.substring(0,actual.length-1);
+    window._calcPaga=Number(actual);
+    document.getElementById('calcPaga').textContent=fmt(window._calcPaga);
+  }
+  calcularVuelto();
 }
 function openCalcDesdeModal(){
   var habVal=0, prodVal=0;
@@ -561,14 +601,22 @@ function openCalcDesdeModal(){
   openCalc(habVal, prodVal);
 }
 function calcularVuelto(){
-  var paga=Number(document.getElementById('calcPaga').value||0);
+  var paga=Number(window._calcPaga||0);
   var total=Number(window._calcTotal||0);
   var vuelto=paga-total;
   var el=document.getElementById('calcVuelto');
   el.textContent=fmt(vuelto);
   el.style.color=vuelto<0?'#ef4444':'#22c55e';
 }
-function closeM(id){document.getElementById(id).classList.remove('op');}
+function closeM(id){
+  document.getElementById(id).classList.remove('op');
+  if(id==='mRoom'){
+    var btn=document.getElementById('btnCalcFloat');
+    if(btn)btn.style.display='none';
+    var calc=document.getElementById('mCalc');
+    if(calc)calc.classList.remove('op');
+  }
+}
 function conf(msg,cb){document.getElementById('mConfB').textContent=msg;confCb=cb;openM('mConf');document.getElementById('mConfOk').onclick=function(){closeM('mConf');if(confCb)confCb();};}
 document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this)closeM(this.id);});});
 
@@ -1069,7 +1117,7 @@ function buildRoomB(r){
     h+='</div>';
    h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
     if(isR){
-     h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button><button class="btn bp sm" onclick="openCalcDesdeModal()">🧮</button></div>';
+     h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
       // FRANJA PRODUCTOS
       h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-top:10px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
