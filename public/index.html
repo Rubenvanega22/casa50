@@ -140,70 +140,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .updating{color:#a78bfa}
 /* Tabs modo extension/renovacion */
 .ext-tabs{display:flex;gap:4px;margin-bottom:8px}
-.ext-tab{flex:1;padding:7px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;cursor:pointer;font-size:11px;font-weight:700}
-.ext-tab.on{border-color:#7c5cfc;background:rgba(124,92,252,.1);color:#a78bfa}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-</style>
-</head>
-<body>
-<div class="toast" id="toast"></div>
-
-<!-- MODALES -->
-<div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
-<div class="ov" id="mCalc" style="background:transparent;pointer-events:none"><div class="modal" style="max-width:240px;position:fixed;right:20px;bottom:20px;margin:0;pointer-events:auto"><div class="mh"><div class="mt">🧮 Calculadora</div><button class="mc" onclick="closeM('mCalc')">✕</button></div><div style="background:#22222c;border-radius:6px;padding:8px;margin-bottom:8px;font-size:11px"><div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#9ca3af">Habitación</span><b id="calcHab" style="color:#e5e7eb">$0</b></div><div style="display:flex;justify-content:space-between;padding:1px 0"><span style="color:#9ca3af">Productos</span><b id="calcProd" style="color:#e5e7eb">$0</b></div><div style="border-top:1px solid #2e2e3a;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between"><b style="color:#a78bfa">Total</b><b id="calcTotal" style="color:#a78bfa">$0</b></div></div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Paga con:</div><div id="calcPaga" style="width:100%;font-size:18px;text-align:right;padding:8px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;margin-bottom:8px;box-sizing:border-box;font-weight:500;min-height:20px">0</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px"><button onclick="calcTecla(7)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">7</button><button onclick="calcTecla(8)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">8</button><button onclick="calcTecla(9)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">9</button><button onclick="calcTecla(4)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">4</button><button onclick="calcTecla(5)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">5</button><button onclick="calcTecla(6)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">6</button><button onclick="calcTecla(1)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">1</button><button onclick="calcTecla(2)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">2</button><button onclick="calcTecla(3)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">3</button><button onclick="calcTeclaC()" style="padding:10px 0;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:5px;color:#ef4444;font-size:13px;font-weight:500;cursor:pointer">C</button><button onclick="calcTecla(0)" style="padding:10px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">0</button><button onclick="calcTeclaBorrar()" style="padding:10px 0;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:5px;color:#f59e0b;font-size:15px;font-weight:500;cursor:pointer">←</button></div><div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#22c55e">VUELTO</div><div id="calcVuelto" style="font-size:20px;font-weight:500;color:#22c55e">$0</div></div></div></div>
-<div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
-<div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
-<div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
-<div class="ov" id="mExtra"><div class="modal"><div class="mh"><div class="mt">Registrar Personal Extra</div><button class="mc" onclick="closeM('mExtra')">✕</button></div>
-<label>Nombre</label><input type="text" id="exName" placeholder="Nombre completo">
-<label>Area</label><select id="exArea"><option value="Servicios">Servicios</option><option value="Camarera">Camarera</option><option value="Patiero">Patiero</option><option value="Mantenimiento">Mantenimiento</option><option value="Recepcion">Recepcion</option></select>
-<label>Turno</label><select id="exShift"><option value="SHIFT_1">Turno 1 (6am-2pm)</option><option value="SHIFT_2">Turno 2 (2pm-9pm)</option><option value="SHIFT_3">Turno 3 (9pm-6am)</option></select>
-<label>Hora de entrada</label><input type="time" id="exEntryTime">
-<label>¿Cuántas horas va a trabajar?</label><select id="exHours"><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="7">7 horas</option><option value="8">8 horas</option><option value="9">9 horas</option><option value="10">10 horas</option><option value="11">11 horas</option><option value="12">12 horas</option></select>
-<input type="hidden" id="exEditId" value="">
-<button class="btn ba full" style="margin-top:8px" onclick="saveExtra()">Registrar</button></div></div>
-<div class="ov" id="mExCo"><div class="modal"><div class="mh"><div class="mt" id="mExCoT">Pago y Salida</div><button class="mc" onclick="closeM('mExCo')">✕</button></div><div id="mExCoI" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
-<label>Hora de salida</label><input type="time" id="exExitTime">
-<label>Pago</label><input type="number" id="exPay" min="0" placeholder="Valor a pagar">
-<button class="btn bg full" style="margin-top:8px" onclick="saveExCo()">Registrar Salida y Pago</button></div></div>
-<div class="ov" id="mStaff"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt" id="mStaffT">Personal</div><button class="mc" onclick="closeM('mStaff')">✕</button></div>
-<input type="hidden" id="sEditId">
-<label>Nombre completo</label><input type="text" id="sName" placeholder="Nombre completo">
-<label>Cédula</label><input type="text" id="sCedula" placeholder="Número de cédula">
-<label>Celular</label><input type="text" id="sCelular" placeholder="Número de celular">
-<label>Área</label><select id="sArea"><option value="">Selecciona</option><option>Recepcion</option><option>Camarera</option><option>Patiero</option><option>Mantenimiento</option><option>Administrador</option></select>
-<label>Estado</label><select id="sActive"><option value="true">Activo</option><option value="false">Inactivo</option></select>
-<label>Fecha de nacimiento</label><input type="date" id="sFechaNac" onchange="updEdad()">
-<div id="edadDisp" style="font-size:11px;color:#a78bfa;margin-bottom:6px"></div>
-<label>Fecha de ingreso</label><input type="date" id="sFechaIngreso" onchange="updFechaSalida()">
-<div id="fechaSalidaDisp" style="font-size:11px;color:#22c55e;margin-bottom:6px"></div>
- <label>Dirección</label><input type="text" id="sDireccion" placeholder="Dirección de residencia">
-<label>Contacto de emergencia</label><input type="text" id="sContacto" placeholder="Nombre del contacto">
-<button class="btn ba full" style="margin-top:8px" onclick="saveStaff()">Guardar</button>
-</div></div>
- <div class="ov" id="mEnable"><div class="modal"><div class="mh"><div class="mt">Habilitar Habitacion</div><button class="mc" onclick="closeM('mEnable')">✕</button></div>
-<div id="mEnableInfo" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
-<label>Descripcion del arreglo (opcional)</label><input type="text" id="enableDesc" placeholder="Ej: Se cambio la chapa">
-<label>Costo del arreglo (opcional)</label><input type="number" id="enableCost" min="0" placeholder="0">
-<button class="btn bg full" style="margin-top:8px" onclick="doEnableConfirm()">Habilitar</button>
-</div></div>
- <div class="ov" id="mCalProg"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt">Programar persona del mes</div><button class="mc" onclick="closeM('mCalProg')">✕</button></div>
-<label>Area</label><select id="cp-area" onchange="ncalFiltrarPersonas()"><option value="Recepcion">Recepcion</option><option value="Camareria">Camareria</option><option value="Patio">Patio</option></select>
-<label>Nombre</label><select id="cp-nombre"><option value="">-- Selecciona --</option></select>
-<label>Turno y horario por semana</label>
-<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px">
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 1</div><select class="form-select" id="cs1-turno" onchange="ncalActHoras(1)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs1-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs1-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 2</div><select id="cs2-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(2)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs2-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs2-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 3</div><select id="cs3-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(3)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs3-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs3-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:8px"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;font-weight:700;margin-bottom:4px">Semana 4</div><select id="cs4-turno" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:6px" onchange="ncalActHoras(4)"><option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option></select><input type="time" id="cs4-entrada" value="06:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:3px"><input type="time" id="cs4-salida" value="14:00" style="width:100%;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;color:#e5e7eb;padding:5px;margin-top:2px"></div>
-</div>
-<label>Dias de descanso recurrentes</label>
-<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px" id="cp-desc-days">
-<div class="abtn2" onclick="ncalToggleDesc(this,'Dom')">Dom</div><div class="abtn2" onclick="ncalToggleDesc(this,'Lun')">Lun</div><div class="abtn2" onclick="ncalToggleDesc(this,'Mar')">Mar</div><div class="abtn2" onclick="ncalToggleDesc(this,'Mie')">Mie</div><div class="abtn2" onclick="ncalToggleDesc(this,'Jue')">Jue</div><div class="abtn2" onclick="ncalToggleDesc(this,'Vie')">Vie</div><div class="abtn2" onclick="ncalToggleDesc(this,'Sab')">Sab</div>
-</div>
-<button class="btn ba full" style="margin-top:10px" onclick="ncalGuardarProg()">Guardar programacion del mes</button>
-</div></div>
-
+.<div class="ov" id="mCalc" style="background:transparent;pointer-events:none"><div class="modal" style="max-width:260px;position:fixed;right:20px;bottom:20px;margin:0;pointer-events:auto"><div class="mh"><div class="mt">🧮 Calculadora</div><button class="mc" onclick="closeM('mCalc')">✕</button></div><div id="calcDisp" style="width:100%;font-size:24px;text-align:right;padding:12px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#e5e7eb;margin-bottom:8px;box-sizing:border-box;font-weight:500;min-height:32px;overflow:hidden">0</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px"><button onclick="calcT('C')" style="padding:12px 0;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:5px;color:#ef4444;font-size:15px;font-weight:500;cursor:pointer">C</button><button onclick="calcT('←')" style="padding:12px 0;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:5px;color:#f59e0b;font-size:15px;font-weight:500;cursor:pointer">←</button><button onclick="calcT('%')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#a78bfa;font-size:15px;font-weight:500;cursor:pointer">%</button><button onclick="calcT('÷')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">÷</button><button onclick="calcT('7')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">7</button><button onclick="calcT('8')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">8</button><button onclick="calcT('9')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">9</button><button onclick="calcT('×')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">×</button><button onclick="calcT('4')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">4</button><button onclick="calcT('5')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">5</button><button onclick="calcT('6')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">6</button><button onclick="calcT('-')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">−</button><button onclick="calcT('1')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">1</button><button onclick="calcT('2')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">2</button><button onclick="calcT('3')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">3</button><button onclick="calcT('+')" style="padding:12px 0;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.4);border-radius:5px;color:#a78bfa;font-size:17px;font-weight:500;cursor:pointer">+</button><button onclick="calcT('0')" style="grid-column:span 2;padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">0</button><button onclick="calcT('.')" style="padding:12px 0;background:#22222c;border:1px solid #2e2e3a;border-radius:5px;color:#e5e7eb;font-size:15px;font-weight:500;cursor:pointer">.</button><button onclick="calcT('=')" style="padding:12px 0;background:#7c3aed;border:none;border-radius:5px;color:#fff;font-size:17px;font-weight:500;cursor:pointer">=</button></div></div></div>
 <div class="ov" id="mCalDia"><div class="modal" style="max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt" id="mCalDiaT">Editar dia</div><button class="mc" onclick="closeM('mCalDia')">✕</button></div>
 <div id="mCalDiaInfo"></div>
 <label>Tipo de dia</label>
@@ -599,6 +536,41 @@ function openCalcDesdeModal(){
     prodVal=Number(txt||0);
   }
   openCalc(habVal, prodVal);
+}
+function calcT(tecla){
+  var disp=document.getElementById('calcDisp');
+  var actual=disp.textContent||'0';
+  if(tecla==='C'){disp.textContent='0';window._calcAnt=null;window._calcOp=null;return;}
+  if(tecla==='←'){disp.textContent=actual.length<=1?'0':actual.substring(0,actual.length-1);return;}
+  if(tecla==='='){
+    if(window._calcOp&&window._calcAnt!==null){
+      var a=Number(window._calcAnt), b=Number(actual), r=0;
+      if(window._calcOp==='+')r=a+b;
+      else if(window._calcOp==='-')r=a-b;
+      else if(window._calcOp==='×')r=a*b;
+      else if(window._calcOp==='÷')r=b===0?0:a/b;
+      disp.textContent=String(Math.round(r*100)/100);
+      window._calcAnt=null;
+      window._calcOp=null;
+    }
+    return;
+  }
+  if(tecla==='%'){
+    disp.textContent=String(Number(actual)/100);
+    return;
+  }
+  if(tecla==='+'||tecla==='-'||tecla==='×'||tecla==='÷'){
+    window._calcAnt=Number(actual);
+    window._calcOp=tecla;
+    disp.textContent='0';
+    return;
+  }
+  if(tecla==='.'){
+    if(actual.indexOf('.')<0)disp.textContent=actual+'.';
+    return;
+  }
+  if(actual==='0')disp.textContent=String(tecla);
+  else disp.textContent=actual+String(tecla);
 }
 function calcularVuelto(){
   var paga=Number(window._calcPaga||0);
