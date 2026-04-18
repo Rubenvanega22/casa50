@@ -954,6 +954,9 @@ function openRoom(rid){
       rpc('getProducts',{},function(data){productosLista=data.products||[];});
     }
     setTimeout(function(){loadRoomProductos(curRoom.roomId,curRoom.checkInMs||0);},100);
+    window._roomProdCarritos=window._roomProdCarritos||{};
+    window._roomProdCarrito=window._roomProdCarritos[curRoom.roomId]||[];
+    setTimeout(function(){renderRoomProdPendiente();},200);
   }
  // Cargar resumen financiero si está ocupada o sucia
   if(curRoom.state==='OCCUPIED'||curRoom.state==='DIRTY'){
@@ -5303,10 +5306,13 @@ function buscarProductoPorNombre(texto){
   cont.innerHTML=h;
 }
 
-window._roomProdCarrito=window._roomProdCarrito||[];
+window._roomProdCarritos=window._roomProdCarritos||{};
 function seleccionarRoomProd(id){
   var prod=productosLista.find(function(p){return p.id===id;});
-  if(!prod)return;
+  if(!prod||!curRoom)return;
+  var rid=curRoom.roomId;
+  if(!window._roomProdCarritos[rid])window._roomProdCarritos[rid]=[];
+  window._roomProdCarrito=window._roomProdCarritos[rid];
   var ex=window._roomProdCarrito.find(function(x){return x.id===id;});
   if(ex){ex.cant+=1;}
   else{window._roomProdCarrito.push({id:prod.id,nombre:prod.nombre,precio:prod.precio,stockActual:prod.stockActual,cant:1});}
@@ -5381,6 +5387,7 @@ function confirmarRoomProd(){
   function next(){
     if(i>=carrito.length){
       window._roomProdCarrito=[];
+      if(window._roomProdCarritos)window._roomProdCarritos[curRoom.roomId]=[];
       renderRoomProdPendiente();
       loadRoomProductos(curRoom.roomId,curRoom.checkInMs||0);
       toast('✓ Productos agregados','ok');
