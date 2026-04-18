@@ -1146,15 +1146,7 @@ async function apiCloseShift(p, res) {
     total_productos_nq: totalProductosNq
   });
 
-  const barNQ=Number(p.barNQ||0),barTj=Number(p.barTarjeta||0);
-  if(barNQ+barTj>0){
-    await supabase.from('bar_sales').insert({
-      ts_ms:now,business_day:bDay,shift_id:shift,
-      user_name:userName,description:'Bar turno cierre',
-      amount_cash:barNQ,amount_card:barTj,amount_nequi:0,
-      total:barNQ+barTj
-    });
-  }
+  // Bar bar_sales removido - duplicaba valores de room_products
   return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
 }
 
