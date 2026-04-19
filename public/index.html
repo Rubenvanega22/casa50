@@ -1952,28 +1952,7 @@ function openHist(rid){
 }
 
 // ---- VENTAS ----
-function loadVentas(){
-  if(!sess)return;
-  var el=document.getElementById('ventasCont');el.innerHTML='<p style="color:#9ca3af">Cargando...</p>';
-  Promise.all([
-    new Promise(function(r){rpc('metrics',{businessDay:sess.businessDay,shiftId:''},r,function(){r({});});}),
-    new Promise(function(r){rpc('getMaidLog',{businessDay:sess.businessDay},r,function(){r({logs:[]});});})
-  ]).then(function(res){
-    var m=res[0]||{};
-    var maidLogs=res[1].logs||[];
-    var taxiList=(m.taxiList||[]);
-    var t=m.totals||{};
-    var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE';}).sort(function(a,b){return a.checkInMs-b.checkInMs;});
-    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
-    var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-    var resumen={SHIFT_1:{count:0,total:0},SHIFT_2:{count:0,total:0},SHIFT_3:{count:0,total:0}};
-    sl.forEach(function(s){var sid=s.shiftId||'SHIFT_1';if(resumen[sid]){resumen[sid].count++;resumen[sid].total+=Number(s.total||0);}});
-    var h='<div class="pay-row"><div class="pay-item"><div class="pay-lbl">Efectivo</div><div class="pay-val" style="color:#22c55e">'+fmt(t.totalEfectivo||0)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(t.totalTarjeta||0)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Nequi</div><div class="pay-val" style="color:#a78bfa">'+fmt(t.totalNequi||0)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Total dia</div><div class="pay-val" style="color:#22c55e">'+fmt(t.sales||0)+'</div></div></div>';
-    h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">';
-    ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
+var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.type==='SALE'&&s.durationHrs>0;}).sort(function(a,b){return a.checkInMs-b.checkInMs;}); ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
       var col=turnoColor[sid];var r=resumen[sid];
       h+='<div style="background:#18181f;border:1px solid '+col+';border-top:3px solid '+col+';border-radius:8px;padding:8px;text-align:center">';
       h+='<div style="font-size:10px;font-weight:700;color:'+col+'">'+turnoLabel[sid]+'</div>';
@@ -2195,7 +2174,7 @@ function loadCuadre(){
 
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
-    var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===sess.shiftId&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
+    var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sess.shiftId&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
     var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId&&(!fromMs||Number(l.tsMs||0)>=fromMs);});
     var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0&&(!fromMs||Number(e.tsMs||0)>=fromMs);});
     var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId&&(!fromMs||Number(tx.tsMs||0)>=fromMs);});
@@ -3858,18 +3837,7 @@ function loadCuadreAdmin(){
    new Promise(function(res){rpc('getExtraStaff',{businessDay:day},res,function(){res({extraStaff:[]});});}),
     new Promise(function(res){rpc('getMaidLog',{businessDay:day},res,function(){res({logs:[]});});})
   ]).then(function(r){
-    var ms=[r[0]||{},r[1]||{},r[2]||{}];
-    var loans=r[3].loans||[];
-    var extras=r[4].extraStaff||[];
-    var maidLogs=r[5].logs||[];
-    var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
-    var totalDia=ms.reduce(function(a,m,i){
-      var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
-      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
-      var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
-      var nq=sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarNequi||0);
-      return a+ef+tj+nq;
-    },0);
+var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
     var h='<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
     h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase">💰 Total del Día (con bar)</div>';
     h+='<div style="font-size:24px;font-weight:900;color:#a78bfa">'+fmt(totalDia)+'</div>';
@@ -3883,7 +3851,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     h+='<th style="width:18%;padding:4px 6px;background:#22222c;font-size:10px;color:#22c55e;border:1px solid #2e2e3a;text-align:center">TOTAL</th></tr></thead><tbody>';
    function dataRow(label,getter,color){
       var vals=ms.map(function(m,i){
-        var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
+        var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
         return getter(m,sl,loans.filter(function(l){return l.shiftId===shifts[i];}),extras.filter(function(e){return e.shiftId===shifts[i]&&Number(e.payment||0)>0;}));
       });
       var total=vals.reduce(function(a,b){return a+b;},0);
@@ -3895,7 +3863,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     function dataRowTotal(label,pm,barGetter,color){
       _admDesKey++;
       var vals=ms.map(function(m,i){
-        var sl=(m.allSalesList||[]).filter(function(s){return s.shiftId===shifts[i];});
+        var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
         return sl.filter(function(s){return s.payMethod===pm;}).reduce(function(a,s){return a+Number(s.total||0);},0)+(barGetter?barGetter(m):0);
       });
       var total=vals.reduce(function(a,b){return a+b;},0);
@@ -3903,7 +3871,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;font-weight:700;color:'+color+'">'+label+'</td>';
       vals.forEach(function(v,i){
         var sid=shifts[i];
-        var sl2=(ms[i].allSalesList||[]).filter(function(s){return s.shiftId===sid;});
+        var sl2=(ms[i].allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid;});
         var barVal=barGetter?barGetter(ms[i]):0;
         var cellId='admD_'+pm+'_'+_admDesKey+'_'+i;
         var des=_desgloseRows(sl2,pm,barVal,color);
@@ -3962,7 +3930,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     shifts.forEach(function(sid,i){
       var sc=(ms[i].totals||{}).shiftClose||null;
       var entregaEsp=0;
-      if(ms[i].totals){var sl2=(ms[i].allSalesList||[]).filter(function(s){return s.shiftId===sid;});var ls2=loans.filter(function(l){return l.shiftId===sid;});var ex2=extras.filter(function(e){return e.shiftId===sid&&Number(e.payment||0)>0;});var ef2=sl2.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((ms[i].totals||{}).barEfectivo||0);var gas2=ls2.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((ms[i].totals||{}).shiftTaxi||0)+ex2.reduce(function(a,e){return a+Number(e.payment||0);},0);entregaEsp=ef2-gas2;}
+      if(ms[i].totals){var sl2=(ms[i].allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid;});var ls2=loans.filter(function(l){return l.shiftId===sid;});var ex2=extras.filter(function(e){return e.shiftId===sid&&Number(e.payment||0)>0;});var ef2=sl2.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((ms[i].totals||{}).barEfectivo||0);var gas2=ls2.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((ms[i].totals||{}).shiftTaxi||0)+ex2.reduce(function(a,e){return a+Number(e.payment||0);},0);entregaEsp=ef2-gas2;}
       var cashCount=sc?sc.cashCount:null;
       var diff=cashCount!==null?cashCount-entregaEsp:null;
       var cols=['','',''];
@@ -3977,7 +3945,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
         var colsBill=['','',''],colsMon=['','',''],colsDiff=['','',''];
         shifts.forEach(function(s2,j){
           var sc2=ms[j].shiftClose||null;
-          var sl3=(ms[j].allSalesList||[]).filter(function(s){return s.shiftId===s2;});
+          var sl3=(ms[j].allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===s2;});
           var ls3=loans.filter(function(l){return l.shiftId===s2;});
           var ex3=extras.filter(function(e){return e.shiftId===s2&&Number(e.payment||0)>0;});
           var ef3=sl3.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((ms[j].totals||{}).barEfectivo||0);
@@ -4019,7 +3987,7 @@ h+='</div>';
     var todasVentas=[];
     ms.forEach(function(m,i){
       var sid=shifts[i];
-      var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&s.roomId!=='304'&&s.shiftId===sid;});
+      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.type==='SALE'&&s.durationHrs>0&&s.roomId!=='304'&&s.shiftId===sid;});
       sl.forEach(function(s){todasVentas.push(s);});
     });
     todasVentas.sort(function(a,b){return a.checkInMs-b.checkInMs;});
