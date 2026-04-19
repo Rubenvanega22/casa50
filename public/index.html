@@ -609,25 +609,9 @@ function entrar(){
   var fe=window._forceEntry===true;window._forceEntry=false;
   var shiftSel=document.getElementById('lShift');
   var shiftId=shiftSel?shiftSel.value:'';
-// Validacion de horario por turno
-if(rol==='RECEPTION'&&shiftId){
-  var horaActual=new Date().getHours()*60+new Date().getMinutes();
-  var horarios={
-    SHIFT_1:{min:5*60+30,max:14*60+30,label:'T1 (desde 5:30am)'},
-    SHIFT_2:{min:13*60+30,max:21*60+30,label:'T2 (desde 1:30pm)'},
-    SHIFT_3:{min:20*60+30,max:23*60+59,label:'T3 (desde 8:30pm)'},
-    SHIFT_1_12:{min:5*60+30,max:14*60+30,label:'1T12 (desde 5:30am)'},
-    SHIFT_2_12:{min:17*60+30,max:23*60+59,label:'2T12 (desde 5:30pm)'}
-  };
-  var h=horarios[shiftId];
-  var esT3=shiftId==='SHIFT_3';
-  var esTardio=esT3&&horaActual<6*60;
-  if(h&&!esTardio&&(horaActual<h.min||horaActual>h.max)){
-    showLE('Este turno no está disponible a esta hora. '+h.label+' para ingresar.');
-    btn.disabled=false;btn.textContent='Ingresar';
-    return;
-  }
-}
+
+  if(shiftId==='SHIFT_1_12')shiftId='SHIFT_1';
+  if(shiftId==='SHIFT_2_12')shiftId='SHIFT_3';
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
     if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
