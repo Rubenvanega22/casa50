@@ -1109,6 +1109,7 @@ async function apiCloseShift(p, res) {
   let totalProductos=0, totalProductosEf=0, totalProductosTa=0, totalProductosNq=0;
 
   (salesRes.data || []).forEach(r => {
+    if (r.anulada) return;
     if (String(r.room_id) === '304') return;
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
     if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
@@ -1177,6 +1178,7 @@ async function apiMetrics(p, res) {
   (salesRes.data||[]).forEach(r=>{
     const t=Number(r.total||0),type=r.type,pm=String(r.pay_method||'').toUpperCase(),sid=r.shift_id;
     const isRev=type==='SALE'||type==='EXTENSION'||type==='RENEWAL';
+    if(r.anulada)return;
     const skip304 = String(r.room_id) === '304';
     if(isRev){
       if(!skip304){
@@ -1312,6 +1314,7 @@ supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra
 
   // Ventas
   (salesRes.data||[]).forEach(r=>{
+    if(r.anulada)return;
     if(String(r.room_id)==='304') return;
     const d=getDay(r.business_day);
     const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
@@ -1628,6 +1631,7 @@ async function apiGetDailyCuadre(p, res) {
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
+    if(r.anulada)return;
     if(String(r.room_id) === '304') return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
     if(r.type==='SALE'){
@@ -2376,7 +2380,7 @@ async function apiAnularVenta(p, res) {
   if(!room) return err(res,'Habitacion no existe');
   if(room.state!=='OCCUPIED') return err(res,'Solo se puede anular si está ocupada');
   // Marcar todas las ventas de esta estadia como ANULADA
-  await supabase.from('sales').update({type:'ANULADA',note:motivo}).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  await supabase.from('sales').update({type:'ANULADA',note:motivo,anulada:true,anulada_ms:now,anulada_por:userName}).eq('room_id',roomId).eq('check_in_ms',checkInMs);
   // Devolver habitacion a disponible
   await supabase.from('rooms').update({
     state:'AVAILABLE', state_since_ms:now, people:0,
