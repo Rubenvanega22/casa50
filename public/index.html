@@ -3837,7 +3837,18 @@ function loadCuadreAdmin(){
    new Promise(function(res){rpc('getExtraStaff',{businessDay:day},res,function(){res({extraStaff:[]});});}),
     new Promise(function(res){rpc('getMaidLog',{businessDay:day},res,function(){res({logs:[]});});})
   ]).then(function(r){
-var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
+    var ms=[r[0]||{},r[1]||{},r[2]||{}];
+    var loans=r[3].loans||[];
+    var extras=r[4].extraStaff||[];
+    var maidLogs=r[5].logs||[];
+    var shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
+    var totalDia=ms.reduce(function(a,m,i){
+      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
+      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
+      var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
+      var nq=sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarNequi||0);
+      return a+ef+tj+nq;
+    },0);
     var h='<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
     h+='<div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase">💰 Total del Día (con bar)</div>';
     h+='<div style="font-size:24px;font-weight:900;color:#a78bfa">'+fmt(totalDia)+'</div>';
