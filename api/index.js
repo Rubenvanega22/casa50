@@ -239,6 +239,7 @@ module.exports = async function handler(req, res) {
       case 'saveCortesia':       return await apiSaveCortesia(payload, res);
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       case 'anularVenta':        return await apiAnularVenta(payload, res);
+      case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -2102,9 +2103,10 @@ async function apiSaveProduct(p, res) {
   if(!nombre) return err(res,'Nombre requerido');
   if(!precio) return err(res,'Precio requerido');
   if(id) {
+    // Al EDITAR no se modifica stock_actual — para ajustar stock usar apiAjusteInventario
     await supabase.from('products').update({
       nombre, codigo_barras: codigo||null, precio, categoria,
-      stock_actual: stockActual, stock_minimo: stockMinimo
+      stock_minimo: stockMinimo
     }).eq('id', id);
   } else {
     await supabase.from('products').insert({
@@ -2319,7 +2321,7 @@ async function apiGetInventarioByDay(p, res) {
     const cortesiasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const entradasAyer=(entriesAyer||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
    const totalTraslados=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
-    const saldoInicialReal=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados;
+    const saldoInicialReal=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados-totalEntradas;
     const turnosData={};
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
@@ -2439,4 +2441,76 @@ async function apiSaveRoomBarcode(p, res) {
   if(!barcode) return err(res,'barcode requerido');
   await supabase.from('rooms').update({ barcode }).eq('room_id', roomId);
   return ok(res, { roomId, barcode });
+}
+// ==================== AJUSTE DE INVENTARIO (ADMIN) ====================
+// Gestiona ajustes de stock del bar con 3 tipos:
+//  - venta_olvidada: Descuenta stock + suma al cuadre (recep olvidó registrar)
+//  - faltante_cobrado: Descuenta stock + suma al cuadre (alguien paga el faltante)
+//  - ajuste_sin_dinero: Solo ajusta stock (rotura, vencido, sobrante, conteo)
+async function apiAjusteInventario(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const now = Date.now();
+  const productId = Number(p.productId||0);
+  const cantidad = Number(p.cantidad||0);
+  const tipo = String(p.tipoAjuste||'').trim();
+  const motivo = String(p.motivo||'').trim();
+  const adminName = String(p.userName||'').trim();
+
+  if(!productId) return err(res,'productId requerido');
+  if(!cantidad || cantidad === 0) return err(res,'Cantidad invalida');
+  if(!['venta_olvidada','faltante_cobrado','ajuste_sin_dinero'].includes(tipo)) return err(res,'Tipo de ajuste invalido');
+  if(motivo.length < 3) return err(res,'Motivo requerido (minimo 3 caracteres)');
+  if(!adminName) return err(res,'Admin requerido');
+
+  const afectaCuadre = (tipo === 'venta_olvidada' || tipo === 'faltante_cobrado');
+  const bDayAjuste = afectaCuadre ? String(p.businessDay||'').trim() : businessDay(now);
+  const shiftAjuste = afectaCuadre ? String(p.shiftId||'').trim() : currentShiftId(now);
+  const payMethodAjuste = afectaCuadre ? String(p.payMethod||'EFECTIVO').toUpperCase() : '';
+  const recepNameAjuste = afectaCuadre ? String(p.recepName||'').trim() : '';
+
+  if(afectaCuadre) {
+    if(!bDayAjuste) return err(res,'Fecha del turno requerida');
+    if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAjuste)) return err(res,'Turno invalido');
+    if(!['EFECTIVO','TARJETA','NEQUI'].includes(payMethodAjuste)) return err(res,'Metodo de pago invalido');
+    if(cantidad <= 0) return err(res,'Cantidad debe ser positiva en venta olvidada/faltante');
+  }
+
+  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
+  if(!prod) return err(res,'Producto no existe');
+
+  const vaDescontar = (cantidad > 0);
+  if(vaDescontar && Number(prod.stock_actual||0) < cantidad) {
+    return err(res,'Stock insuficiente. Hay '+prod.stock_actual+' unidades');
+  }
+
+  const nuevoStock = Number(prod.stock_actual||0) - cantidad;
+  await supabase.from('products').update({ stock_actual: nuevoStock }).eq('id',productId);
+
+  await supabase.from('stock_movements').insert({
+    ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
+    user_name: adminName, user_role: 'ADMIN',
+    product_id: productId, product_name: prod.nombre,
+    tipo: 'ajuste_'+tipo,
+    cantidad: cantidad,
+    nota: motivo
+  });
+
+  if(afectaCuadre) {
+    const precioUnit = Number(prod.precio||0);
+    const total = precioUnit * cantidad;
+    await supabase.from('room_products').insert({
+      ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
+      room_id: 'AJUSTE', check_in_ms: 0,
+      product_id: productId, product_name: prod.nombre,
+      cantidad: cantidad, precio_unit: precioUnit,
+      total: total, pay_method: payMethodAjuste,
+      user_name: recepNameAjuste || adminName,
+      is_cortesia: false,
+      created_by_admin: true,
+      tipo_ajuste: tipo,
+      motivo_ajuste: motivo
+    });
+  }
+
+  return ok(res, { productId, nuevoStock, tipo, afectaCuadre });
 }
