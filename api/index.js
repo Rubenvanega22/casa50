@@ -1832,7 +1832,7 @@ async function apiUpdatePayMethod(p, res) {
   const bDay=businessDay(now);
   const shift=currentShiftId(now);
   const checkInMs=Number(room.check_in_ms||0);
-  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).eq('type','SALE').eq('shift_id',shift).eq('check_in_ms',checkInMs);
+  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
   await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,payMethod});
 }
