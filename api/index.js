@@ -108,7 +108,25 @@ function mapRoom(r) {
     payMethod: r.pay_method || ''
   };
 }
-
+// ==================== HELPER DE PAGINACION ====================
+// Trae TODAS las filas de una consulta Supabase, paginando en lotes de 1000.
+// Se usa para consultas de rangos largos (ej: mes completo) donde Supabase
+// corta por defecto a 1000 filas aunque pidas mas con .range().
+//
+// Uso: const sales = await fetchAll(() => supabase.from('sales').select('...').like('business_day', '2026-04%'));
+async function fetchAll(queryBuilder, batchSize = 1000) {
+  const all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryBuilder().range(from, from + batchSize - 1);
+    if (error) throw error;
+    if (!data || !data.length) break;
+    all.push(...data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+  return all;
+}
 // ==================== HANDLER PRINCIPAL ====================
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
@@ -1275,17 +1293,31 @@ async function apiMonthMetrics(p, res) {
   const ym = String(p.yearMonth || '');
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
 
-  const [salesRes, taxiRes, loansRes, extraRes, maidLogsRes, failuresRes, shiftLogRes, roomProdsRes, barSalesRes] = await Promise.all([
-supabase.from('sales').select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs').like('business_day', ym+'%').range(0, 99999),
+  // Queries que pueden superar 1000 filas — usan el helper fetchAll
+  const salesData = await fetchAll(() => supabase.from('sales')
+    .select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada')
+    .like('business_day', ym+'%'));
+  const maidLogsData = await fetchAll(() => supabase.from('maid_log')
+    .select('maid_name,finished_ms,started_ms,state_to')
+    .like('business_day', ym+'%'));
+  const roomProdsData = await fetchAll(() => supabase.from('room_products')
+    .select('business_day,shift_id,pay_method,total,is_cortesia')
+    .like('business_day', ym+'%'));
+
+  // Queries pequeñas — se mantienen con Promise.all normal
+  const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
     supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
     supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
-    supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym+'%'),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-  supabase.from('room_products').select('business_day,shift_id,pay_method,total,is_cortesia').like('business_day', ym+'%').limit(5000),
     supabase.from('bar_sales').select('business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
   ]);
+
+  // Envolver los arrays paginados en {data: ...} para compatibilidad con el código existente
+  const salesRes = { data: salesData };
+  const maidLogsRes = { data: maidLogsData };
+  const roomProdsRes = { data: roomProdsData };
 
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
   const mkShift = () => ({
