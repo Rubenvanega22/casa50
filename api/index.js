@@ -483,7 +483,7 @@ async function apiCheckIn(p, res) {
 async function apiCheckOut(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const obs = String(p.checkoutObs || p.obs || '').trim();
@@ -844,7 +844,7 @@ async function apiSetDisabled(p, res) {
 async function apiRefund(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const amount = Math.max(1, Number(p.amount || 0));
@@ -867,7 +867,7 @@ async function apiRefund(p, res) {
 async function apiTaxi(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
   const { data } = await supabase.from('taxi_expenses').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
@@ -2210,7 +2210,7 @@ async function apiDeleteRoomProduct(p, res) {
 async function apiSaveCortesia(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||1);
   const userName = String(p.userName||'').trim();
