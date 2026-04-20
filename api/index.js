@@ -2130,7 +2130,7 @@ async function apiGetRoomProducts(p, res) {
 async function apiAddRoomProduct(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
   const roomId = String(p.roomId||'').trim();
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||1);
