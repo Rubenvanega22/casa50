@@ -1532,7 +1532,7 @@ function confirmarAnularVenta(){
 function doCheckOut(){
   if(!curRoom)return;
   var obs=(document.getElementById('coObs')||{}).value||'';
-  rpc('checkOut',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,checkoutObs:obs,force:true},
+  rpc('checkOut',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkoutObs:obs,force:true},
     function(){toast('Salida registrada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
     function(e){toast(e.message||String(e),'err');}
   );
@@ -1639,7 +1639,7 @@ function doRef(){
   if(amt<=0){toast('Monto invalido.','err');return;}
   if(reason.trim().length<3){toast('Motivo obligatorio.','err');return;}
  conf('Devolucion de '+fmt(amt)+' — '+reason+'?',function(){
-    rpc('refund',{roomId:curRoom.roomId,amount:amt,refundReason:reason,userName:sess.userName,userRole:sess.userRole},
+    rpc('refund',{roomId:curRoom.roomId,amount:amt,refundReason:reason,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId},
       function(){toast('Devolucion registrada.','ok');closeM('mRoom');},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -1648,7 +1648,7 @@ function doRef(){
 function doTaxi(){
   var rid=curRoom?curRoom.roomId:'';
   conf('¿Registrar taxi $3.000 para Hab '+rid+'?',function(){
-    rpc('taxi',{userName:sess.userName,userRole:sess.userRole,roomId:rid},
+    rpc('taxi',{userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,roomId:rid},
       function(){toast('Taxi $3.000 registrado.','ok');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -2098,12 +2098,12 @@ function saveExtra(){
   var exHours=Number(document.getElementById('exHours').value||4);
   var exitMs=entryMs+(exHours*3600000);
   if(editId){
-    rpc('updateExtraStaff',{id:editId,personName:n,area:a,shiftId:sh||BS.currentShiftId,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours,userRole:sess.userRole,userName:sess.userName},
+    rpc('updateExtraStaff',{id:editId,personName:n,area:a,shiftId:sh||sess.shiftId||BS.currentShiftId,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours,userRole:sess.userRole,userName:sess.userName},
       function(){toast(n+' actualizado.','ok');closeM('mExtra');loadExtra();document.getElementById('exEditId').value='';},
       function(e){toast(e.message||String(e),'err');}
     );
   } else {
-    rpc('registerExtraStaff',{personName:n,area:a,userRole:sess.userRole,userName:sess.userName,shiftId:sh||BS.currentShiftId,businessDay:sess.businessDay,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours},
+    rpc('registerExtraStaff',{personName:n,area:a,userRole:sess.userRole,userName:sess.userName,shiftId:sh||sess.shiftId||BS.currentShiftId,businessDay:sess.businessDay,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours},
       function(){toast(n+' registrado. Sale a las '+new Date(exitMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'.','ok');closeM('mExtra');loadExtra();document.getElementById('exName').value='';document.getElementById('exEditId').value='';},
       function(e){toast(e.message||String(e),'err');}
     );
