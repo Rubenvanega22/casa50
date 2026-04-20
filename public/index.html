@@ -1291,7 +1291,7 @@ var prodsCI=[..._ciProds];_ciProds=[];
   function saveNext(i){
     if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
     var p=prodsCI[i];
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,checkInMs:checkInMs},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:checkInMs},
       function(){saveNext(i+1);},function(){saveNext(i+1);});
   }
   saveNext(0);
@@ -4925,7 +4925,7 @@ function confirmarVentaProd(productId,precio){
   if(!roomId){toast('Selecciona una habitación.','err');return;}
   var room=rooms.find(function(r){return r.roomId===roomId;});
   conf('Vender '+vpCant+' × '+fmt(precio)+' a Hab '+roomId+'?',function(){
-    rpc('addRoomProduct',{roomId:roomId,productId:productId,cantidad:vpCant,payMethod:vpPm,userName:sess.userName,userRole:sess.userRole,checkInMs:room?room.checkInMs:0},
+    rpc('addRoomProduct',{roomId:roomId,productId:productId,cantidad:vpCant,payMethod:vpPm,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:room?room.checkInMs:0},
       function(res){toast('✓ Producto vendido — '+fmt(res.total),'ok');closeM('mVentaProd');loadProductos();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -5371,7 +5371,7 @@ function confirmarRoomProd(){
       return;
     }
     var p=carrito[i];i++;
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:curRoom.checkInMs||0},
       function(){next();},function(e){toast(e.message||String(e),'err');next();}
     );
   }
@@ -5383,7 +5383,7 @@ function confirmarRoomProdCortesia(){
   if(!prod||!curRoom)return;
   var cant=window._roomProdCant||1;
   conf('¿Registrar '+cant+' '+prod.nombre+' como cortesía?',function(){
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:curRoom.checkInMs||0},
       function(){
         toast('✓ Cortesía registrada.','ok');
         window._roomProdPendiente=null;
@@ -5679,7 +5679,7 @@ function confirmarCortesia(){
   var destinatario=(document.getElementById('cortesiaDestinatario')||{}).value||'';
   if(!destinatario.trim()){toast('Escribe a quién se le da la cortesía.','err');return;}
   conf('¿Dar '+cant+' '+prod.nombre+' a '+destinatario+'?',function(){
-    rpc('addRoomProduct',{roomId:'CORTESIA',productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,cortesiaDestinatario:destinatario.trim(),userName:sess.userName,userRole:sess.userRole,checkInMs:0},
+    rpc('addRoomProduct',{roomId:'CORTESIA',productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,cortesiaDestinatario:destinatario.trim(),userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:0},
       function(){toast('✓ Cortesía registrada — '+cant+' '+prod.nombre+' → '+destinatario,'ok');closeM('mCortesia');loadProductos();},
       function(e){toast(e.message||String(e),'err');}
     );
