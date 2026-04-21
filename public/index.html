@@ -256,6 +256,41 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bk full" id="ncalBtnQuitarExt" style="display:none;margin-top:4px" onclick="ncalQuitarExtra()">Quitar extra</button>
 </div>
 </div></div>
+<!-- MODAL RESUMEN MENSUAL (INVENTARIO MES) -->
+<div class="ov" id="mResumen" style="padding:10px">
+  <div class="modal" style="max-width:1400px;width:98vw;max-height:94vh;display:flex;flex-direction:column">
+    <div class="mh">
+      <div class="mt">📅 Resumen Mensual — Inventario Mes</div>
+      <button class="mc" onclick="closeM('mResumen')">✕</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+      <label style="margin:0">Mes:</label>
+      <input type="month" id="resMes" style="width:auto;margin:0">
+      <button class="btn ba sm" onclick="loadResumen()">Ver mes</button>
+      <select id="resGotoDia" style="width:auto;margin:0;display:none" onchange="resScrollToDia(this.value)">
+        <option value="">Ir al día...</option>
+      </select>
+      <button class="btn bk sm" onclick="loadResumen()" style="margin-left:auto">↻ Actualizar</button>
+    </div>
+
+    <div id="resTarjetas" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px"></div>
+
+    <div id="resTablaCont" style="flex:1;overflow:auto;background:#18181f;border-radius:6px;padding:2px">
+      <p style="color:#9ca3af;text-align:center;padding:40px">Selecciona un mes y haz clic en "Ver mes".</p>
+    </div>
+
+    <div style="margin-top:8px;padding:6px 10px;background:#18181f;border-radius:6px;font-size:10px;color:#9ca3af;display:flex;gap:12px;flex-wrap:wrap">
+      <span><span style="color:#fca5a5;text-decoration:underline;text-decoration-style:dotted">P.Compra</span> = editable</span>
+      <span><span style="color:#c4b5fd">BODEGA</span> = tiempo real</span>
+      <span><span style="color:#a78bfa">S.I.</span> = saldo inicial mes</span>
+      <span><span style="color:#fcd34d">E</span> = entrada a recep.</span>
+      <span><span style="color:#86efac">V</span> = vendido</span>
+      <span><span style="color:#fb923c">C</span> = cortesía</span>
+      <span><span style="color:#c4b5fd">S</span> = saldo final turno</span>
+    </div>
+  </div>
+</div>
 <div class="ov" id="mGoal"><div class="modal"><div class="mh"><div class="mt">Meta del Dia</div><button class="mc" onclick="closeM('mGoal')">✕</button></div><label>Meta en COP</label><input type="number" id="goalIn" min="0"><button class="btn ba full" style="margin-top:8px" onclick="saveGoal()">Guardar Meta</button></div></div>
 <div class="ov" id="mPin"><div class="modal"><div class="mh"><div class="mt" id="mPinT">Recepcionista</div><button class="mc" onclick="closeM('mPin')">✕</button></div><input type="hidden" id="pOldName"><label>Nombre</label><input type="text" id="pName" placeholder="Nombre completo"><label>PIN</label><input type="password" id="pVal" maxlength="10" placeholder="PIN numérico"><button class="btn ba full" style="margin-top:8px" onclick="savePin()">Guardar</button></div></div>
 <div class="ov" id="mChPin"><div class="modal"><div class="mh"><div class="mt">Cambiar PIN Admin</div><button class="mc" onclick="closeM('mChPin')">✕</button></div><label>PIN actual</label><input type="password" id="cpCur"><label>Nuevo PIN</label><input type="password" id="cpNew"><button class="btn br full" style="margin-top:8px" onclick="doChPin()">Cambiar</button></div></div>
@@ -5077,6 +5112,211 @@ function imprimirTurno(shiftId){
     w.document.write(html);
     w.document.close();
   },function(e){toast(e.message||'Error generando impresion','err');});
+}
+// ==================== RESUMEN MENSUAL ====================
+// Variable global que guarda los datos del último mes cargado
+var resumenData = null;
+
+function openResumen(){
+  if(!sess) return toast('Inicia sesion','err');
+  var inp = document.getElementById('resMes');
+  if(inp && !inp.value){
+    var bd = sess.businessDay || '';
+    inp.value = bd ? bd.substring(0,7) : '';
+  }
+  openM('mResumen');
+  loadResumen();
+}
+function loadResumen(){
+  if(!sess) return;
+  var inp = document.getElementById('resMes');
+  var mes = inp ? inp.value : '';
+  if(!mes){ toast('Selecciona un mes','err'); return; }
+
+  var cont = document.getElementById('resTablaCont');
+  if(cont) cont.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:40px">Cargando...</p>';
+
+  rpc('getResumenMes',{mes:mes},function(data){
+    resumenData = data;
+    renderResumen();
+  },function(e){
+    if(cont) cont.innerHTML = '<p style="color:#ef4444;text-align:center;padding:40px">Error: '+(e.message||'desconocido')+'</p>';
+    toast(e.message || 'Error cargando resumen','err');
+  });
+}
+function renderResumen(){
+  if(!resumenData) return;
+  var d = resumenData;
+  var rows = d.rows || [];
+  var totals = d.totals || {};
+  var daysTotals = d.daysTotals || {};
+  var daysInMonth = d.daysInMonth || 30;
+  var mes = d.mes || '';
+  var isAdmin = sess && sess.userRole === 'ADMIN';
+
+  // 1. TARJETAS DE RESUMEN
+  var tj = document.getElementById('resTarjetas');
+  if(tj){
+    var h1 = '';
+    h1 += '<div style="background:#18181f;border-left:3px solid #8b5cf6;padding:8px 12px;border-radius:0 4px 4px 0">';
+    h1 += '<div style="color:#9ca3af;text-transform:uppercase;font-size:9px">Mes anterior quedo</div>';
+    h1 += '<div style="color:#c4b5fd;font-weight:700;font-size:15px">'+fmt(totals.siAnterior||0)+'</div>';
+    h1 += '</div>';
+    h1 += '<div style="background:#18181f;border-left:3px solid #3b82f6;padding:8px 12px;border-radius:0 4px 4px 0">';
+    h1 += '<div style="color:#9ca3af;text-transform:uppercase;font-size:9px">Compras del mes</div>';
+    h1 += '<div style="color:#93c5fd;font-weight:700;font-size:15px">'+fmt(totals.compras||0)+'</div>';
+    h1 += '</div>';
+    h1 += '<div style="background:#18181f;border-left:3px solid #22c55e;padding:8px 12px;border-radius:0 4px 4px 0">';
+    h1 += '<div style="color:#9ca3af;text-transform:uppercase;font-size:9px">Vendido del mes</div>';
+    h1 += '<div style="color:#86efac;font-weight:700;font-size:15px">'+fmt(totals.vendido||0)+'</div>';
+    h1 += '</div>';
+    h1 += '<div style="background:#18181f;border-left:3px solid #f97316;padding:8px 12px;border-radius:0 4px 4px 0">';
+    h1 += '<div style="color:#9ca3af;text-transform:uppercase;font-size:9px">Cortesias del mes</div>';
+    h1 += '<div style="color:#fb923c;font-weight:700;font-size:15px">'+fmt(totals.cortesias||0)+'</div>';
+    h1 += '</div>';
+    h1 += '<div style="background:#18181f;border-left:3px solid #1d9e75;padding:8px 12px;border-radius:0 4px 4px 0">';
+    h1 += '<div style="color:#9ca3af;text-transform:uppercase;font-size:9px">Ganancia estimada</div>';
+    h1 += '<div style="color:#5dcaa5;font-weight:700;font-size:15px">'+fmt(totals.ganancia||0)+'</div>';
+    h1 += '</div>';
+    tj.innerHTML = h1;
+  }
+
+  // 2. SELECTOR IR AL DIA
+  var sel = document.getElementById('resGotoDia');
+  if(sel){
+    var selH = '<option value="">Ir al dia...</option>';
+    for(var d1 = 1; d1 <= daysInMonth; d1++){
+      var f1 = mes+'-'+String(d1).padStart(2,'0');
+      selH += '<option value="'+f1+'">Dia '+d1+'</option>';
+    }
+    sel.innerHTML = selH;
+    sel.style.display = '';
+  }
+
+  // 3. TABLA
+  var cont = document.getElementById('resTablaCont');
+  if(!cont) return;
+
+  if(!rows.length){
+    cont.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:40px">Sin productos activos.</p>';
+    return;
+  }
+
+  // Agrupar productos por categoria
+  var cats = {};
+  rows.forEach(function(r){
+    var c = r.categoria || 'Sin categoria';
+    if(!cats[c]) cats[c] = [];
+    cats[c].push(r);
+  });
+
+  // Generar lista de dias del mes
+  var dias = [];
+  for(var d2 = 1; d2 <= daysInMonth; d2++){
+    dias.push(mes+'-'+String(d2).padStart(2,'0'));
+  }
+
+  var anchoMin = 140 + 240 + (daysInMonth * 260);
+
+  var h = '<table id="resTabla" style="border-collapse:collapse;font-size:10px;min-width:'+anchoMin+'px">';
+
+  // ENCABEZADO FILA 1
+  h += '<thead style="position:sticky;top:0;background:#22222c;z-index:10">';
+  h += '<tr style="color:#9ca3af">';
+  h += '<th rowspan="3" style="position:sticky;left:0;background:#22222c;text-align:left;padding:6px 8px;border-right:2px solid #3a3a45;min-width:140px;z-index:11;vertical-align:bottom">PRODUCTO</th>';
+  h += '<th rowspan="3" style="padding:6px 4px;background:rgba(239,68,68,.08);color:#fca5a5;vertical-align:bottom;min-width:60px">P.Compra</th>';
+  h += '<th rowspan="3" style="padding:6px 4px;background:rgba(34,197,94,.08);color:#86efac;vertical-align:bottom;min-width:60px">P.Venta</th>';
+  h += '<th rowspan="3" style="padding:6px 4px;background:rgba(139,92,246,.1);color:#c4b5fd;border-left:2px solid #3a3a45;vertical-align:bottom;min-width:50px">BODEGA</th>';
+  h += '<th rowspan="3" style="padding:6px 4px;background:rgba(124,92,252,.08);color:#a78bfa;border-left:2px solid #3a3a45;vertical-align:bottom;min-width:50px">S.I.</th>';
+
+  dias.forEach(function(fecha){
+    var diaNum = Number(fecha.split('-')[2]);
+    var esHoy = sess && sess.businessDay === fecha;
+    var bg = esHoy ? 'rgba(124,92,252,.2)' : 'rgba(59,130,246,.12)';
+    var color = esHoy ? '#c4b5fd' : '#93c5fd';
+    var totalDia = daysTotals[fecha] || 0;
+    h += '<th colspan="12" data-dia="'+fecha+'" style="padding:8px 4px;border-left:2px solid #3a3a45;background:'+bg+'">';
+    h += '<div style="color:'+color+';font-size:12px;font-weight:700">DIA '+diaNum+(esHoy?' (hoy)':'')+'</div>';
+    h += '<div style="color:#86efac;font-size:11px;font-weight:700;margin-top:2px">'+fmt(totalDia)+'</div>';
+    h += '</th>';
+  });
+  h += '</tr>';
+
+  // ENCABEZADO FILA 2: T1 T2 T3
+  h += '<tr style="color:#6b7280;font-size:9px">';
+  dias.forEach(function(fecha){
+    var esHoy = sess && sess.businessDay === fecha;
+    var bg = esHoy ? 'rgba(124,92,252,.12)' : 'rgba(59,130,246,.08)';
+    var bgMid = esHoy ? 'rgba(124,92,252,.18)' : 'rgba(59,130,246,.12)';
+    h += '<th colspan="4" style="padding:3px;border-left:2px solid #3a3a45;background:'+bg+'">T1</th>';
+    h += '<th colspan="4" style="padding:3px;background:'+bgMid+'">T2</th>';
+    h += '<th colspan="4" style="padding:3px;background:'+bg+'">T3</th>';
+  });
+  h += '</tr>';
+
+  // ENCABEZADO FILA 3: E V C S
+  h += '<tr style="color:#6b7280;font-size:8px">';
+  dias.forEach(function(fecha){
+    var esHoy = sess && sess.businessDay === fecha;
+    var bg = esHoy ? 'rgba(124,92,252,.08)' : 'rgba(59,130,246,.04)';
+    var bgMid = esHoy ? 'rgba(124,92,252,.12)' : 'rgba(59,130,246,.06)';
+    [bg,bgMid,bg].forEach(function(bgT,idx){
+      h += '<th style="padding:2px;'+(idx===0?'border-left:2px solid #3a3a45;':'')+'background:'+bgT+';color:#fcd34d">E</th>';
+      h += '<th style="padding:2px;background:'+bgT+';color:#86efac">V</th>';
+      h += '<th style="padding:2px;background:'+bgT+';color:#fb923c">C</th>';
+      h += '<th style="padding:2px;background:'+bgT+';color:#c4b5fd">S</th>';
+    });
+  });
+  h += '</tr>';
+  h += '</thead>';
+
+  // CUERPO
+  h += '<tbody>';
+  var colspanTotal = 5 + (daysInMonth * 12);
+  Object.keys(cats).sort().forEach(function(cat){
+    h += '<tr><td colspan="'+colspanTotal+'" style="position:sticky;left:0;background:rgba(124,92,252,.08);padding:5px 10px;font-weight:600;color:#a78bfa;font-size:10px;letter-spacing:.5px">'+esc(cat.toUpperCase())+'</td></tr>';
+
+    cats[cat].forEach(function(r){
+      h += '<tr style="border-bottom:1px solid #1f1f28">';
+      h += '<td style="position:sticky;left:0;background:#18181f;padding:5px 8px;border-right:2px solid #3a3a45">'+esc(r.nombre)+'</td>';
+
+      var pcClick = isAdmin ? 'onclick="editPrecioCompra('+r.id+','+r.precioCompra+',\''+esc(r.nombre).replace(/'/g,"\\'")+'\')"' : '';
+      var pcCursor = isAdmin ? 'cursor:pointer;text-decoration:underline;text-decoration-style:dotted' : '';
+      h += '<td '+pcClick+' style="padding:4px;text-align:center;background:rgba(239,68,68,.03)"><span style="color:#fca5a5;'+pcCursor+'">'+fmt(r.precioCompra)+'</span></td>';
+
+      h += '<td style="padding:4px;text-align:center;color:#86efac;background:rgba(34,197,94,.03)">'+fmt(r.precioVenta)+'</td>';
+      h += '<td style="padding:4px;text-align:center;color:#c4b5fd;font-weight:700;background:rgba(139,92,246,.05);border-left:2px solid #3a3a45">'+r.bodega+'</td>';
+      h += '<td style="padding:4px;text-align:center;color:#a78bfa;font-weight:600;background:rgba(124,92,252,.05);border-left:2px solid #3a3a45">'+r.siMes+'</td>';
+
+      dias.forEach(function(fecha){
+        var pd = r.porDia[fecha];
+        ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid,idx){
+          var t = pd ? pd.turnos[sid] : {e:0,v:0,c:0,s:0};
+          var bordStyle = idx===0 ? 'border-left:2px solid #3a3a45;' : '';
+          h += '<td style="padding:4px;text-align:center;'+bordStyle+'color:'+(t.e>0?'#fcd34d':'#6b7280')+'">'+(t.e>0?'+'+t.e:'—')+'</td>';
+          h += '<td style="padding:4px;text-align:center;color:'+(t.v>0?'#86efac':'#6b7280')+'">'+(t.v>0?t.v:'—')+'</td>';
+          h += '<td style="padding:4px;text-align:center;color:'+(t.c>0?'#fb923c':'#6b7280')+'">'+(t.c>0?t.c:'—')+'</td>';
+          h += '<td style="padding:4px;text-align:center;color:#c4b5fd">'+t.s+'</td>';
+        });
+      });
+
+      h += '</tr>';
+    });
+  });
+  h += '</tbody>';
+  h += '</table>';
+
+  cont.innerHTML = h;
+}
+
+function resScrollToDia(fecha){
+  if(!fecha) return;
+  var cont = document.getElementById('resTablaCont');
+  if(!cont) return;
+  var th = cont.querySelector('th[data-dia="'+fecha+'"]');
+  if(th){
+    cont.scrollLeft = th.offsetLeft - 200;
+  }
 }
 function loadInventarioHoy(){
   var day=sess.businessDay||'';
