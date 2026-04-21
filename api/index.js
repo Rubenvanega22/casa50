@@ -241,6 +241,8 @@ module.exports = async function handler(req, res) {
       case 'anularVenta':        return await apiAnularVenta(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
+      case 'getResumenMes':      return await apiGetResumenMes(payload, res);
+      case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -2622,4 +2624,156 @@ async function apiGetPrintTurno(p, res) {
       total: totalEf + totalTa + totalNq
     }
   });
+}
+// ==================== RESUMEN MENSUAL (INVENTARIO MES) ====================
+// Devuelve el flujo completo del mes por producto, día y turno
+async function apiGetResumenMes(p, res) {
+  const mes = String(p.mes || '').trim();
+  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
+
+  const [yearStr, monthStr] = mes.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const firstDay = `${mes}-01`;
+  const lastDayDate = new Date(year, month, 0);
+  const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
+  const daysInMonth = lastDayDate.getDate();
+
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMes = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
+
+  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  if(!products || !products.length) return ok(res,{rows:[],totals:{},daysTotals:{},mes:mes});
+
+  const { data: cierreAnt } = await supabase.from('cierre_mes').select('*').eq('mes',prevMes);
+  const cierreMap = {};
+  (cierreAnt||[]).forEach(c => { cierreMap[c.product_id] = c; });
+
+  const { data: salesMes } = await supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay);
+  const { data: movementsMes } = await supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay);
+  const { data: entriesMes } = await supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay);
+
+  const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
+
+  const rows = products.map(function(prod){
+    const cierreProd = cierreMap[prod.id] || {};
+    const siRec = Number(cierreProd.stock_recepcion||0);
+    const siBod = Number(cierreProd.stock_bodega||0);
+    const siTotal = siRec + siBod;
+
+    const compras = (entriesMes||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
+
+    const ventasProd = (salesMes||[]).filter(s => s.product_id === prod.id && !s.is_cortesia);
+    const cortesiasProd = (salesMes||[]).filter(s => s.product_id === prod.id && s.is_cortesia);
+    const cantVendida = ventasProd.reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const valorVendido = ventasProd.reduce((a,s) => a + Number(s.total||0), 0);
+    const cantCortesias = cortesiasProd.reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const valorCortesias = cortesiasProd.reduce((a,s) => a + Number(s.total||0), 0);
+
+    const porDia = {};
+    for(let d = 1; d <= daysInMonth; d++) {
+      const fecha = `${mes}-${String(d).padStart(2,'0')}`;
+      porDia[fecha] = {
+        valorDia: 0,
+        turnos: {
+          SHIFT_1: {e:0,v:0,c:0,s:0},
+          SHIFT_2: {e:0,v:0,c:0,s:0},
+          SHIFT_3: {e:0,v:0,c:0,s:0}
+        }
+      };
+    }
+
+    (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').forEach(function(m){
+      const fecha = m.business_day;
+      if(porDia[fecha] && porDia[fecha].turnos[m.shift_id]) {
+        porDia[fecha].turnos[m.shift_id].e += Number(m.cantidad||0);
+      }
+    });
+
+    (salesMes||[]).filter(s => s.product_id === prod.id).forEach(function(s){
+      const fecha = s.business_day;
+      if(!porDia[fecha] || !porDia[fecha].turnos[s.shift_id]) return;
+      if(s.is_cortesia) {
+        porDia[fecha].turnos[s.shift_id].c += Number(s.cantidad||0);
+      } else {
+        porDia[fecha].turnos[s.shift_id].v += Number(s.cantidad||0);
+        porDia[fecha].valorDia += Number(s.total||0);
+      }
+    });
+
+    let saldoRec = siRec;
+    Object.keys(porDia).sort().forEach(function(fecha){
+      SHIFTS.forEach(function(sid){
+        const t = porDia[fecha].turnos[sid];
+        saldoRec = saldoRec + t.e - t.v - t.c;
+        t.s = saldoRec;
+      });
+    });
+
+    return {
+      id: prod.id,
+      nombre: prod.nombre,
+      categoria: prod.categoria || 'Sin categoría',
+      precioCompra: Number(prod.precio_compra||0),
+      precioVenta: Number(prod.precio||0),
+      bodega: Number(prod.stock_actual||0),
+      siMes: siTotal,
+      siRec: siRec,
+      siBod: siBod,
+      compras: compras,
+      cantVendida: cantVendida,
+      valorVendido: valorVendido,
+      cantCortesias: cantCortesias,
+      valorCortesias: valorCortesias,
+      porDia: porDia
+    };
+  });
+
+  const totalSiAnterior = rows.reduce((a,r) => a + (r.siRec + r.siBod) * r.precioCompra, 0);
+  const totalCompras = (entriesMes||[]).reduce((a,e) => {
+    const prod = products.find(p => p.id === e.product_id);
+    const costo = prod ? Number(prod.precio_compra||0) : 0;
+    return a + Number(e.cantidad||0) * costo;
+  }, 0);
+  const totalVendido = (salesMes||[]).filter(s => !s.is_cortesia).reduce((a,s) => a + Number(s.total||0), 0);
+  const totalCortesiasValor = (salesMes||[]).filter(s => s.is_cortesia).reduce((a,s) => a + Number(s.total||0), 0);
+  const totalGanancia = totalVendido - totalCompras - totalCortesiasValor;
+
+  const daysTotals = {};
+  for(let d = 1; d <= daysInMonth; d++) {
+    const fecha = `${mes}-${String(d).padStart(2,'0')}`;
+    daysTotals[fecha] = 0;
+  }
+  (salesMes||[]).filter(s => !s.is_cortesia).forEach(function(s){
+    if(daysTotals[s.business_day] !== undefined) {
+      daysTotals[s.business_day] += Number(s.total||0);
+    }
+  });
+
+  return ok(res, {
+    mes: mes,
+    daysInMonth: daysInMonth,
+    rows: rows,
+    totals: {
+      siAnterior: totalSiAnterior,
+      compras: totalCompras,
+      vendido: totalVendido,
+      cortesias: totalCortesiasValor,
+      ganancia: totalGanancia
+    },
+    daysTotals: daysTotals
+  });
+}
+// ==================== UPDATE PRECIO COMPRA ====================
+// Permite editar el precio de compra desde el Resumen (solo ADMIN)
+async function apiUpdatePrecioCompra(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const productId = Number(p.productId||0);
+  const precioCompra = Number(p.precioCompra||0);
+  if(!productId) return err(res,'productId requerido');
+  if(precioCompra < 0) return err(res,'Precio invalido');
+
+  await supabase.from('products').update({ precio_compra: precioCompra }).eq('id', productId);
+  return ok(res, { productId, precioCompra });
 }
