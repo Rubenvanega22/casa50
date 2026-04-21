@@ -5318,6 +5318,27 @@ function resScrollToDia(fecha){
     cont.scrollLeft = th.offsetLeft - 200;
   }
 }
+function editPrecioCompra(productId, precioActual, nombre){
+  if(!sess || sess.userRole !== 'ADMIN'){
+    toast('Solo ADMIN puede editar precios','err');
+    return;
+  }
+  var nuevo = prompt('Precio de compra de ' + nombre + '\n(solo números, sin puntos ni $)', precioActual);
+  if(nuevo === null) return;
+  nuevo = nuevo.toString().trim().replace(/[^0-9]/g,'');
+  if(nuevo === '') return toast('Precio inválido','err');
+  var precio = Number(nuevo);
+  if(isNaN(precio) || precio < 0) return toast('Precio inválido','err');
+  if(precio === Number(precioActual)) return;
+
+  rpc('updatePrecioCompra',{productId:productId, precioCompra:precio, userRole:sess.userRole, userName:sess.userName},
+    function(){
+      toast('✓ Precio actualizado: ' + fmt(precio),'ok');
+      loadResumen();
+    },
+    function(e){ toast(e.message || 'Error actualizando','err'); }
+  );
+}
 function loadInventarioHoy(){
   var day=sess.businessDay||'';
   var el=document.getElementById('invDay');if(el)el.value=day;
