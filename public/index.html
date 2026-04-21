@@ -4932,6 +4932,139 @@ function confirmarVentaProd(productId,precio){
     );
   });
 }
+// ==================== IMPRIMIR TURNO (RECIBO TERMICO) ====================
+function imprimirTurno(shiftId){
+  if(!sess)return toast('Inicia sesion','err');
+  var dayEl=document.getElementById('invDay');
+  var bDay=dayEl&&dayEl.value?dayEl.value:(sess.businessDay||'');
+  if(!bDay)return toast('Dia no seleccionado','err');
+
+  var labels={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-9pm)',SHIFT_3:'Turno 3 (9pm-6am)'};
+  toast('Generando impresion...','');
+
+  rpc('getPrintTurno',{businessDay:bDay,shiftId:shiftId},function(d){
+    var rows=d.rows||[];
+    var cortesias=d.cortesias||[];
+    var totals=d.totals||{efectivo:0,tarjeta:0,nequi:0,total:0};
+    var recep=d.recepName||'—';
+
+    // Agrupar por categoria para imprimir ordenado
+    var porCat={};
+    rows.forEach(function(r){
+      var c=r.categoria||'Sin categoria';
+      if(!porCat[c])porCat[c]=[];
+      porCat[c].push(r);
+    });
+
+    // Construir HTML del recibo
+    var ahora=new Date();
+    var horaImp=ahora.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    var fechaImp=bDay.split('-').reverse().join('/');
+
+    var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Recibo '+labels[shiftId]+'</title>';
+    html+='<style>';
+    html+='@page{size:80mm auto;margin:0}';
+    html+='*{box-sizing:border-box}';
+    html+='body{margin:0;padding:4mm;font-family:"Courier New",monospace;font-size:10px;line-height:1.3;color:#000;width:72mm}';
+    html+='.center{text-align:center}.b{font-weight:700}.r{text-align:right}';
+    html+='.dash{border-top:1px dashed #000;margin:4px 0}';
+    html+='.solid{border-top:1px solid #000;margin:4px 0}';
+    html+='.hdr{font-size:13px;font-weight:700;letter-spacing:1px}';
+    html+='.row{display:flex;padding:1px 0}';
+    html+='.cat{font-weight:700;padding:4px 0 2px;font-size:10px;border-top:1px dashed #ccc;margin-top:3px}';
+    html+='.col-p{width:46%;word-break:break-word}';
+    html+='.col-e{width:10%;text-align:center}';
+    html+='.col-v{width:24%;text-align:center;font-size:9px}';
+    html+='.col-s{width:10%;text-align:center}';
+    html+='.col-g{width:10%;text-align:right;font-weight:700}';
+    html+='.th{font-weight:700;border-bottom:1px solid #000;padding-bottom:2px}';
+    html+='</style></head><body>';
+
+    // Encabezado
+    html+='<div class="center">';
+    html+='<div class="hdr">CASA 50</div>';
+    html+='<div style="font-size:9px">SPA MOTEL</div>';
+    html+='</div>';
+    html+='<div class="dash"></div>';
+    html+='<div class="center b">INVENTARIO DE TURNO</div>';
+    html+='<div class="center">'+labels[shiftId]+'</div>';
+    html+='<div style="margin-top:4px">';
+    html+='<div>Fecha: '+fechaImp+'</div>';
+    html+='<div>Recep: '+esc(recep)+'</div>';
+    html+='<div>Impreso: '+horaImp+'</div>';
+    html+='</div>';
+    html+='<div class="dash"></div>';
+
+    html+='<div class="center" style="font-size:9px">E=Efectivo T=Tarjeta N=Nequi Cor=Cortesia</div>';
+    html+='<div class="dash"></div>';
+
+    // Encabezado de columnas
+    html+='<div class="row th">';
+    html+='<span class="col-p">PRODUCTO</span>';
+    html+='<span class="col-e">ENT</span>';
+    html+='<span class="col-v">VENTA</span>';
+    html+='<span class="col-s">SAL</span>';
+    html+='<span class="col-g">GRP</span>';
+    html+='</div>';
+
+    if(!rows.length){
+      html+='<div class="center" style="margin:10px 0">Sin movimientos</div>';
+    } else {
+      Object.keys(porCat).sort().forEach(function(cat){
+        html+='<div class="cat">— '+esc(cat.toUpperCase())+' —</div>';
+        porCat[cat].forEach(function(r){
+          var v=[];
+          if(r.efectivo>0)v.push(r.efectivo+'E');
+          if(r.tarjeta>0)v.push(r.tarjeta+'T');
+          if(r.nequi>0)v.push(r.nequi+'N');
+          if(r.cortesia>0)v.push(r.cortesia+'Cor');
+          var ventaStr=v.length?v.join(' '):'—';
+          var entStr=r.entrada>0?'+'+r.entrada:'—';
+          html+='<div class="row">';
+          html+='<span class="col-p">'+esc(r.nombre)+'</span>';
+          html+='<span class="col-e">'+entStr+'</span>';
+          html+='<span class="col-v">'+ventaStr+'</span>';
+          html+='<span class="col-s">'+r.saldo+'</span>';
+          html+='<span class="col-g">'+(r.grupoTotal||0)+'</span>';
+          html+='</div>';
+        });
+      });
+    }
+
+    html+='<div class="dash"></div>';
+
+    // Cortesias
+    if(cortesias.length){
+      html+='<div class="b">CORTESIAS DEL TURNO</div>';
+      cortesias.forEach(function(c){
+        html+='<div style="font-size:9px">'+esc(c.nombre)+' x'+c.cantidad+(c.destinatario?' — '+esc(c.destinatario):'')+'</div>';
+      });
+      html+='<div class="dash"></div>';
+    }
+
+    // Totales
+    html+='<div class="b" style="margin-bottom:3px">TOTALES DEL TURNO</div>';
+    html+='<div class="row"><span style="width:60%">Efectivo (E):</span><span class="r" style="width:40%">'+fmt(totals.efectivo)+'</span></div>';
+    html+='<div class="row"><span style="width:60%">Tarjeta (T):</span><span class="r" style="width:40%">'+fmt(totals.tarjeta)+'</span></div>';
+    html+='<div class="row"><span style="width:60%">Nequi (N):</span><span class="r" style="width:40%">'+fmt(totals.nequi)+'</span></div>';
+    html+='<div class="solid"></div>';
+    html+='<div class="row b" style="font-size:11px"><span style="width:60%">TOTAL VENTAS:</span><span class="r" style="width:40%">'+fmt(totals.total)+'</span></div>';
+
+    html+='<div class="dash"></div>';
+    html+='<div class="center" style="margin-top:14px">______________________</div>';
+    html+='<div class="center" style="font-size:9px">Firma recepcionista</div>';
+    html+='<div style="height:8mm"></div>';
+
+    html+='<script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>';
+    html+='</body></html>';
+
+    // Abrir ventana de impresion
+    var w=window.open('','_blank','width=400,height=600');
+    if(!w){toast('Permite ventanas emergentes para imprimir','err');return;}
+    w.document.write(html);
+    w.document.close();
+  },function(e){toast(e.message||'Error generando impresion','err');});
+}
 function loadInventarioHoy(){
   var day=sess.businessDay||'';
   var el=document.getElementById('invDay');if(el)el.value=day;
@@ -5030,7 +5163,7 @@ function renderInventario(inv,day){
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">Precio</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#9ca3af;border:1px solid #2e2e3a;text-align:center">S.I.</th>';
   shifts.forEach(function(sh){
-    h+='<th colspan="4" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center">'+sh.label+'</th>';
+    h+='<th colspan="4" style="padding:5px 4px;background:rgba('+(sh.id==='SHIFT_1'?'59,130,246':sh.id==='SHIFT_2'?'34,197,94':'245,158,11')+',.15);font-size:10px;color:'+sh.color+';border:1px solid #2e2e3a;text-align:center"><div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+sh.label+'<button onclick="imprimirTurno(\''+sh.id+'\')" style="background:'+sh.color+';color:#fff;border:0;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:3px">🖨️ Imprimir</button></div></th>';
   });
  h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#1D9E75;border:1px solid #2e2e3a;text-align:center">REC+BOD</th>';
   h+='<th style="padding:5px 4px;background:#22222c;font-size:10px;color:#7F77DD;border:1px solid #2e2e3a;text-align:center">Saldo BOD</th>';
