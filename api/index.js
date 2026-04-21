@@ -240,6 +240,7 @@ module.exports = async function handler(req, res) {
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       case 'anularVenta':        return await apiAnularVenta(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
+      case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -2513,4 +2514,112 @@ async function apiAjusteInventario(p, res) {
   }
 
   return ok(res, { productId, nuevoStock, tipo, afectaCuadre });
+}
+// ==================== IMPRESION DE TURNO (RECIBO TERMICO) ====================
+// Devuelve los datos consolidados por producto + método de pago para imprimir
+async function apiGetPrintTurno(p, res) {
+  const bd = String(p.businessDay || businessDay(Date.now()));
+  const sid = String(p.shiftId || '').trim();
+  if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(sid)) return err(res,'Turno invalido');
+
+  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  if(!products || !products.length) return ok(res,{rows:[],totals:{},cortesias:[],businessDay:bd,shiftId:sid});
+
+  const { data: salesDay } = await supabase.from('room_products').select('*').eq('business_day',bd);
+  const { data: movements } = await supabase.from('stock_movements').select('*').eq('business_day',bd);
+  const { data: entries } = await supabase.from('stock_entries').select('*').eq('business_day',bd);
+
+  const salesShift = (salesDay||[]).filter(s => s.shift_id === sid);
+
+  const { data: shiftLog } = await supabase.from('shift_log')
+    .select('user_name').eq('business_day',bd).eq('shift_id',sid)
+    .eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN'])
+    .order('ts_ms').limit(1);
+  const recepName = shiftLog && shiftLog.length ? shiftLog[0].user_name : '—';
+
+  const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
+  const shiftIdx = SHIFTS.indexOf(sid);
+
+  const rows = products.map(function(prod){
+    const entTurno = (movements||[])
+      .filter(m => m.product_id === prod.id && m.shift_id === sid && m.tipo === 'traslado_recepcion')
+      .reduce((a,m) => a + Number(m.cantidad||0), 0);
+
+    const ventasT = salesShift.filter(s => s.product_id === prod.id && !s.is_cortesia);
+    const efT = ventasT.filter(s => s.pay_method === 'EFECTIVO').reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const taT = ventasT.filter(s => s.pay_method === 'TARJETA').reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const nqT = ventasT.filter(s => s.pay_method === 'NEQUI').reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const corItems = salesShift.filter(s => s.product_id === prod.id && s.is_cortesia);
+    const corT = corItems.reduce((a,s) => a + Number(s.cantidad||0), 0);
+
+    const vendidasT = efT + taT + nqT;
+    const valorT = ventasT.reduce((a,s) => a + Number(s.total||0), 0);
+
+    const totalVentasDia = (salesDay||[]).filter(s => s.product_id === prod.id && !s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const totalCortesiasDia = (salesDay||[]).filter(s => s.product_id === prod.id && s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const totalTrasladosDia = (movements||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
+    const totalEntradasDia = (entries||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
+    const saldoInicialDia = Number(prod.stock_actual||0) + totalVentasDia + totalCortesiasDia - totalTrasladosDia - totalEntradasDia;
+
+    let saldoTurno = saldoInicialDia;
+    for(let i = 0; i <= shiftIdx; i++) {
+      const s = SHIFTS[i];
+      const entsUntil = (movements||[]).filter(m => m.product_id === prod.id && m.shift_id === s && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
+      const venUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && !x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
+      const corUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
+      saldoTurno = saldoTurno + entsUntil - venUntil - corUntil;
+    }
+
+    return {
+      id: prod.id,
+      nombre: prod.nombre,
+      categoria: prod.categoria || 'Sin categoría',
+      precio: Number(prod.precio||0),
+      entrada: entTurno,
+      efectivo: efT,
+      tarjeta: taT,
+      nequi: nqT,
+      cortesia: corT,
+      vendidas: vendidasT,
+      saldo: saldoTurno,
+      valor: valorT
+    };
+  });
+
+  const rowsFiltradas = rows.filter(r =>
+    r.entrada > 0 || r.efectivo > 0 || r.tarjeta > 0 || r.nequi > 0 || r.cortesia > 0 || r.saldo !== 0
+  );
+
+  const gruposMap = {};
+  rows.forEach(r => {
+    if(!gruposMap[r.categoria]) gruposMap[r.categoria] = 0;
+    gruposMap[r.categoria] += r.saldo;
+  });
+  rowsFiltradas.forEach(r => { r.grupoTotal = gruposMap[r.categoria] || 0; });
+
+  const cortesias = salesShift
+    .filter(s => s.is_cortesia)
+    .map(s => ({
+      nombre: s.product_name || '',
+      cantidad: Number(s.cantidad||0),
+      destinatario: s.cortesia_destinatario || ''
+    }));
+
+  const totalEf = salesShift.filter(s => !s.is_cortesia && s.pay_method === 'EFECTIVO').reduce((a,s) => a + Number(s.total||0), 0);
+  const totalTa = salesShift.filter(s => !s.is_cortesia && s.pay_method === 'TARJETA').reduce((a,s) => a + Number(s.total||0), 0);
+  const totalNq = salesShift.filter(s => !s.is_cortesia && s.pay_method === 'NEQUI').reduce((a,s) => a + Number(s.total||0), 0);
+
+  return ok(res, {
+    businessDay: bd,
+    shiftId: sid,
+    recepName: recepName,
+    rows: rowsFiltradas,
+    cortesias: cortesias,
+    totals: {
+      efectivo: totalEf,
+      tarjeta: totalTa,
+      nequi: totalNq,
+      total: totalEf + totalTa + totalNq
+    }
+  });
 }
