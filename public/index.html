@@ -25,6 +25,16 @@ select option{background:#22222c}
 .bb{background:#3b82f6;color:#fff}.by{background:#f59e0b;color:#000}.bp{background:#7c3aed;color:#fff}
 .bk{background:#22222c;color:#e5e7eb;border:1px solid #2e2e3a}.bo{background:#f97316;color:#fff}
 .sm{padding:6px 11px;font-size:12px}.xs{padding:3px 8px;font-size:11px;border-radius:6px}
+.btn.bbb{background:transparent;color:#93c5fd;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;font-weight:600}
+.btn.bby{background:transparent;color:#fcd34d;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;font-weight:600}
+.btn.bbg{background:transparent;color:#86efac;border-left:3px solid #22c55e;border-radius:0 6px 6px 0;font-weight:600}
+.btn.bba{background:transparent;color:#c4b5fd;border-left:3px solid #7c5cfc;border-radius:0 6px 6px 0;font-weight:600}
+.btn.bbr{background:transparent;color:#fca5a5;border-left:3px solid #ef4444;border-radius:0 6px 6px 0;font-weight:600}
+.btn.bbt{background:transparent;color:#5dcaa5;border-left:3px solid #1d9e75;border-radius:0 6px 6px 0;font-weight:600}
+.btn.bbb:hover,.btn.bby:hover,.btn.bbg:hover,.btn.bba:hover,.btn.bbr:hover,.btn.bbt:hover{background:rgba(255,255,255,.03)}
+.vista-group{display:inline-flex;background:#0f0f17;border-radius:6px;padding:2px;border:1px solid #2e2e3a;gap:2px}
+.vista-group .btn{border:0;border-radius:4px;background:transparent;color:#9ca3af;font-weight:500}
+.vista-group .btn.active{background:#7c5cfc;color:#fff;font-weight:700}
 .err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:9px;color:#fca5a5;font-size:12px;margin-bottom:10px}
 .si{text-align:center;font-size:11px;color:#6b7280;margin-top:8px}
 #app{display:none}
@@ -475,17 +485,20 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
 <h2 style="font-size:14px">Productos</h2>
 <div style="display:flex;gap:6px;margin-left:auto">
-<button class="btn bk sm" id="btnTabProductos" onclick="swProdTab('productos')" style="border-color:#7c5cfc;color:#a78bfa">Lista</button>
-<button class="btn bk sm" id="btnTabInventario" onclick="swProdTab('inventario')">Inventario</button>
-<button class="btn bo sm" onclick="openAnalisisProductos()">📊 Análisis</button>
+<div class="vista-group">
+<button class="btn active" id="btnTabProductos" onclick="swProdTab('productos')">Lista</button>
+<button class="btn" id="btnTabInventario" onclick="swProdTab('inventario')">Inventario</button>
+<button class="btn" id="btnTabAnalisis" onclick="openAnalisisProductos()">📊 Análisis</button>
+</div>
 </div>
 <div style="display:flex;gap:6px">
-<button class="refresh-btn" onclick="loadProductos()">↻ Actualizar</button>
-<button class="btn bb sm" id="btnIngresoBodega" onclick="openIngresoBodega()">+ Ingreso Bodega</button>
-<button class="btn by sm" id="btnTrasladoRec" onclick="openTrasladoRecepcion()">↓ Bajar a Recepción</button>
-<button class="btn bg sm" id="btnAddStock" style="display:none" onclick="openAddStock()">+ Ingresar Stock</button>
-<button class="btn ba sm" id="btnNuevoProducto" style="display:none" onclick="openNuevoProducto()">+ Nuevo Producto</button>
-<button class="btn bw sm" id="btnAjusteInv" style="display:none" onclick="openAjusteInv()">⚡ Ajuste de inventario</button>
+<button class="btn bbb sm" id="btnIngresoBodega" onclick="openIngresoBodega()">+ Ingreso Bodega</button>
+<button class="btn bby sm" id="btnTrasladoRec" onclick="openTrasladoRecepcion()">↓ Bajar a Recepción</button>
+<button class="btn bbg sm" id="btnAddStock" onclick="openAddStock()">+ Ingresar Stock</button>
+<button class="btn bba sm" id="btnNuevoProducto" style="display:none" onclick="openNuevoProducto()">+ Nuevo Producto</button>
+<button class="btn bbr sm" id="btnAjusteInv" style="display:none" onclick="openAjusteInv()">⚡ Ajuste de inventario</button>
+<button class="btn bbt sm" id="btnResumen" onclick="openResumen()">📅 Resumen</button>
+<button class="btn bk sm" onclick="loadProductos()" style="margin-left:auto">↻ Actualizar</button>
 </div>
 </div>
 <div id="inventarioCont" style="display:none">
@@ -5539,13 +5552,13 @@ function swProdTab(tab){
   if(tab==='productos'){
     if(contP)contP.style.display='';
     if(contI)contI.style.display='none';
-    if(btnP){btnP.style.borderColor='#7c5cfc';btnP.style.color='#a78bfa';}
-    if(btnI){btnI.style.borderColor='';btnI.style.color='';}
+    if(btnP)btnP.classList.add('active');
+    if(btnI)btnI.classList.remove('active');
   } else {
     if(contP)contP.style.display='none';
     if(contI)contI.style.display='';
-    if(btnI){btnI.style.borderColor='#7c5cfc';btnI.style.color='#a78bfa';}
-    if(btnP){btnP.style.borderColor='';btnP.style.color='';}
+    if(btnI)btnI.classList.add('active');
+    if(btnP)btnP.classList.remove('active');
   }
 }
 
