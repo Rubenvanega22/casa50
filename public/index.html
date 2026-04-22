@@ -5021,11 +5021,12 @@ function imprimirTurno(shiftId){
     html+='.hdr{font-size:15px;font-weight:800;letter-spacing:1.5px}';
     html+='.row{display:flex;padding:2px 0}';
     html+='.cat{background:#ddd;padding:3px 0;margin:5px 0 2px;font-size:11px;font-weight:800;text-align:center;letter-spacing:1px;border-radius:2px}';
-    html+='.col-p{width:42%;word-break:break-word;font-weight:600}';
-    html+='.col-e{width:13%;text-align:center;font-weight:700}';
-    html+='.col-v{width:24%;text-align:center;font-size:11px;font-weight:700}';
+    html+='.col-p{width:36%;word-break:break-word;font-weight:600}';
+    html+='.col-si{width:11%;text-align:center;font-weight:800;background:#eee;border-radius:2px}';
+    html+='.col-e{width:12%;text-align:center;font-weight:700}';
+    html+='.col-v{width:22%;text-align:center;font-size:11px;font-weight:700}';
     html+='.col-s{width:9%;text-align:center;font-weight:700}';
-    html+='.col-g{width:12%;text-align:center;font-weight:800}';
+    html+='.col-g{width:10%;text-align:center;font-weight:800}';
     html+='.th{font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;font-size:11px}';
     html+='.g-top{border-top:1px solid #000}';
     html+='.g-bot{border-bottom:1px solid #000}';
@@ -5052,6 +5053,7 @@ function imprimirTurno(shiftId){
     // Encabezado de columnas
     html+='<div class="row th">';
     html+='<span class="col-p">PRODUCTO</span>';
+    html+='<span class="col-si">S.I.</span>';
     html+='<span class="col-e">ENT</span>';
     html+='<span class="col-v">VENTA</span>';
     html+='<span class="col-s">SAL</span>';
@@ -5098,6 +5100,7 @@ function imprimirTurno(shiftId){
 
           html+='<div class="row">';
           html+='<span class="col-p">'+esc(r.nombre)+'</span>';
+          html+='<span class="col-si">'+(r.saldoInicial!=null?r.saldoInicial:0)+'</span>';
           html+='<span class="col-e">'+entStr+'</span>';
           html+='<span class="col-v">'+ventaStr+'</span>';
           html+='<span class="col-s">'+r.saldo+'</span>';
