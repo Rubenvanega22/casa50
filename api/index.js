@@ -2565,7 +2565,9 @@ async function apiGetPrintTurno(p, res) {
     const saldoInicialDia = Number(prod.stock_actual||0) + totalVentasDia + totalCortesiasDia - totalTrasladosDia - totalEntradasDia;
 
     let saldoTurno = saldoInicialDia;
+    let saldoInicialTurno = saldoInicialDia;
     for(let i = 0; i <= shiftIdx; i++) {
+      if(i === shiftIdx) saldoInicialTurno = saldoTurno;
       const s = SHIFTS[i];
       const entsUntil = (movements||[]).filter(m => m.product_id === prod.id && m.shift_id === s && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
       const venUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && !x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
@@ -2584,6 +2586,7 @@ async function apiGetPrintTurno(p, res) {
       nequi: nqT,
       cortesia: corT,
       vendidas: vendidasT,
+      saldoInicial: saldoInicialTurno,
       saldo: saldoTurno,
       valor: valorT
     };
