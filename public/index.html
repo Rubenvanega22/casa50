@@ -4853,13 +4853,63 @@ function initBarcodeScanner(){
     barcodeTimer=setTimeout(function(){barcodeBuffer='';},100);
   });
 }
+
+
+
+
+function abrirModalSacar(room){
+  if(!room||room.state!=='OCCUPIED')return;
+  var now=Date.now();
+  var entradaStr=room.checkInMs?fT(room.checkInMs):'—';
+  var salidaStr=fT(now);
+  var duracionStr='—';
+  if(room.checkInMs){
+    var ms=now-Number(room.checkInMs);
+    var h=Math.floor(ms/(60*60*1000));
+    var m=Math.floor((ms%(60*60*1000))/(60*1000));
+    duracionStr=(h>0?h+'h ':'')+m+'min';
+  }
+  var hh='<div class="mh"><div class="mt">🚪 Habitación '+room.roomId+' ocupada</div><button class="mc" onclick="closeM(\'mSacar\')">✕</button></div>';
+  hh+='<div style="text-align:center;font-size:13px;color:#9ca3af;margin-bottom:14px">¿Deseas sacar esta habitación?</div>';
+  hh+='<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px;border-left:3px solid #3b82f6">';
+  hh+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(46,46,58,.5)"><span style="color:#9ca3af">🕐 Entrada:</span><b style="color:#93c5fd">'+entradaStr+'</b></div>';
+  hh+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(46,46,58,.5)"><span style="color:#9ca3af">🕐 Salida:</span><b style="color:#fcd34d;font-size:14px">'+salidaStr+'</b></div>';
+  hh+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span style="color:#9ca3af">⏱️ Tiempo total:</span><b style="color:#86efac">'+duracionStr+'</b></div>';
+  hh+='</div>';
+  hh+='<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#fcd34d;text-align:center">ℹ️ Al sacar: la habitación quedará marcada como <b style="color:#fbbf24">SUCIA</b></div>';
+  hh+='<div style="display:flex;gap:8px">';
+  hh+='<button class="btn" style="flex:1;background:#22222c;border:1px solid #2e2e3a;color:#9ca3af" onclick="closeM(\'mSacar\')">Cancelar</button>';
+  hh+='<button class="btn" style="flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-weight:700" onclick="doSacarHabitacion(\''+room.roomId+'\')">🚪 Sacar</button>';
+  hh+='</div>';
+  var modal=document.getElementById('mSacar');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mSacar';div.innerHTML='<div class="modal"><div id="mSacarB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mSacar');});document.body.appendChild(div);}
+  document.getElementById('mSacarB').innerHTML=hh;
+  openM('mSacar');
+}
+
+function doSacarHabitacion(roomId){
+  rpc('checkOut',{roomId:roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkoutObs:'Salida por tarjeta RFID',force:true},
+    function(){
+      toast('✓ Habitación '+roomId+' salió — ahora SUCIA','ok');
+      closeM('mSacar');
+      rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+    },
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+
 function procesarCodigoBarras(codigo){
   codigo=codigo.trim().toUpperCase();
   if(codigo.startsWith('HAB')){
     var rid=codigo.replace('HAB','');
     var room=rooms.find(function(r){return r.roomId===rid;});
-    if(room){openRoom(rid);toast('Hab '+rid+' abierta por código','ok');}
-    else toast('Habitación '+rid+' no encontrada','err');
+    if(!room){toast('Habitación '+rid+' no encontrada','err');return;}
+    if(room.state==='OCCUPIED'){
+      abrirModalSacar(room);
+    } else {
+      openRoom(rid);
+      toast('Hab '+rid+' abierta por código','ok');
+    }
     return;
   }
   // Si modal de ingreso bodega está abierto — buscar ahí
