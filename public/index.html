@@ -5963,147 +5963,418 @@ function openAjusteInvPre(id){
     }
   },350);
 }
+// ==================== AJUSTE DE INVENTARIO V2 (13 ESCENARIOS) ====================
+// Variables globales del modal de ajustes
+window._aj = {
+  tabActual: 'BODEGA',
+  prodSel: null,
+  escenario: '',
+  cantidad: 1,
+  recepList: []
+};
+
+// Catálogo de escenarios por tab
+var AJ_ESCENARIOS = {
+  BODEGA: [
+    {tipo:'roto',      icon:'💥', color:'#fca5a5', nombre:'Producto roto/dañado',     desc:'Se quebró, derramó o dañó',        badge:'−Stock bodega', cuadre:false, conteo:false},
+    {tipo:'vencido',   icon:'⏰', color:'#fca5a5', nombre:'Producto vencido',         desc:'Caducó sin venderse',              badge:'−Stock bodega', cuadre:false, conteo:false},
+    {tipo:'conteo',    icon:'📊', color:'#fcd34d', nombre:'Conteo físico ≠ sistema',  desc:'Ajuste por conteo real (±)',        badge:'±Stock bodega', cuadre:false, conteo:true},
+    {tipo:'robo',      icon:'🚨', color:'#fca5a5', nombre:'Sospecha de robo',         desc:'Faltante sin explicación',         badge:'−Stock bodega', cuadre:false, conteo:false}
+  ],
+  RECEPCION: [
+    {tipo:'venta_olvidada',  icon:'✅', color:'#86efac', nombre:'Vendió pero olvidó registrar', desc:'Cliente pagó pero no quedó en el sistema',  badge:'−Stock +Cuadre', cuadre:true, pide:'payMethod'},
+    {tipo:'venta_duplicada', icon:'🔁', color:'#93c5fd', nombre:'Registró 2 veces el mismo',    desc:'Por error sumó una venta dos veces',        badge:'+Stock −Cuadre', cuadre:true, pide:'payMethod'},
+    {tipo:'metodo_pago',     icon:'💳', color:'#c4b5fd', nombre:'Método de pago equivocado',    desc:'Dijo efectivo y era tarjeta (o viceversa)', badge:'Reasigna pago',  cuadre:true, pide:'metodoPagoDoble'},
+    {tipo:'cantidad',        icon:'🔢', color:'#fcd34d', nombre:'Error de cantidad',            desc:'Registró 1 pero fueron 3 (o al revés)',      badge:'Ajusta venta',   cuadre:true, pide:'payMethod', conteo:true},
+    {tipo:'producto',        icon:'🔄', color:'#fcd34d', nombre:'Producto equivocado',          desc:'Registró Coca cuando fue Pepsi',            badge:'Cambia producto',cuadre:true, pide:'productoViejo'}
+  ],
+  FALTANTES: [
+    {tipo:'recep_paga',   icon:'👤', color:'#fb923c', nombre:'Recepcionista paga',         desc:'Falta producto físico y la recepcionista lo paga', badge:'−Stock +Cuadre', cuadre:true, pide:'payMethod'},
+    {tipo:'camarera',     icon:'🧹', color:'#fb923c', nombre:'Camarera se lo llevó',        desc:'Camarera tomó algo sin registrar',                  badge:'−Stock sólo',   cuadre:false},
+    {tipo:'cliente_fuga', icon:'🏃', color:'#fca5a5', nombre:'Cliente se fue sin pagar',    desc:'Consumió pero no se cobró',                         badge:'−Stock pérdida',cuadre:false}
+  ],
+  AJUSTE: [
+    {tipo:'ajuste_manual', icon:'📦', color:'#93c5fd', nombre:'Ajuste manual',     desc:'Usar con precaución, solo si ninguno de los otros aplica', badge:'±Stock', cuadre:false, conteo:true, pide:'destino'}
+  ]
+};
+
 function openAjusteInv(){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo admin','err');return;}
-  var h='<div class="mh"><div class="mt">⚡ Ajuste de inventario</div><button class="mc" onclick="closeM(\'mAjusteInv\')">✕</button></div>';
-  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Solo admin. Queda registrado con motivo obligatorio.</div>';
 
-  h+='<label>Buscar producto</label>';
-  h+='<input type="text" id="ajBuscar" placeholder="🔍 Nombre del producto..." style="margin-bottom:6px" oninput="buscarAjuste(this.value)">';
-  h+='<div id="ajResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
-  h+='<input type="hidden" id="ajProducto" value="">';
+  // Reset estado
+  window._aj = {tabActual:'BODEGA', prodSel:null, escenario:'', cantidad:1, recepList:[]};
 
-  h+='<div id="ajCard" style="display:none;background:#22222c;border:1px solid rgba(249,115,22,.4);border-radius:8px;padding:10px;margin-bottom:8px">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b id="ajNombre" style="font-size:13px;color:#e5e7eb"></b><span id="ajCat" style="font-size:10px;color:#9ca3af"></span></div>';
-  h+='<div style="background:#18181f;border-radius:6px;padding:7px;text-align:center;margin-bottom:10px"><div style="font-size:9px;color:#9ca3af;margin-bottom:2px">Stock actual en recepción</div><div style="font-size:18px;font-weight:700;color:#22c55e" id="ajStockActual">0</div></div>';
+  // Cargar lista de recepcionistas
+  rpc('getStaff',{userRole:sess.userRole},function(data){
+    var list = (data.staff||data.list||[]).filter(function(u){return (u.rol||u.role||'').toUpperCase()==='RECEPTION';});
+    window._aj.recepList = list;
+    var sel = document.getElementById('ajRecep');
+    if(sel) ajFillRecep();
+  },function(){ window._aj.recepList = []; });
 
-  h+='<div style="font-size:11px;font-weight:700;color:#f97316;margin-bottom:6px">Tipo de ajuste</div>';
-  h+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
-  h+='<label style="display:flex;gap:8px;padding:8px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer" id="ajTipo1Lbl"><input type="radio" name="ajTipo" value="venta_olvidada" onchange="selTipoAjuste(this.value)"><div><div style="font-size:12px;font-weight:700;color:#3b82f6">🛒 Venta olvidada</div><div style="font-size:10px;color:#9ca3af">Recep vendió pero no registró — descuenta stock + suma al cuadre</div></div></label>';
-  h+='<label style="display:flex;gap:8px;padding:8px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer" id="ajTipo2Lbl"><input type="radio" name="ajTipo" value="faltante_cobrado" onchange="selTipoAjuste(this.value)"><div><div style="font-size:12px;font-weight:700;color:#a78bfa">💵 Faltante cobrado</div><div style="font-size:10px;color:#9ca3af">Falta producto físico y alguien lo paga — descuenta stock + suma al cuadre</div></div></label>';
-  h+='<label style="display:flex;gap:8px;padding:8px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer" id="ajTipo3Lbl"><input type="radio" name="ajTipo" value="ajuste_sin_dinero" onchange="selTipoAjuste(this.value)"><div><div style="font-size:12px;font-weight:700;color:#f97316">📦 Ajuste sin dinero</div><div style="font-size:10px;color:#9ca3af">Rotura, vencido, sobrante, conteo — solo ajusta stock</div></div></label>';
-  h+='</div>';
-
-  h+='<div style="font-size:11px;font-weight:700;color:#e5e7eb;margin-bottom:6px">Cantidad</div>';
-  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
-  h+='<button onclick="chAjCant(-1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">-</button>';
-  h+='<input id="ajCantDisp" type="number" value="1" oninput="window._ajCant=Number(this.value)||0" style="width:80px;height:28px;font-size:18px;font-weight:700;color:#e5e7eb;text-align:center;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;padding:0">';
-  h+='<button onclick="chAjCant(1)" style="width:28px;height:28px;background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;cursor:pointer;font-size:16px;color:#e5e7eb">+</button>';
-  h+='<span id="ajCantHelp" style="font-size:11px;color:#9ca3af">unidades</span>';
-  h+='</div>';
-
-  h+='<div id="ajSeccionCuadre" style="display:none;border-top:0.5px solid #2e2e3a;padding-top:10px;margin-bottom:10px">';
-  h+='<div style="font-size:11px;font-weight:700;color:#22c55e;margin-bottom:6px">Datos del cuadre a afectar</div>';
-  h+='<div style="display:flex;gap:8px;margin-bottom:8px">';
-  h+='<div style="flex:1"><label style="font-size:10px">Día</label><input type="date" id="ajBDay" style="width:100%"></div>';
-  h+='<div style="flex:1"><label style="font-size:10px">Turno</label><select id="ajShift" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
-  h+='</div>';
-  h+='<div style="display:flex;gap:8px;margin-bottom:8px">';
-  h+='<div style="flex:1"><label style="font-size:10px">Método de pago</label><select id="ajPay" style="width:100%"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
-  h+='<div style="flex:1"><label style="font-size:10px">Recepcionista</label><input type="text" id="ajRecep" placeholder="Nombre" style="width:100%"></div>';
-  h+='</div>';
-  h+='</div>';
-
-  h+='<label>Motivo (obligatorio, mín. 3 letras)</label>';
-  h+='<input type="text" id="ajMotivo" placeholder="Ej: Olvido de recep, rotura, conteo..." style="margin-bottom:10px">';
-
-  h+='<button class="btn bo full" onclick="confirmarAjusteInv()">Guardar ajuste</button>';
-  h+='</div>';
+  var h = ajBuildHTML();
 
   var modal=document.getElementById('mAjusteInv');
-  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAjusteInv';div.innerHTML='<div class="modal"><div id="mAjusteInvB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAjusteInv');});document.body.appendChild(div);}
-  document.getElementById('mAjusteInvB').innerHTML=h;
-  window._ajCant=1;
-  window._ajProdSel=null;
-  window._ajTipo='';
-  var hoy=new Date().toISOString().split('T')[0];
-  var d=document.getElementById('ajBDay');if(d)d.value=hoy;
+  if(!modal){
+    var div=document.createElement('div');
+    div.className='ov';
+    div.id='mAjusteInv';
+    div.innerHTML='<div class="modal" style="max-width:680px;width:96vw"><div id="mAjusteInvB"></div></div>';
+    div.addEventListener('click',function(e){if(e.target===div)closeM('mAjusteInv');});
+    document.body.appendChild(div);
+  }
+  document.getElementById('mAjusteInvB').innerHTML = h;
   openM('mAjusteInv');
-  setTimeout(function(){var inp=document.getElementById('ajBuscar');if(inp)inp.focus();},300);
+  setTimeout(function(){
+    var inp=document.getElementById('ajBuscar');
+    if(inp)inp.focus();
+    ajFillRecep();
+  },300);
 }
 
-function buscarAjuste(txt){
-  var cont=document.getElementById('ajResultados');
-  if(!cont)return;
+function ajBuildHTML(){
+  var tab = window._aj.tabActual;
+  var h = '';
+
+  // HEADER
+  h += '<div class="mh"><div class="mt">⚡ Ajuste de inventario</div><button class="mc" onclick="closeM(\'mAjusteInv\')">✕</button></div>';
+  h += '<div style="font-size:11px;color:#9ca3af;margin-bottom:12px">Solo admin · Cada cambio se registra con motivo obligatorio</div>';
+
+  // TABS
+  h += '<div style="display:flex;gap:4px;background:#0f0f17;padding:4px;border-radius:8px;margin-bottom:14px">';
+  ['BODEGA','RECEPCION','FALTANTES','AJUSTE'].forEach(function(t){
+    var icons = {BODEGA:'🏪', RECEPCION:'🧾', FALTANTES:'💸', AJUSTE:'📦'};
+    var activa = (tab===t);
+    var style = activa ? 'background:#3b82f6;color:white;font-weight:600' : 'background:transparent;color:#9ca3af';
+    h += '<button onclick="ajCambiarTab(\''+t+'\')" style="flex:1;border:0;padding:8px;border-radius:6px;font-size:11px;cursor:pointer;'+style+'">'+icons[t]+' '+t+'</button>';
+  });
+  h += '</div>';
+
+  // BUSCAR PRODUCTO
+  h += '<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px">';
+  h += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Producto</div>';
+  h += '<input type="text" id="ajBuscar" placeholder="🔍 Buscar o escanear..." oninput="ajBuscarProd(this.value)" style="width:100%;background:#18181f;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:8px;font-size:13px;margin-bottom:6px">';
+  h += '<div id="ajResultados" style="background:#18181f;border-radius:6px;max-height:120px;overflow-y:auto"></div>';
+  h += '<div id="ajProdStats" style="display:none;margin-top:10px"></div>';
+  h += '</div>';
+
+  // ESCENARIOS
+  h += '<div id="ajEscenariosCont"></div>';
+
+  // CONFIG (se llena dinámicamente)
+  h += '<div id="ajConfigCont"></div>';
+
+  // WARNING (se llena dinámicamente)
+  h += '<div id="ajWarningCont"></div>';
+
+  // BOTÓN GUARDAR
+  h += '<button id="ajBtnGuardar" onclick="ajGuardar()" style="width:100%;background:#f97316;color:white;border:0;padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px;opacity:0.4" disabled>Guardar ajuste</button>';
+
+  return h;
+}
+
+function ajCambiarTab(tab){
+  window._aj.tabActual = tab;
+  window._aj.escenario = '';
+  var cont = document.getElementById('mAjusteInvB');
+  if(cont) cont.innerHTML = ajBuildHTML();
+  ajFillRecep();
+  // Reseleccionar producto si había
+  if(window._aj.prodSel){
+    ajPintarProdStats();
+    ajRenderEscenarios();
+  }
+}
+
+function ajBuscarProd(txt){
+  var cont = document.getElementById('ajResultados');
+  if(!cont) return;
   if(!txt){cont.innerHTML='';return;}
-  var lista=productosLista.filter(function(p){return p.activo&&p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;}).slice(0,6);
-  if(!lista.length){cont.innerHTML='<p style="font-size:11px;color:#6b7280;padding:6px">Sin resultados</p>';return;}
-  cont.innerHTML=lista.map(function(p){
-    var sc=(p.stockActual||0)<0?'#ef4444':'#22c55e';
-    return '<div onclick="selAjuste('+p.id+')" style="padding:8px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
+  var lista = productosLista.filter(function(p){
+    return p.activo && p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;
+  }).slice(0,6);
+  if(!lista.length){cont.innerHTML='<p style="font-size:11px;color:#6b7280;padding:8px">Sin resultados</p>';return;}
+  cont.innerHTML = lista.map(function(p){
+    var stk = p.stockActual||0;
+    var sc = stk<=0?'#ef4444':stk<=p.stockMinimo?'#f59e0b':'#86efac';
+    return '<div onclick="ajSelProd('+p.id+')" style="padding:7px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
       '<b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b>'+
-      '<span style="font-size:10px;color:'+sc+'">Stock: '+(p.stockActual||0)+'</span></div>';
+      '<span style="font-size:10px;color:'+sc+'">Stock: '+stk+'</span></div>';
   }).join('');
 }
 
-function selAjuste(id){
-  var prod=productosLista.find(function(p){return p.id===id;});
-  if(!prod)return;
-  window._ajProdSel=prod;
-  document.getElementById('ajProducto').value=id;
-  document.getElementById('ajBuscar').value=prod.nombre;
-  document.getElementById('ajResultados').innerHTML='';
-  var card=document.getElementById('ajCard');if(card)card.style.display='block';
-  var nm=document.getElementById('ajNombre');if(nm)nm.textContent=prod.nombre;
-  var cat=document.getElementById('ajCat');if(cat)cat.textContent=prod.categoria||'';
-  var stk=document.getElementById('ajStockActual');
-  if(stk){
-    stk.textContent=prod.stockActual||0;
-    stk.style.color=(prod.stockActual||0)<0?'#ef4444':'#22c55e';
+function ajSelProd(id){
+  var prod = productosLista.find(function(p){return p.id===id;});
+  if(!prod) return;
+  window._aj.prodSel = prod;
+  var buscar = document.getElementById('ajBuscar');
+  if(buscar) buscar.value = prod.nombre;
+  var res = document.getElementById('ajResultados');
+  if(res) res.innerHTML = '';
+  ajPintarProdStats();
+  ajRenderEscenarios();
+}
+
+function ajPintarProdStats(){
+  var prod = window._aj.prodSel;
+  if(!prod) return;
+  var cont = document.getElementById('ajProdStats');
+  if(!cont) return;
+  cont.style.display = '';
+  var h = '<div style="display:flex;gap:8px">';
+  h += '<div style="flex:1;background:#18181f;border-radius:6px;padding:6px;text-align:center"><div style="font-size:9px;color:#9ca3af">Stock</div><div style="color:#c4b5fd;font-weight:700;font-size:14px">'+(prod.stockActual||0)+'</div></div>';
+  h += '<div style="flex:1;background:#18181f;border-radius:6px;padding:6px;text-align:center"><div style="font-size:9px;color:#9ca3af">P.Compra</div><div style="color:#fca5a5;font-weight:700;font-size:14px">'+fmt(prod.precioCompra||0)+'</div></div>';
+  h += '<div style="flex:1;background:#18181f;border-radius:6px;padding:6px;text-align:center"><div style="font-size:9px;color:#9ca3af">P.Venta</div><div style="color:#86efac;font-weight:700;font-size:14px">'+fmt(prod.precio||0)+'</div></div>';
+  h += '</div>';
+  cont.innerHTML = h;
+}
+
+function ajRenderEscenarios(){
+  var tab = window._aj.tabActual;
+  var escenarios = AJ_ESCENARIOS[tab] || [];
+  var cont = document.getElementById('ajEscenariosCont');
+  if(!cont) return;
+
+  var titColors = {BODEGA:'#93c5fd', RECEPCION:'#86efac', FALTANTES:'#fb923c', AJUSTE:'#93c5fd'};
+  var titTexts = {BODEGA:'🏪 ¿Qué pasó en bodega?', RECEPCION:'🧾 ¿Qué error hubo en recepción?', FALTANTES:'💸 ¿Quién responde por el faltante?', AJUSTE:'📦 Ajuste manual (último recurso)'};
+
+  var h = '<div style="font-size:10px;text-transform:uppercase;font-weight:600;margin-bottom:8px;color:'+titColors[tab]+'">'+titTexts[tab]+'</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
+  escenarios.forEach(function(esc){
+    var sel = (window._aj.escenario === esc.tipo);
+    var bg = sel ? 'background:#2d2036;border-color:#8b5cf6' : 'background:#22222c;border-color:#3a3a45';
+    h += '<div onclick="ajSelEscenario(\''+esc.tipo+'\')" style="border:1px solid #3a3a45;border-left:3px solid '+esc.color+';border-radius:6px;padding:10px;cursor:pointer;'+bg+'">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">';
+    h += '<div><div style="font-weight:600;font-size:12px;color:'+esc.color+'">'+esc.icon+' '+esc.nombre+'</div><div style="color:#9ca3af;font-size:10px;margin-top:2px">'+esc.desc+'</div></div>';
+    h += '<span style="font-size:9px;color:#6b7280;padding:2px 6px;background:#18181f;border-radius:4px;white-space:nowrap">'+esc.badge+'</span>';
+    h += '</div></div>';
+  });
+  h += '</div>';
+  cont.innerHTML = h;
+
+  // Si hay escenario seleccionado, mostrar AJUSTE para él
+  if(tab === 'AJUSTE'){
+    // Auto-seleccionar el único escenario
+    window._aj.escenario = 'ajuste_manual';
+    ajRenderConfig();
+  } else if(window._aj.escenario){
+    ajRenderConfig();
+  } else {
+    var c = document.getElementById('ajConfigCont'); if(c) c.innerHTML = '';
+    var w = document.getElementById('ajWarningCont'); if(w) w.innerHTML = '';
+    ajToggleBtnGuardar(false);
   }
 }
 
-function chAjCant(d){
-  window._ajCant=(window._ajCant||0)+d;
-  var el=document.getElementById('ajCantDisp');if(el)el.value=window._ajCant;
+function ajSelEscenario(tipo){
+  window._aj.escenario = tipo;
+  ajRenderEscenarios();
 }
 
-function selTipoAjuste(tipo){
-  window._ajTipo=tipo;
-  var afectaCuadre=(tipo==='venta_olvidada'||tipo==='faltante_cobrado');
-  var sec=document.getElementById('ajSeccionCuadre');
-  if(sec)sec.style.display=afectaCuadre?'block':'none';
-  var help=document.getElementById('ajCantHelp');
-  if(help)help.textContent=afectaCuadre?'unidades (solo positivo)':'unidades (negativo para sumar stock)';
-  ['ajTipo1Lbl','ajTipo2Lbl','ajTipo3Lbl'].forEach(function(id){
-    var el=document.getElementById(id);if(el)el.style.borderColor='#2e2e3a';
+function ajRenderConfig(){
+  var tab = window._aj.tabActual;
+  var tipo = window._aj.escenario;
+  var esc = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
+  if(!esc) return;
+
+  var cont = document.getElementById('ajConfigCont');
+  if(!cont) return;
+
+  var h = '<div style="background:#18181f;border-left:3px solid #8b5cf6;border-radius:0 6px 6px 0;padding:12px;margin-bottom:10px">';
+  h += '<div style="font-size:10px;color:#c4b5fd;font-weight:600;margin-bottom:10px">📝 Configuración</div>';
+
+  // Si afecta cuadre → pedir fecha/turno/recepcionista
+  if(esc.cuadre){
+    h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">📅 Fecha</label><input type="date" id="ajFecha" onchange="ajActualizarWarning()" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"></div>';
+    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">🕐 Turno</label><select id="ajTurno" onchange="ajActualizarWarning()" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="">— Elegir —</option><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
+    h += '</div>';
+
+    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">👤 Recepcionista</label><select id="ajRecep" onchange="ajActualizarWarning()" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="">— Elegir —</option></select></div>';
+  }
+
+  // Si cambia método de pago, pedir los 2 métodos
+  if(esc.pide === 'metodoPagoDoble'){
+    h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">Método anterior</label><select id="ajPayViejo" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
+    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">Método correcto</label><select id="ajPay" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
+    h += '</div>';
+  }
+  // Si necesita método simple
+  else if(esc.pide === 'payMethod'){
+    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">💵 Método de pago</label><select id="ajPay" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
+  }
+
+  // Producto viejo si es "producto equivocado"
+  if(esc.pide === 'productoViejo'){
+    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">🔍 Producto que registró por error</label>';
+    h += '<input type="text" id="ajProdViejoBuscar" placeholder="Buscar producto equivocado..." oninput="ajBuscarProdViejo(this.value)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px;margin-bottom:4px">';
+    h += '<input type="hidden" id="ajProdViejoId" value="">';
+    h += '<div id="ajProdViejoRes" style="background:#22222c;border-radius:6px;max-height:100px;overflow-y:auto"></div>';
+    h += '<div id="ajProdViejoInfo" style="font-size:11px;color:#86efac;margin-top:4px"></div>';
+    h += '</div>';
+  }
+
+  // Destino (bodega o recepción) para AJUSTE MANUAL
+  if(esc.pide === 'destino'){
+    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">📍 ¿Dónde ajustar?</label><select id="ajDestino" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="bodega">📦 Bodega</option><option value="recepcion">🧾 Recepción</option></select></div>';
+  }
+
+  // Aviso azul de precaución para AJUSTE
+  if(tab === 'AJUSTE'){
+    h += '<div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-left:3px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:10px;font-size:11px;color:#93c5fd"><b style="color:#60a5fa;display:block;margin-bottom:4px">ℹ️ Usa este ajuste con precaución</b>Solo si ninguno de los escenarios de las otras pestañas aplica.</div>';
+  }
+
+  // Cantidad
+  var cantLabel = esc.conteo ? 'Cantidad (+ para sumar, − para restar)' : 'Cantidad';
+  h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">'+cantLabel+'</label>';
+  h += '<div style="display:flex;align-items:center;gap:8px">';
+  h += '<button onclick="ajChCant(-1)" style="width:32px;height:32px;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;cursor:pointer;font-size:16px">−</button>';
+  h += '<input id="ajCantInp" type="number" value="'+window._aj.cantidad+'" onchange="window._aj.cantidad=Number(this.value)||0;ajActualizarWarning()" style="width:70px;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;text-align:center;font-weight:700">';
+  h += '<button onclick="ajChCant(1)" style="width:32px;height:32px;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;cursor:pointer;font-size:16px">+</button>';
+  h += '<span style="font-size:10px;color:#9ca3af">unidades</span>';
+  h += '</div></div>';
+
+  // Motivo
+  h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">Motivo (mín. 3 letras)</label>';
+  h += '<input type="text" id="ajMotivo" placeholder="Ej: Se cayó caja al descargar" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"></div>';
+
+  h += '</div>';
+  cont.innerHTML = h;
+
+  // Llenar dropdown recepcionistas si aplica
+  ajFillRecep();
+
+  // Actualizar warning y habilitar botón
+  ajActualizarWarning();
+  ajToggleBtnGuardar(true);
+}
+
+function ajFillRecep(){
+  var sel = document.getElementById('ajRecep');
+  if(!sel) return;
+  var cur = sel.value || '';
+  var h = '<option value="">— Elegir —</option>';
+  (window._aj.recepList||[]).forEach(function(u){
+    var nm = u.nombre || u.name || u.userName || '';
+    if(nm) h += '<option value="'+esc(nm)+'"'+(nm===cur?' selected':'')+'>'+esc(nm)+'</option>';
   });
-  var idMap={venta_olvidada:'ajTipo1Lbl',faltante_cobrado:'ajTipo2Lbl',ajuste_sin_dinero:'ajTipo3Lbl'};
-  var target=document.getElementById(idMap[tipo]);
-  if(target)target.style.borderColor='#f97316';
+  sel.innerHTML = h;
 }
 
-function confirmarAjusteInv(){
-  var productId=Number((document.getElementById('ajProducto')||{}).value||0);
-  var cantidad=window._ajCant||0;
-  var tipo=window._ajTipo||'';
-  var motivo=((document.getElementById('ajMotivo')||{}).value||'').trim();
+function ajChCant(d){
+  window._aj.cantidad = Number(window._aj.cantidad||0) + d;
+  var inp = document.getElementById('ajCantInp');
+  if(inp) inp.value = window._aj.cantidad;
+  ajActualizarWarning();
+}
 
-  if(!productId){toast('Selecciona un producto','err');return;}
-  if(!tipo){toast('Selecciona el tipo de ajuste','err');return;}
-  if(cantidad===0){toast('Cantidad no puede ser cero','err');return;}
-  if(motivo.length<3){toast('Motivo obligatorio (mín 3 letras)','err');return;}
+function ajBuscarProdViejo(txt){
+  var cont = document.getElementById('ajProdViejoRes');
+  if(!cont) return;
+  if(!txt){cont.innerHTML='';return;}
+  var lista = productosLista.filter(function(p){
+    return p.activo && p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0 && p.id !== (window._aj.prodSel?window._aj.prodSel.id:0);
+  }).slice(0,5);
+  cont.innerHTML = lista.map(function(p){
+    return '<div onclick="ajSelProdViejo('+p.id+')" style="padding:6px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;font-size:11px;color:#e5e7eb">'+esc(p.nombre)+'</div>';
+  }).join('');
+}
 
-  var payload={
-    userName:sess.userName, userRole:sess.userRole,
-    productId:productId, cantidad:cantidad,
-    tipoAjuste:tipo, motivo:motivo
+function ajSelProdViejo(id){
+  var prod = productosLista.find(function(p){return p.id===id;});
+  if(!prod) return;
+  document.getElementById('ajProdViejoId').value = id;
+  document.getElementById('ajProdViejoBuscar').value = prod.nombre;
+  document.getElementById('ajProdViejoRes').innerHTML = '';
+  var info = document.getElementById('ajProdViejoInfo');
+  if(info) info.textContent = '✓ Se repondrá stock de: '+prod.nombre;
+}
+
+function ajActualizarWarning(){
+  var tab = window._aj.tabActual;
+  var tipo = window._aj.escenario;
+  var esc = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
+  if(!esc) return;
+  var cont = document.getElementById('ajWarningCont');
+  if(!cont) return;
+
+  if(esc.cuadre){
+    var fecha = (document.getElementById('ajFecha')||{}).value || '';
+    var turno = (document.getElementById('ajTurno')||{}).value || '';
+    var recep = (document.getElementById('ajRecep')||{}).value || '';
+    var cant = window._aj.cantidad || 0;
+    var prod = window._aj.prodSel;
+
+    if(fecha && turno && recep && prod){
+      var tLabel = {SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'}[turno];
+      var valor = cant * (prod.precio||0);
+      cont.innerHTML = '<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-left:3px solid #f59e0b;border-radius:6px;padding:10px;margin-bottom:10px;font-size:11px;color:#fcd34d"><b style="color:#fbbf24;display:block;margin-bottom:4px">⚠️ Este ajuste modificará un cuadre</b>Afectará el cuadre del <b>'+fecha+' — '+tLabel+' — '+esc(recep)+'</b>'+(valor?' por <b>'+fmt(Math.abs(valor))+'</b>':'')+'.</div>';
+    } else {
+      cont.innerHTML = '';
+    }
+  } else {
+    cont.innerHTML = '';
+  }
+}
+
+function ajToggleBtnGuardar(habilitado){
+  var btn = document.getElementById('ajBtnGuardar');
+  if(!btn) return;
+  btn.disabled = !habilitado;
+  btn.style.opacity = habilitado ? '1' : '0.4';
+  btn.style.cursor = habilitado ? 'pointer' : 'not-allowed';
+}
+
+function ajGuardar(){
+  var tab = window._aj.tabActual;
+  var tipo = window._aj.escenario;
+  var prod = window._aj.prodSel;
+  var cant = window._aj.cantidad || 0;
+  var motivo = ((document.getElementById('ajMotivo')||{}).value||'').trim();
+
+  if(!prod){toast('Selecciona un producto','err');return;}
+  if(!tipo){toast('Selecciona un escenario','err');return;}
+  if(cant === 0){toast('Cantidad no puede ser 0','err');return;}
+  if(motivo.length < 3){toast('Motivo mínimo 3 letras','err');return;}
+
+  var payload = {
+    userName: sess.userName, userRole: sess.userRole,
+    categoria: tab, tipo: tipo,
+    productId: prod.id, cantidad: cant, motivo: motivo
   };
 
-  if(tipo==='venta_olvidada'||tipo==='faltante_cobrado'){
-    if(cantidad<=0){toast('En venta olvidada/faltante, cantidad debe ser positiva','err');return;}
-    payload.businessDay=(document.getElementById('ajBDay')||{}).value||'';
-    payload.shiftId=(document.getElementById('ajShift')||{}).value||'';
-    payload.payMethod=(document.getElementById('ajPay')||{}).value||'EFECTIVO';
-    payload.recepName=((document.getElementById('ajRecep')||{}).value||'').trim();
-    if(!payload.businessDay){toast('Selecciona el día','err');return;}
-    if(!payload.recepName){toast('Escribe el nombre de la recepcionista','err');return;}
+  var escObj = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
+  if(!escObj){toast('Escenario inválido','err');return;}
+
+  if(escObj.cuadre){
+    payload.businessDay = (document.getElementById('ajFecha')||{}).value||'';
+    payload.shiftId = (document.getElementById('ajTurno')||{}).value||'';
+    payload.recepName = (document.getElementById('ajRecep')||{}).value||'';
+    if(!payload.businessDay){toast('Selecciona la fecha','err');return;}
+    if(!payload.shiftId){toast('Selecciona el turno','err');return;}
+    if(!payload.recepName){toast('Selecciona la recepcionista','err');return;}
   }
 
-  conf('¿Confirmar ajuste de '+cantidad+' unidades?',function(){
-    rpc('ajusteInventario',payload,
+  if(escObj.pide === 'payMethod'){
+    payload.payMethod = (document.getElementById('ajPay')||{}).value||'EFECTIVO';
+  }
+  if(escObj.pide === 'metodoPagoDoble'){
+    payload.payMethod = (document.getElementById('ajPay')||{}).value||'EFECTIVO';
+    payload.payMethodViejo = (document.getElementById('ajPayViejo')||{}).value||'';
+  }
+  if(escObj.pide === 'productoViejo'){
+    payload.productoViejoId = Number((document.getElementById('ajProdViejoId')||{}).value||0);
+    if(!payload.productoViejoId){toast('Selecciona el producto equivocado','err');return;}
+  }
+  if(escObj.pide === 'destino'){
+    payload.destino = (document.getElementById('ajDestino')||{}).value||'bodega';
+  }
+
+  conf('¿Confirmar este ajuste?',function(){
+    rpc('ajusteInventarioV2', payload,
       function(res){
-        toast('✓ Ajuste registrado. Stock ahora: '+res.nuevoStock,'ok');
+        toast('✓ Ajuste registrado'+(res.afectaCuadre?' y cuadre actualizado':''),'ok');
         closeM('mAjusteInv');
         loadProductos();
       },
