@@ -241,6 +241,7 @@ module.exports = async function handler(req, res) {
       case 'anularVenta':        return await apiAnularVenta(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
       case 'ajusteInventarioV2': return await apiAjusteInventarioV2(payload, res);
+     case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
@@ -2682,13 +2683,20 @@ async function apiGetResumenMes(p, res) {
       porDia[fecha] = {
         valorDia: 0,
         turnos: {
-          SHIFT_1: {e:0,v:0,c:0,s:0},
-          SHIFT_2: {e:0,v:0,c:0,s:0},
-          SHIFT_3: {e:0,v:0,c:0,s:0}
+          SHIFT_1: {b:0,e:0,v:0,c:0,s:0},
+          SHIFT_2: {b:0,e:0,v:0,c:0,s:0},
+          SHIFT_3: {b:0,e:0,v:0,c:0,s:0}
         }
       };
     }
-
+// Llenar B: entradas a bodega (stock_entries = compras a proveedor + ajustes de suma)
+    (entriesMes||[]).filter(e => e.product_id === prod.id).forEach(function(e){
+      const fecha = e.business_day;
+      const sid = e.shift_id || 'SHIFT_1';
+      if(porDia[fecha] && porDia[fecha].turnos[sid]) {
+        porDia[fecha].turnos[sid].b += Number(e.cantidad||0);
+      }
+    });
     (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').forEach(function(m){
       const fecha = m.business_day;
       if(porDia[fecha] && porDia[fecha].turnos[m.shift_id]) {
@@ -2784,6 +2792,72 @@ async function apiUpdatePrecioCompra(p, res) {
 }
 // ==================== AJUSTE DE INVENTARIO V2 (13 ESCENARIOS) ====================
 // Maneja todos los escenarios de ajuste: BODEGA, RECEPCION, FALTANTES, AJUSTE
+// ==================== HISTORIAL DE AJUSTES (BITÁCORA) ====================
+// Devuelve el historial de ajustes hechos por admin, filtrado por mes
+async function apiGetHistorialAjustes(p, res) {
+  const mes = String(p.mes || '').trim();
+  const filtroTipo = String(p.filtroTipo || '').trim(); // 'BODEGA', 'RECEPCION' o '' para todos
+  const filtroProducto = Number(p.filtroProducto || 0);
+  const filtroAdmin = String(p.filtroAdmin || '').trim();
+
+  let firstDay, lastDay;
+  if(/^\d{4}-\d{2}$/.test(mes)) {
+    const [yearStr, monthStr] = mes.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    firstDay = `${mes}-01`;
+    const lastDayDate = new Date(year, month, 0);
+    lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
+  } else {
+    return err(res, 'Mes invalido (formato YYYY-MM)');
+  }
+
+  let query = supabase.from('ajustes').select('*')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .order('ts_ms', { ascending: false });
+
+  if(filtroTipo === 'BODEGA') query = query.eq('categoria', 'BODEGA');
+  else if(filtroTipo === 'RECEPCION') query = query.eq('categoria', 'RECEPCION');
+  if(filtroProducto > 0) query = query.eq('product_id', filtroProducto);
+  if(filtroAdmin) query = query.eq('admin_name', filtroAdmin);
+
+  const { data, error } = await query;
+  if(error) return err(res, error.message);
+
+  const items = (data||[]).map(a => ({
+    id: a.id,
+    ts_ms: Number(a.ts_ms || 0),
+    categoria: a.categoria || '',
+    tipo: a.tipo || '',
+    productId: a.product_id,
+    productName: a.product_name || '',
+    cantidad: Number(a.cantidad || 0),
+    afectaStock: a.afecta_stock || '',
+    afectaCuadre: !!a.afecta_cuadre,
+    businessDay: a.business_day || '',
+    shiftId: a.shift_id || '',
+    recepName: a.recep_name || '',
+    payMethod: a.pay_method || '',
+    payMethodViejo: a.pay_method_viejo || '',
+    productoViejoId: a.producto_viejo_id,
+    valorAfectado: Number(a.valor_afectado || 0),
+    motivo: a.motivo || '',
+    adminName: a.admin_name || '',
+    createdAt: a.created_at
+  }));
+
+  const totalBodega = items.filter(x => x.categoria === 'BODEGA').length;
+  const totalRecepcion = items.filter(x => x.categoria === 'RECEPCION').length;
+
+  return ok(res, {
+    mes: mes,
+    items: items,
+    total: items.length,
+    totalBodega: totalBodega,
+    totalRecepcion: totalRecepcion
+  });
+}
 async function apiAjusteInventarioV2(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const now = Date.now();
@@ -2796,20 +2870,18 @@ async function apiAjusteInventarioV2(p, res) {
   const cantidad = Number(p.cantidad||0);
   const motivo = String(p.motivo||'').trim();
 
-  if(!['BODEGA','RECEPCION','FALTANTES','AJUSTE'].includes(categoria)) return err(res,'Categoria invalida');
+  if(!['BODEGA','RECEPCION'].includes(categoria)) return err(res,'Categoria invalida (solo BODEGA o RECEPCION)');
   if(!tipo) return err(res,'Tipo requerido');
   if(!productId) return err(res,'Producto requerido');
   if(motivo.length < 3) return err(res,'Motivo minimo 3 letras');
 
-  // Traer producto
   const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
 
   const precio = Number(prod.precio||0);
   const precioCompra = Number(prod.precio_compra||0);
 
-  // Variables comunes
-  let afectaStock = 'ninguno'; // bodega / recepcion / ambos / ninguno
+  let afectaStock = 'ninguno';
   let afectaCuadre = false;
   let businessDayAj = '';
   let shiftAj = '';
@@ -2819,7 +2891,6 @@ async function apiAjusteInventarioV2(p, res) {
   let productoViejoId = null;
   let valorAfectado = 0;
   let nuevoStockBod = Number(prod.stock_actual||0);
-  let nuevoStockRec = Number(prod.stock_recepcion||0);
 
   // ========== BODEGA (no afecta cuadre) ==========
   if(categoria === 'BODEGA') {
@@ -2829,16 +2900,19 @@ async function apiAjusteInventarioV2(p, res) {
     shiftAj = currentShiftId(now);
     valorAfectado = cantidad * precioCompra;
 
-    // tipos: roto, vencido, conteo, robo
-    if(tipo === 'conteo') {
-      // Puede ser + o - (cantidad con signo)
+    // Tipos: roto, vencido, conteo, robo, ingreso_extra, salida_extra
+    if(tipo === 'conteo' || tipo === 'ingreso_extra') {
+      // Suman o restan segun el signo de cantidad
       if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad; // cantidad puede ser negativa
-    } else {
-      // roto, vencido, robo => siempre restan
+      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
+      if(nuevoStockBod < 0) return err(res,'Resultado negativo en bodega');
+    } else if(tipo === 'roto' || tipo === 'vencido' || tipo === 'robo' || tipo === 'salida_extra') {
+      // Siempre restan
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
       if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock bodega insuficiente. Hay '+prod.stock_actual);
       nuevoStockBod = Number(prod.stock_actual||0) - cantidad;
+    } else {
+      return err(res,'Tipo de bodega invalido: '+tipo);
     }
 
     await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
@@ -2853,7 +2927,7 @@ async function apiAjusteInventarioV2(p, res) {
     });
   }
 
-  // ========== RECEPCION (errores de recepcionista - afecta cuadre) ==========
+  // ========== RECEPCION (afecta cuadre y stock) ==========
   else if(categoria === 'RECEPCION') {
     afectaCuadre = true;
     businessDayAj = String(p.businessDay||'').trim();
@@ -2865,8 +2939,8 @@ async function apiAjusteInventarioV2(p, res) {
     if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
     if(!recepNameAj) return err(res,'Recepcionista requerida');
 
+    // Escenario 4: agregar venta olvidada
     if(tipo === 'venta_olvidada') {
-      // Se vendió pero no quedó: descuenta stock + suma al cuadre
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
       afectaStock = 'recepcion';
       valorAfectado = cantidad * precio;
@@ -2886,8 +2960,9 @@ async function apiAjusteInventarioV2(p, res) {
         motivo_ajuste: motivo
       });
     }
+
+    // Escenario 3: quitar venta (vendio de mas)
     else if(tipo === 'venta_duplicada') {
-      // Registró 2 veces: repone stock + resta del cuadre
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
       afectaStock = 'recepcion';
       valorAfectado = -(cantidad * precio);
@@ -2899,7 +2974,7 @@ async function apiAjusteInventarioV2(p, res) {
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
         cantidad: -cantidad, precio_unit: precio,
-        total: -Math.abs(cantidad * precio), pay_method: payMethodAj,
+        total: -(cantidad * precio), pay_method: payMethodAj,
         user_name: recepNameAj,
         is_cortesia: false,
         created_by_admin: true,
@@ -2907,8 +2982,9 @@ async function apiAjusteInventarioV2(p, res) {
         motivo_ajuste: motivo
       });
     }
+
+    // Escenario 2: cambiar metodo de pago
     else if(tipo === 'metodo_pago') {
-      // Cambia el método de pago de una venta existente en ese turno
       payMethodViejo = String(p.payMethodViejo||'').toUpperCase();
       if(!payMethodViejo) return err(res,'Metodo anterior requerido');
       if(payMethodViejo === payMethodAj) return err(res,'Los metodos son iguales');
@@ -2916,7 +2992,6 @@ async function apiAjusteInventarioV2(p, res) {
       afectaStock = 'ninguno';
       valorAfectado = cantidad * precio;
 
-      // Resta ventas del método viejo
       await supabase.from('room_products').insert({
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
@@ -2929,7 +3004,6 @@ async function apiAjusteInventarioV2(p, res) {
         tipo_ajuste: 'metodo_pago_resta',
         motivo_ajuste: motivo
       });
-      // Suma ventas al método nuevo
       await supabase.from('room_products').insert({
         ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
@@ -2943,29 +3017,9 @@ async function apiAjusteInventarioV2(p, res) {
         motivo_ajuste: motivo
       });
     }
-    else if(tipo === 'cantidad') {
-      // Ajusta cantidad: si cantidad > 0 suma unidades (vendió más), si < 0 resta (vendió menos)
-      if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
-      afectaStock = 'recepcion';
-      valorAfectado = cantidad * precio;
-      nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
 
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: cantidad, precio_unit: precio,
-        total: cantidad * precio, pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'cantidad',
-        motivo_ajuste: motivo
-      });
-    }
+    // Escenario 1: cambiar producto vendido por otro
     else if(tipo === 'producto') {
-      // Se registró producto equivocado: repone el viejo + suma el correcto
       productoViejoId = Number(p.productoViejoId||0);
       if(!productoViejoId) return err(res,'Producto viejo requerido');
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
@@ -2977,15 +3031,12 @@ async function apiAjusteInventarioV2(p, res) {
       afectaStock = 'ambos';
       valorAfectado = (cantidad * precio) - (cantidad * precioViejo);
 
-      // Repone stock del producto viejo
       const nuevoStockViejo = Number(prodViejo.stock_actual||0) + cantidad;
       await supabase.from('products').update({ stock_actual: nuevoStockViejo }).eq('id',productoViejoId);
 
-      // Descuenta stock del producto correcto
       nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
       await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
 
-      // Resta venta del producto viejo
       await supabase.from('room_products').insert({
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
@@ -2998,7 +3049,6 @@ async function apiAjusteInventarioV2(p, res) {
         tipo_ajuste: 'producto_resta',
         motivo_ajuste: motivo
       });
-      // Suma venta del producto correcto
       await supabase.from('room_products').insert({
         ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
@@ -3012,92 +3062,10 @@ async function apiAjusteInventarioV2(p, res) {
         motivo_ajuste: motivo
       });
     }
+
     else {
       return err(res,'Tipo de recepcion invalido: '+tipo);
     }
-  }
-
-  // ========== FALTANTES (alguien responde) ==========
-  else if(categoria === 'FALTANTES') {
-    businessDayAj = String(p.businessDay||'').trim();
-    shiftAj = String(p.shiftId||'').trim();
-    recepNameAj = String(p.recepName||'').trim();
-    if(!businessDayAj) return err(res,'Fecha requerida');
-    if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
-    if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-
-    afectaStock = 'recepcion';
-    valorAfectado = cantidad * precio;
-    nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
-    await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-
-    if(tipo === 'recep_paga') {
-      // Recepcionista paga: afecta cuadre como venta
-      afectaCuadre = true;
-      payMethodAj = String(p.payMethod||'EFECTIVO').toUpperCase();
-      if(!recepNameAj) return err(res,'Recepcionista requerida');
-
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: cantidad, precio_unit: precio,
-        total: valorAfectado, pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'faltante_recep_paga',
-        motivo_ajuste: motivo
-      });
-    }
-    else if(tipo === 'camarera' || tipo === 'cliente_fuga') {
-      // No afecta cuadre, solo registro de pérdida
-      afectaCuadre = false;
-      await supabase.from('stock_movements').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        user_name: adminName, user_role: 'ADMIN',
-        product_id: productId, product_name: prod.nombre,
-        tipo: 'faltante_'+tipo,
-        cantidad: cantidad,
-        nota: motivo
-      });
-    }
-    else {
-      return err(res,'Tipo de faltante invalido: '+tipo);
-    }
-  }
-
-  // ========== AJUSTE MANUAL (solo stock) ==========
-  else if(categoria === 'AJUSTE') {
-    afectaCuadre = false;
-    businessDayAj = businessDay(now);
-    shiftAj = currentShiftId(now);
-    if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
-
-    const destino = String(p.destino||'bodega').toLowerCase();
-    if(destino === 'bodega') {
-      afectaStock = 'bodega';
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
-      if(nuevoStockBod < 0) return err(res,'Resultado negativo en bodega');
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-    } else {
-      afectaStock = 'recepcion';
-      // La recepción se maneja via stock_actual también (no hay columna separada por ahora)
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
-      if(nuevoStockBod < 0) return err(res,'Resultado negativo');
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-    }
-
-    valorAfectado = cantidad * precioCompra;
-
-    await supabase.from('stock_movements').insert({
-      ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-      user_name: adminName, user_role: 'ADMIN',
-      product_id: productId, product_name: prod.nombre,
-      tipo: 'ajuste_manual_'+destino,
-      cantidad: cantidad,
-      nota: motivo
-    });
   }
 
   // ========== REGISTRAR EN TABLA AUDITABLE ==========
