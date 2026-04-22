@@ -5265,7 +5265,7 @@ function renderResumen(){
     var bg = esHoy ? 'rgba(124,92,252,.2)' : 'rgba(59,130,246,.12)';
     var color = esHoy ? '#c4b5fd' : '#93c5fd';
     var totalDia = daysTotals[fecha] || 0;
-    h += '<th colspan="12" data-dia="'+fecha+'" style="padding:8px 4px;border-left:2px solid #3a3a45;background:'+bg+'">';
+    h += '<th colspan="15" data-dia="'+fecha+'" style="padding:8px 4px;border-left:2px solid #3a3a45;background:'+bg+'">';
     h += '<div style="color:'+color+';font-size:12px;font-weight:700">DIA '+diaNum+(esHoy?' (hoy)':'')+'</div>';
     h += '<div style="color:#86efac;font-size:11px;font-weight:700;margin-top:2px">'+fmt(totalDia)+'</div>';
     h += '</th>';
@@ -5278,9 +5278,9 @@ function renderResumen(){
     var esHoy = sess && sess.businessDay === fecha;
     var bg = esHoy ? 'rgba(124,92,252,.12)' : 'rgba(59,130,246,.08)';
     var bgMid = esHoy ? 'rgba(124,92,252,.18)' : 'rgba(59,130,246,.12)';
-    h += '<th colspan="4" style="padding:3px;border-left:2px solid #3a3a45;background:'+bg+'">T1</th>';
-    h += '<th colspan="4" style="padding:3px;background:'+bgMid+'">T2</th>';
-    h += '<th colspan="4" style="padding:3px;background:'+bg+'">T3</th>';
+    h += '<th colspan="5" style="padding:3px;border-left:2px solid #3a3a45;background:'+bg+'">T1</th>';
+    h += '<th colspan="5" style="padding:3px;background:'+bgMid+'">T2</th>';
+    h += '<th colspan="5" style="padding:3px;background:'+bg+'">T3</th>';
   });
   h += '</tr>';
 
@@ -5291,7 +5291,8 @@ function renderResumen(){
     var bg = esHoy ? 'rgba(124,92,252,.08)' : 'rgba(59,130,246,.04)';
     var bgMid = esHoy ? 'rgba(124,92,252,.12)' : 'rgba(59,130,246,.06)';
     [bg,bgMid,bg].forEach(function(bgT,idx){
-      h += '<th style="padding:2px;'+(idx===0?'border-left:2px solid #3a3a45;':'')+'background:'+bgT+';color:#fcd34d">E</th>';
+    h += '<th style="padding:2px;'+(idx===0?'border-left:2px solid #3a3a45;':'')+'background:'+bgT+';color:#60a5fa">B</th>';
+      h += '<th style="padding:2px;background:'+bgT+';color:#fcd34d">E</th>';
       h += '<th style="padding:2px;background:'+bgT+';color:#86efac">V</th>';
       h += '<th style="padding:2px;background:'+bgT+';color:#fb923c">C</th>';
       h += '<th style="padding:2px;background:'+bgT+';color:#c4b5fd">S</th>';
@@ -5302,7 +5303,7 @@ function renderResumen(){
 
   // CUERPO
   h += '<tbody>';
-  var colspanTotal = 5 + (daysInMonth * 12);
+  var colspanTotal = 5 + (daysInMonth * 15);
   Object.keys(cats).sort().forEach(function(cat){
     h += '<tr><td colspan="'+colspanTotal+'" style="position:sticky;left:0;background:rgba(124,92,252,.08);padding:5px 10px;font-weight:600;color:#a78bfa;font-size:10px;letter-spacing:.5px">'+esc(cat.toUpperCase())+'</td></tr>';
 
@@ -5322,9 +5323,10 @@ function renderResumen(){
       dias.forEach(function(fecha){
         var pd = r.porDia[fecha];
         ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid,idx){
-          var t = pd ? pd.turnos[sid] : {e:0,v:0,c:0,s:0};
+          var t = pd ? pd.turnos[sid] : {b:0,e:0,v:0,c:0,s:0};
           var bordStyle = idx===0 ? 'border-left:2px solid #3a3a45;' : '';
-          h += '<td style="padding:4px;text-align:center;'+bordStyle+'color:'+(t.e>0?'#fcd34d':'#6b7280')+'">'+(t.e>0?'+'+t.e:'—')+'</td>';
+          h += '<td style="padding:4px;text-align:center;'+bordStyle+'color:'+(t.b>0?'#60a5fa':'#6b7280')+';font-weight:'+(t.b>0?'700':'400')+'">'+(t.b>0?'+'+t.b:'—')+'</td>';
+          h += '<td style="padding:4px;text-align:center;color:'+(t.e>0?'#fcd34d':'#6b7280')+'">'+(t.e>0?'+'+t.e:'—')+'</td>';
           h += '<td style="padding:4px;text-align:center;color:'+(t.v>0?'#86efac':'#6b7280')+'">'+(t.v>0?t.v:'—')+'</td>';
           h += '<td style="padding:4px;text-align:center;color:'+(t.c>0?'#fb923c':'#6b7280')+'">'+(t.c>0?t.c:'—')+'</td>';
           h += '<td style="padding:4px;text-align:center;color:#c4b5fd">'+t.s+'</td>';
