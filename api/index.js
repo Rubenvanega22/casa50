@@ -240,6 +240,7 @@ module.exports = async function handler(req, res) {
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       case 'anularVenta':        return await apiAnularVenta(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
+      case 'ajusteInventarioV2': return await apiAjusteInventarioV2(payload, res);
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
@@ -2625,6 +2626,7 @@ async function apiGetPrintTurno(p, res) {
     }
   });
 }
+
 // ==================== RESUMEN MENSUAL (INVENTARIO MES) ====================
 // Devuelve el flujo completo del mes por producto, día y turno
 async function apiGetResumenMes(p, res) {
@@ -2776,4 +2778,353 @@ async function apiUpdatePrecioCompra(p, res) {
 
   await supabase.from('products').update({ precio_compra: precioCompra }).eq('id', productId);
   return ok(res, { productId, precioCompra });
+}
+// ==================== AJUSTE DE INVENTARIO V2 (13 ESCENARIOS) ====================
+// Maneja todos los escenarios de ajuste: BODEGA, RECEPCION, FALTANTES, AJUSTE
+async function apiAjusteInventarioV2(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const now = Date.now();
+  const adminName = String(p.userName||'').trim();
+  if(!adminName) return err(res,'Admin requerido');
+
+  const categoria = String(p.categoria||'').toUpperCase().trim();
+  const tipo = String(p.tipo||'').trim();
+  const productId = Number(p.productId||0);
+  const cantidad = Number(p.cantidad||0);
+  const motivo = String(p.motivo||'').trim();
+
+  if(!['BODEGA','RECEPCION','FALTANTES','AJUSTE'].includes(categoria)) return err(res,'Categoria invalida');
+  if(!tipo) return err(res,'Tipo requerido');
+  if(!productId) return err(res,'Producto requerido');
+  if(motivo.length < 3) return err(res,'Motivo minimo 3 letras');
+
+  // Traer producto
+  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
+  if(!prod) return err(res,'Producto no existe');
+
+  const precio = Number(prod.precio||0);
+  const precioCompra = Number(prod.precio_compra||0);
+
+  // Variables comunes
+  let afectaStock = 'ninguno'; // bodega / recepcion / ambos / ninguno
+  let afectaCuadre = false;
+  let businessDayAj = '';
+  let shiftAj = '';
+  let recepNameAj = '';
+  let payMethodAj = '';
+  let payMethodViejo = '';
+  let productoViejoId = null;
+  let valorAfectado = 0;
+  let nuevoStockBod = Number(prod.stock_actual||0);
+  let nuevoStockRec = Number(prod.stock_recepcion||0);
+
+  // ========== BODEGA (no afecta cuadre) ==========
+  if(categoria === 'BODEGA') {
+    afectaStock = 'bodega';
+    afectaCuadre = false;
+    businessDayAj = businessDay(now);
+    shiftAj = currentShiftId(now);
+    valorAfectado = cantidad * precioCompra;
+
+    // tipos: roto, vencido, conteo, robo
+    if(tipo === 'conteo') {
+      // Puede ser + o - (cantidad con signo)
+      if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
+      nuevoStockBod = Number(prod.stock_actual||0) + cantidad; // cantidad puede ser negativa
+    } else {
+      // roto, vencido, robo => siempre restan
+      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
+      if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock bodega insuficiente. Hay '+prod.stock_actual);
+      nuevoStockBod = Number(prod.stock_actual||0) - cantidad;
+    }
+
+    await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+    await supabase.from('stock_movements').insert({
+      ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+      user_name: adminName, user_role: 'ADMIN',
+      product_id: productId, product_name: prod.nombre,
+      tipo: 'bodega_'+tipo,
+      cantidad: cantidad,
+      nota: motivo
+    });
+  }
+
+  // ========== RECEPCION (errores de recepcionista - afecta cuadre) ==========
+  else if(categoria === 'RECEPCION') {
+    afectaCuadre = true;
+    businessDayAj = String(p.businessDay||'').trim();
+    shiftAj = String(p.shiftId||'').trim();
+    recepNameAj = String(p.recepName||'').trim();
+    payMethodAj = String(p.payMethod||'EFECTIVO').toUpperCase();
+
+    if(!businessDayAj) return err(res,'Fecha requerida');
+    if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
+    if(!recepNameAj) return err(res,'Recepcionista requerida');
+
+    if(tipo === 'venta_olvidada') {
+      // Se vendió pero no quedó: descuenta stock + suma al cuadre
+      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
+      afectaStock = 'recepcion';
+      valorAfectado = cantidad * precio;
+      nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+      await supabase.from('room_products').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: cantidad, precio_unit: precio,
+        total: valorAfectado, pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'venta_olvidada',
+        motivo_ajuste: motivo
+      });
+    }
+    else if(tipo === 'venta_duplicada') {
+      // Registró 2 veces: repone stock + resta del cuadre
+      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
+      afectaStock = 'recepcion';
+      valorAfectado = -(cantidad * precio);
+      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+      await supabase.from('room_products').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: -cantidad, precio_unit: precio,
+        total: -Math.abs(cantidad * precio), pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'venta_duplicada',
+        motivo_ajuste: motivo
+      });
+    }
+    else if(tipo === 'metodo_pago') {
+      // Cambia el método de pago de una venta existente en ese turno
+      payMethodViejo = String(p.payMethodViejo||'').toUpperCase();
+      if(!payMethodViejo) return err(res,'Metodo anterior requerido');
+      if(payMethodViejo === payMethodAj) return err(res,'Los metodos son iguales');
+      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
+      afectaStock = 'ninguno';
+      valorAfectado = cantidad * precio;
+
+      // Resta ventas del método viejo
+      await supabase.from('room_products').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: -cantidad, precio_unit: precio,
+        total: -(cantidad * precio), pay_method: payMethodViejo,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'metodo_pago_resta',
+        motivo_ajuste: motivo
+      });
+      // Suma ventas al método nuevo
+      await supabase.from('room_products').insert({
+        ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: cantidad, precio_unit: precio,
+        total: cantidad * precio, pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'metodo_pago_suma',
+        motivo_ajuste: motivo
+      });
+    }
+    else if(tipo === 'cantidad') {
+      // Ajusta cantidad: si cantidad > 0 suma unidades (vendió más), si < 0 resta (vendió menos)
+      if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
+      afectaStock = 'recepcion';
+      valorAfectado = cantidad * precio;
+      nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+      await supabase.from('room_products').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: cantidad, precio_unit: precio,
+        total: cantidad * precio, pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'cantidad',
+        motivo_ajuste: motivo
+      });
+    }
+    else if(tipo === 'producto') {
+      // Se registró producto equivocado: repone el viejo + suma el correcto
+      productoViejoId = Number(p.productoViejoId||0);
+      if(!productoViejoId) return err(res,'Producto viejo requerido');
+      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
+
+      const { data: prodViejo } = await supabase.from('products').select('*').eq('id',productoViejoId).single();
+      if(!prodViejo) return err(res,'Producto viejo no existe');
+      const precioViejo = Number(prodViejo.precio||0);
+
+      afectaStock = 'ambos';
+      valorAfectado = (cantidad * precio) - (cantidad * precioViejo);
+
+      // Repone stock del producto viejo
+      const nuevoStockViejo = Number(prodViejo.stock_actual||0) + cantidad;
+      await supabase.from('products').update({ stock_actual: nuevoStockViejo }).eq('id',productoViejoId);
+
+      // Descuenta stock del producto correcto
+      nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+      // Resta venta del producto viejo
+      await supabase.from('room_products').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productoViejoId, product_name: prodViejo.nombre,
+        cantidad: -cantidad, precio_unit: precioViejo,
+        total: -(cantidad * precioViejo), pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'producto_resta',
+        motivo_ajuste: motivo
+      });
+      // Suma venta del producto correcto
+      await supabase.from('room_products').insert({
+        ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: cantidad, precio_unit: precio,
+        total: cantidad * precio, pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'producto_suma',
+        motivo_ajuste: motivo
+      });
+    }
+    else {
+      return err(res,'Tipo de recepcion invalido: '+tipo);
+    }
+  }
+
+  // ========== FALTANTES (alguien responde) ==========
+  else if(categoria === 'FALTANTES') {
+    businessDayAj = String(p.businessDay||'').trim();
+    shiftAj = String(p.shiftId||'').trim();
+    recepNameAj = String(p.recepName||'').trim();
+    if(!businessDayAj) return err(res,'Fecha requerida');
+    if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
+    if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
+
+    afectaStock = 'recepcion';
+    valorAfectado = cantidad * precio;
+    nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
+    await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+    if(tipo === 'recep_paga') {
+      // Recepcionista paga: afecta cuadre como venta
+      afectaCuadre = true;
+      payMethodAj = String(p.payMethod||'EFECTIVO').toUpperCase();
+      if(!recepNameAj) return err(res,'Recepcionista requerida');
+
+      await supabase.from('room_products').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        room_id: 'AJUSTE', check_in_ms: 0,
+        product_id: productId, product_name: prod.nombre,
+        cantidad: cantidad, precio_unit: precio,
+        total: valorAfectado, pay_method: payMethodAj,
+        user_name: recepNameAj,
+        is_cortesia: false,
+        created_by_admin: true,
+        tipo_ajuste: 'faltante_recep_paga',
+        motivo_ajuste: motivo
+      });
+    }
+    else if(tipo === 'camarera' || tipo === 'cliente_fuga') {
+      // No afecta cuadre, solo registro de pérdida
+      afectaCuadre = false;
+      await supabase.from('stock_movements').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        user_name: adminName, user_role: 'ADMIN',
+        product_id: productId, product_name: prod.nombre,
+        tipo: 'faltante_'+tipo,
+        cantidad: cantidad,
+        nota: motivo
+      });
+    }
+    else {
+      return err(res,'Tipo de faltante invalido: '+tipo);
+    }
+  }
+
+  // ========== AJUSTE MANUAL (solo stock) ==========
+  else if(categoria === 'AJUSTE') {
+    afectaCuadre = false;
+    businessDayAj = businessDay(now);
+    shiftAj = currentShiftId(now);
+    if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
+
+    const destino = String(p.destino||'bodega').toLowerCase();
+    if(destino === 'bodega') {
+      afectaStock = 'bodega';
+      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
+      if(nuevoStockBod < 0) return err(res,'Resultado negativo en bodega');
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+    } else {
+      afectaStock = 'recepcion';
+      // La recepción se maneja via stock_actual también (no hay columna separada por ahora)
+      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
+      if(nuevoStockBod < 0) return err(res,'Resultado negativo');
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+    }
+
+    valorAfectado = cantidad * precioCompra;
+
+    await supabase.from('stock_movements').insert({
+      ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+      user_name: adminName, user_role: 'ADMIN',
+      product_id: productId, product_name: prod.nombre,
+      tipo: 'ajuste_manual_'+destino,
+      cantidad: cantidad,
+      nota: motivo
+    });
+  }
+
+  // ========== REGISTRAR EN TABLA AUDITABLE ==========
+  await supabase.from('ajustes').insert({
+    ts_ms: now,
+    categoria: categoria,
+    tipo: tipo,
+    product_id: productId,
+    product_name: prod.nombre,
+    cantidad: cantidad,
+    afecta_stock: afectaStock,
+    afecta_cuadre: afectaCuadre,
+    business_day: businessDayAj,
+    shift_id: shiftAj,
+    recep_name: recepNameAj,
+    pay_method: payMethodAj,
+    pay_method_viejo: payMethodViejo,
+    producto_viejo_id: productoViejoId,
+    valor_afectado: valorAfectado,
+    motivo: motivo,
+    admin_name: adminName
+  });
+
+  return ok(res, {
+    categoria: categoria,
+    tipo: tipo,
+    productId: productId,
+    cantidad: cantidad,
+    afectaCuadre: afectaCuadre,
+    valorAfectado: valorAfectado,
+    nuevoStockBodega: nuevoStockBod
+  });
 }
