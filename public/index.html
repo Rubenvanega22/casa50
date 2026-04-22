@@ -6006,7 +6006,7 @@ function openAjusteInv(){
 
   // Cargar lista de recepcionistas
   rpc('getStaff',{userRole:sess.userRole},function(data){
-    var list = (data.staff||data.list||[]).filter(function(u){return (u.rol||u.role||'').toUpperCase()==='RECEPTION';});
+    var list = (data.staff||[]).filter(function(u){return u.active!==false && ((u.area||'').toUpperCase()==='RECEPCION' || (u.area||'').toUpperCase()==='RECEPTION');});
     window._aj.recepList = list;
     var sel = document.getElementById('ajRecep');
     if(sel) ajFillRecep();
@@ -6256,7 +6256,7 @@ function ajFillRecep(){
   var cur = sel.value || '';
   var h = '<option value="">— Elegir —</option>';
   (window._aj.recepList||[]).forEach(function(u){
-    var nm = u.nombre || u.name || u.userName || '';
+    var nm = u.name || '';
     if(nm) h += '<option value="'+esc(nm)+'"'+(nm===cur?' selected':'')+'>'+esc(nm)+'</option>';
   });
   sel.innerHTML = h;
