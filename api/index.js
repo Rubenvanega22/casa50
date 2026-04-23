@@ -2715,12 +2715,44 @@ async function apiGetResumenMes(p, res) {
       }
     });
 
-    let saldoRec = siRec;
+    // Fecha desde la que arrancan los calculos limpios (saldo inicial real en recepcion)
+    const fechaInicio = '2026-04-23';
+    // Calcular stock real actual en recepcion = total historico de traslados - ventas - cortesias
+    // (hasta la fecha de inicio inclusive, tomando datos historicos)
+    // Como punto de partida usamos el saldo actual calculado con todos los datos del mes hasta hoy
+    const { data: todosMovs } = await supabase.from('stock_movements').select('*').eq('product_id', prod.id).eq('tipo','traslado_recepcion');
+    const { data: todasVentas } = await supabase.from('room_products').select('*').eq('product_id', prod.id);
+    const totalTraslados = (todosMovs||[]).reduce((a,m) => a + Number(m.cantidad||0), 0);
+    const totalVentasAll = (todasVentas||[]).filter(s => !s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const totalCortesiasAll = (todasVentas||[]).filter(s => s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const stockRealRec = totalTraslados - totalVentasAll - totalCortesiasAll;
+    // Sumar ventas desde fechaInicio hasta hoy para trabajar hacia atras
+    let ventasDesdeInicio = 0, cortesiasDesdeInicio = 0, trasladosDesdeInicio = 0;
+    (todasVentas||[]).filter(s => s.business_day >= fechaInicio).forEach(s => {
+      if(s.is_cortesia) cortesiasDesdeInicio += Number(s.cantidad||0);
+      else ventasDesdeInicio += Number(s.cantidad||0);
+    });
+    (todosMovs||[]).filter(m => m.business_day >= fechaInicio).forEach(m => {
+      trasladosDesdeInicio += Number(m.cantidad||0);
+    });
+    // Saldo al inicio de fechaInicio = stockRealRec - (trasladosDesdeInicio - ventasDesdeInicio - cortesiasDesdeInicio)
+    const saldoInicioFecha = stockRealRec - trasladosDesdeInicio + ventasDesdeInicio + cortesiasDesdeInicio;
+    let saldoRec = saldoInicioFecha;
     Object.keys(porDia).sort().forEach(function(fecha){
       SHIFTS.forEach(function(sid){
         const t = porDia[fecha].turnos[sid];
-        saldoRec = saldoRec + t.e - t.v - t.c;
-        t.s = saldoRec;
+        if(fecha < fechaInicio) {
+          // Antes del 23/04: mostrar 0 (datos antiguos mezclados no son confiables)
+          t.s = 0;
+          t.b = 0;
+          t.e = 0;
+          t.v = 0;
+          t.c = 0;
+        } else {
+          // Desde el 23/04: calcular normal
+          saldoRec = saldoRec + t.e - t.v - t.c;
+          t.s = saldoRec;
+        }
       });
     });
 
