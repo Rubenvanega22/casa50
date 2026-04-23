@@ -5554,7 +5554,8 @@ function renderInventario(inv,day){
   });
   Object.keys(cats).sort().forEach(function(cat){
     h+='<tr><td colspan="12" style="padding:4px 8px;background:rgba(124,92,252,.15);font-size:11px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a;text-align:center;letter-spacing:1px">'+esc(cat.toUpperCase())+'</td></tr>';
-    cats[cat].forEach(function(r){
+    var _prodsGrupo = cats[cat];
+    _prodsGrupo.forEach(function(r, _rowIdx){
       var saldoCol=r.saldoActual<=0?'#ef4444':r.saldoActual<=r.stockMinimo?'#f59e0b':'#22c55e';
      var siStr='<span style="color:#e5e7eb;font-weight:700">'+r.saldoInicial+'</span>';
       h+='<tr>';
@@ -5598,7 +5599,18 @@ function renderInventario(inv,day){
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+eTotStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;vertical-align:top">'+vStr+'</td>';
         h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center">'+sStr+'</td>';
-        h+='<td style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;background:rgba(245,158,11,.06)">'+gStr+'</td>';
+        if(_rowIdx===0){
+          var _fwRef = r.nombre.trim().split(' ')[0].toLowerCase();
+          var _grupoSize = _prodsGrupo.filter(function(x){return x.nombre.trim().split(' ')[0].toLowerCase()===_fwRef;}).length;
+          h+='<td rowspan="'+_grupoSize+'" style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;background:rgba(245,158,11,.08);vertical-align:middle;font-size:14px;font-weight:900">'+gStr+'</td>';
+        } else {
+          var _fwCur = r.nombre.trim().split(' ')[0].toLowerCase();
+          var _fwPrev = _prodsGrupo[_rowIdx-1].nombre.trim().split(' ')[0].toLowerCase();
+          if(_fwCur !== _fwPrev){
+            var _grupoSize2 = _prodsGrupo.slice(_rowIdx).filter(function(x){return x.nombre.trim().split(' ')[0].toLowerCase()===_fwCur;}).length;
+            h+='<td rowspan="'+_grupoSize2+'" style="padding:3px 4px;border:1px solid #2e2e3a;text-align:center;background:rgba(245,158,11,.08);vertical-align:middle;font-size:14px;font-weight:900">'+gStr+'</td>';
+          }
+        }
       });
       var bodCol=r.stockBodega<=0?'#ef4444':r.stockBodega<=r.stockMinimo?'#f59e0b':'#a78bfa';
      h+='<td style="padding:4px 6px;border:1px solid #2e2e3a;font-size:12px;font-weight:800;color:'+saldoCol+';text-align:center">'+(r.saldoActual+(r.stockBodega||0))+'</td>';
