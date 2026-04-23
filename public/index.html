@@ -271,7 +271,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
       <select id="resGotoDia" style="width:auto;margin:0;display:none" onchange="resScrollToDia(this.value)">
         <option value="">Ir al día...</option>
       </select>
-      <button class="btn bk sm" onclick="loadResumen()" style="margin-left:auto">↻ Actualizar</button>
+      <button class="btn ba sm" onclick="openHistorialAjustes()" style="margin-left:auto">📜 Motivos</button>
+      <button class="btn bk sm" onclick="loadResumen()">↻ Actualizar</button>
     </div>
 
     <div id="resTarjetas" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px"></div>
@@ -5400,6 +5401,99 @@ function resScrollToDia(fecha){
   if(th){
     cont.scrollLeft = th.offsetLeft - 200;
   }
+}
+// ==================== HISTORIAL DE AJUSTES (BITACORA) ====================
+var histAjustesData = null;
+
+function openHistorialAjustes(){
+  if(!sess) return toast('Inicia sesion','err');
+  // Usar el mismo mes que tiene el Resumen abierto
+  var inp = document.getElementById('resMes');
+  var mes = inp && inp.value ? inp.value : (sess.businessDay||'').substring(0,7);
+  var h = '<div class="mh"><div class="mt">📜 Historial de Ajustes</div><button class="mc" onclick="closeM(\'mHistAj\')">✕</button></div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;padding:8px;background:#1a1a24;border-radius:8px">';
+  h += '<label style="margin:0;font-size:11px">Mes:</label>';
+  h += '<input type="month" id="histAjMes" value="'+mes+'" style="width:auto;margin:0">';
+  h += '<select id="histAjTipo" style="width:auto;margin:0">';
+  h += '<option value="">Todos los tipos</option>';
+  h += '<option value="BODEGA">Solo BODEGA</option>';
+  h += '<option value="RECEPCION">Solo RECEPCION</option>';
+  h += '</select>';
+  h += '<button class="btn ba sm" onclick="loadHistorialAjustes()">Buscar</button>';
+  h += '</div>';
+  h += '<div id="histAjResumen" style="display:flex;gap:8px;margin-bottom:10px;font-size:11px;color:#9ca3af"></div>';
+  h += '<div id="histAjLista" style="max-height:60vh;overflow-y:auto"><p style="color:#9ca3af;text-align:center;padding:40px">Cargando...</p></div>';
+  var modal=document.getElementById('mHistAj');
+  if(!modal){
+    var div=document.createElement('div');
+    div.className='ov';
+    div.id='mHistAj';
+    div.innerHTML='<div class="modal" style="max-width:800px"><div id="mHistAjB"></div></div>';
+    div.addEventListener('click',function(e){if(e.target===div)closeM('mHistAj');});
+    document.body.appendChild(div);
+  }
+  document.getElementById('mHistAjB').innerHTML=h;
+  openM('mHistAj');
+  loadHistorialAjustes();
+}
+
+function loadHistorialAjustes(){
+  var mes = (document.getElementById('histAjMes')||{}).value || '';
+  var tipo = (document.getElementById('histAjTipo')||{}).value || '';
+  if(!mes){toast('Selecciona un mes','err');return;}
+  var cont = document.getElementById('histAjLista');
+  if(cont) cont.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:40px">Cargando...</p>';
+  rpc('getHistorialAjustes',{mes:mes,filtroTipo:tipo,userRole:sess.userRole,userName:sess.userName},function(data){
+    histAjustesData = data;
+    renderHistorialAjustes();
+  },function(e){
+    if(cont) cont.innerHTML = '<p style="color:#ef4444;text-align:center;padding:40px">Error: '+(e.message||'desconocido')+'</p>';
+  });
+}
+
+function renderHistorialAjustes(){
+  if(!histAjustesData) return;
+  var d = histAjustesData;
+  var items = d.items || [];
+  var resEl = document.getElementById('histAjResumen');
+  if(resEl){
+    resEl.innerHTML = '<span>Total: <b style="color:#e5e7eb">'+d.total+'</b></span>'+
+      '<span>BODEGA: <b style="color:#c4b5fd">'+d.totalBodega+'</b></span>'+
+      '<span>RECEPCION: <b style="color:#93c5fd">'+d.totalRecepcion+'</b></span>';
+  }
+  var cont = document.getElementById('histAjLista');
+  if(!cont) return;
+  if(!items.length){
+    cont.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:40px">Sin ajustes en este mes.</p>';
+    return;
+  }
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  h += '<thead><tr style="background:#22222c">';
+  h += '<th style="padding:8px;text-align:left;color:#9ca3af;font-size:10px;text-transform:uppercase">Fecha</th>';
+  h += '<th style="padding:8px;text-align:center;color:#9ca3af;font-size:10px;text-transform:uppercase">Tipo</th>';
+  h += '<th style="padding:8px;text-align:left;color:#9ca3af;font-size:10px;text-transform:uppercase">Producto</th>';
+  h += '<th style="padding:8px;text-align:center;color:#9ca3af;font-size:10px;text-transform:uppercase">Cant</th>';
+  h += '<th style="padding:8px;text-align:left;color:#9ca3af;font-size:10px;text-transform:uppercase">Motivo</th>';
+  h += '<th style="padding:8px;text-align:left;color:#9ca3af;font-size:10px;text-transform:uppercase">Admin</th>';
+  h += '</tr></thead><tbody>';
+  items.forEach(function(a){
+    var fecha = a.businessDay || '';
+    var hora = a.ts_ms ? new Date(Number(a.ts_ms)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
+    var chipColor = a.categoria==='BODEGA' ? '#c4b5fd' : '#60a5fa';
+    var chipBg = a.categoria==='BODEGA' ? 'rgba(139,92,246,.2)' : 'rgba(59,130,246,.2)';
+    var cantColor = Number(a.cantidad)>=0 ? '#86efac' : '#fca5a5';
+    var cantTxt = Number(a.cantidad)>=0 ? '+'+a.cantidad : a.cantidad;
+    h += '<tr style="border-bottom:1px solid rgba(46,46,58,.5)">';
+    h += '<td style="padding:8px;color:#9ca3af;font-size:11px;white-space:nowrap">'+fecha+'<br><small>'+hora+'</small></td>';
+    h += '<td style="padding:8px;text-align:center"><span style="background:'+chipBg+';color:'+chipColor+';padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:0.5px">'+esc(a.categoria)+'</span><br><small style="color:#6b7280;font-size:9px">'+esc(a.tipo||'')+'</small></td>';
+    h += '<td style="padding:8px;color:#e5e7eb;font-weight:600">'+esc(a.productName||'')+'</td>';
+    h += '<td style="padding:8px;text-align:center;color:'+cantColor+';font-weight:700">'+cantTxt+'</td>';
+    h += '<td style="padding:8px;color:#d1d5db;font-size:11px">'+esc(a.motivo||'')+(a.recepName?'<br><small style="color:#6b7280">Recep: '+esc(a.recepName)+'</small>':'')+'</td>';
+    h += '<td style="padding:8px;color:#60a5fa;font-weight:600;font-size:11px">'+esc(a.adminName||'')+'</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  cont.innerHTML = h;
 }
 function editPrecioCompra(productId, precioActual, nombre){
   if(!sess || sess.userRole !== 'ADMIN'){
