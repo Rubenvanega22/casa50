@@ -6164,27 +6164,22 @@ window._aj = {
 
 // Catálogo de escenarios por tab
 
+// ==================== AJUSTE DE INVENTARIO V3 (BODEGA + RECEPCION) ====================
+// Catalogo de escenarios disponibles por categoria
 var AJ_ESCENARIOS = {
   BODEGA: [
-    {tipo:'roto',      icon:'💥', color:'#fca5a5', nombre:'Producto roto/dañado',     desc:'Se quebró, derramó o dañó',        badge:'−Stock bodega', cuadre:false, conteo:false},
-    {tipo:'vencido',   icon:'⏰', color:'#fca5a5', nombre:'Producto vencido',         desc:'Caducó sin venderse',              badge:'−Stock bodega', cuadre:false, conteo:false},
-    {tipo:'conteo',    icon:'📊', color:'#fcd34d', nombre:'Conteo físico ≠ sistema',  desc:'Ajuste por conteo real (±)',        badge:'±Stock bodega', cuadre:false, conteo:true},
-    {tipo:'robo',      icon:'🚨', color:'#fca5a5', nombre:'Sospecha de robo',         desc:'Faltante sin explicación',         badge:'−Stock bodega', cuadre:false, conteo:false}
+    {tipo:'ingreso_extra', icon:'➕', titulo:'Ingreso extra', desc:'Apareció producto que no estaba registrado', cuadre:false, stock:'bodega', pide:'cantidad_pos'},
+    {tipo:'conteo',        icon:'📋', titulo:'Ajuste por conteo', desc:'El conteo físico no cuadra (puede sumar o restar)', cuadre:false, stock:'bodega', pide:'cantidad_signo'},
+    {tipo:'roto',          icon:'💥', titulo:'Producto roto',     desc:'Se dañó en bodega',                      cuadre:false, stock:'bodega', pide:'cantidad_pos'},
+    {tipo:'vencido',       icon:'📅', titulo:'Producto vencido',  desc:'Pasó la fecha de vencimiento',           cuadre:false, stock:'bodega', pide:'cantidad_pos'},
+    {tipo:'robo',          icon:'🚨', titulo:'Robo/pérdida',      desc:'Desapareció sospechosamente',            cuadre:false, stock:'bodega', pide:'cantidad_pos'},
+    {tipo:'salida_extra',  icon:'➖', titulo:'Salida extra',      desc:'Motivo especial no listado',             cuadre:false, stock:'bodega', pide:'cantidad_pos'}
   ],
   RECEPCION: [
-    {tipo:'venta_olvidada',  icon:'✅', color:'#86efac', nombre:'Vendió pero olvidó registrar', desc:'Cliente pagó pero no quedó en el sistema',  badge:'−Stock +Cuadre', cuadre:true, pide:'payMethod'},
-    {tipo:'venta_duplicada', icon:'🔁', color:'#93c5fd', nombre:'Registró 2 veces el mismo',    desc:'Por error sumó una venta dos veces',        badge:'+Stock −Cuadre', cuadre:true, pide:'payMethod'},
-    {tipo:'metodo_pago',     icon:'💳', color:'#c4b5fd', nombre:'Método de pago equivocado',    desc:'Dijo efectivo y era tarjeta (o viceversa)', badge:'Reasigna pago',  cuadre:true, pide:'metodoPagoDoble'},
-    {tipo:'cantidad',        icon:'🔢', color:'#fcd34d', nombre:'Error de cantidad',            desc:'Registró 1 pero fueron 3 (o al revés)',      badge:'Ajusta venta',   cuadre:true, pide:'payMethod', conteo:true},
-    {tipo:'producto',        icon:'🔄', color:'#fcd34d', nombre:'Producto equivocado',          desc:'Registró Coca cuando fue Pepsi',            badge:'Cambia producto',cuadre:true, pide:'productoViejo'}
-  ],
-  FALTANTES: [
-    {tipo:'recep_paga',   icon:'👤', color:'#fb923c', nombre:'Recepcionista paga',         desc:'Falta producto físico y la recepcionista lo paga', badge:'−Stock +Cuadre', cuadre:true, pide:'payMethod'},
-    {tipo:'camarera',     icon:'🧹', color:'#fb923c', nombre:'Camarera se lo llevó',        desc:'Camarera tomó algo sin registrar',                  badge:'−Stock sólo',   cuadre:false},
-    {tipo:'cliente_fuga', icon:'🏃', color:'#fca5a5', nombre:'Cliente se fue sin pagar',    desc:'Consumió pero no se cobró',                         badge:'−Stock pérdida',cuadre:false}
-  ],
-  AJUSTE: [
-    {tipo:'ajuste_manual', icon:'📦', color:'#93c5fd', nombre:'Ajuste manual',     desc:'Usar con precaución, solo si ninguno de los otros aplica', badge:'±Stock', cuadre:false, conteo:true, pide:'destino'}
+    {tipo:'producto',         icon:'🔄', titulo:'Cambiar producto vendido', desc:'Vendió un producto por otro (cambiar A por B)', cuadre:true, stock:'ambos',     pide:'productoViejo'},
+    {tipo:'metodo_pago',      icon:'💳', titulo:'Cambiar método de pago',   desc:'Efectivo → Tarjeta, Nequi, etc',                cuadre:true, stock:'ninguno',   pide:'metodoPagoDoble'},
+    {tipo:'venta_duplicada',  icon:'➖', titulo:'Quitar venta (vendió de más)', desc:'Registró 2 cuando era 1',                cuadre:true, stock:'recepcion', pide:'payMethod'},
+    {tipo:'venta_olvidada',   icon:'➕', titulo:'Agregar venta olvidada',   desc:'Vendió pero no registró',                       cuadre:true, stock:'recepcion', pide:'payMethod'}
   ]
 };
 
@@ -6219,6 +6214,7 @@ function openAjusteInv(){
     var inp=document.getElementById('ajBuscar');
     if(inp)inp.focus();
     ajFillRecep();
+    ajRenderEscenarios();
   },300);
 }
 
@@ -6228,22 +6224,24 @@ function ajBuildHTML(){
 
   // HEADER
   h += '<div class="mh"><div class="mt">⚡ Ajuste de inventario</div><button class="mc" onclick="closeM(\'mAjusteInv\')">✕</button></div>';
-  h += '<div style="font-size:11px;color:#9ca3af;margin-bottom:12px">Solo admin · Cada cambio se registra con motivo obligatorio</div>';
+  h += '<div style="font-size:11px;color:#9ca3af;margin-bottom:12px">Solo admin · Cada cambio queda registrado con motivo</div>';
 
-  // TABS
-  h += '<div style="display:flex;gap:4px;background:#0f0f17;padding:4px;border-radius:8px;margin-bottom:14px">';
-  ['BODEGA','RECEPCION','FALTANTES','AJUSTE'].forEach(function(t){
-    var icons = {BODEGA:'🏪', RECEPCION:'🧾', FALTANTES:'💸', AJUSTE:'📦'};
-    var activa = (tab===t);
-    var style = activa ? 'background:#3b82f6;color:white;font-weight:600' : 'background:transparent;color:#9ca3af';
-    h += '<button onclick="ajCambiarTab(\''+t+'\')" style="flex:1;border:0;padding:8px;border-radius:6px;font-size:11px;cursor:pointer;'+style+'">'+icons[t]+' '+t+'</button>';
+  // TABS (solo 2 ahora)
+  h += '<div style="display:flex;gap:6px;background:#0f0f17;padding:5px;border-radius:10px;margin-bottom:14px">';
+  [
+    {k:'BODEGA',    icon:'📦', color:'#8b5cf6'},
+    {k:'RECEPCION', icon:'🧾', color:'#3b82f6'}
+  ].forEach(function(t){
+    var activa = (tab===t.k);
+    var style = activa ? 'background:'+t.color+';color:white;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)' : 'background:transparent;color:#9ca3af';
+    h += '<button onclick="ajCambiarTab(\''+t.k+'\')" style="flex:1;border:0;padding:10px;border-radius:8px;font-size:12px;cursor:pointer;letter-spacing:0.5px;'+style+'">'+t.icon+' '+t.k+'</button>';
   });
   h += '</div>';
 
   // BUSCAR PRODUCTO
-  h += '<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px">';
-  h += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Producto</div>';
-  h += '<input type="text" id="ajBuscar" placeholder="🔍 Buscar o escanear..." oninput="ajBuscarProd(this.value)" style="width:100%;background:#18181f;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:8px;font-size:13px;margin-bottom:6px">';
+  h += '<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px">';
+  h += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:6px">Paso 1 — Producto</div>';
+  h += '<input type="text" id="ajBuscar" placeholder="🔍 Buscar o escanear código..." oninput="ajBuscarProd(this.value)" style="width:100%;background:#18181f;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:10px;font-size:13px;margin-bottom:6px">';
   h += '<div id="ajResultados" style="background:#18181f;border-radius:6px;max-height:120px;overflow-y:auto"></div>';
   h += '<div id="ajProdStats" style="display:none;margin-top:10px"></div>';
   h += '</div>';
@@ -6254,11 +6252,14 @@ function ajBuildHTML(){
   // CONFIG (se llena dinámicamente)
   h += '<div id="ajConfigCont"></div>';
 
-  // WARNING (se llena dinámicamente)
+  // PREVIEW (vista previa del cambio)
+  h += '<div id="ajPreviewCont"></div>';
+
+  // WARNING (se llena dinámicamente cuando afecta cuadre pasado)
   h += '<div id="ajWarningCont"></div>';
 
   // BOTÓN GUARDAR
-  h += '<button id="ajBtnGuardar" onclick="ajGuardar()" style="width:100%;background:#f97316;color:white;border:0;padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px;opacity:0.4" disabled>Guardar ajuste</button>';
+  h += '<button id="ajBtnGuardar" onclick="ajGuardar()" style="width:100%;background:#f97316;color:white;border:0;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px;opacity:0.4;letter-spacing:0.5px" disabled>Guardar ajuste</button>';
 
   return h;
 }
@@ -6266,178 +6267,152 @@ function ajBuildHTML(){
 function ajCambiarTab(tab){
   window._aj.tabActual = tab;
   window._aj.escenario = '';
-  var cont = document.getElementById('mAjusteInvB');
-  if(cont) cont.innerHTML = ajBuildHTML();
-  ajFillRecep();
-  // Reseleccionar producto si había
-  if(window._aj.prodSel){
-    ajPintarProdStats();
+  window._aj.prodSel = null;
+  document.getElementById('mAjusteInvB').innerHTML = ajBuildHTML();
+  setTimeout(function(){
+    ajFillRecep();
     ajRenderEscenarios();
-  }
+    var inp=document.getElementById('ajBuscar');
+    if(inp) inp.focus();
+  },100);
 }
 
-function ajBuscarProd(txt){
+function ajBuscarProd(q){
+  q = (q||'').trim().toLowerCase();
   var cont = document.getElementById('ajResultados');
   if(!cont) return;
-  if(!txt){cont.innerHTML='';return;}
-  var lista = productosLista.filter(function(p){
-    return p.activo && p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0;
-  }).slice(0,6);
-  if(!lista.length){cont.innerHTML='<p style="font-size:11px;color:#6b7280;padding:8px">Sin resultados</p>';return;}
-  cont.innerHTML = lista.map(function(p){
-    var stk = p.stockActual||0;
-    var sc = stk<=0?'#ef4444':stk<=p.stockMinimo?'#f59e0b':'#86efac';
-    return '<div onclick="ajSelProd('+p.id+')" style="padding:7px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;display:flex;justify-content:space-between;align-items:center">'+
-      '<b style="font-size:12px;color:#e5e7eb">'+esc(p.nombre)+'</b>'+
-      '<span style="font-size:10px;color:'+sc+'">Stock: '+stk+'</span></div>';
-  }).join('');
+  if(!q){ cont.innerHTML=''; return; }
+  var lista = (productosLista||[]).filter(function(p){
+    if(!p.activo) return false;
+    return (p.nombre||'').toLowerCase().indexOf(q)>=0 || (p.codigoBarras||'').toLowerCase().indexOf(q)>=0;
+  }).slice(0,8);
+  if(!lista.length){ cont.innerHTML = '<div style="padding:8px;color:#9ca3af;font-size:11px;text-align:center">Sin resultados</div>'; return; }
+  var h = '';
+  lista.forEach(function(p){
+    h += '<div onclick="ajSelProd('+p.id+')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid rgba(46,46,58,.5);font-size:12px;color:#e5e7eb">'+esc(p.nombre)+' <span style="color:#9ca3af;font-size:10px">· Stock: '+(p.stockActual||0)+' · '+fmt(p.precio)+'</span></div>';
+  });
+  cont.innerHTML = h;
 }
 
-function ajSelProd(id){
-  var prod = productosLista.find(function(p){return p.id===id;});
-  if(!prod) return;
-  window._aj.prodSel = prod;
-  var buscar = document.getElementById('ajBuscar');
-  if(buscar) buscar.value = prod.nombre;
-  var res = document.getElementById('ajResultados');
-  if(res) res.innerHTML = '';
+function ajSelProd(pid){
+  var p = (productosLista||[]).find(function(x){return x.id===pid;});
+  if(!p) return;
+  window._aj.prodSel = p;
+  document.getElementById('ajBuscar').value = p.nombre;
+  document.getElementById('ajResultados').innerHTML = '';
   ajPintarProdStats();
   ajRenderEscenarios();
+  ajToggleBtnGuardar();
 }
 
 function ajPintarProdStats(){
-  var prod = window._aj.prodSel;
-  if(!prod) return;
-  var cont = document.getElementById('ajProdStats');
-  if(!cont) return;
-  cont.style.display = '';
-  var h = '<div style="display:flex;gap:8px">';
-  h += '<div style="flex:1;background:#18181f;border-radius:6px;padding:6px;text-align:center"><div style="font-size:9px;color:#9ca3af">Stock</div><div style="color:#c4b5fd;font-weight:700;font-size:14px">'+(prod.stockActual||0)+'</div></div>';
-  h += '<div style="flex:1;background:#18181f;border-radius:6px;padding:6px;text-align:center"><div style="font-size:9px;color:#9ca3af">P.Compra</div><div style="color:#fca5a5;font-weight:700;font-size:14px">'+fmt(prod.precioCompra||0)+'</div></div>';
-  h += '<div style="flex:1;background:#18181f;border-radius:6px;padding:6px;text-align:center"><div style="font-size:9px;color:#9ca3af">P.Venta</div><div style="color:#86efac;font-weight:700;font-size:14px">'+fmt(prod.precio||0)+'</div></div>';
-  h += '</div>';
-  cont.innerHTML = h;
+  var p = window._aj.prodSel;
+  var el = document.getElementById('ajProdStats');
+  if(!p || !el){ if(el)el.style.display='none'; return; }
+  el.style.display='block';
+  var stockCol = p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+  el.innerHTML = '<div style="display:flex;gap:10px;font-size:11px;padding:6px 0;border-top:1px solid rgba(46,46,58,.5)">'+
+    '<span style="color:#9ca3af">Stock: <b style="color:'+stockCol+'">'+(p.stockActual||0)+'</b></span>'+
+    '<span style="color:#9ca3af">Precio: <b style="color:#e5e7eb">'+fmt(p.precio)+'</b></span>'+
+    '<span style="color:#9ca3af">Categoría: <b style="color:#a78bfa">'+esc(p.categoria||'—')+'</b></span>'+
+    '</div>';
 }
 
 function ajRenderEscenarios(){
   var tab = window._aj.tabActual;
-  var escenarios = AJ_ESCENARIOS[tab] || [];
   var cont = document.getElementById('ajEscenariosCont');
   if(!cont) return;
-
-  var titColors = {BODEGA:'#93c5fd', RECEPCION:'#86efac', FALTANTES:'#fb923c', AJUSTE:'#93c5fd'};
-  var titTexts = {BODEGA:'🏪 ¿Qué pasó en bodega?', RECEPCION:'🧾 ¿Qué error hubo en recepción?', FALTANTES:'💸 ¿Quién responde por el faltante?', AJUSTE:'📦 Ajuste manual (último recurso)'};
-
-  var h = '<div style="font-size:10px;text-transform:uppercase;font-weight:600;margin-bottom:8px;color:'+titColors[tab]+'">'+titTexts[tab]+'</div>';
-  h += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
-  escenarios.forEach(function(esc){
-    var sel = (window._aj.escenario === esc.tipo);
-    var bg = sel ? 'background:#2d2036;border-color:#8b5cf6' : 'background:#22222c;border-color:#3a3a45';
-    h += '<div onclick="ajSelEscenario(\''+esc.tipo+'\')" style="border:1px solid #3a3a45;border-left:3px solid '+esc.color+';border-radius:6px;padding:10px;cursor:pointer;'+bg+'">';
-    h += '<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">';
-    h += '<div><div style="font-weight:600;font-size:12px;color:'+esc.color+'">'+esc.icon+' '+esc.nombre+'</div><div style="color:#9ca3af;font-size:10px;margin-top:2px">'+esc.desc+'</div></div>';
-    h += '<span style="font-size:9px;color:#6b7280;padding:2px 6px;background:#18181f;border-radius:4px;white-space:nowrap">'+esc.badge+'</span>';
-    h += '</div></div>';
+  var esc_list = AJ_ESCENARIOS[tab] || [];
+  var h = '<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px">';
+  h += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:8px">Paso 2 — Escenario</div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+  esc_list.forEach(function(e){
+    var activa = (window._aj.escenario===e.tipo);
+    var bg = activa ? 'background:rgba(249,115,22,.15);border-color:#f97316' : 'background:#18181f;border-color:#3a3a45';
+    h += '<div onclick="ajSelEscenario(\''+e.tipo+'\')" style="padding:8px 10px;border:1px solid;border-radius:8px;cursor:pointer;'+bg+'">';
+    h += '<div style="font-size:12px;color:#e5e7eb;font-weight:700">'+e.icon+' '+esc(e.titulo)+'</div>';
+    h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">'+esc(e.desc)+'</div>';
+    h += '</div>';
   });
-  h += '</div>';
+  h += '</div></div>';
   cont.innerHTML = h;
-
-  // Si hay escenario seleccionado, mostrar AJUSTE para él
-  if(tab === 'AJUSTE'){
-    // Auto-seleccionar el único escenario
-    window._aj.escenario = 'ajuste_manual';
-    ajRenderConfig();
-  } else if(window._aj.escenario){
-    ajRenderConfig();
-  } else {
-    var c = document.getElementById('ajConfigCont'); if(c) c.innerHTML = '';
-    var w = document.getElementById('ajWarningCont'); if(w) w.innerHTML = '';
-    ajToggleBtnGuardar(false);
-  }
 }
 
 function ajSelEscenario(tipo){
   window._aj.escenario = tipo;
   ajRenderEscenarios();
+  ajRenderConfig();
+  ajToggleBtnGuardar();
 }
 
 function ajRenderConfig(){
   var tab = window._aj.tabActual;
   var tipo = window._aj.escenario;
-  var esc = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
-  if(!esc) return;
-
   var cont = document.getElementById('ajConfigCont');
   if(!cont) return;
+  if(!tipo){ cont.innerHTML=''; ajRenderPreview(); return; }
+  var e = (AJ_ESCENARIOS[tab]||[]).find(function(x){return x.tipo===tipo;});
+  if(!e){ cont.innerHTML=''; ajRenderPreview(); return; }
 
-  var h = '<div style="background:#18181f;border-left:3px solid #8b5cf6;border-radius:0 6px 6px 0;padding:12px;margin-bottom:10px">';
-  h += '<div style="font-size:10px;color:#c4b5fd;font-weight:600;margin-bottom:10px">📝 Configuración</div>';
+  var today = (sess.businessDay||'').substring(0,10);
+  var h = '<div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:12px">';
+  h += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:8px">Paso 3 — Detalles</div>';
 
-  // Si afecta cuadre → pedir fecha/turno/recepcionista
-  if(esc.cuadre){
-    h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
-    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">📅 Fecha</label><input type="date" id="ajFecha" onchange="ajActualizarWarning()" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"></div>';
-    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">🕐 Turno</label><select id="ajTurno" onchange="ajActualizarWarning()" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="">— Elegir —</option><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
+  // Fecha + turno + recepcionista (solo si afecta cuadre)
+  if(e.cuadre){
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Fecha</label><input type="date" id="ajFecha" value="'+today+'" onchange="ajActualizarWarning();ajRenderPreview()" style="width:100%"></div>';
+    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Turno</label><select id="ajTurno" onchange="ajRenderPreview()" style="width:100%">';
+    h += '<option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2" selected>T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option>';
+    h += '</select></div>';
     h += '</div>';
-
-    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">👤 Recepcionista</label><select id="ajRecep" onchange="ajActualizarWarning()" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="">— Elegir —</option></select></div>';
+    h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Recepcionista</label>';
+    h += '<select id="ajRecep" style="width:100%;margin-bottom:10px"><option value="">— Elegir —</option></select>';
   }
 
-  // Si cambia método de pago, pedir los 2 métodos
-  if(esc.pide === 'metodoPagoDoble'){
-    h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
-    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">Método anterior</label><select id="ajPayViejo" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
-    h += '<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">Método correcto</label><select id="ajPay" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
-    h += '</div>';
-  }
-  // Si necesita método simple
-  else if(esc.pide === 'payMethod'){
-    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">💵 Método de pago</label><select id="ajPay" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
-  }
-
-  // Producto viejo si es "producto equivocado"
-  if(esc.pide === 'productoViejo'){
-    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">🔍 Producto que registró por error</label>';
-    h += '<input type="text" id="ajProdViejoBuscar" placeholder="Buscar producto equivocado..." oninput="ajBuscarProdViejo(this.value)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px;margin-bottom:4px">';
+  // Producto viejo (cambiar producto)
+  if(e.pide === 'productoViejo'){
+    h += '<div style="background:rgba(239,68,68,.05);border-left:3px solid #ef4444;padding:8px 10px;border-radius:0 6px 6px 0;margin-bottom:10px">';
+    h += '<label style="font-size:10px;color:#fca5a5;display:block;margin-bottom:3px">❌ Producto registrado (el equivocado)</label>';
     h += '<input type="hidden" id="ajProdViejoId" value="">';
-    h += '<div id="ajProdViejoRes" style="background:#22222c;border-radius:6px;max-height:100px;overflow-y:auto"></div>';
-    h += '<div id="ajProdViejoInfo" style="font-size:11px;color:#86efac;margin-top:4px"></div>';
+    h += '<input type="text" id="ajProdViejoBuscar" placeholder="🔍 Buscar producto equivocado..." oninput="ajBuscarProdViejo(this.value)" style="width:100%;background:#18181f;border:1px solid #3a3a45;color:#e5e7eb;padding:8px;border-radius:6px;font-size:12px">';
+    h += '<div id="ajProdViejoRes" style="background:#18181f;border-radius:6px;max-height:100px;overflow-y:auto;margin-top:4px"></div>';
+    h += '<div id="ajProdViejoNom" style="font-size:11px;color:#86efac;margin-top:4px;font-weight:700"></div>';
     h += '</div>';
   }
 
-  // Destino (bodega o recepción) para AJUSTE MANUAL
-  if(esc.pide === 'destino'){
-    h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">📍 ¿Dónde ajustar?</label><select id="ajDestino" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"><option value="bodega">📦 Bodega</option><option value="recepcion">🧾 Recepción</option></select></div>';
+  // Metodo pago viejo + nuevo
+  if(e.pide === 'metodoPagoDoble'){
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+    h += '<div><label style="font-size:10px;color:#fca5a5;display:block;margin-bottom:3px">❌ Método registrado</label>';
+    h += '<select id="ajPayViejo" onchange="ajRenderPreview()" style="width:100%"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
+    h += '<div><label style="font-size:10px;color:#86efac;display:block;margin-bottom:3px">✅ Método correcto</label>';
+    h += '<select id="ajPay" onchange="ajRenderPreview()" style="width:100%"><option value="TARJETA">Tarjeta</option><option value="EFECTIVO">Efectivo</option><option value="NEQUI">Nequi</option></select></div>';
+    h += '</div>';
   }
 
-  // Aviso azul de precaución para AJUSTE
-  if(tab === 'AJUSTE'){
-    h += '<div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-left:3px solid #3b82f6;border-radius:6px;padding:10px;margin-bottom:10px;font-size:11px;color:#93c5fd"><b style="color:#60a5fa;display:block;margin-bottom:4px">ℹ️ Usa este ajuste con precaución</b>Solo si ninguno de los escenarios de las otras pestañas aplica.</div>';
+  // Metodo pago simple
+  if(e.pide === 'payMethod'){
+    h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Método de pago</label>';
+    h += '<select id="ajPay" onchange="ajRenderPreview()" style="width:100%;margin-bottom:10px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select>';
   }
 
   // Cantidad
-  var cantLabel = esc.conteo ? 'Cantidad (+ para sumar, − para restar)' : 'Cantidad';
-  h += '<div style="margin-bottom:10px"><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">'+cantLabel+'</label>';
-  h += '<div style="display:flex;align-items:center;gap:8px">';
-  h += '<button onclick="ajChCant(-1)" style="width:32px;height:32px;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;cursor:pointer;font-size:16px">−</button>';
-  h += '<input id="ajCantInp" type="number" value="'+window._aj.cantidad+'" onchange="window._aj.cantidad=Number(this.value)||0;ajActualizarWarning()" style="width:70px;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;text-align:center;font-weight:700">';
-  h += '<button onclick="ajChCant(1)" style="width:32px;height:32px;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;cursor:pointer;font-size:16px">+</button>';
-  h += '<span style="font-size:10px;color:#9ca3af">unidades</span>';
-  h += '</div></div>';
+  var cantLabel = (e.pide==='cantidad_signo') ? 'Cantidad (+ suma, − resta)' : 'Cantidad';
+  var cantMin = (e.pide==='cantidad_signo') ? '' : 'min="1"';
+  h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">'+cantLabel+'</label>';
+  h += '<input type="number" id="ajCantidad" value="1" '+cantMin+' oninput="ajChCant(this.value)" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:700">';
 
   // Motivo
-  h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:4px">Motivo (mín. 3 letras)</label>';
-  h += '<input type="text" id="ajMotivo" placeholder="Ej: Se cayó caja al descargar" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px"></div>';
+  h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Motivo (obligatorio)</label>';
+  h += '<textarea id="ajMotivo" rows="2" placeholder="Describe brevemente el motivo del ajuste..." oninput="ajToggleBtnGuardar()" style="width:100%;background:#18181f;border:1px solid #3a3a45;color:#e5e7eb;padding:8px;border-radius:6px;font-size:12px;resize:vertical"></textarea>';
 
   h += '</div>';
   cont.innerHTML = h;
 
-  // Llenar dropdown recepcionistas si aplica
-  ajFillRecep();
-
-  // Actualizar warning y habilitar botón
+  if(e.cuadre) ajFillRecep();
+  ajRenderPreview();
   ajActualizarWarning();
-  ajToggleBtnGuardar(true);
 }
 
 function ajFillRecep(){
@@ -6450,70 +6425,144 @@ function ajFillRecep(){
     if(nm) h += '<option value="'+esc(nm)+'"'+(nm===cur?' selected':'')+'>'+esc(nm)+'</option>';
   });
   sel.innerHTML = h;
+  sel.onchange = function(){ajRenderPreview();};
 }
 
-function ajChCant(d){
-  window._aj.cantidad = Number(window._aj.cantidad||0) + d;
-  var inp = document.getElementById('ajCantInp');
-  if(inp) inp.value = window._aj.cantidad;
-  ajActualizarWarning();
+function ajChCant(v){
+  window._aj.cantidad = Number(v||0);
+  ajRenderPreview();
+  ajToggleBtnGuardar();
 }
 
-function ajBuscarProdViejo(txt){
+function ajBuscarProdViejo(q){
+  q = (q||'').trim().toLowerCase();
   var cont = document.getElementById('ajProdViejoRes');
   if(!cont) return;
-  if(!txt){cont.innerHTML='';return;}
-  var lista = productosLista.filter(function(p){
-    return p.activo && p.nombre.toLowerCase().indexOf(txt.toLowerCase())>=0 && p.id !== (window._aj.prodSel?window._aj.prodSel.id:0);
-  }).slice(0,5);
-  cont.innerHTML = lista.map(function(p){
-    return '<div onclick="ajSelProdViejo('+p.id+')" style="padding:6px 10px;border-bottom:1px solid rgba(46,46,58,.3);cursor:pointer;font-size:11px;color:#e5e7eb">'+esc(p.nombre)+'</div>';
-  }).join('');
+  if(!q){ cont.innerHTML=''; return; }
+  var lista = (productosLista||[]).filter(function(p){
+    if(!p.activo) return false;
+    if(window._aj.prodSel && p.id===window._aj.prodSel.id) return false;
+    return (p.nombre||'').toLowerCase().indexOf(q)>=0;
+  }).slice(0,6);
+  if(!lista.length){ cont.innerHTML = '<div style="padding:6px;color:#9ca3af;font-size:11px;text-align:center">Sin resultados</div>'; return; }
+  var h = '';
+  lista.forEach(function(p){
+    h += '<div onclick="ajSelProdViejo('+p.id+')" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid rgba(46,46,58,.5);font-size:11px;color:#e5e7eb">'+esc(p.nombre)+' <span style="color:#9ca3af">· '+fmt(p.precio)+'</span></div>';
+  });
+  cont.innerHTML = h;
 }
 
-function ajSelProdViejo(id){
-  var prod = productosLista.find(function(p){return p.id===id;});
-  if(!prod) return;
-  document.getElementById('ajProdViejoId').value = id;
-  document.getElementById('ajProdViejoBuscar').value = prod.nombre;
+function ajSelProdViejo(pid){
+  var p = (productosLista||[]).find(function(x){return x.id===pid;});
+  if(!p) return;
+  document.getElementById('ajProdViejoId').value = pid;
+  document.getElementById('ajProdViejoBuscar').value = p.nombre;
+  document.getElementById('ajProdViejoNom').textContent = '✓ ' + p.nombre + ' (' + fmt(p.precio) + ')';
   document.getElementById('ajProdViejoRes').innerHTML = '';
-  var info = document.getElementById('ajProdViejoInfo');
-  if(info) info.textContent = '✓ Se repondrá stock de: '+prod.nombre;
+  ajRenderPreview();
+}
+
+function ajRenderPreview(){
+  var cont = document.getElementById('ajPreviewCont');
+  if(!cont) return;
+  var prod = window._aj.prodSel;
+  var tipo = window._aj.escenario;
+  var tab = window._aj.tabActual;
+  var cant = Number(window._aj.cantidad||0);
+  if(!prod || !tipo || !cant){ cont.innerHTML=''; return; }
+
+  var e = (AJ_ESCENARIOS[tab]||[]).find(function(x){return x.tipo===tipo;});
+  if(!e){ cont.innerHTML=''; return; }
+
+  var stockActual = Number(prod.stockActual||0);
+  var precio = Number(prod.precio||0);
+
+  var h = '<div style="background:rgba(251,191,36,.06);border:1px dashed rgba(251,191,36,.4);border-radius:10px;padding:12px;margin-bottom:12px">';
+  h += '<div style="font-size:10px;color:#fbbf24;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:8px">Vista previa del cambio</div>';
+
+  if(tab === 'BODEGA'){
+    var delta = cant;
+    if(e.tipo !== 'conteo' && e.tipo !== 'ingreso_extra') delta = -Math.abs(cant);
+    if(e.tipo === 'ingreso_extra') delta = Math.abs(cant);
+    var newStock = stockActual + delta;
+    h += '<table style="width:100%;font-size:11px"><tr><td style="color:#9ca3af;padding:3px 0">📦 Stock bodega:</td>';
+    h += '<td style="color:#fca5a5">'+stockActual+'</td><td style="color:#fbbf24;text-align:center">→</td>';
+    h += '<td style="color:#86efac;font-weight:700">'+newStock+' ('+(delta>=0?'+':'')+delta+')</td></tr></table>';
+    h += '<div style="font-size:10px;color:#6b7280;margin-top:4px">ℹ️ No afecta el cuadre</div>';
+  }
+  else if(tab === 'RECEPCION'){
+    if(tipo === 'producto'){
+      var pidViejo = Number((document.getElementById('ajProdViejoId')||{}).value||0);
+      var prodViejo = pidViejo ? (productosLista||[]).find(function(x){return x.id===pidViejo;}) : null;
+      if(prodViejo){
+        var precioV = Number(prodViejo.precio||0);
+        var dif = (cant*precio) - (cant*precioV);
+        h += '<table style="width:100%;font-size:11px">';
+        h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock '+esc(prodViejo.nombre)+':</td><td style="color:#fca5a5">'+(prodViejo.stockActual||0)+'</td><td style="color:#fbbf24;text-align:center">→</td><td style="color:#86efac">+'+cant+'</td></tr>';
+        h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock '+esc(prod.nombre)+':</td><td style="color:#fca5a5">'+stockActual+'</td><td style="color:#fbbf24;text-align:center">→</td><td style="color:#86efac">−'+cant+'</td></tr>';
+        h += '<tr><td style="color:#9ca3af;padding:3px 0">💵 Cuadre:</td><td colspan="3" style="color:'+(dif>=0?'#86efac':'#fca5a5')+';font-weight:700">'+(dif>=0?'+':'')+fmt(dif)+'</td></tr>';
+        h += '</table>';
+      } else {
+        h += '<div style="color:#9ca3af;font-size:11px">Selecciona el producto equivocado para ver la vista previa</div>';
+      }
+    }
+    else if(tipo === 'metodo_pago'){
+      var payV = (document.getElementById('ajPayViejo')||{}).value || 'EFECTIVO';
+      var payN = (document.getElementById('ajPay')||{}).value || 'TARJETA';
+      var valor = cant * precio;
+      h += '<table style="width:100%;font-size:11px">';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock:</td><td colspan="3" style="color:#6b7280">Sin cambios</td></tr>';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">💵 Cuadre '+payV+':</td><td colspan="3" style="color:#fca5a5">−'+fmt(valor)+'</td></tr>';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">💳 Cuadre '+payN+':</td><td colspan="3" style="color:#86efac;font-weight:700">+'+fmt(valor)+'</td></tr>';
+      h += '</table>';
+    }
+    else if(tipo === 'venta_duplicada'){
+      var val = cant * precio;
+      var pay = (document.getElementById('ajPay')||{}).value || 'EFECTIVO';
+      h += '<table style="width:100%;font-size:11px">';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock:</td><td style="color:#fca5a5">'+stockActual+'</td><td style="color:#fbbf24;text-align:center">→</td><td style="color:#86efac;font-weight:700">'+(stockActual+cant)+' (+'+cant+')</td></tr>';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">💵 Cuadre '+pay+':</td><td colspan="3" style="color:#fca5a5;font-weight:700">−'+fmt(val)+'</td></tr>';
+      h += '</table>';
+    }
+    else if(tipo === 'venta_olvidada'){
+      var val2 = cant * precio;
+      var pay2 = (document.getElementById('ajPay')||{}).value || 'EFECTIVO';
+      h += '<table style="width:100%;font-size:11px">';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock:</td><td style="color:#fca5a5">'+stockActual+'</td><td style="color:#fbbf24;text-align:center">→</td><td style="color:#86efac;font-weight:700">'+(stockActual-cant)+' (−'+cant+')</td></tr>';
+      h += '<tr><td style="color:#9ca3af;padding:3px 0">💵 Cuadre '+pay2+':</td><td colspan="3" style="color:#86efac;font-weight:700">+'+fmt(val2)+'</td></tr>';
+      h += '</table>';
+    }
+  }
+
+  h += '</div>';
+  cont.innerHTML = h;
 }
 
 function ajActualizarWarning(){
-  var tab = window._aj.tabActual;
-  var tipo = window._aj.escenario;
-  var esc = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
-  if(!esc) return;
   var cont = document.getElementById('ajWarningCont');
-  if(!cont) return;
-
-  if(esc.cuadre){
-    var fecha = (document.getElementById('ajFecha')||{}).value || '';
-    var turno = (document.getElementById('ajTurno')||{}).value || '';
-    var recep = (document.getElementById('ajRecep')||{}).value || '';
-    var cant = window._aj.cantidad || 0;
-    var prod = window._aj.prodSel;
-
-    if(fecha && turno && recep && prod){
-      var tLabel = {SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'}[turno];
-      var valor = cant * (prod.precio||0);
-      cont.innerHTML = '<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-left:3px solid #f59e0b;border-radius:6px;padding:10px;margin-bottom:10px;font-size:11px;color:#fcd34d"><b style="color:#fbbf24;display:block;margin-bottom:4px">⚠️ Este ajuste modificará un cuadre</b>Afectará el cuadre del <b>'+fecha+' — '+tLabel+' — '+esc(recep)+'</b>'+(valor?' por <b>'+fmt(Math.abs(valor))+'</b>':'')+'.</div>';
-    } else {
-      cont.innerHTML = '';
-    }
+  if(!cont){ return; }
+  var fechaEl = document.getElementById('ajFecha');
+  if(!fechaEl){ cont.innerHTML=''; return; }
+  var fecha = fechaEl.value || '';
+  var hoy = (sess.businessDay||'').substring(0,10);
+  if(fecha && fecha !== hoy){
+    cont.innerHTML = '<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;color:#fbbf24"><b>⚠️ Atención:</b> Estás modificando un cuadre pasado ('+fecha+'). Asegúrate del motivo.</div>';
   } else {
     cont.innerHTML = '';
   }
 }
 
-function ajToggleBtnGuardar(habilitado){
+function ajToggleBtnGuardar(){
   var btn = document.getElementById('ajBtnGuardar');
   if(!btn) return;
-  btn.disabled = !habilitado;
-  btn.style.opacity = habilitado ? '1' : '0.4';
-  btn.style.cursor = habilitado ? 'pointer' : 'not-allowed';
+  var prod = window._aj.prodSel;
+  var tipo = window._aj.escenario;
+  var cant = Number(window._aj.cantidad||0);
+  var motivo = ((document.getElementById('ajMotivo')||{}).value||'').trim();
+  var ok = prod && tipo && cant!==0 && motivo.length>=3;
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '0.4';
+  btn.style.cursor = ok ? 'pointer' : 'not-allowed';
 }
 
 function ajGuardar(){
@@ -6556,9 +6605,6 @@ function ajGuardar(){
   if(escObj.pide === 'productoViejo'){
     payload.productoViejoId = Number((document.getElementById('ajProdViejoId')||{}).value||0);
     if(!payload.productoViejoId){toast('Selecciona el producto equivocado','err');return;}
-  }
-  if(escObj.pide === 'destino'){
-    payload.destino = (document.getElementById('ajDestino')||{}).value||'bodega';
   }
 
   conf('¿Confirmar este ajuste?',function(){
