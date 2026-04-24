@@ -4096,7 +4096,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       var prod=Number((m.totals||{}).totalProductos||0);
       var cort=Number((m.totals||{}).totalCortesiasProds||0);
       var efnq=ef+nq;
-      var entrega=efnq-gastos;
+      var entrega=ef-gastos;
       var total=tj+ef+nq;
       return {prod:prod,tj:tj,efnq:efnq,gastos:gastos,entrega:entrega,total:total,cort:cort};
     });
