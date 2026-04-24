@@ -4070,6 +4070,70 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       }
     });
     h+='</tbody></table></div>';
+    // ==================== RESUMEN COMPACTO NUEVO ====================
+    var snCompact={SHIFT_1:{label:'TURNO 1',sub:'6am-2pm',color:'#3b82f6',rgba:'59,130,246'},SHIFT_2:{label:'TURNO 2',sub:'2pm-9pm',color:'#22c55e',rgba:'34,197,94'},SHIFT_3:{label:'TURNO 3',sub:'9pm-6am',color:'#f97316',rgba:'249,115,22'}};
+    h+='<div style="margin-top:14px;padding:10px;background:#18181f;border:1px solid #2e2e3a;border-radius:10px">';
+    h+='<div style="text-align:center;color:#a78bfa;font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:10px">📊 RESUMEN COMPACTO</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">';
+    shifts.forEach(function(sid,i){
+      var sc=snCompact[sid];
+      var resp=(ms[i].shiftUser)||'—';
+      h+='<div style="text-align:center;padding:6px;background:rgba('+sc.rgba+',.15);border-radius:6px;border-top:3px solid '+sc.color+'">';
+      h+='<div style="font-size:11px;color:'+sc.color+';font-weight:700;letter-spacing:1px">'+sc.label+'</div>';
+      h+='<div style="font-size:9px;color:#9ca3af">'+esc(resp)+' · '+sc.sub+'</div>';
+      h+='</div>';
+    });
+    h+='</div>';
+    var datosTurno=shifts.map(function(sid,i){
+      var m=ms[i]||{};
+      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid;});
+      var ls=loans.filter(function(l){return l.shiftId===sid;});
+      var ex=extras.filter(function(e){return e.shiftId===sid&&Number(e.payment||0)>0;});
+      var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
+      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
+      var nq=sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarNequi||0);
+      var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);
+      var prod=Number((m.totals||{}).totalProductos||0);
+      var cort=Number((m.totals||{}).totalCortesiasProds||0);
+      var efnq=ef+nq;
+      var entrega=efnq-gastos;
+      var total=tj+ef+nq;
+      return {prod:prod,tj:tj,efnq:efnq,gastos:gastos,entrega:entrega,total:total,cort:cort};
+    });
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px">';
+    datosTurno.forEach(function(d){h+='<div style="background:rgba(251,146,60,.06);border:0.5px solid rgba(251,146,60,.3);border-radius:6px;padding:6px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:10px;color:#fb923c">🛒 Productos</div><div style="font-size:13px;font-weight:700;color:#fb923c">'+fmt(d.prod)+'</div></div>';});
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px">';
+    datosTurno.forEach(function(d){h+='<div style="background:rgba(234,179,8,.06);border:0.5px solid rgba(234,179,8,.3);border-radius:6px;padding:6px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:10px;color:#fde047">💳 Tarjeta</div><div style="font-size:13px;font-weight:700;color:#fde047">'+fmt(d.tj)+'</div></div>';});
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px">';
+    datosTurno.forEach(function(d){
+      h+='<div style="background:rgba(59,130,246,.06);border:0.5px solid rgba(59,130,246,.3);border-radius:6px;padding:6px">';
+      h+='<div style="font-size:10px;color:#93c5fd;text-align:center;margin-bottom:4px;font-weight:700">📱 Ef + Nq</div>';
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;text-align:center">';
+      h+='<div><div style="font-size:8px;color:#6b7280">Ef+Nq</div><div style="font-size:11px;color:#93c5fd;font-weight:700">'+fmt(d.efnq)+'</div></div>';
+      h+='<div style="border-left:0.5px solid rgba(255,255,255,.08);border-right:0.5px solid rgba(255,255,255,.08)"><div style="font-size:8px;color:#6b7280">−Gast</div><div style="font-size:11px;color:#ef4444;font-weight:700">'+fmt(d.gastos)+'</div></div>';
+      h+='<div><div style="font-size:8px;color:#6b7280">=Res</div><div style="font-size:11px;color:#86efac;font-weight:700">'+fmt(d.efnq-d.gastos)+'</div></div>';
+      h+='</div></div>';
+    });
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px">';
+    datosTurno.forEach(function(d){h+='<div style="background:rgba(167,139,250,.1);border:0.5px solid rgba(167,139,250,.4);border-radius:6px;padding:7px;text-align:center"><div style="font-size:9px;color:#c4b5fd;letter-spacing:.5px;font-weight:700">🔸 TOTAL TURNO</div><div style="font-size:15px;font-weight:800;color:#c4b5fd">'+fmt(d.total)+'</div></div>';});
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px">';
+    datosTurno.forEach(function(d){h+='<div style="background:rgba(34,197,94,.1);border:0.5px solid rgba(34,197,94,.4);border-radius:6px;padding:7px;text-align:center"><div style="font-size:9px;color:#86efac;letter-spacing:.5px;font-weight:700">💵 ENTREGA</div><div style="font-size:15px;font-weight:800;color:'+(d.entrega>=0?'#86efac':'#fca5a5')+'">'+fmt(d.entrega)+'</div></div>';});
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">';
+    datosTurno.forEach(function(d){h+='<div style="background:rgba(139,92,246,.06);border:0.5px solid rgba(139,92,246,.3);border-radius:6px;padding:5px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:10px;color:#a78bfa">🎁 Cortesías</div><div style="font-size:11px;color:#a78bfa">'+fmt(d.cort)+'</div></div>';});
+    h+='</div>';
+    var entregaTotal=datosTurno.reduce(function(a,d){return a+d.entrega;},0);
+    h+='<div style="background:rgba(192,132,252,.1);border:1px solid rgba(192,132,252,.4);border-radius:10px;padding:12px;text-align:center">';
+    h+='<div style="color:#d8b4fe;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:3px">💰 ENTREGA TOTAL DEL DÍA</div>';
+    h+='<div style="font-size:26px;font-weight:800;color:#d8b4fe">'+fmt(entregaTotal)+'</div>';
+    h+='<div style="font-size:10px;color:#6b7280;margin-top:4px">T1 + T2 + T3</div>';
+    h+='</div>';
+    h+='</div>';
+    // ==================== FIN RESUMEN COMPACTO ====================
     // Botones fallas por turno
     h+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
     shifts.forEach(function(sid,i){
