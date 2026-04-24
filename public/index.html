@@ -2373,7 +2373,15 @@ h+='</div></div>';
     el.innerHTML=h;
   });
 }
- function toggleAdmDesCell(id){
+function toggleDetalleCuadreAdm(){
+  var el=document.getElementById('detCuadreAdm');
+  var btn=document.getElementById('btnDetCuadreAdm');
+  if(!el||!btn)return;
+  var oculto=el.style.display==='none';
+  el.style.display=oculto?'table-row-group':'none';
+  btn.innerHTML=oculto?'▲ Ocultar detalle completo':'▼ Ver detalle completo';
+} 
+function toggleAdmDesCell(id){
   var el=document.getElementById(id);
   if(!el)return;
   el.style.display=el.style.display==='none'?'block':'none';
@@ -3996,7 +4004,9 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     dataRow('Taxis',function(m){return Number((m.totals||{}).shiftTaxi||0);},'#f59e0b');
     dataRow('Turnos',function(m,sl,ls,ex){return ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#f97316');
     dataRow('Total Gastos',function(m,sl,ls,ex){return ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);},'#ef4444');
-   h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">💰 TOTAL TURNO</td></tr>';
+   h+='<tr><td colspan="5" style="padding:6px;background:#22222c;border:1px solid #2e2e3a;text-align:center"><button onclick="toggleDetalleCuadreAdm()" id="btnDetCuadreAdm" style="background:none;border:1px solid #a78bfa;color:#a78bfa;cursor:pointer;font-size:11px;font-weight:700;padding:4px 12px;border-radius:6px">▼ Ver detalle completo</button></td></tr>';
+    h+='</tbody><tbody id="detCuadreAdm" style="display:none">';
+    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">💰 TOTAL TURNO</td></tr>';
     dataRow('Total del Turno',function(m,sl,ls,ex){
       var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
       var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
