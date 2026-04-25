@@ -2336,7 +2336,7 @@ h+='</div></div>';
     h+='<div style="font-size:20px;font-weight:800;color:#c4b5fd">'+fmt(totalTurno)+'</div></div>';
     h+='<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.4);border-radius:10px;padding:10px;text-align:center">';
     h+='<div style="font-size:10px;color:#86efac;font-weight:600;letter-spacing:1px">💵 EFECTIVO ENTREGADO</div>';
-    h+='<div id="entregaDisp" stye="font-size:20px;font-weight:800;color:'+(entrega>=0?'#86efac':'#fca5a5')+'">'+fmt(entrega)+'</div></div></div>';
+    h+='<div id="entregaDisp" style="font-size:20px;font-weight:800;color:'+(entrega>=0?'#86efac':'#fca5a5')+'">'+fmt(entrega)+'</div></div></div>';
     h+='<div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.3);border-radius:10px;padding:8px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
     h+='<span style="font-size:12px;color:#a78bfa">🎁 Cortesías</span>';
     h+='<span style="font-size:13px;color:#a78bfa">'+fmt(Number(t.totalCortesiasProds||0))+'</span></div>';
@@ -2393,14 +2393,15 @@ function toggleAdmDesCell(id){
   el.style.display=vis?'none':'block';
 }
 function _desgloseRows(sl,pm,barVal,color){
-  var ventas=sl.filter(function(s){return s.payMethod===pm&&(s.type==='SALE'||s.type==='RENEWAL');});
-  var exts=sl.filter(function(s){return s.payMethod===pm&&s.type==='EXTENSION';});
+  var amountKey = pm==='EFECTIVO'?'amount_1':pm==='TARJETA'?'amount_2':'amount_3';
+  var ventas=sl.filter(function(s){return (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');});
+  var exts=sl.filter(function(s){return (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&s.type==='EXTENSION';});
   var h='';
   if(ventas.length){
     h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin-bottom:5px">Ventas base</div>';
     ventas.forEach(function(s){
       var epv=Number(s.extraPeopleValue||0);
-      var habVal=Number(s.total||0)-epv;
+      var habVal=s.payMethod==='MIXTO'?Number(s[amountKey]||0):(Number(s.total||0)-epv);
       h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
       h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+esc(s.category)+' '+s.durationHrs+'h</span>';
       h+='<span style="color:'+color+'">'+fmt(habVal)+'</span>';
@@ -4096,7 +4097,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       var prod=Number((m.totals||{}).totalProductos||0);
       var cort=Number((m.totals||{}).totalCortesiasProds||0);
       var efnq=ef+nq;
-      var entrega=efnq-gastos;
+      var entrega=ef-gastos;
       var total=tj+ef+nq;
       return {prod:prod,tj:tj,efnq:efnq,gastos:gastos,entrega:entrega,total:total,cort:cort};
     });
