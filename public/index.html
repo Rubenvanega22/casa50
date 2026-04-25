@@ -5047,7 +5047,7 @@ function loadListadoMaid(){
   ]).then(function(res){
     var m=res[0]||{};
     var maidLogs=res[1].logs||[];
-  var sl=(m.allSalesList||[]).filter(function(s){return s.type==='SALE';});
+  var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0;});
     sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
     if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
     var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
