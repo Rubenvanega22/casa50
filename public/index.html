@@ -2075,9 +2075,9 @@ function loadVentas(){
       conCobro304.forEach(function(s){
         var col=turnoColor[s.shiftId]||'#6b7280';
         var lbl=turnoLabel[s.shiftId]||'';
-        var checkoutReal=0;
+        var checkoutReal=Number(s.checkoutMs||0);
         var roomState=rooms.find(function(r){return r.roomId===s.roomId;});
-        if(roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
+        if(!checkoutReal&&roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
         var maidLog=maidLogs.find(function(l){
           return l.roomId===s.roomId&&Number(l.checkInMs||0)===Number(s.checkInMs||0)&&Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE';
         });
@@ -4346,9 +4346,9 @@ h+='</div>';
       todasVentas.forEach(function(s){
         var col=turnoColor[s.shiftId]||'#6b7280';
         var lbl=turnoLabel[s.shiftId]||'';
-        var checkoutReal=0;
+        var checkoutReal=Number(s.checkoutMs||0);
         var roomState=rooms.find(function(r){return r.roomId===s.roomId;});
-        if(roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
+        if(!checkoutReal&&roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
         var maidLog=maidLogs.find(function(l){return l.roomId===s.roomId&&Number(l.checkInMs||0)===Number(s.checkInMs||0)&&Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE';});
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
         h+='<div style="background:#18181f;border:0.5px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px">';
@@ -5068,9 +5068,9 @@ function loadListadoMaid(){
       var col=turnoColor[s.shiftId]||'#6b7280';
       var lbl=turnoLabel[s.shiftId]||'';
       // Hora real de salida
-      var checkoutReal=0;
+      var checkoutReal=Number(s.checkoutMs||0);
       var roomState=rooms.find(function(r){return r.roomId===s.roomId;});
-      if(roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
+      if(!checkoutReal&&roomState&&roomState.state!=='OCCUPIED')checkoutReal=Number(roomState.lastCheckoutMs||0);
       // Aseo
       var maidLog=maidLogs.find(function(l){
         return l.roomId===s.roomId&&Number(l.checkInMs||0)===Number(s.checkInMs||0)&&Number(l.finishedMs||0)>0&&l.stateTo==='AVAILABLE';
