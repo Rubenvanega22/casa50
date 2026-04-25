@@ -162,6 +162,52 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
 <div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
 <div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
+<div class="ov" id="mChangePay"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">💳 Cambiar Método de Pago</div><button class="mc" onclick="closeM('mChangePay')">✕</button></div>
+<div style="font-size:12px;color:#9ca3af;margin-bottom:10px" id="mcpSubtitle">Selecciona la venta y el nuevo método</div>
+<div id="mcpAdmCtrl" style="display:none;margin-bottom:10px">
+<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Turno a modificar</label>
+<select id="mcpShift" onchange="loadVentasParaCambio()" style="width:100%">
+<option value="SHIFT_1">Turno 1 (6am - 2pm)</option>
+<option value="SHIFT_2">Turno 2 (2pm - 10pm)</option>
+<option value="SHIFT_3">Turno 3 (10pm - 6am)</option>
+</select>
+</div>
+<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Selecciona la venta</div>
+<div id="mcpListVentas" style="max-height:200px;overflow-y:auto;border:1px solid #2e2e3a;border-radius:8px;padding:6px;background:#1a1a22;margin-bottom:12px">
+<p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">Cargando ventas...</p>
+</div>
+<div id="mcpDetVenta" style="display:none;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.3);border-radius:8px;padding:10px;margin-bottom:12px">
+<div style="font-size:10px;color:#a78bfa;font-weight:700;text-transform:uppercase">Venta seleccionada</div>
+<div id="mcpDetTitle" style="font-size:14px;font-weight:700;color:#e5e7eb;margin-top:2px"></div>
+<div id="mcpDetInfo" style="font-size:11px;color:#9ca3af;margin-top:2px"></div>
+<div id="mcpDetActual" style="font-size:11px;color:#f59e0b;margin-top:4px;font-weight:600"></div>
+</div>
+<div id="mcpMetodoSection" style="display:none">
+<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Nuevo método de pago</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+<button type="button" id="mcpBtnEF" onclick="selectNuevoMetodo('EFECTIVO')" style="padding:10px 4px;background:#1a1a22;border:1px solid #2e2e3a;border-radius:8px;color:#e5e7eb;cursor:pointer;font-size:11px">💵<br>Efectivo</button>
+<button type="button" id="mcpBtnTJ" onclick="selectNuevoMetodo('TARJETA')" style="padding:10px 4px;background:#1a1a22;border:1px solid #2e2e3a;border-radius:8px;color:#e5e7eb;cursor:pointer;font-size:11px">💳<br>Tarjeta</button>
+<button type="button" id="mcpBtnNQ" onclick="selectNuevoMetodo('NEQUI')" style="padding:10px 4px;background:#1a1a22;border:1px solid #2e2e3a;border-radius:8px;color:#e5e7eb;cursor:pointer;font-size:11px">📱<br>Nequi</button>
+<button type="button" id="mcpBtnMX" onclick="selectNuevoMetodo('MIXTO')" style="padding:10px 4px;background:#1a1a22;border:1px solid #2e2e3a;border-radius:8px;color:#e5e7eb;cursor:pointer;font-size:11px">🔀<br>Mixto</button>
+</div>
+<div id="mcpMixtoBlock" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:10px;margin-bottom:12px">
+<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:6px">Distribuir total: <span id="mcpMixtoTotal">$0</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+<div><label style="font-size:10px;color:#9ca3af">Efectivo</label><input type="number" id="mcpMixEF" min="0" oninput="updateMixtoSum()" style="width:100%;font-size:12px"></div>
+<div><label style="font-size:10px;color:#9ca3af">Tarjeta</label><input type="number" id="mcpMixTJ" min="0" oninput="updateMixtoSum()" style="width:100%;font-size:12px"></div>
+<div><label style="font-size:10px;color:#9ca3af">Nequi</label><input type="number" id="mcpMixNQ" min="0" oninput="updateMixtoSum()" style="width:100%;font-size:12px"></div>
+</div>
+<div id="mcpMixtoSum" style="font-size:11px;margin-top:6px;text-align:center;color:#9ca3af">Suma actual: $0</div>
+</div>
+<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo del cambio <span style="color:#ef4444">*</span></label>
+<textarea id="mcpReason" placeholder="Ej: La recepcionista marcó mal el método de pago" style="width:100%;min-height:50px;font-size:12px;margin-bottom:10px"></textarea>
+<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#f59e0b">⚠️ Este cambio quedará registrado en el historial con tu nombre y fecha. El cuadre se recalculará automáticamente.</div>
+<div style="display:flex;gap:6px">
+<button class="btn bk" style="flex:1" onclick="closeM('mChangePay')">Cancelar</button>
+<button class="btn ba" style="flex:1" onclick="saveChangePayMethod()">Guardar cambio</button>
+</div>
+</div>
+</div></div>
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
 <div class="ov" id="mExtra"><div class="modal"><div class="mh"><div class="mt">Registrar Personal Extra</div><button class="mc" onclick="closeM('mExtra')">✕</button></div>
 <label>Nombre</label><input type="text" id="exName" placeholder="Nombre completo">
@@ -407,6 +453,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
 <h2 style="font-size:14px">Cuadre de Turno</h2>
 <button class="refresh-btn" onclick="loadCuadre()">↻ Actualizar</button>
+<button class="btn sm" style="background:#f59e0b;color:#1f1f24;font-weight:700" onclick="openChangePayModal('RECEPTION')">🔄 Cambiar Método</button>
 </div>
 <div id="cuadreCont"></div>
 </div>
@@ -497,6 +544,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <h2 style="font-size:14px">Cuadre de Caja</h2>
 <input type="date" id="cuadreAdminDay" style="width:auto;margin:0">
 <button class="btn ba sm" onclick="loadCuadreAdmin()">Ver</button>
+<button class="btn sm" style="background:#f59e0b;color:#1f1f24;font-weight:700" onclick="openChangePayModal('ADMIN')">🔄 Cambiar Método</button>
 </div>
 <div id="cuadreAdminCont"><p style="color:#9ca3af">Selecciona una fecha y presiona Ver.</p></div>
 </div>
@@ -2216,6 +2264,143 @@ function loadExtra(){
 }
 
 // ---- CUADRE ----
+// ===== CAMBIAR METODO DE PAGO =====
+var mcpState={role:null,sales:[],selectedSaleId:null,selectedMethod:null};
+function openChangePayModal(role){
+  if(!sess){toast('Sesión no iniciada','err');return;}
+  mcpState={role:role,sales:[],selectedSaleId:null,selectedMethod:null};
+  document.getElementById('mcpAdmCtrl').style.display=(role==='ADMIN')?'block':'none';
+  document.getElementById('mcpDetVenta').style.display='none';
+  document.getElementById('mcpMetodoSection').style.display='none';
+  document.getElementById('mcpMixtoBlock').style.display='none';
+  document.getElementById('mcpReason').value='';
+  document.getElementById('mcpMixEF').value='';
+  document.getElementById('mcpMixTJ').value='';
+  document.getElementById('mcpMixNQ').value='';
+  ['mcpBtnEF','mcpBtnTJ','mcpBtnNQ','mcpBtnMX'].forEach(function(id){var b=document.getElementById(id);b.style.background='#1a1a22';b.style.borderColor='#2e2e3a';});
+  if(role==='ADMIN'){
+    var day=document.getElementById('cuadreAdminDay').value;
+    if(!day){toast('Primero selecciona una fecha y presiona Ver en Cuadre.','err');return;}
+    document.getElementById('mcpSubtitle').textContent='Día '+day+' — selecciona turno y venta';
+    document.getElementById('mcpShift').value='SHIFT_1';
+  } else {
+    document.getElementById('mcpSubtitle').textContent='Tu turno actual — selecciona una venta';
+  }
+  openM('mChangePay');
+  loadVentasParaCambio();
+}
+function loadVentasParaCambio(){
+  var listEl=document.getElementById('mcpListVentas');
+  listEl.innerHTML='<p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">Cargando ventas...</p>';
+  document.getElementById('mcpDetVenta').style.display='none';
+  document.getElementById('mcpMetodoSection').style.display='none';
+  mcpState.selectedSaleId=null;mcpState.selectedMethod=null;
+  var day,shift,fromMs;
+  if(mcpState.role==='ADMIN'){day=document.getElementById('cuadreAdminDay').value;shift=document.getElementById('mcpShift').value;fromMs=0;}
+  else{day=sess.businessDay;shift=sess.shiftId;fromMs=Number(sess.fromMs||0);}
+  rpc('metrics',{businessDay:day,shiftId:shift},function(m){
+    var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shift&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
+    sl.sort(function(a,b){return Number(a.tsMs||a.checkInMs||0)-Number(b.tsMs||b.checkInMs||0);});
+    mcpState.sales=sl;
+    if(sl.length===0){listEl.innerHTML='<p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">No hay ventas en este turno.</p>';return;}
+    var h='';
+    sl.forEach(function(s){
+      var pm=s.payMethod||'EFECTIVO';
+      var color={EFECTIVO:'#22c55e',TARJETA:'#3b82f6',NEQUI:'#a78bfa',MIXTO:'#f59e0b'}[pm]||'#9ca3af';
+      var bg={EFECTIVO:'rgba(34,197,94,.12)',TARJETA:'rgba(59,130,246,.12)',NEQUI:'rgba(167,139,250,.12)',MIXTO:'rgba(245,158,11,.12)'}[pm]||'rgba(156,163,175,.12)';
+      var hora=fT(s.tsMs||s.checkInMs);
+      var cat=s.category||'';
+      var dur=s.duration_hrs||s.durationHrs||0;
+      h+='<div onclick="selectVentaParaCambio('+s.id+')" style="padding:8px;border-bottom:1px solid #2e2e3a;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background=\'#22222c\'" onmouseout="this.style.background=\'transparent\'">';
+      h+='<div><div style="font-size:12px;font-weight:600;color:#e5e7eb">Hab '+esc(s.roomId)+(cat?' — '+esc(cat):'')+(dur?' '+dur+'h':'')+'</div><div style="font-size:10px;color:#9ca3af">'+hora+'</div></div>';
+      h+='<div style="display:flex;align-items:center;gap:8px"><span style="background:'+bg+';color:'+color+';padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700">'+pm+'</span><span style="font-size:12px;font-weight:700;color:#e5e7eb">'+fmt(s.total)+'</span></div>';
+      h+='</div>';
+    });
+    listEl.innerHTML=h;
+  },function(e){listEl.innerHTML='<p style="color:#ef4444;font-size:12px;text-align:center;padding:10px">Error: '+(e.message||'?')+'</p>';});
+}
+
+function selectVentaParaCambio(saleId){
+  var s=mcpState.sales.find(function(x){return Number(x.id)===Number(saleId);});
+  if(!s){toast('Venta no encontrada','err');return;}
+  mcpState.selectedSaleId=Number(saleId);mcpState.selectedMethod=null;
+  var hora=fT(s.tsMs||s.checkInMs);
+  var pm=s.payMethod||'EFECTIVO';
+  var dur=s.duration_hrs||s.durationHrs||0;
+  document.getElementById('mcpDetTitle').textContent='Hab '+s.roomId+(s.category?' — '+s.category:'')+(dur?' '+dur+'h':'');
+  document.getElementById('mcpDetInfo').textContent=hora+' · '+pm+' · '+fmt(s.total);
+  var detalle='';
+  if(pm==='MIXTO'){detalle='Actual: '+fmt(s.amount_1||0)+' ef + '+fmt(s.amount_2||0)+' tj + '+fmt(s.amount_3||0)+' nq';}
+  else{detalle='Actual: '+fmt(s.total)+' en '+pm;}
+  document.getElementById('mcpDetActual').textContent=detalle;
+  document.getElementById('mcpDetVenta').style.display='block';
+  document.getElementById('mcpMetodoSection').style.display='block';
+  document.getElementById('mcpMixtoBlock').style.display='none';
+  ['mcpBtnEF','mcpBtnTJ','mcpBtnNQ','mcpBtnMX'].forEach(function(id){var b=document.getElementById(id);b.style.background='#1a1a22';b.style.borderColor='#2e2e3a';});
+  document.getElementById('mcpMixtoTotal').textContent=fmt(s.total);
+}
+function selectNuevoMetodo(metodo){
+  mcpState.selectedMethod=metodo;
+  var btnMap={EFECTIVO:'mcpBtnEF',TARJETA:'mcpBtnTJ',NEQUI:'mcpBtnNQ',MIXTO:'mcpBtnMX'};
+  var colorMap={EFECTIVO:{bg:'rgba(34,197,94,.18)',bd:'#22c55e'},TARJETA:{bg:'rgba(59,130,246,.18)',bd:'#3b82f6'},NEQUI:{bg:'rgba(167,139,250,.18)',bd:'#a78bfa'},MIXTO:{bg:'rgba(245,158,11,.18)',bd:'#f59e0b'}};
+  ['mcpBtnEF','mcpBtnTJ','mcpBtnNQ','mcpBtnMX'].forEach(function(id){var b=document.getElementById(id);b.style.background='#1a1a22';b.style.borderColor='#2e2e3a';});
+  var b=document.getElementById(btnMap[metodo]);b.style.background=colorMap[metodo].bg;b.style.borderColor=colorMap[metodo].bd;
+  document.getElementById('mcpMixtoBlock').style.display=(metodo==='MIXTO')?'block':'none';
+  if(metodo==='MIXTO'){
+    var s=mcpState.sales.find(function(x){return Number(x.id)===Number(mcpState.selectedSaleId);});
+    if(s){
+      document.getElementById('mcpMixEF').value=Number(s.amount_1||0);
+      document.getElementById('mcpMixTJ').value=Number(s.amount_2||0);
+      document.getElementById('mcpMixNQ').value=Number(s.amount_3||0);
+      updateMixtoSum();
+    }
+  }
+}
+function updateMixtoSum(){
+  var s=mcpState.sales.find(function(x){return Number(x.id)===Number(mcpState.selectedSaleId);});
+  if(!s)return;
+  var ef=Number(document.getElementById('mcpMixEF').value||0);
+  var tj=Number(document.getElementById('mcpMixTJ').value||0);
+  var nq=Number(document.getElementById('mcpMixNQ').value||0);
+  var sum=ef+tj+nq;
+  var total=Number(s.total||0);
+  var el=document.getElementById('mcpMixtoSum');
+  if(sum===total){el.style.color='#22c55e';el.textContent='✓ Suma: '+fmt(sum)+' (cuadra con el total)';}
+  else{el.style.color='#ef4444';el.textContent='✗ Suma: '+fmt(sum)+' — debe ser '+fmt(total);}
+}
+function saveChangePayMethod(){
+  if(!mcpState.selectedSaleId){toast('Selecciona una venta primero','err');return;}
+  if(!mcpState.selectedMethod){toast('Selecciona el nuevo método de pago','err');return;}
+  var reason=document.getElementById('mcpReason').value.trim();
+  if(!reason){toast('Escribe el motivo del cambio','err');return;}
+  var s=mcpState.sales.find(function(x){return Number(x.id)===Number(mcpState.selectedSaleId);});
+  if(!s){toast('Venta no encontrada','err');return;}
+  var total=Number(s.total||0);
+  var newA1=0,newA2=0,newA3=0,newPm2='';
+  if(mcpState.selectedMethod==='EFECTIVO'){newA1=total;}
+  else if(mcpState.selectedMethod==='TARJETA'){newA2=total;}
+  else if(mcpState.selectedMethod==='NEQUI'){newA3=total;}
+  else if(mcpState.selectedMethod==='MIXTO'){
+    newA1=Number(document.getElementById('mcpMixEF').value||0);
+    newA2=Number(document.getElementById('mcpMixTJ').value||0);
+    newA3=Number(document.getElementById('mcpMixNQ').value||0);
+    newPm2='MIXTO_EF_TJ_NQ';
+    if(newA1+newA2+newA3!==total){toast('La suma del MIXTO no cuadra con el total','err');return;}
+  }
+  var samePm=(s.payMethod===mcpState.selectedMethod);
+  var sameAm=(Number(s.amount_1||0)===newA1&&Number(s.amount_2||0)===newA2&&Number(s.amount_3||0)===newA3);
+  if(samePm&&sameAm){toast('No hay cambios para guardar','err');return;}
+  rpc('changePaymentMethod',{
+    saleId:s.id,newPayMethod:mcpState.selectedMethod,newPayMethod2:newPm2,
+    newAmount1:newA1,newAmount2:newA2,newAmount3:newA3,reason:reason,
+    userName:sess.userName,userRole:sess.userRole
+  },function(){
+    toast('✓ Método de pago cambiado','ok');
+    closeM('mChangePay');
+    if(mcpState.role==='ADMIN')loadCuadreAdmin();
+    else loadCuadre();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
 function loadCuadre(){
   if(!sess)return;
   var el=document.getElementById('cuadreCont');el.innerHTML='<p style="color:#9ca3af">Calculando...</p>';
