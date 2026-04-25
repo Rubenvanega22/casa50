@@ -245,6 +245,7 @@ module.exports = async function handler(req, res) {
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
+      case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -1209,7 +1210,7 @@ async function apiMetrics(p, res) {
         dayTotal+=t;
         if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
       }
-      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||'')});
+      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||'')});
       if(!shiftFilter||sid===shiftFilter){
         if(!skip304){
           shiftSales+=t;
@@ -1218,7 +1219,7 @@ async function apiMetrics(p, res) {
         }
       }
     }
-    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;allSalesList.push({tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
+    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
   });
 const {data:prodSales}=await supabase.from('room_products').select('*').eq('business_day',bDay);
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
@@ -2790,6 +2791,67 @@ async function apiUpdatePrecioCompra(p, res) {
 
   await supabase.from('products').update({ precio_compra: precioCompra }).eq('id', productId);
   return ok(res, { productId, precioCompra });
+}
+async function apiChangePaymentMethod(p, res) {
+  try {
+    const saleId = Number(p.saleId || 0);
+    const newPm = String(p.newPayMethod || '').toUpperCase();
+    const newPm2 = String(p.newPayMethod2 || '');
+    const newA1 = Number(p.newAmount1 || 0);
+    const newA2 = Number(p.newAmount2 || 0);
+    const newA3 = Number(p.newAmount3 || 0);
+    const reason = String(p.reason || '').trim();
+    const userName = String(p.userName || '');
+    const userRole = String(p.userRole || '');
+    if (!saleId) return err(res, 'Falta saleId');
+    if (!['EFECTIVO','TARJETA','NEQUI','MIXTO'].includes(newPm)) return err(res, 'Metodo invalido');
+    if (!reason) return err(res, 'Falta motivo');
+    if (!userName) return err(res, 'Falta usuario');
+    const { data: saleData, error: saleErr } = await supabase.from('sales').select('*').eq('id', saleId).single();
+    if (saleErr || !saleData) return err(res, 'Venta no encontrada');
+    if (saleData.anulada) return err(res, 'No se puede modificar una venta anulada');
+    const total = Number(saleData.total || 0);
+    if (newPm === 'MIXTO') {
+      if (Math.round(newA1 + newA2 + newA3) !== Math.round(total)) return err(res, 'La suma del MIXTO no cuadra con el total ('+total+')');
+    } else {
+      if (newPm === 'EFECTIVO' && Math.round(newA1) !== Math.round(total)) return err(res, 'amount_1 debe igualar al total');
+      if (newPm === 'TARJETA'  && Math.round(newA2) !== Math.round(total)) return err(res, 'amount_2 debe igualar al total');
+      if (newPm === 'NEQUI'    && Math.round(newA3) !== Math.round(total)) return err(res, 'amount_3 debe igualar al total');
+    }
+    const nowMs = Date.now();
+    const { error: insErr } = await supabase.from('payment_method_changes').insert({
+      sale_id: saleId,
+      changed_at_ms: nowMs,
+      business_day: saleData.business_day,
+      shift_id: saleData.shift_id,
+      user_role: userRole,
+      user_name: userName,
+      old_pay_method: saleData.pay_method || '',
+      old_pay_method_2: saleData.pay_method_2 || '',
+      old_amount_1: Number(saleData.amount_1 || 0),
+      old_amount_2: Number(saleData.amount_2 || 0),
+      old_amount_3: Number(saleData.amount_3 || 0),
+      new_pay_method: newPm,
+      new_pay_method_2: newPm2,
+      new_amount_1: newA1,
+      new_amount_2: newA2,
+      new_amount_3: newA3,
+      total: total,
+      reason: reason
+    });
+    if (insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
+    const { error: updErr } = await supabase.from('sales').update({
+      pay_method: newPm,
+      pay_method_2: newPm2,
+      amount_1: newA1,
+      amount_2: newA2,
+      amount_3: newA3
+    }).eq('id', saleId);
+    if (updErr) return err(res, 'Error actualizando venta: ' + updErr.message);
+    return ok(res, { changed: true, saleId: saleId });
+  } catch (e) {
+    return err(res, e.message || String(e));
+  }
 }
 // ==================== AJUSTE DE INVENTARIO V2 (13 ESCENARIOS) ====================
 // Maneja todos los escenarios de ajuste: BODEGA, RECEPCION, FALTANTES, AJUSTE
