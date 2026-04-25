@@ -2063,9 +2063,10 @@ function loadVentas(){
       h+='<div style="font-size:11px;color:#9ca3af">'+fmt(r.total)+'</div></div>';
     });
     h+='</div>';
-    totalHabDia=sl.length;
+    var totalSinCortesia=sl.filter(function(s){return s.roomId!=='304';}).length;
+    totalHabDia=totalSinCortesia;
     renderSM();
-    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+sl.length+' ventas hoy</div>';
+    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+totalSinCortesia+' ventas hoy</div>';
     if(!sl.length){
       h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
     } else {
