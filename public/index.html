@@ -794,6 +794,7 @@ function sw(id){
   var b=document.querySelector('[data-tab="'+id+'"]');if(b)b.classList.add('on');
   if(id==='notes')loadNotes();
   if(id==='maids')loadMP();
+  if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
  if(id==='maint'){loadMaintMonth();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
@@ -1018,7 +1019,7 @@ function renderSM(){
   var isRec=sess&&sess.userRole==='RECEPTION';
   var badge=document.getElementById('ocupadasBadge');
   var btnC=document.getElementById('btnCortesia');
-  if(badge){badge.style.display=isRec?'':'none';badge.style.background='rgba(34,197,94,.12)';badge.style.border='1px solid rgba(34,197,94,.4)';badge.style.color='#22c55e';badge.textContent='🟢 '+totalHabDia+' hoy';}
+  if(badge){badge.style.display=(isRec||sess.userRole==='ADMIN')?'':'none';badge.style.background='rgba(34,197,94,.12)';badge.style.border='1px solid rgba(34,197,94,.4)';badge.style.color='#22c55e';badge.textContent='🟢 '+totalHabDia+' hoy';}
   if(btnC)btnC.style.display=isRec?'':'none';
 }
 
