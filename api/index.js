@@ -279,7 +279,7 @@ async function apiGetRooms(req, res) {
 // ==================== LOGIN ====================
 async function apiLogin(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
+  let bDay = businessDay(now);
   let shift = String(p.shiftId||'').trim()||currentShiftId(now);
   shift = normalizeShiftId(shift);
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shift)) shift=currentShiftId(now);
@@ -295,7 +295,12 @@ async function apiLogin(p, res) {
       if(logoutT3&&logoutT3.length){
         const logoutHour = new Date(Number(logoutT3[0].ts_ms) + (-5*3600000)).getUTCHours();
         // Solo cambia a SHIFT_1 si el logout fue tambien en la madrugada
-        if(logoutHour >= 0 && logoutHour < 6) shift = 'SHIFT_1';
+        if(logoutHour >= 0 && logoutHour < 6){
+          shift = 'SHIFT_1';
+          // Avanzar el business_day un día porque este SHIFT_1 pertenece al dia siguiente comercialmente
+          const tomorrow = new Date(now + 24 * 3600 * 1000);
+          bDay = tomorrow.toISOString().slice(0,10);
+        }
       }
     }
   }
