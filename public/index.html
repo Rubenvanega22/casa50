@@ -213,6 +213,13 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bk" style="flex:1" onclick="closeM('mChangePay')">Cancelar</button>
 <button class="btn ba" style="flex:1" onclick="saveChangePayMethod()">Guardar cambio</button>
 </div>
+<div style="border-top:2px dashed #2e2e3a;margin:14px 0;padding-top:12px">
+<div style="font-size:11px;color:#ef4444;text-transform:uppercase;font-weight:700;margin-bottom:8px">🗑️ Anular esta venta</div>
+<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px;margin-bottom:10px;font-size:11px;color:#fca5a5">⚠️ Esto anula la venta del cuadre. Quedará registrada como ANULADA pero con historial visible.</div>
+<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo de anulación <span style="color:#ef4444">*</span></label>
+<textarea id="mcpAnulMotivo" placeholder="Ej: La cliente se fue sin pagar, error de digitación, etc." style="width:100%;min-height:50px;font-size:12px;margin-bottom:10px"></textarea>
+<button class="btn br full" onclick="anularVentaModulo()">🗑️ Anular venta seleccionada</button>
+</div>
 </div>
 <div id="mcpTabGastos" style="display:none;padding:20px;text-align:center;color:#9ca3af;font-size:13px">
 <div style="font-size:32px;margin-bottom:10px">💰</div>
@@ -2415,6 +2422,26 @@ function updateMixtoSum(){
   var el=document.getElementById('mcpMixtoSum');
   if(sum===total){el.style.color='#22c55e';el.textContent='✓ Suma: '+fmt(sum)+' (cuadra con el total)';}
   else{el.style.color='#ef4444';el.textContent='✗ Suma: '+fmt(sum)+' — debe ser '+fmt(total);}
+}
+function anularVentaModulo(){
+  if(!mcpState.selectedSaleId){toast('Selecciona una venta primero','err');return;}
+  var motivo=(document.getElementById('mcpAnulMotivo')||{}).value||'';
+  if(!motivo.trim()||motivo.trim().length<5){toast('El motivo es obligatorio (mínimo 5 caracteres)','err');return;}
+  var s=mcpState.sales.find(function(x){return Number(x.id)===Number(mcpState.selectedSaleId);});
+  if(!s){toast('Venta no encontrada','err');return;}
+  conf('¿Anular la venta de Hab '+s.roomId+' por '+fmt(s.total)+'? Esta acción no se puede deshacer fácilmente.',function(){
+    rpc('anularVentaModulo',{
+      saleId:s.id,
+      motivo:motivo.trim(),
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Venta anulada','ok');
+      closeM('mChangePay');
+      if(mcpState.role==='ADMIN')loadCuadreAdmin();
+      else loadCuadre();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
 }
 function saveChangePayMethod(){
   if(!mcpState.selectedSaleId){toast('Selecciona una venta primero','err');return;}
