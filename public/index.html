@@ -4277,9 +4277,9 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid;});
       var ls=loans.filter(function(l){return l.shiftId===sid;});
       var ex=extras.filter(function(e){return e.shiftId===sid&&Number(e.payment||0)>0;});
-      var tj=sl.filter(function(s){return s.payMethod==='TARJETA';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarTarjeta||0);
-      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarEfectivo||0);
-      var nq=sl.filter(function(s){return s.payMethod==='NEQUI';}).reduce(function(a,s){return a+Number(s.total||0);},0)+Number((m.totals||{}).shiftBarNequi||0);
+      var tj=sl.filter(function(s){return s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarTarjeta||0);
+      var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO'||(s.payMethod==='MIXTO'&&Number(s.amount_1||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_1||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarEfectivo||0);
+      var nq=sl.filter(function(s){return s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarNequi||0);
       var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);
       var prod=Number((m.totals||{}).totalProductos||0);
       var cort=Number((m.totals||{}).totalCortesiasProds||0);
