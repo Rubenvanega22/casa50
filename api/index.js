@@ -2670,9 +2670,9 @@ async function apiGetResumenMes(p, res) {
   const cierreMap = {};
   (cierreAnt||[]).forEach(c => { cierreMap[c.product_id] = c; });
 
-  const salesMes = await fetchAll(() => supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const movementsMes = await fetchAll(() => supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const entriesMes = await fetchAll(() => supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const { data: salesMes } = await supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay);
+  const { data: movementsMes } = await supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay);
+  const { data: entriesMes } = await supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay);
 
 
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
