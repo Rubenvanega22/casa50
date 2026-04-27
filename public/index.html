@@ -2316,6 +2316,8 @@ function openChangePayModal(role){
   if(!sess){toast('Sesión no iniciada','err');return;}
   mcpState={role:role,sales:[],selectedSaleId:null,selectedMethod:null};
   document.getElementById('mcpAdmCtrl').style.display=(role==='ADMIN')?'block':'none';
+  document.getElementById('mcpTabs').style.display=(role==='ADMIN')?'grid':'none';
+  mcpSwitchTab('ventas');
   document.getElementById('mcpDetVenta').style.display='none';
   document.getElementById('mcpMetodoSection').style.display='none';
   document.getElementById('mcpMixtoBlock').style.display='none';
