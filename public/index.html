@@ -2291,6 +2291,27 @@ function loadExtra(){
 // ---- CUADRE ----
 // ===== CAMBIAR METODO DE PAGO =====
 var mcpState={role:null,sales:[],selectedSaleId:null,selectedMethod:null};
+function mcpSwitchTab(tab){
+  var tabs=['ventas','gastos','taxis','personal'];
+  tabs.forEach(function(t){
+    var cont=document.getElementById('mcpTab'+t.charAt(0).toUpperCase()+t.slice(1));
+    var btn=document.getElementById('mcpTabBtn_'+t);
+    if(!cont||!btn)return;
+    if(t===tab){
+      cont.style.display='block';
+      btn.style.background='rgba(245,158,11,.18)';
+      btn.style.borderColor='#f59e0b';
+      btn.style.color='#fcd34d';
+      btn.style.fontWeight='700';
+    } else {
+      cont.style.display='none';
+      btn.style.background='#22222c';
+      btn.style.borderColor='#2e2e3a';
+      btn.style.color='#9ca3af';
+      btn.style.fontWeight='400';
+    }
+  });
+}
 function openChangePayModal(role){
   if(!sess){toast('Sesión no iniciada','err');return;}
   mcpState={role:role,sales:[],selectedSaleId:null,selectedMethod:null};
