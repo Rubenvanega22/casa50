@@ -4149,8 +4149,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       _admDesKey++;
       var vals=ms.map(function(m,i){
         var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
-        var amountKey=pm==='EFECTIVO'?'amount_1':(pm==='TARJETA'?'amount_2':'amount_3');
-return sl.filter(function(s){return s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s[amountKey]||0):Number(s.total||0));},0)+(barGetter?barGetter(m):0);
+        return sl.filter(function(s){return s.payMethod===pm;}).reduce(function(a,s){return a+Number(s.total||0);},0)+(barGetter?barGetter(m):0);
       });
       var total=vals.reduce(function(a,b){return a+b;},0);
       var rgb=pm==='TARJETA'?'59,130,246':pm==='NEQUI'?'124,92,252':'34,197,94';
