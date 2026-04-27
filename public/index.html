@@ -1006,7 +1006,7 @@ function mkCard(r){
   }
 if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs))/60000);h+='<div class="ri">Salio: <b>'+fT(r.lastCheckoutMs)+'</b></div><div class="ri warn">'+mD+' min sucia'+(r.maidInProgress?' — <span style="color:#a78bfa;animation:pulse 1s infinite">🧹 '+esc(r.maidNameProgress||'')+'</span>':'')+'</div>';}
   if(eff==='CO'){var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0);if(since){var mC=Math.round((now-since)/60000);h+='<div class="ri">Desde: <b>'+fT(since)+'</b></div><div class="ri" style="color:#3b82f6">'+mC+' min</div>';}}
-  if(r.noteMinor)h+='<div style="font-size:9px;color:#f59e0b;margin-top:2px">nota</div>';
+  if(r.noteMinor)h+='<div style="font-size:10px;font-weight:800;color:#f59e0b;margin-top:2px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">📝 NOTA</div>';
   card.innerHTML=h;
   card.onclick=function(){openRoom(r.roomId);};
   return card;
