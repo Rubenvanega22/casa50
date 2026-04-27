@@ -172,6 +172,12 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="SHIFT_3">Turno 3 (10pm - 6am)</option>
 </select>
 </div>
+<div id="mcpTabs" style="display:none;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #2e2e3a">
+<button type="button" id="mcpTabBtn_ventas" onclick="mcpSwitchTab('ventas')" style="padding:7px 4px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:6px;color:#fcd34d;cursor:pointer;font-size:11px;font-weight:700">📋 Ventas</button>
+<button type="button" id="mcpTabBtn_gastos" onclick="mcpSwitchTab('gastos')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">💰 Gastos</button>
+<button type="button" id="mcpTabBtn_taxis" onclick="mcpSwitchTab('taxis')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">🚕 Taxis</button>
+<button type="button" id="mcpTabBtn_personal" onclick="mcpSwitchTab('personal')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">👷 Personal</button>
+</div>
 <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Selecciona la venta</div>
 <div id="mcpListVentas" style="max-height:200px;overflow-y:auto;border:1px solid #2e2e3a;border-radius:8px;padding:6px;background:#1a1a22;margin-bottom:12px">
 <p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">Cargando ventas...</p>
