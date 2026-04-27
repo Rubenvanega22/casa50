@@ -162,7 +162,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
 <div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
 <div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
-<div class="ov" id="mChangePay"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">🔧 Ajuste</div><button class="mc" onclick="closeM('mChangePay')">✕</button></div>
+<div class="ov" id="mChangePay"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">💳 Cambiar Método de Pago</div><button class="mc" onclick="closeM('mChangePay')">✕</button></div>
 <div style="font-size:12px;color:#9ca3af;margin-bottom:10px" id="mcpSubtitle">Selecciona la venta y el nuevo método</div>
 <div id="mcpAdmCtrl" style="display:none;margin-bottom:10px">
 <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Turno a modificar</label>
@@ -172,13 +172,6 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="SHIFT_3">Turno 3 (10pm - 6am)</option>
 </select>
 </div>
-<div id="mcpTabs" style="display:none;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #2e2e3a">
-<button type="button" id="mcpTabBtn_ventas" onclick="mcpSwitchTab('ventas')" style="padding:7px 4px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:6px;color:#fcd34d;cursor:pointer;font-size:11px;font-weight:700">📋 Ventas</button>
-<button type="button" id="mcpTabBtn_gastos" onclick="mcpSwitchTab('gastos')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">💰 Gastos</button>
-<button type="button" id="mcpTabBtn_taxis" onclick="mcpSwitchTab('taxis')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">🚕 Taxis</button>
-<button type="button" id="mcpTabBtn_personal" onclick="mcpSwitchTab('personal')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">👷 Personal</button>
-</div>
-<div id="mcpTabVentas">
 <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Selecciona la venta</div>
 <div id="mcpListVentas" style="max-height:200px;overflow-y:auto;border:1px solid #2e2e3a;border-radius:8px;padding:6px;background:#1a1a22;margin-bottom:12px">
 <p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">Cargando ventas...</p>
@@ -213,21 +206,6 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bk" style="flex:1" onclick="closeM('mChangePay')">Cancelar</button>
 <button class="btn ba" style="flex:1" onclick="saveChangePayMethod()">Guardar cambio</button>
 </div>
-</div>
-<div id="mcpTabGastos" style="display:none;padding:20px;text-align:center;color:#9ca3af;font-size:13px">
-<div style="font-size:32px;margin-bottom:10px">💰</div>
-<div style="font-weight:700;color:#f59e0b">Pestaña Gastos</div>
-<div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar gastos del turno</div>
-</div>
-<div id="mcpTabTaxis" style="display:none;padding:20px;text-align:center;color:#9ca3af;font-size:13px">
-<div style="font-size:32px;margin-bottom:10px">🚕</div>
-<div style="font-weight:700;color:#f59e0b">Pestaña Taxis</div>
-<div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar taxis del turno</div>
-</div>
-<div id="mcpTabPersonal" style="display:none;padding:20px;text-align:center;color:#9ca3af;font-size:13px">
-<div style="font-size:32px;margin-bottom:10px">👷</div>
-<div style="font-weight:700;color:#f59e0b">Pestaña Personal</div>
-<div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar personal extra</div>
 </div>
 </div></div>
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
@@ -566,7 +544,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <h2 style="font-size:14px">Cuadre de Caja</h2>
 <input type="date" id="cuadreAdminDay" style="width:auto;margin:0">
 <button class="btn ba sm" onclick="loadCuadreAdmin()">Ver</button>
-<button class="btn sm" style="background:#f59e0b;color:#1f1f24;font-weight:700" onclick="openChangePayModal('ADMIN')">🔧 Ajuste</button>
+<button class="btn sm" style="background:#f59e0b;color:#1f1f24;font-weight:700" onclick="openChangePayModal('ADMIN')">🔄 Cambiar Método</button>
 </div>
 <div id="cuadreAdminCont"><p style="color:#9ca3af">Selecciona una fecha y presiona Ver.</p></div>
 </div>
