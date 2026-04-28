@@ -241,6 +241,10 @@ module.exports = async function handler(req, res) {
       case 'anularVenta':        return await apiAnularVenta(payload, res);
       case 'anularVentaModulo':  return await apiAnularVentaModulo(payload, res);
       case 'agregarVentaManual': return await apiAgregarVentaManual(payload, res);
+      case 'listGastosTurno':    return await apiListGastosTurno(payload, res);
+      case 'agregarGastoManual': return await apiAgregarGastoManual(payload, res);
+      case 'editarGastoModulo':  return await apiEditarGastoModulo(payload, res);
+      case 'anularGastoModulo':  return await apiAnularGastoModulo(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
       case 'ajusteInventarioV2': return await apiAjusteInventarioV2(payload, res);
      case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
@@ -2418,6 +2422,106 @@ async function apiTrasladoRecepcion(p, res) {
     tipo:'traslado_recepcion', cantidad, nota
   });
   return ok(res,{productId,nuevoBodega,nuevoRecepcion});
+}
+async function apiListGastosTurno(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  const businessDay_ = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  if(!businessDay_) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  const { data, error } = await supabase.from('loans')
+    .select('*')
+    .eq('business_day', businessDay_)
+    .eq('shift_id', shiftId)
+    .order('ts_ms', {ascending:true});
+  if(error) return err(res, error.message);
+  return ok(res, {gastos: data||[]});
+}
+async function apiAgregarGastoManual(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar gastos manuales');
+  const businessDay_ = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  const borrowerName = String(p.borrowerName||'').trim();
+  const amount = Number(p.amount||0);
+  const note = String(p.note||'').trim();
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!businessDay_) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  if(!borrowerName) return err(res,'borrowerName requerido');
+  if(amount<=0) return err(res,'Monto inválido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
+  const now = Date.now();
+  const { data, error } = await supabase.from('loans').insert({
+    ts_ms: now,
+    business_day: businessDay_,
+    shift_id: shiftId,
+    user_name: userName,
+    borrower_name: borrowerName,
+    amount: amount,
+    note: note,
+    manual: true,
+    motivo_manual: motivo,
+    anulada: false
+  }).select('id').single();
+  if(error) return err(res,'Error guardando: '+error.message);
+  return ok(res,{gastoId:data.id, amount});
+}
+async function apiEditarGastoModulo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
+  const gastoId = Number(p.gastoId||0);
+  const borrowerName = String(p.borrowerName||'').trim();
+  const amount = Number(p.amount||0);
+  const note = String(p.note||'').trim();
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!gastoId) return err(res,'gastoId requerido');
+  if(!borrowerName) return err(res,'borrowerName requerido');
+  if(amount<=0) return err(res,'Monto inválido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
+  const now = Date.now();
+  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
+  if(errGasto) return err(res, errGasto.message);
+  if(!gasto) return err(res,'Gasto no encontrado');
+  if(gasto.anulada) return err(res,'No se puede editar un gasto anulado');
+  // Si ya fue editado antes, NO sobreescribir el amount_original
+  const amountOriginal = gasto.amount_original!==null && gasto.amount_original!==undefined
+    ? gasto.amount_original
+    : gasto.amount;
+  await supabase.from('loans').update({
+    borrower_name: borrowerName,
+    amount: amount,
+    note: note,
+    editada: true,
+    editada_ms: now,
+    editada_por: userName,
+    amount_original: amountOriginal,
+    motivo_edicion: motivo
+  }).eq('id', gastoId);
+  return ok(res,{gastoId, amount});
+}
+async function apiAnularGastoModulo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
+  const gastoId = Number(p.gastoId||0);
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!gastoId) return err(res,'gastoId requerido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
+  const now = Date.now();
+  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
+  if(errGasto) return err(res, errGasto.message);
+  if(!gasto) return err(res,'Gasto no encontrado');
+  if(gasto.anulada) return err(res,'Este gasto ya está anulado');
+  await supabase.from('loans').update({
+    anulada: true,
+    anulada_ms: now,
+    anulada_por: userName,
+    motivo_anulacion: motivo
+  }).eq('id', gastoId);
+  return ok(res,{gastoId, anulada:true});
 }
 async function apiAgregarVentaManual(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
