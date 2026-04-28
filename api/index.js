@@ -232,6 +232,7 @@ module.exports = async function handler(req, res) {
       case 'addStock':               return await apiAddStock(payload, res);
       case 'ingresoBodega':          return await apiIngresoBodega(payload, res);
       case 'trasladoRecepcion':      return await apiTrasladoRecepcion(payload, res);
+      case 'devolverABodega':        return await apiDevolverABodega(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -2398,6 +2399,31 @@ async function apiIngresoBodega(p, res) {
   return ok(res,{productId,nuevoBodega});
 }
 
+async function apiDevolverABodega(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const productId = Number(p.productId||0);
+  const cantidad = Number(p.cantidad||0);
+  const nota = String(p.nota||'').trim();
+  if(!productId) return err(res,'productId requerido');
+  if(cantidad<=0) return err(res,'Cantidad invalida');
+  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  if(!prod) return err(res,'Producto no existe');
+  if(Number(prod.stock_actual||0)<cantidad) return err(res,'No hay suficiente en recepción. Hay: '+prod.stock_actual);
+  const nuevoBodega = Number(prod.stock_bodega||0) + cantidad;
+  const nuevoRecepcion = Number(prod.stock_actual||0) - cantidad;
+  await supabase.from('products').update({stock_bodega:nuevoBodega, stock_actual:nuevoRecepcion}).eq('id',productId);
+  await supabase.from('stock_movements').insert({
+    ts_ms:now, business_day:bDay, shift_id:shift,
+    user_name:String(p.userName||''), user_role:userRole,
+    product_id:productId, product_name:prod.nombre,
+    tipo:'devolucion_bodega', cantidad, nota
+  });
+  return ok(res,{productId,nuevoBodega,nuevoRecepcion});
+}
 async function apiTrasladoRecepcion(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
