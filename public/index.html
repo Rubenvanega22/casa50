@@ -670,7 +670,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="openAddGastoManual()">💰+ Gasto</button>
 
 <button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="openAddPersonaManual()">👷+ Personal</button>
-<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="toast('Próximamente','err')">⏰+ Hora</button>
+<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="openAddHoraExtraManual()">⏰+ Hora</button>
 </div>
 <div id="cuadreAdminCont"><p style="color:#9ca3af">Selecciona una fecha y presiona Ver.</p></div>
 </div>
@@ -2783,6 +2783,11 @@ function openAddGastoManual(){
   document.getElementById('agmNote').value='';
   document.getElementById('agmMotivo').value='';
   openM('mAddGastoManual');
+}
+function openAddHoraExtraManual(){
+  if(!sess){toast('Sesión no iniciada','err');return;}
+  if(sess.userRole!=='ADMIN'){toast('Solo ADMIN puede agregar horas extra','err');return;}
+  toast('✓ Paso 1: el botón se conecta bien','ok');
 }
 function saveAddGastoManual(){
   var day=document.getElementById('agmDay').value;
