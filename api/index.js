@@ -240,6 +240,7 @@ module.exports = async function handler(req, res) {
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       case 'anularVenta':        return await apiAnularVenta(payload, res);
       case 'anularVentaModulo':  return await apiAnularVentaModulo(payload, res);
+      case 'agregarVentaManual': return await apiAgregarVentaManual(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
       case 'ajusteInventarioV2': return await apiAjusteInventarioV2(payload, res);
      case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
@@ -2417,6 +2418,106 @@ async function apiTrasladoRecepcion(p, res) {
     tipo:'traslado_recepcion', cantidad, nota
   });
   return ok(res,{productId,nuevoBodega,nuevoRecepcion});
+}
+async function apiAgregarVentaManual(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar ventas manuales');
+  const businessDay_ = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  const roomId = String(p.roomId||'').trim();
+  const category = String(p.category||'').trim();
+  const durationHrs = Number(p.durationHrs||0);
+  const people = Number(p.people||0);
+  const arrivalType = String(p.arrivalType||'WALK').trim();
+  const arrivalPlate = String(p.arrivalPlate||'').trim();
+  const horaIn = String(p.horaIn||'').trim();
+  const horaOut = String(p.horaOut||'').trim();
+  const total = Number(p.total||0);
+  const payMethod = String(p.payMethod||'').trim();
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!businessDay_) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  if(!roomId) return err(res,'roomId requerido');
+  if(!horaIn||!horaOut) return err(res,'horaIn y horaOut requeridas');
+  if(total<=0) return err(res,'Total inválido');
+  if(!payMethod) return err(res,'payMethod requerido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
+  let amount_1=null, amount_2=null, amount_3=null, pay_method_2=null;
+  if(payMethod==='MIXTO'){
+    amount_1=Number(p.amount_1||0);
+    amount_2=Number(p.amount_2||0);
+    amount_3=Number(p.amount_3||0);
+    if((amount_1+amount_2+amount_3)!==total) return err(res,'Suma del mixto debe ser igual al total');
+    pay_method_2='MIXTO';
+  }
+  const dateBase = businessDay_;
+  const checkInIso = dateBase+'T'+horaIn+':00-05:00';
+  const checkOutIso = dateBase+'T'+horaOut+':00-05:00';
+  let checkInMs = new Date(checkInIso).getTime();
+  let dueMs = new Date(checkOutIso).getTime();
+  if(dueMs<=checkInMs) dueMs += 24*60*60*1000;
+  const now = Date.now();
+  const included = (people>2)?2:people;
+  const extraPeople = Math.max(0,people-included);
+  const extraPeopleValue = extraPeople*20000;
+  const noteFinal = '[MANUAL] '+motivo;
+  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
+    ts_ms: now,
+    business_day: businessDay_,
+    shift_id: shiftId,
+    user_role: userRole,
+    user_name: userName,
+    type: 'SALE',
+    room_id: roomId,
+    category: category,
+    duration_hrs: durationHrs,
+    base_price: total - extraPeopleValue,
+    people: people,
+    included_people: included,
+    extra_people: extraPeople,
+    extra_people_value: extraPeopleValue,
+    extra_hours: 0,
+    extra_hours_value: 0,
+    total: total,
+    arrival_type: arrivalType,
+    arrival_plate: arrivalPlate,
+    pay_method: payMethod,
+    pay_method_2: pay_method_2,
+    amount_1: amount_1,
+    amount_2: amount_2,
+    amount_3: amount_3,
+    paid_with: total,
+    change_given: 0,
+    check_in_ms: checkInMs,
+    due_ms: dueMs,
+    checkout_ms: dueMs,
+    note: noteFinal,
+    anulada: false
+  }).select('id').single();
+  if(errIns) return err(res, 'Error guardando venta: '+errIns.message);
+  await supabase.from('state_history').insert({
+    ts_ms: now,
+    business_day: businessDay_,
+    shift_id: shiftId,
+    user_role: userRole,
+    user_name: userName,
+    room_id: roomId,
+    from_state: 'AJUSTE',
+    to_state: 'VENTA_MANUAL',
+    people: people,
+    meta_json: JSON.stringify({
+      accion:'VENTA_AGREGADA_MANUAL',
+      saleId: inserted.id,
+      motivo: motivo,
+      total: total,
+      pay_method: payMethod,
+      duration_hrs: durationHrs,
+      hora_in: horaIn,
+      hora_out: horaOut
+    })
+  });
+  return ok(res,{saleId:inserted.id, total});
 }
 async function apiAnularVentaModulo(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
