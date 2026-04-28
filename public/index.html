@@ -2431,6 +2431,7 @@ function mcpSwitchTab(tab){
     }
   });
   if(tab==='gastos')mcpLoadGastos();
+  setTimeout(function(){var c=document.getElementById('mcpTab'+tab.charAt(0).toUpperCase()+tab.slice(1));if(c)c.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
 }
 var avmState={duracion:3,personas:2,arrType:'WALK',payMethod:'EFECTIVO',roomCategory:''};
 function openAddVentaManual(){
