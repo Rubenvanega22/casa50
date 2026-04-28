@@ -2347,7 +2347,8 @@ async function apiGetInventarioByDay(p, res) {
     const cortesiasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const entradasAyer=(entriesAyer||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
    const totalTraslados=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
-    const saldoInicialReal=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados-totalEntradas;
+    const totalDevoluciones=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
+    const saldoInicialReal=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados-totalEntradas+totalDevoluciones;
     const turnosData={};
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
@@ -2363,7 +2364,9 @@ const trasladoTotal=movsProd.filter(m=>m.tipo==='traslado_recepcion').reduce((a,
 shifts.forEach(function(sid){
   const movsSid=movsProd.filter(m=>m.shift_id===sid);
   turnosData[sid].ingresoBodega=movsSid.filter(m=>m.tipo==='ingreso_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
-  turnosData[sid].trasladoRecepcion=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
+  var trasladoTurno=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
+  var devolucionTurno=movsSid.filter(m=>m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
+  turnosData[sid].trasladoRecepcion=trasladoTurno-devolucionTurno;
 });
 return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial:saldoInicialReal,saldoActual:Number(prod.stock_actual||0),stockBodega:Number(prod.stock_bodega||0),turnos:turnosData};
   });
