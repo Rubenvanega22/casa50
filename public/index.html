@@ -2387,6 +2387,155 @@ function mcpSwitchTab(tab){
     }
   });
 }
+var avmState={duracion:3,personas:2,arrType:'WALK',payMethod:'EFECTIVO',roomCategory:''};
+function openAddVentaManual(){
+  if(!sess){toast('Sesión no iniciada','err');return;}
+  if(sess.userRole!=='ADMIN'){toast('Solo ADMIN puede agregar ventas manuales','err');return;}
+  avmState={duracion:3,personas:2,arrType:'WALK',payMethod:'EFECTIVO',roomCategory:''};
+  var dayInput=document.getElementById('avmDay');
+  var defaultDay=document.getElementById('cuadreAdminDay').value||sess.businessDay||(new Date().toISOString().slice(0,10));
+  dayInput.value=defaultDay;
+  document.getElementById('avmShift').value=document.getElementById('mcpShift').value||sess.shiftId||'SHIFT_1';
+  var roomSel=document.getElementById('avmRoom');
+  roomSel.innerHTML='';
+  (rooms||[]).slice().sort(function(a,b){return String(a.roomId).localeCompare(String(b.roomId));}).forEach(function(r){
+    var opt=document.createElement('option');
+    opt.value=r.roomId;
+    opt.textContent='Hab '+r.roomId+' — '+(r.category||'');
+    opt.dataset.category=r.category||'';
+    roomSel.appendChild(opt);
+  });
+  document.getElementById('avmHoraIn').value='10:00';
+  document.getElementById('avmHoraOut').value='13:00';
+  document.getElementById('avmDuracion').value='3';
+  document.getElementById('avmPplDisp').textContent='2';
+  document.getElementById('avmExtraInfo').textContent='';
+  document.getElementById('avmPlate').value='';
+  document.getElementById('avmPlateDiv').style.display='none';
+  document.getElementById('avmManualTotal').checked=false;
+  document.getElementById('avmTotalManual').style.display='none';
+  document.getElementById('avmTotalManual').value='';
+  document.getElementById('avmMixtoBlock').style.display='none';
+  document.getElementById('avmMixEF').value='';
+  document.getElementById('avmMixTJ').value='';
+  document.getElementById('avmMixNQ').value='';
+  document.getElementById('avmMotivo').value='';
+  ['WALK','TAXI','CAR','MOTO'].forEach(function(t){var el=document.getElementById('avmArr'+t);if(el)el.classList.toggle('on',t==='WALK');});
+  ['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(p){var el=document.getElementById('avmPm'+p);if(el)el.classList.toggle('on',p==='EFECTIVO');});
+  openM('mAddVentaManual');
+  avmCalcTotal();
+}
+
+function avmActSalida(){
+  var h=document.getElementById('avmHoraIn').value;
+  var d=Number(document.getElementById('avmDuracion').value||3);
+  if(!h)return;
+  var p=h.split(':');var hh=Number(p[0]||0),mm=Number(p[1]||0);
+  var nh=(hh+d)%24;
+  document.getElementById('avmHoraOut').value=String(nh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+}
+function avmChPpl(d){
+  avmState.personas=Math.max(1,Math.min(20,avmState.personas+d));
+  document.getElementById('avmPplDisp').textContent=avmState.personas;
+  avmCalcTotal();
+}
+function avmSelArr(t){
+  avmState.arrType=t;
+  ['WALK','TAXI','CAR','MOTO'].forEach(function(x){var el=document.getElementById('avmArr'+x);if(el)el.classList.toggle('on',x===t);});
+  document.getElementById('avmPlateDiv').style.display=(t==='CAR'||t==='MOTO'||t==='TAXI')?'block':'none';
+}
+function avmSelPm(pm){
+  avmState.payMethod=pm;
+  ['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(x){var el=document.getElementById('avmPm'+x);if(el)el.classList.toggle('on',x===pm);});
+  document.getElementById('avmMixtoBlock').style.display=(pm==='MIXTO')?'block':'none';
+  if(pm==='MIXTO'){
+    var t=avmGetTotal();
+    document.getElementById('avmMixtoTotal').textContent=fmt(t);
+  }
+}
+function avmTogManual(){
+  var ck=document.getElementById('avmManualTotal').checked;
+  document.getElementById('avmTotalManual').style.display=ck?'block':'none';
+  if(ck){var auto=Number((document.getElementById('avmTotalAuto').textContent||'').replace(/[^0-9]/g,''));document.getElementById('avmTotalManual').value=auto||0;}
+  if(avmState.payMethod==='MIXTO'){document.getElementById('avmMixtoTotal').textContent=fmt(avmGetTotal());}
+}
+function avmGetTotal(){
+  if(document.getElementById('avmManualTotal').checked){
+    return Number(document.getElementById('avmTotalManual').value||0);
+  }
+  return Number((document.getElementById('avmTotalAuto').textContent||'').replace(/[^0-9]/g,''))||0;
+}
+function avmCalcTotal(){
+  var sel=document.getElementById('avmRoom');
+  var opt=sel.options[sel.selectedIndex];
+  if(!opt){document.getElementById('avmTotalAuto').textContent='$0';return;}
+  var cat=opt.dataset.category||'';
+  avmState.roomCategory=cat;
+  var dur=Number(document.getElementById('avmDuracion').value||3);
+  var ppl=avmState.personas;
+  var cfg=(MP[cat]||MP['Junior']||{});
+  var hk=String(dur)+'h';
+  var base=Number((cfg[hk]&&cfg[hk].price)||0);
+  var inc=Number((cfg[hk]&&cfg[hk].included)||2);
+  var extra=Math.max(0,ppl-inc);
+  var extraVal=Number(cfg.extraPersonValue||20000)*extra;
+  var total=base+extraVal;
+  document.getElementById('avmTotalAuto').textContent=fmt(total);
+  document.getElementById('avmExtraInfo').textContent=extra>0?'(+'+extra+' extra = '+fmt(extraVal)+')':'';
+  if(avmState.payMethod==='MIXTO'){document.getElementById('avmMixtoTotal').textContent=fmt(avmGetTotal());}
+}
+function avmUpdMixto(){
+  var ef=Number(document.getElementById('avmMixEF').value||0);
+  var tj=Number(document.getElementById('avmMixTJ').value||0);
+  var nq=Number(document.getElementById('avmMixNQ').value||0);
+  var sum=ef+tj+nq;
+  var total=avmGetTotal();
+  var el=document.getElementById('avmMixtoSum');
+  if(sum===total&&total>0){el.style.color='#22c55e';el.textContent='✓ Suma: '+fmt(sum)+' (cuadra)';}
+  else{el.style.color='#ef4444';el.textContent='Suma: '+fmt(sum)+' — debe ser '+fmt(total);}
+}
+function saveAddVentaManual(){
+  var day=document.getElementById('avmDay').value;
+  var shift=document.getElementById('avmShift').value;
+  var room=document.getElementById('avmRoom').value;
+  var cat=avmState.roomCategory;
+  var dur=Number(document.getElementById('avmDuracion').value||3);
+  var ppl=avmState.personas;
+  var arr=avmState.arrType;
+  var plate=(document.getElementById('avmPlate').value||'').trim().toUpperCase();
+  var horaIn=document.getElementById('avmHoraIn').value;
+  var horaOut=document.getElementById('avmHoraOut').value;
+  var pm=avmState.payMethod;
+  var motivo=document.getElementById('avmMotivo').value.trim();
+  var total=avmGetTotal();
+  if(!day){toast('Selecciona el día','err');return;}
+  if(!room){toast('Selecciona la habitación','err');return;}
+  if(!horaIn||!horaOut){toast('Define horas de entrada y salida','err');return;}
+  if(total<=0){toast('El total debe ser mayor a 0','err');return;}
+  if(!motivo||motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  var amt1=null,amt2=null,amt3=null,pm2=null;
+  if(pm==='MIXTO'){
+    amt1=Number(document.getElementById('avmMixEF').value||0);
+    amt2=Number(document.getElementById('avmMixTJ').value||0);
+    amt3=Number(document.getElementById('avmMixNQ').value||0);
+    if((amt1+amt2+amt3)!==total){toast('La suma del mixto debe ser igual al total','err');return;}
+    pm2='MIXTO';
+  }
+  conf('¿Agregar venta manual: Hab '+room+' por '+fmt(total)+' ('+pm+')?',function(){
+    rpc('agregarVentaManual',{
+      businessDay:day,shiftId:shift,roomId:room,category:cat,
+      durationHrs:dur,people:ppl,arrivalType:arr,arrivalPlate:plate,
+      horaIn:horaIn,horaOut:horaOut,total:total,payMethod:pm,
+      amount_1:amt1,amount_2:amt2,amount_3:amt3,pay_method_2:pm2,
+      motivo:motivo,userName:sess.userName,userRole:sess.userRole
+    },function(){
+      toast('✓ Venta agregada al cuadre','ok');
+      closeM('mAddVentaManual');
+      if(mcpState&&mcpState.role==='ADMIN')loadCuadreAdmin();
+      else loadCuadre();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
 function openChangePayModal(role){
   if(!sess){toast('Sesión no iniciada','err');return;}
   mcpState={role:role,sales:[],selectedSaleId:null,selectedMethod:null};
