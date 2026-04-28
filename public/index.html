@@ -174,7 +174,9 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="mcpTabs" style="display:none;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #2e2e3a">
 <button type="button" id="mcpTabBtn_ventas" onclick="mcpSwitchTab('ventas')" style="padding:7px 4px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:6px;color:#fcd34d;cursor:pointer;font-size:11px;font-weight:700">📋 Ventas</button>
-
+<button type="button" id="mcpTabBtn_gastos" onclick="mcpSwitchTab('gastos')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">💰 Gastos</button>
+<button type="button" id="mcpTabBtn_taxis" onclick="mcpSwitchTab('taxis')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">🚕 Taxis</button>
+<button type="button" id="mcpTabBtn_personal" onclick="mcpSwitchTab('personal')" style="padding:7px 4px;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:11px">👷 Personal</button>
 </div>
 <div id="mcpTabVentas">
 <button id="mcpBtnAddVenta" onclick="openAddVentaManual()" style="width:100%;padding:10px;background:rgba(34,197,94,.12);border:1px solid #22c55e;border-radius:8px;color:#22c55e;cursor:pointer;font-size:12px;font-weight:700;margin-bottom:10px">➕ Agregar venta olvidada</button>
@@ -208,6 +210,18 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo del cambio <span style="color:#ef4444">*</span></label>
 <textarea id="mcpReason" placeholder="Ej: La recepcionista marcó mal el método de pago" style="width:100%;min-height:50px;font-size:12px;margin-bottom:10px"></textarea>
 <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#f59e0b">⚠️ Este cambio quedará registrado en el historial con tu nombre y fecha. El cuadre se recalculará automáticamente.</div>
+<div style="display:flex;gap:6px">
+<button class="btn bk" style="flex:1" onclick="closeM('mChangePay')">Cancelar</button>
+<button class="btn ba" style="flex:1" onclick="saveChangePayMethod()">Guardar cambio</button>
+</div>
+<div style="border-top:2px dashed #2e2e3a;margin:14px 0;padding-top:12px">
+<div style="font-size:11px;color:#ef4444;text-transform:uppercase;font-weight:700;margin-bottom:8px">🗑️ Anular esta venta</div>
+<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px;margin-bottom:10px;font-size:11px;color:#fca5a5">⚠️ Esto anula la venta del cuadre. Quedará registrada como ANULADA pero con historial visible.</div>
+<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo de anulación <span style="color:#ef4444">*</span></label>
+<textarea id="mcpAnulMotivo" placeholder="Ej: La cliente se fue sin pagar, error de digitación, etc." style="width:100%;min-height:50px;font-size:12px;margin-bottom:10px"></textarea>
+<button class="btn br full" onclick="anularVentaModulo()">🗑️ Anular venta seleccionada</button>
+</div>
+</div>
 <div id="mcpTabGastos" style="display:none">
 <button id="mcpBtnAddGasto" onclick="openAddGastoManual()" style="width:100%;padding:10px;background:rgba(34,197,94,.12);border:1px solid #22c55e;border-radius:8px;color:#22c55e;cursor:pointer;font-size:12px;font-weight:700;margin-bottom:10px">➕ Agregar gasto olvidado</button>
 <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Selecciona el gasto</div>
@@ -247,6 +261,14 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="font-size:32px;margin-bottom:10px">👷</div>
 <div style="font-weight:700;color:#f59e0b">Pestaña Personal</div>
 <div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar personal extra</div>
+</div>
+</div>
+</div></div>
+<div class="ov" id="mAddGastoManual"><div class="modal" style="max-width:480px;max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt">➕ Agregar Gasto Olvidado</div><button class="mc" onclick="closeM('mAddGastoManual')">✕</button></div>
+<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">💡 Este gasto se agregará al cuadre como si la recepcionista lo hubiera registrado normalmente. Quedará marcado con tag "MANUAL".</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+<div><label style="font-size:10px;color:#9ca3af">Día</label><input type="date" id="agmDay" style="width:100%"></div>
+<div><label style="font-size:10px;color:#9ca3af">Turno</label><select id="agmShift" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>
 </div>
 <label>A quién</label>
 <input type="text" id="agmBorrower" placeholder="Nombre de la persona" style="margin-bottom:8px">
@@ -666,8 +688,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn ba sm" onclick="loadCuadreAdmin()">Ver</button>
 <button class="btn sm" style="background:#f59e0b;color:#1f1f24;font-weight:700" onclick="openChangePayModal('ADMIN')">🔧 Ajuste Habitaciones</button>
 <button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="openAddGastoManual()">💰+ Gasto</button>
-
-<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="openAddPersonaManual()">👷+ Personal</button>
+<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="toast('Próximamente','err')">🚕+ Taxi</button>
+<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="toast('Próximamente','err')">👷+ Personal</button>
 <button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e;font-weight:500" onclick="toast('Próximamente','err')">⏰+ Hora</button>
 </div>
 <div id="cuadreAdminCont"><p style="color:#9ca3af">Selecciona una fecha y presiona Ver.</p></div>
@@ -2805,101 +2827,6 @@ function saveAddGastoManual(){
       mcpLoadGastos();
       if(mcpState&&mcpState.role==='ADMIN')loadCuadreAdmin();
       else loadCuadre();
-    },function(e){toast('Error: '+(e.message||'?'),'err');});
-  });
-}
-function openAddPersonaManual(){
-  if(!sess){toast('Sesión no iniciada','err');return;}
-  if(sess.userRole!=='ADMIN'){toast('Solo ADMIN puede agregar persona adicional manualmente','err');return;}
-  var defaultDay=document.getElementById('cuadreAdminDay').value||sess.businessDay||(new Date().toISOString().slice(0,10));
-  var modal=document.getElementById('mAddPersonaManual');
-  if(!modal){
-    var div=document.createElement('div');
-    div.className='ov';
-    div.id='mAddPersonaManual';
-    div.innerHTML='<div class="modal" style="max-width:480px;max-height:90vh;overflow-y:auto"><div id="mAddPersonaManualB"></div></div>';
-    div.addEventListener('click',function(e){if(e.target===div)closeM('mAddPersonaManual');});
-    document.body.appendChild(div);
-  }
-  var h='<div class="mh"><div class="mt">👷 Agregar Persona Adicional Olvidada</div><button class="mc" onclick="closeM(\'mAddPersonaManual\')">✕</button></div>';
-  h+='<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">Esta persona adicional se agregará al cuadre como si la recepcionista la hubiera registrado.</div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
-  h+='<div><label style="font-size:11px;color:#9ca3af">Día</label><input type="date" id="apmDia" value="'+defaultDay+'" style="margin:0"></div>';
-  h+='<div><label style="font-size:11px;color:#9ca3af">Turno</label><select id="apmTurno" style="margin:0"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
-  h+='</div>';
-  h+='<label style="font-size:11px;color:#9ca3af">Habitación</label>';
-  h+='<select id="apmRoom" onchange="apmActPrecio()" style="margin-bottom:10px">';
-  h+='<option value="">-- Selecciona habitación --</option>';
-  rooms.forEach(function(r){h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' - '+r.category+'</option>';});
-  h+='</select>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
-  h+='<div><label style="font-size:11px;color:#9ca3af">Cantidad personas</label><input type="number" id="apmCantidad" min="1" value="1" oninput="apmActTotal()"></div>';
-  h+='<div><label style="font-size:11px;color:#9ca3af">Valor por persona</label><div id="apmValorPersona" style="background:#18181f;border:0.5px solid #2e2e3a;border-radius:6px;padding:6px;color:#e5e7eb;font-size:12px;height:30px;line-height:18px">$0</div></div>';
-  h+='</div>';
-  h+='<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.4);border-radius:6px;padding:10px;text-align:center;margin-bottom:10px">';
-  h+='<div style="font-size:10px;color:#86efac;margin-bottom:2px">TOTAL</div>';
-  h+='<div id="apmTotal" style="font-size:20px;font-weight:700;color:#22c55e">$0</div>';
-  h+='</div>';
-  h+='<label style="font-size:11px;color:#9ca3af">Método de pago</label>';
-  h+='<div class="pm" style="margin-bottom:10px">';
-  h+='<div class="pmo on" id="apmPmEFECTIVO" onclick="apmSelPm(\'EFECTIVO\')">Efectivo</div>';
-  h+='<div class="pmo" id="apmPmTARJETA" onclick="apmSelPm(\'TARJETA\')">Tarjeta</div>';
-  h+='<div class="pmo" id="apmPmNEQUI" onclick="apmSelPm(\'NEQUI\')">Nequi</div>';
-  h+='</div>';
-  h+='<label style="font-size:11px;color:#fcd34d">Motivo (obligatorio, mínimo 5 caracteres)</label>';
-  h+='<textarea id="apmMotivo" rows="2" placeholder="Ej: Recepcionista olvidó cobrar la persona adicional..." style="margin-bottom:10px"></textarea>';
-  h+='<div style="display:flex;gap:6px">';
-  h+='<button class="btn" style="flex:1;background:#2e2e3a;color:#e5e7eb" onclick="closeM(\'mAddPersonaManual\')">Cancelar</button>';
-  h+='<button class="btn ba" style="flex:1" onclick="saveAddPersonaManual()">Guardar</button>';
-  h+='</div>';
-  document.getElementById('mAddPersonaManualB').innerHTML=h;
-  window._apmPay='EFECTIVO';
-  openM('mAddPersonaManual');
-}
-function apmActPrecio(){
-  var sel=document.getElementById('apmRoom');
-  var cat=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].getAttribute('data-cat'):'';
-  var cfg=(typeof MP!=='undefined'&&MP[cat])?MP[cat]:null;
-  var precio=cfg?Number(cfg.extraPerson||0):0;
-  document.getElementById('apmValorPersona').textContent=fmt(precio);
-  window._apmPrecio=precio;
-  apmActTotal();
-}
-function apmActTotal(){
-  var cant=Number((document.getElementById('apmCantidad')||{}).value||0);
-  var precio=Number(window._apmPrecio||0);
-  document.getElementById('apmTotal').textContent=fmt(cant*precio);
-}
-function apmSelPm(pm){
-  window._apmPay=pm;
-  ['EFECTIVO','TARJETA','NEQUI'].forEach(function(p){
-    var el=document.getElementById('apmPm'+p);
-    if(el){if(p===pm)el.classList.add('on');else el.classList.remove('on');}
-  });
-}
-function saveAddPersonaManual(){
-  var day=document.getElementById('apmDia').value;
-  var shift=document.getElementById('apmTurno').value;
-  var roomId=document.getElementById('apmRoom').value;
-  var cantidad=Number(document.getElementById('apmCantidad').value||0);
-  var motivo=document.getElementById('apmMotivo').value.trim();
-  var pay=window._apmPay||'EFECTIVO';
-  if(!day){toast('Selecciona el día','err');return;}
-  if(!shift){toast('Selecciona el turno','err');return;}
-  if(!roomId){toast('Selecciona la habitación','err');return;}
-  if(cantidad<=0){toast('Cantidad inválida','err');return;}
-  if(!motivo||motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
-  var precio=Number(window._apmPrecio||0);
-  var total=cantidad*precio;
-  conf('¿Agregar '+cantidad+' persona(s) adicional(es) en Hab '+roomId+' por '+fmt(total)+'?',function(){
-    rpc('agregarPersonaManual',{
-      businessDay:day,shiftId:shift,roomId:roomId,
-      cantidad:cantidad,payMethod:pay,motivo:motivo,
-      userName:sess.userName,userRole:sess.userRole
-    },function(){
-      toast('Persona adicional agregada al cuadre','ok');
-      closeM('mAddPersonaManual');
-      if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
     },function(e){toast('Error: '+(e.message||'?'),'err');});
   });
 }
