@@ -7407,7 +7407,21 @@ function openTrasladoRecepcion(){
   h+='<span style="font-size:11px;color:#9ca3af">unidades a bajar</span>';
   h+='</div>';
   h+='<label>Nota (opcional)</label><input type="text" id="trNota" placeholder="Ej: Turno 2" style="margin-bottom:8px">';
-  h+='<button class="btn bo full" onclick="confirmarTrasladoRec()">Confirmar traslado</button>';
+  h+='<div style="display:flex;gap:6px;align-items:center">';
+  h+='<button class="btn bo" style="flex:1" onclick="confirmarTrasladoRec()">Confirmar traslado</button>';
+  h+='<button onclick="toggleDevolverBodega()" title="Devolver a bodega" style="width:38px;height:38px;background:#22222c;border:1px solid #555;border-radius:6px;color:#9ca3af;font-size:16px;cursor:pointer">↩</button>';
+  h+='</div>';
+  h+='<div id="trDevolverSection" style="display:none;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:10px;margin-top:8px">';
+  h+='<div style="font-size:11px;color:#fca5a5;font-weight:700;margin-bottom:6px">↩ Devolver a bodega</div>';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:8px">Si bajaste de más, devuelve a bodega</div>';
+  h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">';
+  h+='<button onclick="chTrDevCant(-1)" style="width:28px;height:28px;background:#1a1a22;border:1px solid rgba(239,68,68,.4);border-radius:4px;color:#fca5a5;font-size:14px;cursor:pointer">-</button>';
+  h+='<input type="number" id="trDevCant" min="1" value="1" style="flex:1;text-align:center;background:#1a1a22;border:1px solid rgba(239,68,68,.4);border-radius:4px;padding:4px;color:#fca5a5;font-weight:700">';
+  h+='<button onclick="chTrDevCant(1)" style="width:28px;height:28px;background:#1a1a22;border:1px solid rgba(239,68,68,.4);border-radius:4px;color:#fca5a5;font-size:14px;cursor:pointer">+</button>';
+  h+='<span style="font-size:11px;color:#9ca3af" id="trDevMax">unidades</span>';
+  h+='</div>';
+  h+='<button class="btn br full" style="background:#ef4444;color:white" onclick="confirmarDevolucionBodega()">↩ Devolver a bodega</button>';
+  h+='</div>';
   h+='</div>';
   h+='<div style="border-top:0.5px solid #2e2e3a;padding-top:10px">';
   h+='<div style="font-size:11px;font-weight:700;color:#3b82f6;margin-bottom:6px">Corregir cantidad en recepción</div>';
@@ -7427,7 +7441,51 @@ function openTrasladoRecepcion(){
     var inp=document.getElementById('trBuscar');
     if(inp)inp.focus();
   },300);
-}function buscarTraslado(txt){
+}function toggleDevolverBodega(){
+  var sec=document.getElementById('trDevolverSection');
+  if(!sec)return;
+  var nuevo=(sec.style.display==='none')?'block':'none';
+  sec.style.display=nuevo;
+  if(nuevo==='block'){
+    var p=window._trProd||null;
+    var maxRec=p?Number(p.stockActual||0):0;
+    document.getElementById('trDevMax').textContent='máx '+maxRec;
+    var inp=document.getElementById('trDevCant');
+    if(inp){inp.max=maxRec;if(Number(inp.value)>maxRec)inp.value=Math.max(1,maxRec);}
+  }
+}
+function chTrDevCant(d){
+  var inp=document.getElementById('trDevCant');
+  if(!inp)return;
+  var p=window._trProd||null;
+  var max=p?Number(p.stockActual||0):999;
+  var v=Math.max(1,Math.min(max,Number(inp.value||1)+d));
+  inp.value=v;
+}
+function confirmarDevolucionBodega(){
+  var p=window._trProd;
+  if(!p){toast('Selecciona un producto primero','err');return;}
+  var cant=Number(document.getElementById('trDevCant').value||0);
+  var maxRec=Number(p.stockActual||0);
+  if(cant<=0){toast('Cantidad inválida','err');return;}
+  if(cant>maxRec){toast('No puedes devolver más de '+maxRec+' (lo que hay en recepción)','err');return;}
+  var nota=(document.getElementById('trNota')||{}).value||'';
+  conf('¿Devolver '+cant+' unidades de '+p.nombre+' a bodega?',function(){
+    rpc('devolverABodega',{
+      productId:p.id,
+      cantidad:cant,
+      nota:nota.trim(),
+      shiftId:sess.shiftId,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Devolución registrada: '+cant+' unidades a bodega','ok');
+      closeM('mTrasladoRec');
+      cargarProductos();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
+function buscarTraslado(txt){
   var cont=document.getElementById('trResultados');
   if(!cont)return;
   if(!txt){cont.innerHTML='';return;}
