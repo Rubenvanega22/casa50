@@ -233,6 +233,7 @@ module.exports = async function handler(req, res) {
       case 'ingresoBodega':          return await apiIngresoBodega(payload, res);
       case 'trasladoRecepcion':      return await apiTrasladoRecepcion(payload, res);
       case 'devolverABodega':        return await apiDevolverABodega(payload, res);
+      case 'agregarPersonaManual':   return await apiAgregarPersonaManual(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -1731,6 +1732,39 @@ async function apiGetDailyCuadre(p, res) {
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
 
+async function apiAgregarPersonaManual(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Sin permiso');
+  const now = Date.now();
+  const businessDayParam = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  const roomId = String(p.roomId||'').trim();
+  const cantidad = Number(p.cantidad||0);
+  const payMethod = String(p.payMethod||'EFECTIVO').toUpperCase();
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!businessDayParam) return err(res,'Día requerido');
+  if(!shiftId) return err(res,'Turno requerido');
+  if(!roomId) return err(res,'Habitación requerida');
+  if(cantidad<=0) return err(res,'Cantidad inválida');
+  if(!motivo||motivo.length<5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
+  const room = await getRoom(roomId);
+  if(!room) return err(res,'Habitación no existe');
+  const cfg = MASTER_PRICING[room.category]||MASTER_PRICING['Junior'];
+  const costPerPerson = Number(cfg.extraPerson||0);
+  const totalCost = costPerPerson * cantidad;
+  await supabase.from('sales').insert({
+    ts_ms:now, business_day:businessDayParam, shift_id:shiftId,
+    user_role:'ADMIN', user_name:userName, type:'SALE',
+    room_id:roomId, category:room.category, duration_hrs:0,
+    base_price:0, people:cantidad, included_people:Number(cfg.included||2),
+    extra_people:cantidad, extra_people_value:costPerPerson,
+    total:totalCost, pay_method:payMethod,
+    check_in_ms:0, due_ms:0,
+    note:'[MANUAL] '+motivo
+  });
+  return ok(res,{roomId,cantidad,totalCost,businessDay:businessDayParam,shiftId});
+}
 async function apiAddExtraPerson(p, res) {
   const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
   const userName=String(p.userName||'').trim(),roomId=String(p.roomId||'').trim();
