@@ -263,6 +263,40 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bg" style="flex:1" onclick="saveAddGastoManual()">Guardar gasto</button>
 </div>
 </div></div>
+<div class="ov" id="mAddHoraExtraManual"><div class="modal" style="max-width:520px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">⏰ Ajustar Hora Extra Olvidada</div><button class="mc" onclick="closeM('mAddHoraExtraManual')">✕</button></div>
+<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">💡 Aquí puedes anexar o quitar horas extras que la recepcionista olvidó registrar o registró mal. Los cambios se reflejan automáticamente en el cuadre del día y en el resumen mensual.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+<div><label style="font-size:10px;color:#9ca3af">Día</label><input type="date" id="hexDay" onchange="hexLoadHabitaciones()" style="width:100%"></div>
+<div><label style="font-size:10px;color:#9ca3af">Turno</label><select id="hexShift" onchange="hexLoadHabitaciones()" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>
+</div>
+<label style="font-size:10px;color:#9ca3af">Habitación (solo las que vendieron en este turno)</label>
+<select id="hexRoom" onchange="hexLoadExtras()" style="width:100%;margin-bottom:12px"><option value="">— Selecciona día y turno primero —</option></select>
+<div id="hexListaExtras" style="display:none;background:rgba(59,130,246,.08);border:0.5px solid rgba(59,130,246,.3);border-radius:6px;padding:10px;margin-bottom:12px">
+<div style="font-size:11px;color:#3b82f6;font-weight:700;text-transform:uppercase;margin-bottom:8px">Horas extra ya registradas</div>
+<div id="hexListaExtrasCont"><p style="color:#9ca3af;font-size:11px">Cargando...</p></div>
+</div>
+<div id="hexAgregarSection" style="display:none;background:rgba(34,197,94,.06);border:1px solid #22c55e;border-radius:8px;padding:10px">
+<div style="font-size:11px;color:#22c55e;font-weight:700;margin-bottom:8px">➕ Agregar hora extra olvidada</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+<div><label style="font-size:10px;color:#9ca3af">Cantidad de horas</label><select id="hexHrs" onchange="hexCalcPrecio()" style="width:100%"><option value="1">1 hora</option><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option></select></div>
+<div><label style="font-size:10px;color:#9ca3af">Precio (auto)</label><input type="number" id="hexPrecio" min="0" disabled style="width:100%;background:#18181f;color:#22c55e;font-weight:700"></div>
+</div>
+<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#9ca3af;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="hexOverride" onchange="hexTogOverride()" style="width:14px;height:14px"> Sobrescribir precio manualmente</label>
+<label style="font-size:10px;color:#9ca3af">Método de pago</label>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:2px 0 10px">
+<div class="pmo on" id="hexPmEFECTIVO" onclick="hexSelPm('EFECTIVO')">Efectivo</div>
+<div class="pmo" id="hexPmTARJETA" onclick="hexSelPm('TARJETA')">Tarjeta</div>
+<div class="pmo" id="hexPmNEQUI" onclick="hexSelPm('NEQUI')">Nequi</div>
+<div class="pmo" id="hexPmMIXTO" onclick="hexSelPm('MIXTO')">Mixto</div>
+</div>
+<label style="font-size:10px;color:#9ca3af">Motivo (obligatorio)</label>
+<textarea id="hexMotivo" placeholder="Ej: Recepcionista olvidó cobrar 1h extra de Hab 305..." style="min-height:50px;margin-bottom:10px"></textarea>
+<div style="display:flex;gap:6px">
+<button class="btn bk" style="flex:1" onclick="closeM('mAddHoraExtraManual')">Cancelar</button>
+<button class="btn bg" style="flex:1" onclick="saveAddHoraExtraManual()">Guardar hora extra</button>
+</div>
+</div>
+</div></div>
 <div class="ov" id="mAddVentaManual"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">➕ Agregar Venta Olvidada</div><button class="mc" onclick="closeM('mAddVentaManual')">✕</button></div>
 <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">💡 Esta venta se agregará al cuadre como si la recepcionista la hubiera registrado normalmente. Quedará marcada con tag "MANUAL".</div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -2787,8 +2821,25 @@ function openAddGastoManual(){
 function openAddHoraExtraManual(){
   if(!sess){toast('Sesión no iniciada','err');return;}
   if(sess.userRole!=='ADMIN'){toast('Solo ADMIN puede agregar horas extra','err');return;}
-  toast('✓ Paso 1: el botón se conecta bien','ok');
+  var defaultDay=document.getElementById('cuadreAdminDay').value||sess.businessDay||(new Date().toISOString().slice(0,10));
+  document.getElementById('hexDay').value=defaultDay;
+  document.getElementById('hexShift').value=sess.shiftId||'SHIFT_1';
+  document.getElementById('hexRoom').innerHTML='<option value="">— Selecciona día y turno primero —</option>';
+  document.getElementById('hexListaExtras').style.display='none';
+  document.getElementById('hexAgregarSection').style.display='none';
+  document.getElementById('hexHrs').value='1';
+  document.getElementById('hexPrecio').value='';
+  document.getElementById('hexOverride').checked=false;
+  document.getElementById('hexMotivo').value='';
+  hexSelPm('EFECTIVO');
+  openM('mAddHoraExtraManual');
 }
+function hexLoadHabitaciones(){toast('Próximamente: cargar habitaciones del turno','err');}
+function hexLoadExtras(){toast('Próximamente: cargar extras de la habitación','err');}
+function hexCalcPrecio(){toast('Próximamente: calcular precio','err');}
+function hexTogOverride(){var ov=document.getElementById('hexOverride').checked;document.getElementById('hexPrecio').disabled=!ov;}
+function hexSelPm(pm){['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(p){var el=document.getElementById('hexPm'+p);if(el)el.classList.toggle('on',p===pm);});window.hexSelectedPm=pm;}
+function saveAddHoraExtraManual(){toast('Próximamente: guardar hora extra (Paso 4)','err');}
 function saveAddGastoManual(){
   var day=document.getElementById('agmDay').value;
   var shift=document.getElementById('agmShift').value;
