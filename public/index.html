@@ -2834,7 +2834,25 @@ function openAddHoraExtraManual(){
   hexSelPm('EFECTIVO');
   openM('mAddHoraExtraManual');
 }
-function hexLoadHabitaciones(){toast('Próximamente: cargar habitaciones del turno','err');}
+function hexLoadHabitaciones(){
+  var day=document.getElementById('hexDay').value;
+  var shift=document.getElementById('hexShift').value;
+  var sel=document.getElementById('hexRoom');
+  document.getElementById('hexListaExtras').style.display='none';
+  document.getElementById('hexAgregarSection').style.display='none';
+  if(!day||!shift){sel.innerHTML='<option value="">— Selecciona día y turno primero —</option>';return;}
+  sel.innerHTML='<option value="">Cargando...</option>';
+  rpc('getHabitacionesTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){
+    var habs=(d&&d.habitaciones)||[];
+    if(!habs.length){sel.innerHTML='<option value="">No hay ventas en este turno</option>';return;}
+    var h='<option value="">— Selecciona habitación —</option>';
+    habs.forEach(function(r){
+      var marker=r.countExtensiones>0?' ⏰':'';
+      h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' — '+r.category+marker+'</option>';
+    });
+    sel.innerHTML=h;
+  },function(e){sel.innerHTML='<option value="">Error: '+(e.message||'?')+'</option>';toast('Error cargando habitaciones','err');});
+}
 function hexLoadExtras(){toast('Próximamente: cargar extras de la habitación','err');}
 function hexCalcPrecio(){toast('Próximamente: calcular precio','err');}
 function hexTogOverride(){var ov=document.getElementById('hexOverride').checked;document.getElementById('hexPrecio').disabled=!ov;}
