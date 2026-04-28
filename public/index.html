@@ -7447,6 +7447,49 @@ function openTrasladoRecepcion(){
   var nuevo=(sec.style.display==='none')?'block':'none';
   sec.style.display=nuevo;
   if(nuevo==='block'){
+    var p=window._trProdSel||null;
+    var maxRec=p?Number(p.stockActual||0):0;
+    document.getElementById('trDevMax').textContent='máx '+maxRec;
+    var inp=document.getElementById('trDevCant');
+    if(inp){inp.max=maxRec;if(Number(inp.value)>maxRec)inp.value=Math.max(1,maxRec);}
+  }
+}
+function chTrDevCant(d){
+  var inp=document.getElementById('trDevCant');
+  if(!inp)return;
+  var p=window._trProdSel||null;
+  var max=p?Number(p.stockActual||0):999;
+  var v=Math.max(1,Math.min(max,Number(inp.value||1)+d));
+  inp.value=v;
+}
+function confirmarDevolucionBodega(){
+  var p=window._trProdSel;
+  if(!p){toast('Selecciona un producto primero','err');return;}
+  var cant=Number(document.getElementById('trDevCant').value||0);
+  var maxRec=Number(p.stockActual||0);
+  if(cant<=0){toast('Cantidad inválida','err');return;}
+  if(cant>maxRec){toast('No puedes devolver más de '+maxRec+' (lo que hay en recepción)','err');return;}
+  var nota=(document.getElementById('trNota')||{}).value||'';
+  conf('¿Devolver '+cant+' unidades de '+p.nombre+' a bodega?',function(){
+    rpc('devolverABodega',{
+      productId:p.id,
+      cantidad:cant,
+      nota:nota.trim(),
+      shiftId:sess.shiftId,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Devolución registrada: '+cant+' unidades a bodega','ok');
+      closeM('mTrasladoRec');
+      loadProductos();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
+  var sec=document.getElementById('trDevolverSection');
+  if(!sec)return;
+  var nuevo=(sec.style.display==='none')?'block':'none';
+  sec.style.display=nuevo;
+  if(nuevo==='block'){
     var p=window._trProd||null;
     var maxRec=p?Number(p.stockActual||0):0;
     document.getElementById('trDevMax').textContent='máx '+maxRec;
