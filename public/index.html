@@ -222,10 +222,35 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn br full" onclick="anularVentaModulo()">🗑️ Anular venta seleccionada</button>
 </div>
 </div>
-<div id="mcpTabGastos" style="display:none;padding:20px;text-align:center;color:#9ca3af;font-size:13px">
-<div style="font-size:32px;margin-bottom:10px">💰</div>
-<div style="font-weight:700;color:#f59e0b">Pestaña Gastos</div>
-<div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar gastos del turno</div>
+<div id="mcpTabGastos" style="display:none">
+<button id="mcpBtnAddGasto" onclick="openAddGastoManual()" style="width:100%;padding:10px;background:rgba(34,197,94,.12);border:1px solid #22c55e;border-radius:8px;color:#22c55e;cursor:pointer;font-size:12px;font-weight:700;margin-bottom:10px">➕ Agregar gasto olvidado</button>
+<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Selecciona el gasto</div>
+<div id="mcpListGastos" style="max-height:200px;overflow-y:auto;border:1px solid #2e2e3a;border-radius:8px;padding:6px;background:#1a1a22;margin-bottom:12px">
+<p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">Cargando gastos...</p>
+</div>
+<div id="mcpDetGasto" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:10px;margin-bottom:12px">
+<div style="font-size:10px;color:#f59e0b;font-weight:700;text-transform:uppercase">Gasto seleccionado</div>
+<div id="mcpGastoInfo" style="font-size:13px;color:#e5e7eb;margin-top:4px"></div>
+</div>
+<div id="mcpEditGastoSection" style="display:none;background:#22222c;border:1px solid #2e2e3a;border-radius:8px;padding:10px;margin-bottom:10px">
+<div style="font-size:11px;color:#a78bfa;font-weight:700;text-transform:uppercase;margin-bottom:8px">✏️ Editar gasto</div>
+<label style="font-size:10px;color:#9ca3af">A quién</label>
+<input type="text" id="mcpEditGastoBorrower" style="margin-bottom:6px">
+<label style="font-size:10px;color:#9ca3af">Monto</label>
+<input type="number" id="mcpEditGastoAmount" min="0" style="margin-bottom:6px">
+<label style="font-size:10px;color:#9ca3af">Nota</label>
+<input type="text" id="mcpEditGastoNote" style="margin-bottom:6px">
+<label style="font-size:10px;color:#9ca3af">Motivo del cambio <span style="color:#ef4444">*</span></label>
+<textarea id="mcpEditGastoMotivo" placeholder="Ej: corrección de monto" style="min-height:40px;margin-bottom:8px"></textarea>
+<button class="btn ba full" onclick="editarGastoModulo()">💾 Guardar cambios</button>
+</div>
+<div id="mcpAnulGastoSection" style="display:none;border-top:2px dashed #2e2e3a;padding-top:12px">
+<div style="font-size:11px;color:#ef4444;text-transform:uppercase;font-weight:700;margin-bottom:8px">🗑️ Anular este gasto</div>
+<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px;margin-bottom:10px;font-size:11px;color:#fca5a5">⚠️ Esto anula el gasto del cuadre. Quedará registrado como ANULADO pero con historial visible.</div>
+<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo de anulación <span style="color:#ef4444">*</span></label>
+<textarea id="mcpAnulGastoMotivo" placeholder="Ej: gasto duplicado, error de digitación, etc." style="min-height:50px;margin-bottom:10px"></textarea>
+<button class="btn br full" onclick="anularGastoModulo()">🗑️ Anular gasto seleccionado</button>
+</div>
 </div>
 <div id="mcpTabTaxis" style="display:none;padding:20px;text-align:center;color:#9ca3af;font-size:13px">
 <div style="font-size:32px;margin-bottom:10px">🚕</div>
@@ -237,6 +262,25 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="font-weight:700;color:#f59e0b">Pestaña Personal</div>
 <div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar personal extra</div>
 </div>
+</div>
+</div></div>
+<div class="ov" id="mAddGastoManual"><div class="modal" style="max-width:480px;max-height:90vh;overflow-y:auto"><div class="mh"><div class="mt">➕ Agregar Gasto Olvidado</div><button class="mc" onclick="closeM('mAddGastoManual')">✕</button></div>
+<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">💡 Este gasto se agregará al cuadre como si la recepcionista lo hubiera registrado normalmente. Quedará marcado con tag "MANUAL".</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+<div><label style="font-size:10px;color:#9ca3af">Día</label><input type="date" id="agmDay" style="width:100%"></div>
+<div><label style="font-size:10px;color:#9ca3af">Turno</label><select id="agmShift" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>
+</div>
+<label>A quién</label>
+<input type="text" id="agmBorrower" placeholder="Nombre de la persona" style="margin-bottom:8px">
+<label>Monto</label>
+<input type="number" id="agmAmount" min="0" placeholder="0" style="margin-bottom:8px">
+<label>Nota (opcional)</label>
+<input type="text" id="agmNote" placeholder="Concepto del gasto" style="margin-bottom:8px">
+<label>Motivo (obligatorio)</label>
+<textarea id="agmMotivo" placeholder="Ej: Recepcionista olvidó registrar el gasto..." style="min-height:50px;margin-bottom:10px"></textarea>
+<div style="display:flex;gap:6px">
+<button class="btn bk" style="flex:1" onclick="closeM('mAddGastoManual')">Cancelar</button>
+<button class="btn bg" style="flex:1" onclick="saveAddGastoManual()">Guardar gasto</button>
 </div>
 </div></div>
 <div class="ov" id="mAddVentaManual"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">➕ Agregar Venta Olvidada</div><button class="mc" onclick="closeM('mAddVentaManual')">✕</button></div>
@@ -2386,6 +2430,7 @@ function mcpSwitchTab(tab){
       btn.style.fontWeight='400';
     }
   });
+  if(tab==='gastos')mcpLoadGastos();
 }
 var avmState={duracion:3,personas:2,arrType:'WALK',payMethod:'EFECTIVO',roomCategory:''};
 function openAddVentaManual(){
@@ -2639,6 +2684,146 @@ function updateMixtoSum(){
   var el=document.getElementById('mcpMixtoSum');
   if(sum===total){el.style.color='#22c55e';el.textContent='✓ Suma: '+fmt(sum)+' (cuadra con el total)';}
   else{el.style.color='#ef4444';el.textContent='✗ Suma: '+fmt(sum)+' — debe ser '+fmt(total);}
+}
+var mcpGastoState={selectedId:null,gastos:[]};
+function mcpLoadGastos(){
+  var day,shift;
+  if(mcpState.role==='ADMIN'){
+    day=document.getElementById('cuadreAdminDay').value;
+    shift=document.getElementById('mcpShift').value;
+  } else {
+    day=sess.businessDay;
+    shift=sess.shiftId;
+  }
+  if(!day||!shift){document.getElementById('mcpListGastos').innerHTML='<p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">Selecciona día y turno</p>';return;}
+  document.getElementById('mcpDetGasto').style.display='none';
+  document.getElementById('mcpEditGastoSection').style.display='none';
+  document.getElementById('mcpAnulGastoSection').style.display='none';
+  rpc('listGastosTurno',{businessDay:day,shiftId:shift},function(r){
+    var gastos=r.gastos||[];
+    mcpGastoState.gastos=gastos;
+    var listEl=document.getElementById('mcpListGastos');
+    if(gastos.length===0){listEl.innerHTML='<p style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">No hay gastos en este turno</p>';return;}
+    var html='';
+    gastos.forEach(function(g){
+      var anulada=g.anulada;
+      var manual=g.manual;
+      var time=fmtH(g.ts_ms);
+      var bg=anulada?'rgba(239,68,68,.08)':'rgba(255,255,255,.04)';
+      var border=anulada?'#ef4444':'#2e2e3a';
+      var color=anulada?'#fca5a5':'#e5e7eb';
+      var deco=anulada?'text-decoration:line-through;':'';
+      var tag=anulada?'<span style="background:#ef4444;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;margin-left:4px">ANULADA</span>':'';
+      var manualTag=manual?'<span style="background:#a78bfa;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;margin-left:4px">MANUAL</span>':'';
+      var editTag=g.editada?'<span style="background:#f59e0b;color:#1f1f24;padding:1px 5px;border-radius:3px;font-size:9px;margin-left:4px">EDITADA</span>':'';
+      html+='<div onclick="mcpSelectGasto('+g.id+')" style="cursor:pointer;padding:8px;border-radius:6px;background:'+bg+';border:1px solid '+border+';margin-bottom:4px;'+deco+'">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center">';
+      html+='<div style="flex:1"><b style="color:'+color+';font-size:13px">'+(g.borrower_name||'(sin nombre)')+'</b>'+tag+manualTag+editTag+'<div style="font-size:10px;color:#9ca3af">'+time+(g.note?' · '+g.note:'')+'</div></div>';
+      html+='<b style="color:'+color+';font-size:14px">'+fmt(g.amount)+'</b>';
+      html+='</div></div>';
+    });
+    listEl.innerHTML=html;
+  },function(e){
+    document.getElementById('mcpListGastos').innerHTML='<p style="color:#ef4444;font-size:12px;text-align:center;padding:10px">Error: '+(e.message||'?')+'</p>';
+  });
+}
+function mcpSelectGasto(id){
+  var g=mcpGastoState.gastos.find(function(x){return Number(x.id)===Number(id);});
+  if(!g){toast('Gasto no encontrado','err');return;}
+  if(g.anulada){toast('Este gasto ya está anulado','err');return;}
+  mcpGastoState.selectedId=g.id;
+  document.getElementById('mcpDetGasto').style.display='block';
+  document.getElementById('mcpGastoInfo').innerHTML='<b>'+(g.borrower_name||'(sin nombre)')+'</b> — '+fmt(g.amount)+(g.note?'<br><span style="font-size:11px;color:#9ca3af">'+g.note+'</span>':'');
+  document.getElementById('mcpEditGastoBorrower').value=g.borrower_name||'';
+  document.getElementById('mcpEditGastoAmount').value=g.amount||0;
+  document.getElementById('mcpEditGastoNote').value=g.note||'';
+  document.getElementById('mcpEditGastoMotivo').value='';
+  document.getElementById('mcpAnulGastoMotivo').value='';
+  document.getElementById('mcpEditGastoSection').style.display='block';
+  document.getElementById('mcpAnulGastoSection').style.display='block';
+}
+function editarGastoModulo(){
+  if(!mcpGastoState.selectedId){toast('Selecciona un gasto','err');return;}
+  var borrower=document.getElementById('mcpEditGastoBorrower').value.trim();
+  var amount=Number(document.getElementById('mcpEditGastoAmount').value||0);
+  var note=document.getElementById('mcpEditGastoNote').value.trim();
+  var motivo=document.getElementById('mcpEditGastoMotivo').value.trim();
+  if(!borrower){toast('Nombre obligatorio','err');return;}
+  if(amount<=0){toast('Monto inválido','err');return;}
+  if(!motivo||motivo.length<5){toast('Motivo del cambio (min 5 caracteres)','err');return;}
+  conf('¿Guardar cambios al gasto?',function(){
+    rpc('editarGastoModulo',{
+      gastoId:mcpGastoState.selectedId,
+      borrowerName:borrower,
+      amount:amount,
+      note:note,
+      motivo:motivo,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Gasto editado','ok');
+      mcpLoadGastos();
+      if(mcpState.role==='ADMIN')loadCuadreAdmin();else loadCuadre();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
+function anularGastoModulo(){
+  if(!mcpGastoState.selectedId){toast('Selecciona un gasto','err');return;}
+  var motivo=document.getElementById('mcpAnulGastoMotivo').value.trim();
+  if(!motivo||motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  var g=mcpGastoState.gastos.find(function(x){return Number(x.id)===Number(mcpGastoState.selectedId);});
+  if(!g){toast('Gasto no encontrado','err');return;}
+  conf('¿Anular gasto: '+(g.borrower_name||'')+' por '+fmt(g.amount)+'?',function(){
+    rpc('anularGastoModulo',{
+      gastoId:mcpGastoState.selectedId,
+      motivo:motivo,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Gasto anulado','ok');
+      mcpGastoState.selectedId=null;
+      mcpLoadGastos();
+      if(mcpState.role==='ADMIN')loadCuadreAdmin();else loadCuadre();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
+function openAddGastoManual(){
+  if(!sess){toast('Sesión no iniciada','err');return;}
+  if(sess.userRole!=='ADMIN'){toast('Solo ADMIN puede agregar gastos manuales','err');return;}
+  var defaultDay=document.getElementById('cuadreAdminDay').value||sess.businessDay||(new Date().toISOString().slice(0,10));
+  document.getElementById('agmDay').value=defaultDay;
+  document.getElementById('agmShift').value=document.getElementById('mcpShift').value||sess.shiftId||'SHIFT_1';
+  document.getElementById('agmBorrower').value='';
+  document.getElementById('agmAmount').value='';
+  document.getElementById('agmNote').value='';
+  document.getElementById('agmMotivo').value='';
+  openM('mAddGastoManual');
+}
+function saveAddGastoManual(){
+  var day=document.getElementById('agmDay').value;
+  var shift=document.getElementById('agmShift').value;
+  var borrower=document.getElementById('agmBorrower').value.trim();
+  var amount=Number(document.getElementById('agmAmount').value||0);
+  var note=document.getElementById('agmNote').value.trim();
+  var motivo=document.getElementById('agmMotivo').value.trim();
+  if(!day){toast('Selecciona el día','err');return;}
+  if(!shift){toast('Selecciona el turno','err');return;}
+  if(!borrower){toast('Nombre obligatorio','err');return;}
+  if(amount<=0){toast('Monto inválido','err');return;}
+  if(!motivo||motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  conf('¿Agregar gasto manual: '+borrower+' por '+fmt(amount)+'?',function(){
+    rpc('agregarGastoManual',{
+      businessDay:day,shiftId:shift,borrowerName:borrower,
+      amount:amount,note:note,motivo:motivo,
+      userName:sess.userName,userRole:sess.userRole
+    },function(){
+      toast('✓ Gasto agregado al cuadre','ok');
+      closeM('mAddGastoManual');
+      mcpLoadGastos();
+      if(mcpState&&mcpState.role==='ADMIN')loadCuadreAdmin();
+      else loadCuadre();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
 }
 function anularVentaModulo(){
   if(!mcpState.selectedSaleId){toast('Selecciona una venta primero','err');return;}
