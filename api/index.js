@@ -239,6 +239,7 @@ module.exports = async function handler(req, res) {
       case 'saveCortesia':       return await apiSaveCortesia(payload, res);
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       case 'anularVenta':        return await apiAnularVenta(payload, res);
+      case 'anularVentaModulo':  return await apiAnularVentaModulo(payload, res);
       case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
       case 'ajusteInventarioV2': return await apiAjusteInventarioV2(payload, res);
      case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
@@ -2416,6 +2417,49 @@ async function apiTrasladoRecepcion(p, res) {
     tipo:'traslado_recepcion', cantidad, nota
   });
   return ok(res,{productId,nuevoBodega,nuevoRecepcion});
+}
+async function apiAnularVentaModulo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='RECEPTION'&&userRole!=='ADMIN') return err(res,'Sin permiso');
+  const saleId = Number(p.saleId||0);
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!saleId) return err(res,'saleId requerido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
+  const now = Date.now();
+  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
+  if(errSale) return err(res, errSale.message);
+  if(!sale) return err(res,'Venta no encontrada');
+  if(sale.anulada) return err(res,'Esta venta ya está anulada');
+  const motivoFinal = '[AJUSTE-ANULACION] ' + motivo;
+  await supabase.from('sales').update({
+    type:'ANULADA',
+    note: motivoFinal,
+    anulada: true,
+    anulada_ms: now,
+    anulada_por: userName
+  }).eq('id', saleId);
+  await supabase.from('state_history').insert({
+    ts_ms: now,
+    business_day: sale.business_day,
+    shift_id: sale.shift_id,
+    user_role: userRole,
+    user_name: userName,
+    room_id: sale.room_id,
+    from_state: 'AJUSTE',
+    to_state: 'ANULADA',
+    people: 0,
+    meta_json: JSON.stringify({
+      accion:'ANULADA_DESDE_AJUSTE',
+      saleId: saleId,
+      motivo: motivo,
+      total_anulado: sale.total,
+      pay_method: sale.pay_method,
+      business_day_original: sale.business_day,
+      shift_original: sale.shift_id
+    })
+  });
+  return ok(res,{saleId, anulada:true});
 }
 async function apiAnularVenta(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
