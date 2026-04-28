@@ -234,6 +234,7 @@ module.exports = async function handler(req, res) {
       case 'trasladoRecepcion':      return await apiTrasladoRecepcion(payload, res);
       case 'devolverABodega':        return await apiDevolverABodega(payload, res);
       case 'agregarPersonaManual':   return await apiAgregarPersonaManual(payload, res);
+      case 'getHabitacionesTurno':   return await apiGetHabitacionesTurno(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -1732,6 +1733,31 @@ async function apiGetDailyCuadre(p, res) {
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
 
+async function apiGetHabitacionesTurno(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const businessDayParam = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  if(!businessDayParam) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  const { data, error } = await supabase
+    .from('sales')
+    .select('room_id, category, type, anulada')
+    .eq('business_day', businessDayParam)
+    .eq('shift_id', shiftId)
+    .in('type', ['SALE', 'RENEWAL', 'EXTENSION']);
+  if(error) return err(res, error.message);
+  const habitacionesMap = {};
+  (data||[]).forEach(r => {
+    if(r.anulada) return;
+    if(!habitacionesMap[r.room_id]) {
+      habitacionesMap[r.room_id] = { roomId: r.room_id, category: r.category, countExtensiones: 0 };
+    }
+    if(r.type === 'EXTENSION') habitacionesMap[r.room_id].countExtensiones++;
+  });
+  const habitaciones = Object.values(habitacionesMap).sort((a,b) => String(a.roomId).localeCompare(String(b.roomId)));
+  return ok(res, { habitaciones });
+}
 async function apiAgregarPersonaManual(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN') return err(res,'Sin permiso');
