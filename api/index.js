@@ -1745,7 +1745,7 @@ async function apiGetExtrasHabitacion(p, res) {
   if(!roomId) return err(res,'roomId requerido');
   const { data, error } = await supabase
     .from('sales')
-    .select('id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, motivo_anulacion, anulada_por, note')
+    .select('id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
