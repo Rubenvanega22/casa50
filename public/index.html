@@ -3074,6 +3074,77 @@ function saveAddPersonaManual(){
     },function(e){toast('Error: '+(e.message||'?'),'err');});
   });
 }
+function pmaLoadHabitaciones(){
+  var day=document.getElementById('apmDia').value;
+  var shift=document.getElementById('apmTurno').value;
+  var sel=document.getElementById('apmRoom');
+  if(!sel)return;
+  var contLista=document.getElementById('pmaListaPersonas');
+  if(contLista)contLista.style.display='none';
+  if(!day||!shift){sel.innerHTML='<option value="">— Selecciona día y turno primero —</option>';return;}
+  sel.innerHTML='<option value="">Cargando...</option>';
+  rpc('getHabitacionesTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){
+    var habs=(d&&d.habitaciones)||[];
+    if(!habs.length){sel.innerHTML='<option value="">No hay ventas en este turno</option>';return;}
+    var h='<option value="">— Selecciona habitación —</option>';
+    habs.forEach(function(r){
+      h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' — '+r.category+'</option>';
+    });
+    sel.innerHTML=h;
+  },function(e){sel.innerHTML='<option value="">Error: '+(e.message||'?')+'</option>';toast('Error cargando habitaciones','err');});
+}
+function pmaLoadPersonas(){
+  var day=document.getElementById('apmDia').value;
+  var shift=document.getElementById('apmTurno').value;
+  var sel=document.getElementById('apmRoom');
+  var roomId=sel?sel.value:'';
+  var contLista=document.getElementById('pmaListaPersonas');
+  if(!contLista)return;
+  if(!roomId){contLista.style.display='none';return;}
+  contLista.style.display='block';
+  var cont=document.getElementById('pmaListaPersonasCont');
+  if(!cont)return;
+  cont.innerHTML='<p style="color:#9ca3af;font-size:11px">Cargando...</p>';
+  rpc('getPersonasHabitacion',{businessDay:day,shiftId:shift,roomId:roomId,userName:sess.userName,userRole:sess.userRole},function(d){
+    var personas=(d&&d.personas)||[];
+    if(!personas.length){
+      cont.innerHTML='<p style="color:#9ca3af;font-size:11px">Esta habitación no tiene personas adicionales registradas en este turno.</p>';
+      return;
+    }
+    var h='';
+    personas.forEach(function(r){
+      var fecha=new Date(Number(r.ts_ms||0));
+      var hh=String(fecha.getHours()).padStart(2,'0')+':'+String(fecha.getMinutes()).padStart(2,'0');
+      var anulada=r.anulada?true:false;
+      var styleRow=anulada?'opacity:0.5;text-decoration:line-through':'';
+      var btnAnular=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="pmaAnularPersona('+r.id+')">🗑️ Anular</button>';
+      h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
+      h+='<div><div style="font-size:11px">'+(r.extra_people||1)+' persona(s) · '+hh+' · '+(r.pay_method||'?')+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af">Cobrada por: '+(r.user_name||'?')+'</div></div>';
+      h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#22c55e;font-size:12px">'+fmt(Number(r.total||0))+'</b>'+btnAnular+'</div>';
+      h+='</div>';
+    });
+    cont.innerHTML=h;
+  },function(e){cont.innerHTML='<p style="color:#ef4444;font-size:11px">Error: '+(e.message||'?')+'</p>';});
+}
+function pmaAnularPersona(saleId){
+  var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  conf('¿Anular esta persona adicional? Se reflejará en el cuadre del día y en el resumen mensual.',function(){
+    rpc('anularVentaModulo',{
+      saleId:saleId,
+      motivo:motivo,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Persona adicional anulada','ok');
+      pmaLoadPersonas();
+      if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
 function anularVentaModulo(){
   if(!mcpState.selectedSaleId){toast('Selecciona una venta primero','err');return;}
   var motivo=(document.getElementById('mcpAnulMotivo')||{}).value||'';
