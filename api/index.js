@@ -236,6 +236,7 @@ module.exports = async function handler(req, res) {
       case 'agregarPersonaManual':   return await apiAgregarPersonaManual(payload, res);
       case 'getHabitacionesTurno':   return await apiGetHabitacionesTurno(payload, res);
       case 'getExtrasHabitacion':    return await apiGetExtrasHabitacion(payload, res);
+      case 'agregarHoraExtraManual': return await apiAgregarHoraExtraManual(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -1734,6 +1735,80 @@ async function apiGetDailyCuadre(p, res) {
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
 
+async function apiAgregarHoraExtraManual(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar horas extra manualmente');
+  const businessDayParam = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  const roomId = String(p.roomId||'').trim();
+  const extraHrs = Number(p.extraHrs||0);
+  const total = Number(p.total||0);
+  const payMethod = String(p.payMethod||'EFECTIVO').toUpperCase();
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!businessDayParam) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  if(!roomId) return err(res,'roomId requerido');
+  if(extraHrs<=0||extraHrs>6) return err(res,'Horas extra inválidas (1-6)');
+  if(total<=0) return err(res,'Total inválido');
+  if(!motivo||motivo.length<5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
+  const room = await getRoom(roomId);
+  if(!room) return err(res,'Habitación no existe');
+  const now = Date.now();
+  const noteFinal = '[MANUAL] '+motivo;
+  let amount_1=null, amount_2=null, amount_3=null, pay_method_2=null;
+  if(payMethod==='MIXTO'){
+    amount_1=Number(p.amount_1||0);
+    amount_2=Number(p.amount_2||0);
+    amount_3=Number(p.amount_3||0);
+    if((amount_1+amount_2+amount_3)!==total) return err(res,'Suma del mixto debe ser igual al total');
+    pay_method_2='MIXTO';
+  }
+  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
+    ts_ms: now,
+    business_day: businessDayParam,
+    shift_id: shiftId,
+    user_role: 'ADMIN',
+    user_name: userName,
+    type: 'EXTENSION',
+    room_id: roomId,
+    category: room.category,
+    duration_hrs: extraHrs,
+    base_price: total,
+    people: Number(room.people||0),
+    extra_hours: extraHrs,
+    extra_hours_value: total,
+    total: total,
+    pay_method: payMethod,
+    pay_method_2: pay_method_2,
+    amount_1: amount_1,
+    amount_2: amount_2,
+    amount_3: amount_3,
+    note: noteFinal,
+    anulada: false
+  }).select('id').single();
+  if(errIns) return err(res,'Error guardando hora extra: '+errIns.message);
+  await supabase.from('state_history').insert({
+    ts_ms: now,
+    business_day: businessDayParam,
+    shift_id: shiftId,
+    user_role: userRole,
+    user_name: userName,
+    room_id: roomId,
+    from_state: 'AJUSTE',
+    to_state: 'HORA_EXTRA_MANUAL',
+    people: Number(room.people||0),
+    meta_json: JSON.stringify({
+      accion:'HORA_EXTRA_AGREGADA_MANUAL',
+      saleId: inserted.id,
+      motivo: motivo,
+      total: total,
+      pay_method: payMethod,
+      extra_hours: extraHrs
+    })
+  });
+  return ok(res,{saleId:inserted.id, total, extraHrs});
+}
 async function apiGetExtrasHabitacion(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
