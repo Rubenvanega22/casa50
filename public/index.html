@@ -5598,7 +5598,49 @@ function loadGastosMes(){
   var mes=document.getElementById('gmPick').value;
   if(!mes){toast('Selecciona un mes','err');return;}
   var cont=document.getElementById('gmCont');
-  cont.innerHTML='<div style="background:rgba(34,197,94,.06);border:0.5px solid rgba(34,197,94,.3);border-radius:8px;padding:30px;text-align:center"><div style="font-size:28px;margin-bottom:10px">🚧</div><div style="font-size:14px;color:#86efac;font-weight:500;margin-bottom:6px">Módulo Gastos del Mes</div><div style="font-size:12px;color:#9ca3af">Mes seleccionado: '+mes+'</div><div style="font-size:11px;color:#6b7280;margin-top:12px">En desarrollo · próximamente saldos, tabla y descargos</div></div>';
+  cont.innerHTML='<p style="color:#9ca3af;text-align:center;padding:30px">Cargando...</p>';
+  rpc('getGastosMesResumen',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(d){
+    cont.innerHTML=renderGastosMes(d);
+  },function(e){
+    cont.innerHTML='<p style="color:#ef4444;text-align:center;padding:30px">Error: '+esc(e.message||'?')+'</p>';
+  });
+}
+function renderGastosMes(d){
+  var v=d.ventas||{};
+  var g=d.gastos||{};
+  var s=d.saldos||{};
+  var h='';
+  // Dos secciones paralelas: Ventas (informativo) + Disponible (movible)
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
+  // Sección A: Ventas del mes
+  h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
+  h+='<div style="font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">📈 Ventas del mes</div>';
+  h+='<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Crece cada día · NO cambia por gastos</div>';
+  h+='<div style="background:#18181f;border-radius:6px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:#9ca3af;margin-bottom:4px">VENTAS DEL MES (TOTAL)</div><div style="font-size:22px;font-weight:700">'+fmt(v.total||0)+'</div></div>';
+  h+='<div style="display:flex;flex-direction:column;gap:6px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(34,197,94,.06);border-radius:6px"><span style="font-size:12px;color:#9ca3af">💵 Ventas en efectivo</span><b style="font-size:14px;color:#22c55e">'+fmt(v.efectivo||0)+'</b></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(24,95,165,.06);border-radius:6px"><span style="font-size:12px;color:#9ca3af">💳 Ventas en tarjeta</span><b style="font-size:14px;color:#3b82f6">'+fmt(v.tarjeta||0)+'</b></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(168,85,247,.06);border-radius:6px"><span style="font-size:12px;color:#9ca3af">📱 Ventas en nequi</span><b style="font-size:14px;color:#a855f7">'+fmt(v.nequi||0)+'</b></div>';
+  h+='</div></div>';
+  // Sección B: Donde esta la plata HOY
+  h+='<div style="background:#22222c;border:1px solid #3b82f6;border-radius:10px;padding:14px">';
+  h+='<div style="font-size:10px;color:#3b82f6;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">💰 Dónde está la plata HOY</div>';
+  h+='<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Sí cambia con gastos y descargos del Nequi</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:6px">';
+  h+='<div style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💵 Efectivo en caja</span><b style="font-size:16px;color:#22c55e">'+fmt(s.efectivoEnCaja||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.efectivo||0)+' ventas + '+fmt(d.descargos.total||0)+' descargos − '+fmt(g.efectivo||0)+' gastos</div></div>';
+  h+='<div style="background:rgba(24,95,165,.08);border:0.5px solid rgba(24,95,165,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💳 Caja tarjeta</span><b style="font-size:16px;color:#3b82f6">'+fmt(s.cajaTarjeta||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.tarjeta||0)+' ventas − '+fmt(g.tarjeta||0)+' gastos</div></div>';
+  h+='<div style="background:rgba(168,85,247,.08);border:0.5px solid rgba(168,85,247,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">📱 Nequi</span><b style="font-size:16px;color:#a855f7">'+fmt(s.nequiDisponible||0)+'</b></div><div style="font-size:10px;color:#6b7280;margin-bottom:8px">'+fmt(v.nequi||0)+' ventas − '+fmt(d.descargos.total||0)+' descargados</div><div style="display:flex;gap:6px"><button class="btn sm" style="flex:1;background:rgba(168,85,247,.15);color:#a855f7;border:0.5px solid rgba(168,85,247,.4);font-size:11px">↩ Descargar a efectivo</button><button class="btn sm" style="flex:1;background:#2e2e3a;color:#9ca3af;font-size:11px">📋 Historial ('+(d.descargos.cantidad||0)+')</button></div></div>';
+  h+='</div></div>';
+  h+='</div>';
+  // 3 tarjetas resumen
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">';
+  h+='<div style="background:#22222c;border-radius:8px;padding:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Ventas del mes</div><div style="font-size:20px;font-weight:700">'+fmt(v.total||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+(v.cantidad||0)+' ventas</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Gastos del mes</div><div style="font-size:20px;font-weight:700;color:#ef4444">−'+fmt(g.total||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+(g.cantidad||0)+' gastos</div></div>';
+  h+='<div style="background:#22222c;border-radius:8px;padding:12px;border-left:3px solid #22c55e"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Utilidad neta</div><div style="font-size:20px;font-weight:700;color:#22c55e">'+fmt(d.utilidad||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">Ventas − gastos</div></div>';
+  h+='</div>';
+  // Placeholder para tabla
+  h+='<div style="background:rgba(251,191,36,.06);border:1px dashed rgba(251,191,36,.4);border-radius:8px;padding:20px;text-align:center"><div style="font-size:14px;color:#fbbf24;margin-bottom:6px">📋 Tabla detallada de gastos</div><div style="font-size:11px;color:#6b7280">Próximamente · botón "+ Agregar gasto" + filtros por categoría</div></div>';
+  return h;
 }
 function loadMo(){
   var ym=document.getElementById('moPick').value;
