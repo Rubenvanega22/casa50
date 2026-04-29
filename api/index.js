@@ -3186,6 +3186,14 @@ async function apiGetResumenMes(p, res) {
         porDia[fecha].turnos[m.shift_id].e -= Number(m.cantidad||0);
       }
     });
+    // Ajuste por conteo de recepcion: cuenta como entrada (E) en el resumen
+    // Solo se aplica a partir del 2026-04-30 para no afectar ajustes anteriores
+    (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'recepcion_conteo' && m.business_day >= '2026-04-30').forEach(function(m){
+      const fecha = m.business_day;
+      if(porDia[fecha] && porDia[fecha].turnos[m.shift_id]) {
+        porDia[fecha].turnos[m.shift_id].e += Number(m.cantidad||0);
+      }
+    });
 
     (salesMes||[]).filter(s => s.product_id === prod.id).forEach(function(s){
       const fecha = s.business_day;
