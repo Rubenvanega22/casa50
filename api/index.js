@@ -3483,8 +3483,27 @@ async function apiAjusteInventarioV2(p, res) {
     if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
     if(!recepNameAj) return err(res,'Recepcionista requerida');
 
+    // Escenario 5: ajuste por conteo (NO afecta cuadre, solo stock_actual)
+    if(tipo === 'conteo') {
+      if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
+      afectaCuadre = false;
+      afectaStock = 'recepcion';
+      valorAfectado = 0;
+      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
+      if(nuevoStockBod < 0) return err(res,'Resultado negativo. Stock actual: '+prod.stock_actual);
+      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+      await supabase.from('stock_movements').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        user_name: recepNameAj, user_role: 'ADMIN',
+        product_id: productId, product_name: prod.nombre,
+        tipo: 'recepcion_conteo',
+        cantidad: cantidad,
+        nota: motivo
+      });
+    }
+
     // Escenario 4: agregar venta olvidada
-    if(tipo === 'venta_olvidada') {
+    else if(tipo === 'venta_olvidada') {
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
       afectaStock = 'recepcion';
       valorAfectado = cantidad * precio;
