@@ -235,6 +235,7 @@ module.exports = async function handler(req, res) {
       case 'devolverABodega':        return await apiDevolverABodega(payload, res);
       case 'agregarPersonaManual':   return await apiAgregarPersonaManual(payload, res);
       case 'getHabitacionesTurno':   return await apiGetHabitacionesTurno(payload, res);
+      case 'getExtrasHabitacion':    return await apiGetExtrasHabitacion(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -1733,6 +1734,26 @@ async function apiGetDailyCuadre(p, res) {
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
 
+async function apiGetExtrasHabitacion(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const businessDayParam = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  const roomId = String(p.roomId||'').trim();
+  if(!businessDayParam) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  if(!roomId) return err(res,'roomId requerido');
+  const { data, error } = await supabase
+    .from('sales')
+    .select('id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, motivo_anulacion, anulada_por, note')
+    .eq('business_day', businessDayParam)
+    .eq('shift_id', shiftId)
+    .eq('room_id', roomId)
+    .eq('type', 'EXTENSION')
+    .order('ts_ms', { ascending: true });
+  if(error) return err(res, error.message);
+  return ok(res, { extras: data || [] });
+}
 async function apiGetHabitacionesTurno(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
