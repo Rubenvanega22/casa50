@@ -7314,12 +7314,7 @@ window._aj = {
 // Catalogo de escenarios disponibles por categoria
 var AJ_ESCENARIOS = {
   BODEGA: [
-    {tipo:'ingreso_extra', icon:'➕', titulo:'Ingreso extra', desc:'Apareció producto que no estaba registrado', cuadre:false, stock:'bodega', pide:'cantidad_pos'},
-    {tipo:'conteo',        icon:'📋', titulo:'Ajuste por conteo', desc:'El conteo físico no cuadra (puede sumar o restar)', cuadre:false, stock:'bodega', pide:'cantidad_signo'},
-    {tipo:'roto',          icon:'💥', titulo:'Producto roto',     desc:'Se dañó en bodega',                      cuadre:false, stock:'bodega', pide:'cantidad_pos'},
-    {tipo:'vencido',       icon:'📅', titulo:'Producto vencido',  desc:'Pasó la fecha de vencimiento',           cuadre:false, stock:'bodega', pide:'cantidad_pos'},
-    {tipo:'robo',          icon:'🚨', titulo:'Robo/pérdida',      desc:'Desapareció sospechosamente',            cuadre:false, stock:'bodega', pide:'cantidad_pos'},
-    {tipo:'salida_extra',  icon:'➖', titulo:'Salida extra',      desc:'Motivo especial no listado',             cuadre:false, stock:'bodega', pide:'cantidad_pos'}
+    {tipo:'conteo',        icon:'📋', titulo:'Ajuste por conteo', desc:'El conteo físico no cuadra (puede sumar o restar)', cuadre:false, stock:'bodega', pide:'cantidad_signo'}
   ],
   RECEPCION: [
     {tipo:'producto',         icon:'🔄', titulo:'Cambiar producto vendido', desc:'Vendió un producto por otro (cambiar A por B)', cuadre:true, stock:'ambos',     pide:'productoViejo'},
