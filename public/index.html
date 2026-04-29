@@ -7633,7 +7633,14 @@ function ajRenderPreview(){
     h += '<div style="font-size:10px;color:#6b7280;margin-top:4px">ℹ️ No afecta el cuadre</div>';
   }
   else if(tab === 'RECEPCION'){
-    if(tipo === 'producto'){
+    if(tipo === 'conteo'){
+      var newStockR = stockActual + cant;
+      h += '<table style="width:100%;font-size:11px"><tr><td style="color:#9ca3af;padding:3px 0">📦 Stock recepción:</td>';
+      h += '<td style="color:#fca5a5">'+stockActual+'</td><td style="color:#fbbf24;text-align:center">→</td>';
+      h += '<td style="color:#86efac;font-weight:700">'+newStockR+' ('+(cant>=0?'+':'')+cant+')</td></tr></table>';
+      h += '<div style="font-size:10px;color:#6b7280;margin-top:4px">ℹ️ No afecta el cuadre (solo inventario)</div>';
+    }
+    else if(tipo === 'producto'){
       var pidViejo = Number((document.getElementById('ajProdViejoId')||{}).value||0);
       var prodViejo = pidViejo ? (productosLista||[]).find(function(x){return x.id===pidViejo;}) : null;
       if(prodViejo){
