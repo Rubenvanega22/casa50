@@ -3479,9 +3479,16 @@ async function apiAjusteInventarioV2(p, res) {
     recepNameAj = String(p.recepName||'').trim();
     payMethodAj = String(p.payMethod||'EFECTIVO').toUpperCase();
 
-    if(!businessDayAj) return err(res,'Fecha requerida');
-    if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
-    if(!recepNameAj) return err(res,'Recepcionista requerida');
+    // Para conteo: si no envía fecha/turno/recep, los completamos con valores actuales
+    if(tipo === 'conteo') {
+      if(!businessDayAj) businessDayAj = businessDay(now);
+      if(!shiftAj) shiftAj = currentShiftId(now);
+      if(!recepNameAj) recepNameAj = adminName;
+    } else {
+      if(!businessDayAj) return err(res,'Fecha requerida');
+      if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
+      if(!recepNameAj) return err(res,'Recepcionista requerida');
+    }
 
     // Escenario 5: ajuste por conteo (NO afecta cuadre, solo stock_actual)
     if(tipo === 'conteo') {
