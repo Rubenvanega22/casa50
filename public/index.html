@@ -2995,11 +2995,11 @@ function openAddPersonaManual(){
   var h='<div class="mh"><div class="mt">👷 Agregar Persona Adicional Olvidada</div><button class="mc" onclick="closeM(\'mAddPersonaManual\')">✕</button></div>';
   h+='<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">Esta persona adicional se agregará al cuadre como si la recepcionista la hubiera registrado.</div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
-  h+='<div><label style="font-size:11px;color:#9ca3af">Día</label><input type="date" id="apmDia" value="'+defaultDay+'" style="margin:0"></div>';
-  h+='<div><label style="font-size:11px;color:#9ca3af">Turno</label><select id="apmTurno" style="margin:0"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
+  h+='<div><label style="font-size:11px;color:#9ca3af">Día</label><input type="date" id="apmDia" value="'+defaultDay+'" onchange="pmaLoadHabitaciones()" style="margin:0"></div>';
+  h+='<div><label style="font-size:11px;color:#9ca3af">Turno</label><select id="apmTurno" onchange="pmaLoadHabitaciones()" style="margin:0"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
   h+='</div>';
   h+='<label style="font-size:11px;color:#9ca3af">Habitación</label>';
-  h+='<select id="apmRoom" onchange="apmActPrecio()" style="margin-bottom:10px">';
+  h+='<select id="apmRoom" onchange="apmActPrecio();pmaLoadPersonas()" style="margin-bottom:10px">';
   h+='<option value="">-- Selecciona habitación --</option>';
   rooms.forEach(function(r){h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' - '+r.category+'</option>';});
   h+='</select>';
