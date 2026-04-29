@@ -256,6 +256,7 @@ module.exports = async function handler(req, res) {
      case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
+      case 'getGastosMesResumen': return await apiGetGastosMesResumen(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
       case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
@@ -3104,6 +3105,128 @@ async function apiGetPrintTurno(p, res) {
       nequi: totalNq,
       total: totalEf + totalTa + totalNq
     }
+  });
+}
+
+// ==================== GASTOS DEL MES (NUEVO MODULO) ====================
+// Devuelve ventas, gastos y descargos del mes para el modulo de Gastos del Mes
+async function apiGetGastosMesResumen(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const mes = String(p.mes || '').trim();
+  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
+
+  const [yearStr, monthStr] = mes.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const firstDay = `${mes}-01`;
+  const lastDayDate = new Date(year, month, 0);
+  const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
+
+  // 1. Ventas del mes desde la tabla "sales" (NO room_products)
+  const ventasMes = await fetchAll(() => supabase.from('sales')
+    .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .neq('anulada', true));
+  
+  let ventasEfectivo = 0;
+  let ventasTarjeta = 0;
+  let ventasNequi = 0;
+  let totalVentas = 0;
+  let cantVentas = 0;
+  
+  (ventasMes||[]).forEach(v => {
+    if(v.anulada) return;
+    cantVentas++;
+    totalVentas += Number(v.total||0);
+    // Si es MIXTO usa amount_1/2/3
+    if(v.pay_method === 'MIXTO' || v.pay_method_2) {
+      ventasEfectivo += Number(v.amount_1||0);
+      ventasTarjeta += Number(v.amount_2||0);
+      ventasNequi += Number(v.amount_3||0);
+    } else {
+      const total = Number(v.total||0);
+      const pm = String(v.pay_method||'').toUpperCase();
+      if(pm === 'EFECTIVO') ventasEfectivo += total;
+      else if(pm === 'TARJETA') ventasTarjeta += total;
+      else if(pm === 'NEQUI') ventasNequi += total;
+    }
+  });
+
+  // 2. Gastos del mes desde la nueva tabla "gastos_mes"
+  const { data: gastosMes, error: errG } = await supabase.from('gastos_mes')
+    .select('*')
+    .eq('mes', mes)
+    .order('fecha', { ascending: true })
+    .order('ts_ms', { ascending: true });
+  if(errG) return err(res, errG.message);
+
+  let gastosEfectivo = 0;
+  let gastosTarjeta = 0;
+  let totalGastos = 0;
+  let cantGastos = 0;
+  const gastosPorCategoria = {};
+  
+  (gastosMes||[]).forEach(g => {
+    if(g.anulada) return;
+    cantGastos++;
+    const monto = Number(g.monto||0);
+    totalGastos += monto;
+    if(g.pay_method === 'EFECTIVO') gastosEfectivo += monto;
+    else if(g.pay_method === 'TARJETA') gastosTarjeta += monto;
+    if(!gastosPorCategoria[g.categoria]) gastosPorCategoria[g.categoria] = 0;
+    gastosPorCategoria[g.categoria] += monto;
+  });
+
+  // 3. Descargos de Nequi del mes
+  const { data: descargos, error: errD } = await supabase.from('descargos_nequi')
+    .select('*')
+    .eq('mes', mes)
+    .order('fecha', { ascending: true });
+  if(errD) return err(res, errD.message);
+
+  let totalDescargos = 0;
+  (descargos||[]).forEach(d => {
+    if(d.anulada) return;
+    totalDescargos += Number(d.monto||0);
+  });
+
+  // 4. Calculos finales (donde esta la plata HOY)
+  const efectivoEnCaja = ventasEfectivo + totalDescargos - gastosEfectivo;
+  const cajaTarjeta = ventasTarjeta - gastosTarjeta;
+  const nequiDisponible = ventasNequi - totalDescargos;
+  const utilidad = totalVentas - totalGastos;
+
+  return ok(res, {
+    mes: mes,
+    ventas: {
+      total: totalVentas,
+      efectivo: ventasEfectivo,
+      tarjeta: ventasTarjeta,
+      nequi: ventasNequi,
+      cantidad: cantVentas
+    },
+    gastos: {
+      total: totalGastos,
+      efectivo: gastosEfectivo,
+      tarjeta: gastosTarjeta,
+      cantidad: cantGastos,
+      lista: gastosMes || [],
+      porCategoria: gastosPorCategoria
+    },
+    descargos: {
+      total: totalDescargos,
+      cantidad: (descargos||[]).filter(d => !d.anulada).length,
+      lista: descargos || []
+    },
+    saldos: {
+      efectivoEnCaja: efectivoEnCaja,
+      cajaTarjeta: cajaTarjeta,
+      nequiDisponible: nequiDisponible
+    },
+    utilidad: utilidad
   });
 }
 
