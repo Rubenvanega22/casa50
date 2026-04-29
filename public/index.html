@@ -7317,6 +7317,7 @@ var AJ_ESCENARIOS = {
     {tipo:'conteo',        icon:'📋', titulo:'Ajuste por conteo', desc:'El conteo físico no cuadra (puede sumar o restar)', cuadre:false, stock:'bodega', pide:'cantidad_signo'}
   ],
   RECEPCION: [
+    {tipo:'conteo',           icon:'📋', titulo:'Ajuste por conteo',        desc:'El conteo físico no cuadra (NO afecta plata)',  cuadre:false, stock:'recepcion', pide:'cantidad_signo'},
     {tipo:'producto',         icon:'🔄', titulo:'Cambiar producto vendido', desc:'Vendió un producto por otro (cambiar A por B)', cuadre:true, stock:'ambos',     pide:'productoViejo'},
     {tipo:'metodo_pago',      icon:'💳', titulo:'Cambiar método de pago',   desc:'Efectivo → Tarjeta, Nequi, etc',                cuadre:true, stock:'ninguno',   pide:'metodoPagoDoble'},
     {tipo:'venta_duplicada',  icon:'➖', titulo:'Quitar venta (vendió de más)', desc:'Registró 2 cuando era 1',                cuadre:true, stock:'recepcion', pide:'payMethod'},
