@@ -2901,7 +2901,25 @@ function hexCalcPrecio(){
   var pricePerHour=(MP[category]&&MP[category].extraHour)||0;
   document.getElementById('hexPrecio').value=pricePerHour*hrs;
 }
-function hexAnularExtra(saleId){toast('Próximamente: anular extra (Paso 5)','err');}
+function hexAnularExtra(saleId){
+  var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  conf('¿Anular esta hora extra? Esta acción se reflejará en el cuadre del día y el resumen mensual.',function(){
+    rpc('anularVentaModulo',{
+      saleId:saleId,
+      motivo:motivo,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Hora extra anulada','ok');
+      hexLoadExtras();
+      hexLoadHabitaciones();
+      if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
 function hexTogOverride(){var ov=document.getElementById('hexOverride').checked;document.getElementById('hexPrecio').disabled=!ov;}
 function hexSelPm(pm){['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(p){var el=document.getElementById('hexPm'+p);if(el)el.classList.toggle('on',p===pm);});window.hexSelectedPm=pm;}
 function saveAddHoraExtraManual(){toast('Próximamente: guardar hora extra (Paso 4)','err');}
