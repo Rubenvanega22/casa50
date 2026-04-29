@@ -2922,7 +2922,33 @@ function hexAnularExtra(saleId){
 }
 function hexTogOverride(){var ov=document.getElementById('hexOverride').checked;document.getElementById('hexPrecio').disabled=!ov;}
 function hexSelPm(pm){['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(p){var el=document.getElementById('hexPm'+p);if(el)el.classList.toggle('on',p===pm);});window.hexSelectedPm=pm;}
-function saveAddHoraExtraManual(){toast('Próximamente: guardar hora extra (Paso 4)','err');}
+function saveAddHoraExtraManual(){
+  var day=document.getElementById('hexDay').value;
+  var shift=document.getElementById('hexShift').value;
+  var roomId=document.getElementById('hexRoom').value;
+  var hrs=Number(document.getElementById('hexHrs').value||0);
+  var total=Number(document.getElementById('hexPrecio').value||0);
+  var motivo=document.getElementById('hexMotivo').value.trim();
+  var pm=window.hexSelectedPm||'EFECTIVO';
+  if(!day){toast('Selecciona el día','err');return;}
+  if(!shift){toast('Selecciona el turno','err');return;}
+  if(!roomId){toast('Selecciona la habitación','err');return;}
+  if(hrs<=0){toast('Cantidad de horas inválida','err');return;}
+  if(total<=0){toast('Precio inválido','err');return;}
+  if(!motivo||motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  if(pm==='MIXTO'){toast('MIXTO: pendiente de implementar (usa Efectivo, Tarjeta o Nequi)','err');return;}
+  conf('¿Agregar '+hrs+'h extra a Hab '+roomId+' por '+fmt(total)+' ('+pm+')?',function(){
+    rpc('agregarHoraExtraManual',{
+      businessDay:day,shiftId:shift,roomId:roomId,
+      extraHrs:hrs,total:total,payMethod:pm,motivo:motivo,
+      userName:sess.userName,userRole:sess.userRole
+    },function(){
+      toast('✓ Hora extra agregada al cuadre','ok');
+      closeM('mAddHoraExtraManual');
+      if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
 function saveAddGastoManual(){
   var day=document.getElementById('agmDay').value;
   var shift=document.getElementById('agmShift').value;
