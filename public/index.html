@@ -2851,8 +2851,9 @@ function hexLoadHabitaciones(){
     if(!habs.length){sel.innerHTML='<option value="">No hay ventas en este turno</option>';return;}
     var h='<option value="">— Selecciona habitación —</option>';
     habs.forEach(function(r){
-      var marker=r.countExtensiones>0?' ⏰':'';
-      h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' — '+r.category+marker+'</option>';
+      var markerExt=r.countExtensiones>0?' ⏰':'';
+      var markerPer=(r.countPersonasAdicionales||0)>0?' 👤':'';
+      h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' — '+r.category+markerExt+markerPer+'</option>';
     });
     sel.innerHTML=h;
   },function(e){sel.innerHTML='<option value="">Error: '+(e.message||'?')+'</option>';toast('Error cargando habitaciones','err');});
@@ -3093,7 +3094,8 @@ function pmaLoadHabitaciones(){
     if(!habs.length){sel.innerHTML='<option value="">No hay ventas en este turno</option>';return;}
     var h='<option value="">— Selecciona habitación —</option>';
     habs.forEach(function(r){
-      h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' — '+r.category+'</option>';
+      var marker=(r.countPersonasAdicionales||0)>0?' 👤':'';
+      h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' — '+r.category+marker+'</option>';
     });
     sel.innerHTML=h;
   },function(e){sel.innerHTML='<option value="">Error: '+(e.message||'?')+'</option>';toast('Error cargando habitaciones','err');});
