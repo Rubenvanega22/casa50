@@ -251,8 +251,12 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div></div></div></div>
 <div class="ov" id="mAddGastoManual"><div class="modal" style="max-width:480px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">💰 Agregar Gasto Manual</div><button class="mc" onclick="closeM('mAddGastoManual')">✕</button></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-<div><label style="font-size:10px;color:#9ca3af">Día</label><input type="date" id="agmDay" style="width:100%"></div>
-<div><label style="font-size:10px;color:#9ca3af">Turno</label><select id="agmShift" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>
+<div><label style="font-size:10px;color:#9ca3af">Día</label><input type="date" id="agmDay" onchange="gmaLoadGastos()" style="width:100%"></div>
+<div><label style="font-size:10px;color:#9ca3af">Turno</label><select id="agmShift" onchange="gmaLoadGastos()" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2">T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>
+</div>
+<div id="gmaListaGastos" style="display:none;background:rgba(59,130,246,.08);border:0.5px solid rgba(59,130,246,.3);border-radius:6px;padding:10px;margin-bottom:12px">
+<div style="font-size:11px;color:#3b82f6;font-weight:700;text-transform:uppercase;margin-bottom:8px">Gastos ya registrados</div>
+<div id="gmaListaGastosCont"><p style="color:#9ca3af;font-size:11px">Cargando...</p></div>
 </div>
 <label>A quién</label>
 <input type="text" id="agmBorrower" placeholder="Nombre de la persona" style="margin-bottom:8px">
@@ -2812,7 +2816,7 @@ function anularGastoModulo(){
 }
 function openAddGastoManual(){
   if(!sess){toast('Sesión no iniciada','err');return;}
-  if(sess.userRole!=='ADMIN'){toast('Solo ADMIN puede agregar gastos manuales','err');return;}
+  if(sess.userRole!=='ADMIN'&&sess.userRole!=='RECEPTION'){toast('Sin permiso','err');return;}
   var defaultDay=document.getElementById('cuadreAdminDay').value||sess.businessDay||(new Date().toISOString().slice(0,10));
   document.getElementById('agmDay').value=defaultDay;
   document.getElementById('agmShift').value=document.getElementById('mcpShift').value||sess.shiftId||'SHIFT_1';
@@ -2820,7 +2824,9 @@ function openAddGastoManual(){
   document.getElementById('agmAmount').value='';
   document.getElementById('agmNote').value='';
   document.getElementById('agmMotivo').value='';
+  document.getElementById('gmaListaGastos').style.display='none';
   openM('mAddGastoManual');
+  gmaLoadGastos();
 }
 function openAddHoraExtraManual(){
   if(!sess){toast('Sesión no iniciada','err');return;}
@@ -2927,6 +2933,57 @@ function hexAnularExtra(saleId){
 }
 function hexTogOverride(){var ov=document.getElementById('hexOverride').checked;document.getElementById('hexPrecio').disabled=!ov;}
 function hexSelPm(pm){['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(p){var el=document.getElementById('hexPm'+p);if(el)el.classList.toggle('on',p===pm);});window.hexSelectedPm=pm;}
+function gmaLoadGastos(){
+  var day=document.getElementById('agmDay').value;
+  var shift=document.getElementById('agmShift').value;
+  var cont=document.getElementById('gmaListaGastos');
+  if(!cont)return;
+  if(!day||!shift){cont.style.display='none';return;}
+  cont.style.display='block';
+  var inner=document.getElementById('gmaListaGastosCont');
+  inner.innerHTML='<p style="color:#9ca3af;font-size:11px">Cargando...</p>';
+  rpc('listGastosTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){
+    var gastos=(d&&d.gastos)||[];
+    if(!gastos.length){
+      inner.innerHTML='<p style="color:#9ca3af;font-size:11px">No hay gastos registrados en este turno.</p>';
+      return;
+    }
+    var h='';
+    gastos.forEach(function(r){
+      var fecha=new Date(Number(r.ts_ms||0));
+      var hh=String(fecha.getHours()).padStart(2,'0')+':'+String(fecha.getMinutes()).padStart(2,'0');
+      var anulada=r.anulada?true:false;
+      var styleRow=anulada?'opacity:0.5;text-decoration:line-through':'';
+      var manualTag=r.manual?'<span style="background:#FAEEDA;color:#633806;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">MANUAL</span>':'';
+      var btnAnular=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="gmaAnularGasto('+r.id+')">🗑️ Anular</button>';
+      h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
+      h+='<div><div style="font-size:11px">'+manualTag+(r.borrower_name||'?')+' · '+hh+(r.note?' · "'+r.note+'"':'')+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af">Registrado por: '+(r.user_name||'?')+'</div></div>';
+      h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#ef4444;font-size:12px">'+fmt(Number(r.amount||0))+'</b>'+btnAnular+'</div>';
+      h+='</div>';
+    });
+    inner.innerHTML=h;
+  },function(e){inner.innerHTML='<p style="color:#ef4444;font-size:11px">Error: '+(e.message||'?')+'</p>';});
+}
+function gmaAnularGasto(gastoId){
+  var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  if(!confirm('¿Anular este gasto? Se reflejará en el cuadre del día y en el resumen mensual.'))return;
+  rpc('anularGastoModulo',{
+    gastoId:gastoId,
+    motivo:motivo,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Gasto anulado','ok');
+    gmaLoadGastos();
+    if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    if(typeof loadCuadre==='function')loadCuadre();
+    if(typeof mcpLoadGastos==='function')mcpLoadGastos();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
 function saveAddHoraExtraManual(){
   var day=document.getElementById('hexDay').value;
   var shift=document.getElementById('hexShift').value;
