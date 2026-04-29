@@ -257,6 +257,9 @@ module.exports = async function handler(req, res) {
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
       case 'getGastosMesResumen': return await apiGetGastosMesResumen(payload, res);
+      case 'addGastoMes':         return await apiAddGastoMes(payload, res);
+      case 'editGastoMes':        return await apiEditGastoMes(payload, res);
+      case 'anularGastoMes':      return await apiAnularGastoMes(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
       case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
@@ -3228,6 +3231,115 @@ async function apiGetGastosMesResumen(p, res) {
     },
     utilidad: utilidad
   });
+}
+
+// ==================== AGREGAR GASTO DEL MES ====================
+async function apiAddGastoMes(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const fecha = String(p.fecha||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
+  const categoria = String(p.categoria||'').trim();
+  const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social'];
+  if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida. Validas: '+CATEGORIAS_VALIDAS.join(', '));
+  const concepto = String(p.concepto||'').trim();
+  if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
+  const monto = Number(p.monto||0);
+  if(monto<=0) return err(res,'Monto debe ser mayor a 0');
+  const payMethod = String(p.payMethod||'').toUpperCase();
+  if(!['EFECTIVO','TARJETA'].includes(payMethod)) return err(res,'Metodo de pago invalido (solo EFECTIVO o TARJETA)');
+  const mes = fecha.substring(0,7);
+  const now = Date.now();
+  const { data, error } = await supabase.from('gastos_mes').insert({
+    ts_ms: now,
+    fecha: fecha,
+    mes: mes,
+    categoria: categoria,
+    concepto: concepto,
+    monto: monto,
+    pay_method: payMethod,
+    created_by: userName
+  }).select().single();
+  if(error) return err(res, error.message);
+  return ok(res, { gasto: data });
+}
+
+// ==================== EDITAR GASTO DEL MES ====================
+async function apiEditGastoMes(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const gastoId = Number(p.gastoId||0);
+  if(!gastoId) return err(res,'gastoId requerido');
+  const motivo = String(p.motivo||'').trim();
+  if(motivo.length<5) return err(res,'Motivo de edicion requerido (min 5 caracteres)');
+  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
+  if(errG) return err(res, errG.message);
+  if(!gastoActual) return err(res,'Gasto no encontrado');
+  if(gastoActual.anulada) return err(res,'No se puede editar un gasto anulado');
+  const updates = {
+    edited_ms: Date.now(),
+    edited_by: userName,
+    motivo_edicion: motivo
+  };
+  if(p.concepto !== undefined){
+    const concepto = String(p.concepto||'').trim();
+    if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
+    updates.concepto = concepto;
+  }
+  if(p.monto !== undefined){
+    const monto = Number(p.monto||0);
+    if(monto<=0) return err(res,'Monto debe ser mayor a 0');
+    if(updates.monto_original === undefined) updates.monto_original = gastoActual.monto;
+    updates.monto = monto;
+  }
+  if(p.payMethod !== undefined){
+    const payMethod = String(p.payMethod||'').toUpperCase();
+    if(!['EFECTIVO','TARJETA'].includes(payMethod)) return err(res,'Metodo de pago invalido');
+    updates.pay_method = payMethod;
+  }
+  if(p.categoria !== undefined){
+    const categoria = String(p.categoria||'').trim();
+    const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social'];
+    if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida');
+    updates.categoria = categoria;
+  }
+  if(p.fecha !== undefined){
+    const fecha = String(p.fecha||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida');
+    updates.fecha = fecha;
+    updates.mes = fecha.substring(0,7);
+  }
+  const { error } = await supabase.from('gastos_mes').update(updates).eq('id', gastoId);
+  if(error) return err(res, error.message);
+  return ok(res, { gastoId: gastoId });
+}
+
+// ==================== ANULAR GASTO DEL MES ====================
+async function apiAnularGastoMes(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const gastoId = Number(p.gastoId||0);
+  if(!gastoId) return err(res,'gastoId requerido');
+  const motivo = String(p.motivo||'').trim();
+  if(motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
+  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
+  if(errG) return err(res, errG.message);
+  if(!gastoActual) return err(res,'Gasto no encontrado');
+  if(gastoActual.anulada) return err(res,'Este gasto ya esta anulado');
+  const { error } = await supabase.from('gastos_mes').update({
+    anulada: true,
+    anulada_ms: Date.now(),
+    anulada_por: userName,
+    motivo_anulacion: motivo
+  }).eq('id', gastoId);
+  if(error) return err(res, error.message);
+  return ok(res, { gastoId: gastoId });
 }
 
 // ==================== RESUMEN MENSUAL (INVENTARIO MES) ====================
