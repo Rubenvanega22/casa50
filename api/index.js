@@ -237,6 +237,7 @@ module.exports = async function handler(req, res) {
       case 'getHabitacionesTurno':   return await apiGetHabitacionesTurno(payload, res);
       case 'getExtrasHabitacion':    return await apiGetExtrasHabitacion(payload, res);
       case 'agregarHoraExtraManual': return await apiAgregarHoraExtraManual(payload, res);
+      case 'getPersonasHabitacion':  return await apiGetPersonasHabitacion(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -1735,6 +1736,29 @@ async function apiGetDailyCuadre(p, res) {
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
 
+async function apiGetPersonasHabitacion(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const businessDayParam = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  const roomId = String(p.roomId||'').trim();
+  if(!businessDayParam) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  if(!roomId) return err(res,'roomId requerido');
+  const { data, error } = await supabase
+    .from('sales')
+    .select('id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price')
+    .eq('business_day', businessDayParam)
+    .eq('shift_id', shiftId)
+    .eq('room_id', roomId)
+    .in('type', ['SALE', 'ANULADA'])
+    .eq('duration_hrs', 0)
+    .eq('base_price', 0)
+    .gt('extra_people', 0)
+    .order('ts_ms', { ascending: true });
+  if(error) return err(res, error.message);
+  return ok(res, { personas: data || [] });
+}
 async function apiAgregarHoraExtraManual(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar horas extra manualmente');
