@@ -249,6 +249,36 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar personal extra</div>
 </div>
 </div></div></div></div>
+<div class="ov" id="mAddGastoMes"><div class="modal" style="max-width:480px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">➕ Agregar Gasto del Mes</div><button class="mc" onclick="closeM('mAddGastoMes')">✕</button></div>
+<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">💡 Este gasto se descontará automáticamente del saldo disponible según el método de pago elegido.</div>
+<label style="font-size:11px;color:#9ca3af">Categoría</label>
+<select id="gmAddCat" style="width:100%;margin-bottom:8px">
+<option value="">— Selecciona categoría —</option>
+<option value="Compras Bar">🍺 Compras Bar</option>
+<option value="Aseo">🧹 Aseo</option>
+<option value="Mantenimiento">🔧 Mantenimiento</option>
+<option value="Gastos Generales">📋 Gastos Generales</option>
+<option value="Servicios">⚡ Servicios</option>
+<option value="Caja Menor">💰 Caja Menor</option>
+<option value="Nomina">👥 Nómina</option>
+<option value="Seguridad Social">🏥 Seguridad Social</option>
+</select>
+<label style="font-size:11px;color:#9ca3af">Fecha</label>
+<input type="date" id="gmAddFecha" style="width:100%;margin-bottom:8px">
+<label style="font-size:11px;color:#9ca3af">Concepto del gasto</label>
+<input type="text" id="gmAddConcepto" placeholder="Ej: LIQUORS - pedido cervezas" style="margin-bottom:8px">
+<label style="font-size:11px;color:#9ca3af">Monto</label>
+<input type="number" id="gmAddMonto" min="0" placeholder="0" style="margin-bottom:10px">
+<label style="font-size:11px;color:#9ca3af">Método de pago</label>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:2px 0 12px">
+<div class="pmo on" id="gmAddPmEFECTIVO" onclick="gmSelPm('EFECTIVO')">💵 Efectivo</div>
+<div class="pmo" id="gmAddPmTARJETA" onclick="gmSelPm('TARJETA')">💳 Tarjeta</div>
+</div>
+<div style="display:flex;gap:6px">
+<button class="btn bk" style="flex:1" onclick="closeM('mAddGastoMes')">Cancelar</button>
+<button class="btn bg" style="flex:1" onclick="saveAddGastoMes()">Guardar gasto</button>
+</div>
+</div></div>
 <div class="ov" id="mAddGastoManual"><div class="modal" style="max-width:480px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">💰 Agregar Gasto Manual</div><button class="mc" onclick="closeM('mAddGastoManual')">✕</button></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
 <div><label style="font-size:10px;color:#9ca3af">Día</label><input type="date" id="agmDay" onchange="gmaLoadGastos()" style="width:100%"></div>
@@ -5696,10 +5726,71 @@ function renderGastosMesTabla(lista){
   return h;
 }
 function openAddGastoMes(){
-  toast('🚧 Modal de agregar gasto - próximo paso','warn');
+  if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  document.getElementById('gmAddCat').value='';
+  var hoy=new Date();
+  var fechaHoy=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  document.getElementById('gmAddFecha').value=fechaHoy;
+  document.getElementById('gmAddConcepto').value='';
+  document.getElementById('gmAddMonto').value='';
+  gmSelPm('EFECTIVO');
+  openM('mAddGastoMes');
+}
+function gmSelPm(pm){
+  ['EFECTIVO','TARJETA'].forEach(function(p){
+    var el=document.getElementById('gmAddPm'+p);
+    if(el)el.classList.toggle('on',p===pm);
+  });
+  window._gmAddPay=pm;
+}
+function saveAddGastoMes(){
+  var cat=document.getElementById('gmAddCat').value;
+  var fecha=document.getElementById('gmAddFecha').value;
+  var concepto=document.getElementById('gmAddConcepto').value.trim();
+  var monto=Number(document.getElementById('gmAddMonto').value||0);
+  var payMethod=window._gmAddPay||'EFECTIVO';
+  if(!cat){toast('Selecciona una categoría','err');return;}
+  if(!fecha){toast('Selecciona la fecha','err');return;}
+  if(concepto.length<3){toast('Concepto debe tener mínimo 3 caracteres','err');return;}
+  if(monto<=0){toast('El monto debe ser mayor a 0','err');return;}
+  rpc('addGastoMes',{
+    fecha:fecha,
+    categoria:cat,
+    concepto:concepto,
+    monto:monto,
+    payMethod:payMethod,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Gasto agregado','ok');
+    closeM('mAddGastoMes');
+    loadGastosMes();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
 }
 function openMenuGastoMes(gastoId){
-  toast('🚧 Editar/Anular gasto '+gastoId+' - próximo paso','warn');
+  var opcion=prompt('¿Qué deseas hacer con este gasto?\n\n1 = Editar\n2 = Anular\n\nEscribe 1 o 2:');
+  if(opcion===null)return;
+  opcion=String(opcion||'').trim();
+  if(opcion==='1'){
+    toast('🚧 Editar gasto - próximo mini-paso','warn');
+  } else if(opcion==='2'){
+    var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
+    if(motivo===null)return;
+    motivo=String(motivo||'').trim();
+    if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+    if(!confirm('¿Anular este gasto del mes? Se reflejará en el saldo disponible.'))return;
+    rpc('anularGastoMes',{
+      gastoId:gastoId,
+      motivo:motivo,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Gasto anulado','ok');
+      loadGastosMes();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  } else {
+    toast('Opción inválida','err');
+  }
 }
 function loadMo(){
   var ym=document.getElementById('moPick').value;
