@@ -1749,7 +1749,8 @@ async function apiGetExtrasHabitacion(p, res) {
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
-    .eq('type', 'EXTENSION')
+    .in('type', ['EXTENSION', 'ANULADA'])
+    .gt('extra_hours', 0)
     .order('ts_ms', { ascending: true });
   if(error) return err(res, error.message);
   return ok(res, { extras: data || [] });
