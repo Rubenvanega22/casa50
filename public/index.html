@@ -5638,9 +5638,68 @@ function renderGastosMes(d){
   h+='<div style="background:#22222c;border-radius:8px;padding:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Gastos del mes</div><div style="font-size:20px;font-weight:700;color:#ef4444">−'+fmt(g.total||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+(g.cantidad||0)+' gastos</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:12px;border-left:3px solid #22c55e"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Utilidad neta</div><div style="font-size:20px;font-weight:700;color:#22c55e">'+fmt(d.utilidad||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">Ventas − gastos</div></div>';
   h+='</div>';
-  // Placeholder para tabla
-  h+='<div style="background:rgba(251,191,36,.06);border:1px dashed rgba(251,191,36,.4);border-radius:8px;padding:20px;text-align:center"><div style="font-size:14px;color:#fbbf24;margin-bottom:6px">📋 Tabla detallada de gastos</div><div style="font-size:11px;color:#6b7280">Próximamente · botón "+ Agregar gasto" + filtros por categoría</div></div>';
+  // Encabezado y tabla detallada
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  h+='<div style="font-size:13px;font-weight:700">Detalle de gastos · '+(g.cantidad||0)+' movimientos</div>';
+  h+='<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:0.5px solid #22c55e;font-weight:500" onclick="openAddGastoMes()">➕ Agregar gasto</button>';
+  h+='</div>';
+  h+=renderGastosMesTabla(g.lista||[]);
   return h;
+}
+function renderGastosMesTabla(lista){
+  if(!lista||!lista.length){
+    return '<div style="background:#22222c;border:0.5px dashed #2e2e3a;border-radius:8px;padding:30px;text-align:center"><div style="font-size:32px;margin-bottom:8px">📋</div><div style="font-size:13px;color:#9ca3af;margin-bottom:4px">No hay gastos registrados en este mes</div><div style="font-size:11px;color:#6b7280">Click en "➕ Agregar gasto" para crear el primero</div></div>';
+  }
+  var porCat={};
+  lista.forEach(function(item){
+    if(item.anulada) return;
+    if(!porCat[item.categoria])porCat[item.categoria]={items:[],total:0};
+    porCat[item.categoria].items.push(item);
+    porCat[item.categoria].total+=Number(item.monto||0);
+  });
+  var iconos={'Compras Bar':'🍺','Aseo':'🧹','Mantenimiento':'🔧','Gastos Generales':'📋','Servicios':'⚡','Caja Menor':'💰','Nomina':'👥','Seguridad Social':'🏥'};
+  var colores={'Compras Bar':'rgba(239,159,39,.04)','Aseo':'rgba(34,197,94,.04)','Mantenimiento':'rgba(59,130,246,.04)','Gastos Generales':'rgba(168,85,247,.04)','Servicios':'rgba(186,117,23,.04)','Caja Menor':'rgba(212,83,126,.04)','Nomina':'rgba(83,74,183,.04)','Seguridad Social':'rgba(216,90,48,.04)'};
+  var h='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:8px;overflow:hidden">';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  h+='<thead><tr style="background:#18181f">';
+  h+='<th style="text-align:left;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:140px">Categoría</th>';
+  h+='<th style="text-align:left;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:50px">Fecha</th>';
+  h+='<th style="text-align:left;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase">Gasto</th>';
+  h+='<th style="text-align:right;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:100px">Monto</th>';
+  h+='<th style="text-align:center;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:80px">Pago</th>';
+  h+='<th style="text-align:right;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:110px">Total cat.</th>';
+  h+='<th style="width:50px"></th>';
+  h+='</tr></thead><tbody>';
+  Object.keys(porCat).sort().forEach(function(cat){
+    var items=porCat[cat].items;
+    var totalCat=porCat[cat].total;
+    var bgCat=colores[cat]||'#22222c';
+    items.forEach(function(item,idx){
+      var dia=String(item.fecha||'').split('-')[2]||'';
+      var pmTag=item.pay_method==='EFECTIVO'?'<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:2px 6px;border-radius:4px;font-size:10px">Efectivo</span>':'<span style="background:rgba(59,130,246,.15);color:#3b82f6;padding:2px 6px;border-radius:4px;font-size:10px">Tarjeta</span>';
+      h+='<tr style="border-top:'+(idx===0?'1.5px solid #2e2e3a':'0.5px solid rgba(46,46,58,.5)')+';background:'+bgCat+'">';
+      if(idx===0){
+        h+='<td rowspan="'+items.length+'" style="padding:10px 12px;vertical-align:top;border-right:0.5px solid rgba(46,46,58,.5)"><div style="font-size:12px;font-weight:500">'+(iconos[cat]||'•')+' '+esc(cat)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+items.length+' '+(items.length===1?'item':'items')+'</div></td>';
+      }
+      h+='<td style="padding:8px 12px;color:#9ca3af">'+esc(dia)+'</td>';
+      h+='<td style="padding:8px 12px">'+esc(item.concepto||'')+'</td>';
+      h+='<td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;color:#ef4444">'+fmt(item.monto||0)+'</td>';
+      h+='<td style="padding:8px 12px;text-align:center">'+pmTag+'</td>';
+      if(idx===0){
+        h+='<td rowspan="'+items.length+'" style="padding:10px 12px;text-align:right;vertical-align:top;font-weight:700;color:#ef4444;font-size:13px;font-variant-numeric:tabular-nums;border-left:0.5px solid rgba(46,46,58,.5)">'+fmt(totalCat)+'</td>';
+      }
+      h+='<td style="padding:8px 4px;text-align:center"><button onclick="openMenuGastoMes('+item.id+')" style="background:transparent;border:0;color:#6b7280;cursor:pointer;font-size:14px;padding:4px">⋮</button></td>';
+      h+='</tr>';
+    });
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+function openAddGastoMes(){
+  toast('🚧 Modal de agregar gasto - próximo paso','warn');
+}
+function openMenuGastoMes(gastoId){
+  toast('🚧 Editar/Anular gasto '+gastoId+' - próximo paso','warn');
 }
 function loadMo(){
   var ym=document.getElementById('moPick').value;
