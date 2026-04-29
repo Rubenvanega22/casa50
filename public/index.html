@@ -649,6 +649,15 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="moCont"></div>
 </div>
+<!-- GASTOS DEL MES (admin) -->
+<div class="pnl" id="pnl-gastosmes">
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+<input type="month" id="gmPick" style="width:auto;margin:0">
+<button class="btn ba sm" onclick="loadGastosMes()">Ver mes</button>
+<button class="refresh-btn" onclick="loadGastosMes()">↻ Actualizar</button>
+</div>
+<div id="gmCont"><p style="color:#9ca3af;font-size:13px;text-align:center;padding:30px">Cargando módulo de Gastos del Mes...</p></div>
+</div>
 <!-- CAMARERAS (admin) -->
 <div class="pnl" id="pnl-maids">
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
@@ -947,7 +956,7 @@ function buildTabs(){
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
  if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'},{id:'productos',l:'Productos'});
 if(r==='MAID')tabs.push({id:'listado',l:'Listado'},{id:'sched',l:'Calendario'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'},{id:'productos',l:'Productos'});tabs.push({id:'notes',l:'Reportes'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'gastosmes',l:'Gastos Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'},{id:'productos',l:'Productos'});tabs.push({id:'notes',l:'Reportes'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';b.textContent=t.l;b.dataset.tab=t.id;
@@ -964,6 +973,7 @@ function sw(id){
   if(id==='maids')loadMP();
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
+  if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
  if(id==='maint'){loadMaintMonth();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
@@ -5583,6 +5593,12 @@ function _dash_card(label,val,color){
 }
 function _dash_trophy(label,val,sub,color){
   return '<div style="background:#22222c;border-radius:10px;padding:10px;border-left:3px solid '+color+'"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">'+label+'</div><div style="font-size:14px;font-weight:800;color:'+color+'">'+esc(String(val))+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">'+esc(String(sub))+'</div></div>';
+}
+function loadGastosMes(){
+  var mes=document.getElementById('gmPick').value;
+  if(!mes){toast('Selecciona un mes','err');return;}
+  var cont=document.getElementById('gmCont');
+  cont.innerHTML='<div style="background:rgba(34,197,94,.06);border:0.5px solid rgba(34,197,94,.3);border-radius:8px;padding:30px;text-align:center"><div style="font-size:28px;margin-bottom:10px">🚧</div><div style="font-size:14px;color:#86efac;font-weight:500;margin-bottom:6px">Módulo Gastos del Mes</div><div style="font-size:12px;color:#9ca3af">Mes seleccionado: '+mes+'</div><div style="font-size:11px;color:#6b7280;margin-top:12px">En desarrollo · próximamente saldos, tabla y descargos</div></div>';
 }
 function loadMo(){
   var ym=document.getElementById('moPick').value;
