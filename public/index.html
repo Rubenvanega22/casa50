@@ -3001,7 +3001,7 @@ function openAddPersonaManual(){
   h+='<label style="font-size:11px;color:#9ca3af">Habitación</label>';
   h+='<select id="apmRoom" onchange="apmActPrecio();pmaLoadPersonas()" style="margin-bottom:10px">';
   h+='<option value="">-- Selecciona habitación --</option>';
-  rooms.forEach(function(r){h+='<option value="'+r.roomId+'" data-cat="'+r.category+'">Hab '+r.roomId+' - '+r.category+'</option>';});
+  // Habitaciones se cargan dinámicamente con pmaLoadHabitaciones()
   h+='</select>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
   h+='<div><label style="font-size:11px;color:#9ca3af">Cantidad personas</label><input type="number" id="apmCantidad" min="1" value="1" oninput="apmActTotal()"></div>';
@@ -3026,6 +3026,7 @@ function openAddPersonaManual(){
   document.getElementById('mAddPersonaManualB').innerHTML=h;
   window._apmPay='EFECTIVO';
   openM('mAddPersonaManual');
+  pmaLoadHabitaciones();
 }
 function apmActPrecio(){
   var sel=document.getElementById('apmRoom');
