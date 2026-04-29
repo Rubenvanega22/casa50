@@ -1754,7 +1754,7 @@ async function apiGetPersonasHabitacion(p, res) {
     .in('type', ['SALE', 'ANULADA'])
     .eq('duration_hrs', 0)
     .eq('base_price', 0)
-    .gt('extra_people', 0)
+    .gt('extra_people_value', 0)
     .order('ts_ms', { ascending: true });
   if(error) return err(res, error.message);
   return ok(res, { personas: data || [] });
@@ -1863,7 +1863,7 @@ async function apiGetHabitacionesTurno(p, res) {
   if(!shiftId) return err(res,'shiftId requerido');
   const { data, error } = await supabase
     .from('sales')
-    .select('room_id, category, type, anulada')
+    .select('room_id, category, type, anulada, duration_hrs, base_price, extra_people_value')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .in('type', ['SALE', 'RENEWAL', 'EXTENSION']);
@@ -1872,9 +1872,12 @@ async function apiGetHabitacionesTurno(p, res) {
   (data||[]).forEach(r => {
     if(r.anulada) return;
     if(!habitacionesMap[r.room_id]) {
-      habitacionesMap[r.room_id] = { roomId: r.room_id, category: r.category, countExtensiones: 0 };
+      habitacionesMap[r.room_id] = { roomId: r.room_id, category: r.category, countExtensiones: 0, countPersonasAdicionales: 0 };
     }
     if(r.type === 'EXTENSION') habitacionesMap[r.room_id].countExtensiones++;
+    if(r.type === 'SALE' && Number(r.duration_hrs||0)===0 && Number(r.base_price||0)===0 && Number(r.extra_people_value||0)>0){
+      habitacionesMap[r.room_id].countPersonasAdicionales++;
+    }
   });
   const habitaciones = Object.values(habitacionesMap).sort((a,b) => String(a.roomId).localeCompare(String(b.roomId)));
   return ok(res, { habitaciones });
