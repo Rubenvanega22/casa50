@@ -2853,8 +2853,55 @@ function hexLoadHabitaciones(){
     sel.innerHTML=h;
   },function(e){sel.innerHTML='<option value="">Error: '+(e.message||'?')+'</option>';toast('Error cargando habitaciones','err');});
 }
-function hexLoadExtras(){toast('Próximamente: cargar extras de la habitación','err');}
-function hexCalcPrecio(){toast('Próximamente: calcular precio','err');}
+function hexLoadExtras(){
+  var day=document.getElementById('hexDay').value;
+  var shift=document.getElementById('hexShift').value;
+  var sel=document.getElementById('hexRoom');
+  var roomId=sel.value;
+  if(!roomId){
+    document.getElementById('hexListaExtras').style.display='none';
+    document.getElementById('hexAgregarSection').style.display='none';
+    return;
+  }
+  var opt=sel.options[sel.selectedIndex];
+  var category=opt?opt.getAttribute('data-cat'):'';
+  window.hexCurrentCategory=category;
+  document.getElementById('hexAgregarSection').style.display='block';
+  hexCalcPrecio();
+  var cont=document.getElementById('hexListaExtrasCont');
+  document.getElementById('hexListaExtras').style.display='block';
+  cont.innerHTML='<p style="color:#9ca3af;font-size:11px">Cargando extras...</p>';
+  rpc('getExtrasHabitacion',{businessDay:day,shiftId:shift,roomId:roomId,userName:sess.userName,userRole:sess.userRole},function(d){
+    var extras=(d&&d.extras)||[];
+    if(!extras.length){
+      cont.innerHTML='<p style="color:#9ca3af;font-size:11px">Esta habitación no tiene horas extras registradas en este turno.</p>';
+      return;
+    }
+    var h='';
+    extras.forEach(function(r){
+      var fecha=new Date(Number(r.ts_ms||0));
+      var hh=String(fecha.getHours()).padStart(2,'0')+':'+String(fecha.getMinutes()).padStart(2,'0');
+      var anulada=r.anulada?true:false;
+      var styleRow=anulada?'opacity:0.5;text-decoration:line-through':'';
+      var btnAnular=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="hexAnularExtra('+r.id+')">🗑️ Anular</button>';
+      h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
+      h+='<div><div style="font-size:11px">'+(r.extra_hours||1)+'h · '+hh+' · '+(r.pay_method||'?')+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af">Cobrada por: '+(r.user_name||'?')+'</div></div>';
+      h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#22c55e;font-size:12px">'+fmt(Number(r.total||0))+'</b>'+btnAnular+'</div>';
+      h+='</div>';
+    });
+    cont.innerHTML=h;
+  },function(e){cont.innerHTML='<p style="color:#ef4444;font-size:11px">Error: '+(e.message||'?')+'</p>';});
+}
+function hexCalcPrecio(){
+  var category=window.hexCurrentCategory||'';
+  var hrs=Number(document.getElementById('hexHrs').value||1);
+  var override=document.getElementById('hexOverride').checked;
+  if(override)return;
+  var pricePerHour=(MP[category]&&MP[category].extraHour)||0;
+  document.getElementById('hexPrecio').value=pricePerHour*hrs;
+}
+function hexAnularExtra(saleId){toast('Próximamente: anular extra (Paso 5)','err');}
 function hexTogOverride(){var ov=document.getElementById('hexOverride').checked;document.getElementById('hexPrecio').disabled=!ov;}
 function hexSelPm(pm){['EFECTIVO','TARJETA','NEQUI','MIXTO'].forEach(function(p){var el=document.getElementById('hexPm'+p);if(el)el.classList.toggle('on',p===pm);});window.hexSelectedPm=pm;}
 function saveAddHoraExtraManual(){toast('Próximamente: guardar hora extra (Paso 4)','err');}
