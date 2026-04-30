@@ -257,6 +257,10 @@ module.exports = async function handler(req, res) {
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
       case 'getMetricasMes':      return await apiGetMetricasMes(payload, res);
+      case 'getGraficaDiaADia':   return await apiGetGraficaDiaADia(payload, res);
+      case 'getGraficaAnoAno':    return await apiGetGraficaAnoAno(payload, res);
+      case 'getAnoAnterior':      return await apiGetAnoAnterior(payload, res);
+      case 'saveAnoAnterior':     return await apiSaveAnoAnterior(payload, res);
       case 'getGastosMesResumen': return await apiGetGastosMesResumen(payload, res);
       case 'addGastoMes':         return await apiAddGastoMes(payload, res);
       case 'editGastoMes':        return await apiEditGastoMes(payload, res);
@@ -3111,6 +3115,348 @@ async function apiGetPrintTurno(p, res) {
       nequi: totalNq,
       total: totalEf + totalTa + totalNq
     }
+  });
+}
+
+// ==================== GET AÑO ANTERIOR ====================
+// Lee los datos guardados de un año anterior (los 12 meses con ventas y gastos)
+async function apiGetAnoAnterior(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const ano = Number(p.ano||0);
+  if(!ano || ano < 2020 || ano > 2100) return err(res,'Ano invalido');
+  const { data, error } = await supabase.from('ventas_gastos_anuales')
+    .select('*')
+    .eq('ano', ano)
+    .maybeSingle();
+  if(error) return err(res, error.message);
+  if(!data){
+    // No existe, devolver estructura vacia
+    return ok(res, { ano: ano, existe: false, datos: null });
+  }
+  return ok(res, { ano: ano, existe: true, datos: data });
+}
+
+// ==================== SAVE AÑO ANTERIOR ====================
+// Guarda los 12 totales del año anterior (ventas + gastos por mes)
+async function apiSaveAnoAnterior(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const ano = Number(p.ano||0);
+  if(!ano || ano < 2020 || ano > 2100) return err(res,'Ano invalido');
+
+  // Validar que vienen los 24 valores (12 ventas + 12 gastos)
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const datos = { ano: ano, edited_ms: Date.now(), edited_by: userName };
+  meses.forEach(m => {
+    const vKey = `ventas_${m}`;
+    const gKey = `gastos_${m}`;
+    datos[vKey] = Number(p[vKey]||0);
+    datos[gKey] = Number(p[gKey]||0);
+    if(datos[vKey] < 0) datos[vKey] = 0;
+    if(datos[gKey] < 0) datos[gKey] = 0;
+  });
+
+  // Verificar si ya existe el ano
+  const { data: existe } = await supabase.from('ventas_gastos_anuales')
+    .select('id')
+    .eq('ano', ano)
+    .maybeSingle();
+
+  let result;
+  if(existe){
+    // Actualizar
+    result = await supabase.from('ventas_gastos_anuales')
+      .update(datos)
+      .eq('ano', ano);
+  } else {
+    // Crear nuevo
+    result = await supabase.from('ventas_gastos_anuales')
+      .insert(datos);
+  }
+  if(result.error) return err(res, result.error.message);
+  return ok(res, { ano: ano, guardado: true });
+}
+
+// ==================== GRAFICA DIA A DIA ====================
+// Devuelve datos del mes actual + mes anterior dia por dia (ventas y gastos)
+async function apiGetGraficaDiaADia(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const mes = String(p.mes || '').trim();
+  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
+
+  const [yearStr, monthStr] = mes.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  
+  // Calcular mes anterior
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const mesAnterior = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
+
+  const firstDayActual = `${mes}-01`;
+  const lastDayActualDate = new Date(year, month, 0);
+  const lastDayActual = `${mes}-${String(lastDayActualDate.getDate()).padStart(2,'0')}`;
+  const diasActual = lastDayActualDate.getDate();
+
+  const firstDayAnterior = `${mesAnterior}-01`;
+  const lastDayAnteriorDate = new Date(prevYear, prevMonth, 0);
+  const lastDayAnterior = `${mesAnterior}-${String(lastDayAnteriorDate.getDate()).padStart(2,'0')}`;
+  const diasAnterior = lastDayAnteriorDate.getDate();
+
+  // Hoy (para limitar dias del mes actual)
+  const hoy = new Date();
+  const hoyYear = hoy.getFullYear();
+  const hoyMonth = hoy.getMonth() + 1;
+  const hoyDay = hoy.getDate();
+  const esActualMes = (year === hoyYear && month === hoyMonth);
+  const ultimoDiaActual = esActualMes ? hoyDay : diasActual;
+
+  // 1. Ventas mes actual
+  const ventasActual = await fetchAll(() => supabase.from('sales')
+    .select('business_day, total, type, anulada')
+    .gte('business_day', firstDayActual)
+    .lte('business_day', lastDayActual)
+    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .neq('anulada', true));
+
+  // 2. Ventas mes anterior
+  const ventasAnterior = await fetchAll(() => supabase.from('sales')
+    .select('business_day, total, type, anulada')
+    .gte('business_day', firstDayAnterior)
+    .lte('business_day', lastDayAnterior)
+    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .neq('anulada', true));
+
+  // 3. Gastos del mes actual (de gastos_mes)
+  const { data: gastosActual } = await supabase.from('gastos_mes')
+    .select('fecha, monto, anulada')
+    .eq('mes', mes)
+    .neq('anulada', true);
+
+  // Agrupar por dia
+  const datosActual = {};
+  const datosAnterior = {};
+  const gastosDia = {};
+  for(let d=1; d<=diasActual; d++){
+    const fecha = `${mes}-${String(d).padStart(2,'0')}`;
+    datosActual[fecha] = 0;
+    gastosDia[fecha] = 0;
+  }
+  for(let d=1; d<=diasAnterior; d++){
+    const fecha = `${mesAnterior}-${String(d).padStart(2,'0')}`;
+    datosAnterior[fecha] = 0;
+  }
+
+  (ventasActual||[]).forEach(v => {
+    if(v.anulada) return;
+    if(datosActual[v.business_day] !== undefined){
+      datosActual[v.business_day] += Number(v.total||0);
+    }
+  });
+  (ventasAnterior||[]).forEach(v => {
+    if(v.anulada) return;
+    if(datosAnterior[v.business_day] !== undefined){
+      datosAnterior[v.business_day] += Number(v.total||0);
+    }
+  });
+  (gastosActual||[]).forEach(g => {
+    if(g.anulada) return;
+    if(gastosDia[g.fecha] !== undefined){
+      gastosDia[g.fecha] += Number(g.monto||0);
+    }
+  });
+
+  // Convertir a arrays alineados por dia (1, 2, 3, ..., 31)
+  const labels = [];
+  const seriesActual = [];
+  const seriesAnterior = [];
+  const seriesGastos = [];
+  const maxDias = Math.max(diasActual, diasAnterior);
+  for(let d=1; d<=maxDias; d++){
+    labels.push(d);
+    const fechaActual = `${mes}-${String(d).padStart(2,'0')}`;
+    const fechaAnterior = `${mesAnterior}-${String(d).padStart(2,'0')}`;
+    seriesActual.push(d <= diasActual ? (datosActual[fechaActual]||0) : null);
+    seriesAnterior.push(d <= diasAnterior ? (datosAnterior[fechaAnterior]||0) : null);
+    seriesGastos.push(d <= diasActual ? (gastosDia[fechaActual]||0) : null);
+  }
+
+  // Calcular totales "a la fecha" (hasta hoyDay si es mes actual, sino mes completo)
+  let totalActualHastaFecha = 0;
+  let totalAnteriorHastaFecha = 0;
+  let gastosActualHastaFecha = 0;
+  let gastosAnteriorHastaFecha = 0;
+
+  for(let d=1; d<=ultimoDiaActual; d++){
+    const fechaActual = `${mes}-${String(d).padStart(2,'0')}`;
+    const fechaAnterior = `${mesAnterior}-${String(d).padStart(2,'0')}`;
+    totalActualHastaFecha += datosActual[fechaActual]||0;
+    if(d <= diasAnterior) totalAnteriorHastaFecha += datosAnterior[fechaAnterior]||0;
+    gastosActualHastaFecha += gastosDia[fechaActual]||0;
+  }
+
+  // Gastos mes anterior hasta misma fecha
+  const { data: gastosAnteriorRaw } = await supabase.from('gastos_mes')
+    .select('fecha, monto, anulada')
+    .eq('mes', mesAnterior)
+    .neq('anulada', true);
+  (gastosAnteriorRaw||[]).forEach(g => {
+    if(g.anulada) return;
+    const dia = Number(g.fecha.split('-')[2]);
+    if(dia <= ultimoDiaActual){
+      gastosAnteriorHastaFecha += Number(g.monto||0);
+    }
+  });
+
+  // Mejor dia, peor dia, promedio
+  let mejorDia = { dia: '—', total: 0 };
+  let peorDia = { dia: '—', total: Infinity };
+  let suma = 0;
+  let cuenta = 0;
+  for(let d=1; d<=ultimoDiaActual; d++){
+    const fecha = `${mes}-${String(d).padStart(2,'0')}`;
+    const v = datosActual[fecha]||0;
+    if(v > 0){
+      suma += v;
+      cuenta++;
+      if(v > mejorDia.total) mejorDia = { dia: d, total: v };
+      if(v < peorDia.total) peorDia = { dia: d, total: v };
+    }
+  }
+  if(cuenta === 0) peorDia = { dia: '—', total: 0 };
+  const promedio = cuenta > 0 ? Math.round(suma/cuenta) : 0;
+
+  return ok(res, {
+    mes: mes,
+    mesAnterior: mesAnterior,
+    labels: labels,
+    seriesActual: seriesActual,
+    seriesAnterior: seriesAnterior,
+    seriesGastos: seriesGastos,
+    ultimoDiaActual: ultimoDiaActual,
+    aLaFecha: {
+      ventasActual: totalActualHastaFecha,
+      ventasAnterior: totalAnteriorHastaFecha,
+      diferenciaVentas: totalActualHastaFecha - totalAnteriorHastaFecha,
+      pctVentas: totalAnteriorHastaFecha > 0 ? Math.round(((totalActualHastaFecha - totalAnteriorHastaFecha) / totalAnteriorHastaFecha) * 1000) / 10 : 0,
+      gastosActual: gastosActualHastaFecha,
+      gastosAnterior: gastosAnteriorHastaFecha,
+      diferenciaGastos: gastosActualHastaFecha - gastosAnteriorHastaFecha,
+      pctGastos: gastosAnteriorHastaFecha > 0 ? Math.round(((gastosActualHastaFecha - gastosAnteriorHastaFecha) / gastosAnteriorHastaFecha) * 1000) / 10 : 0
+    },
+    minicards: {
+      mejorDia: mejorDia,
+      peorDia: peorDia,
+      promedio: promedio
+    }
+  });
+}
+
+// ==================== GRAFICA AÑO A AÑO ====================
+// Devuelve datos de los 12 meses del año actual + 12 meses del año anterior
+async function apiGetGraficaAnoAno(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const ano = Number(p.ano||0);
+  if(!ano || ano < 2020 || ano > 2100) return err(res,'Ano invalido');
+
+  const anoAnterior = ano - 1;
+  const firstDay = `${ano}-01-01`;
+  const lastDay = `${ano}-12-31`;
+
+  // 1. Ventas y gastos del año actual (calculados desde sales y gastos_mes)
+  const ventasActual = await fetchAll(() => supabase.from('sales')
+    .select('business_day, total, type, anulada')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .neq('anulada', true));
+
+  const { data: gastosActual } = await supabase.from('gastos_mes')
+    .select('mes, monto, anulada')
+    .gte('mes', `${ano}-01`)
+    .lte('mes', `${ano}-12`)
+    .neq('anulada', true);
+
+  // Agrupar por mes (1-12)
+  const ventasPorMes = [0,0,0,0,0,0,0,0,0,0,0,0];
+  const gastosPorMes = [0,0,0,0,0,0,0,0,0,0,0,0];
+  
+  (ventasActual||[]).forEach(v => {
+    if(v.anulada) return;
+    const m = Number(v.business_day.split('-')[1]) - 1;
+    if(m >= 0 && m <= 11) ventasPorMes[m] += Number(v.total||0);
+  });
+  (gastosActual||[]).forEach(g => {
+    if(g.anulada) return;
+    const m = Number(g.mes.split('-')[1]) - 1;
+    if(m >= 0 && m <= 11) gastosPorMes[m] += Number(g.monto||0);
+  });
+
+  // Hoy: hasta qué mes mostrar el año actual
+  const hoy = new Date();
+  const hoyYear = hoy.getFullYear();
+  const hoyMonth = hoy.getMonth() + 1;
+  const ultimoMes = (ano === hoyYear) ? hoyMonth : 12;
+
+  // Poner null en meses futuros del año actual
+  const ventasActualFinal = ventasPorMes.map((v, i) => i < ultimoMes ? v : null);
+  const gastosActualFinal = gastosPorMes.map((v, i) => i < ultimoMes ? v : null);
+
+  // 2. Año anterior (de la tabla ventas_gastos_anuales)
+  const { data: anoAnt } = await supabase.from('ventas_gastos_anuales')
+    .select('*')
+    .eq('ano', anoAnterior)
+    .maybeSingle();
+
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const ventasAnterior = meses.map(m => Number(anoAnt ? (anoAnt[`ventas_${m}`]||0) : 0));
+  const gastosAnterior = meses.map(m => Number(anoAnt ? (anoAnt[`gastos_${m}`]||0) : 0));
+
+  // Acumulados a la fecha (hasta ultimoMes)
+  let ventasActualAcum = 0;
+  let ventasAnteriorAcum = 0;
+  let gastosActualAcum = 0;
+  let gastosAnteriorAcum = 0;
+  for(let i=0; i<ultimoMes; i++){
+    ventasActualAcum += ventasPorMes[i]||0;
+    ventasAnteriorAcum += ventasAnterior[i]||0;
+    gastosActualAcum += gastosPorMes[i]||0;
+    gastosAnteriorAcum += gastosAnterior[i]||0;
+  }
+
+  // Mejor mes del año actual
+  let mejorMes = { mes: '—', total: 0 };
+  for(let i=0; i<ultimoMes; i++){
+    if(ventasPorMes[i] > mejorMes.total){
+      mejorMes = { mes: i+1, total: ventasPorMes[i] };
+    }
+  }
+
+  return ok(res, {
+    ano: ano,
+    anoAnterior: anoAnterior,
+    ultimoMes: ultimoMes,
+    seriesVentasActual: ventasActualFinal,
+    seriesVentasAnterior: ventasAnterior,
+    seriesGastosActual: gastosActualFinal,
+    seriesGastosAnterior: gastosAnterior,
+    acumulados: {
+      ventasActual: ventasActualAcum,
+      ventasAnterior: ventasAnteriorAcum,
+      diferenciaVentas: ventasActualAcum - ventasAnteriorAcum,
+      pctVentas: ventasAnteriorAcum > 0 ? Math.round(((ventasActualAcum - ventasAnteriorAcum) / ventasAnteriorAcum) * 1000) / 10 : 0,
+      gastosActual: gastosActualAcum,
+      gastosAnterior: gastosAnteriorAcum,
+      diferenciaGastos: gastosActualAcum - gastosAnteriorAcum,
+      pctGastos: gastosAnteriorAcum > 0 ? Math.round(((gastosActualAcum - gastosAnteriorAcum) / gastosAnteriorAcum) * 1000) / 10 : 0
+    },
+    mejorMes: mejorMes,
+    tieneAnoAnterior: !!anoAnt
   });
 }
 
