@@ -5368,9 +5368,12 @@ function loadnew(){
     h+='<div id="graf1box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica día a día...</div></div>';
     h+='<div id="graf2box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica año a año...</div></div>';
     h+='<div id="rankBox" style="margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando rankings...</div></div>';
+    h+=renderHorasPico(d);
     h+=renderInfoMes(d);
     h+=renderDebugMini(d);
     el.innerHTML=h;
+    // Pintar grafica horas pico despues de renderizar el HTML
+    setTimeout(function(){pintarHorasPico(d);},50);
     // Cargar metricas del mes anterior para el comparativo de rankings
     var mesAntStr=(function(){
       var p=mes.split('-');
@@ -5810,6 +5813,101 @@ function renderRankings(d,dPrev){
   
   h+='</div>';
   return h;
+}
+
+// Renderiza la caja de horas pico (HTML con canvas)
+function renderHorasPico(d){
+  var horas=d.horasPico||{};
+  var totalCount=0;
+  var maxCount=0;
+  var maxHora=0;
+  Object.keys(horas).forEach(function(h){
+    var c=Number(horas[h]||0);
+    totalCount+=c;
+    if(c>maxCount){maxCount=c;maxHora=Number(h);}
+  });
+  
+  var horaPicoTxt='—';
+  if(maxCount>0){
+    var ampm=maxHora>=12?'pm':'am';
+    var h12=maxHora>12?maxHora-12:(maxHora===0?12:maxHora);
+    horaPicoTxt=h12+ampm;
+  }
+  var pctPico=totalCount>0?Math.round((maxCount/totalCount)*100):0;
+  
+  var h='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">';
+  h+='<div>';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb">⏰ Horas pico del día</div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Distribución de check-ins por hora · '+totalCount+' ventas en el mes</div>';
+  h+='</div>';
+  if(maxCount>0){
+    h+='<div style="background:rgba(167,139,250,.1);border:0.5px solid rgba(167,139,250,.3);border-radius:8px;padding:6px 10px;text-align:center">';
+    h+='<div style="font-size:9px;color:#c4b5fd;text-transform:uppercase;letter-spacing:.5px">Pico</div>';
+    h+='<div style="font-size:14px;font-weight:700;color:#a78bfa">'+horaPicoTxt+'</div>';
+    h+='<div style="font-size:9px;color:#9ca3af">'+maxCount+' ventas · '+pctPico+'%</div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<div style="position:relative;width:100%;height:160px"><canvas id="canvasHorasPico" role="img" aria-label="Distribución por hora del día">Horas pico.</canvas></div>';
+  h+='</div>';
+  return h;
+}
+
+// Pinta grafica de horas pico con Chart.js (24 barras)
+var _chartHorasPico=null;
+function pintarHorasPico(d){
+  if(typeof Chart==='undefined')return;
+  var canvas=document.getElementById('canvasHorasPico');
+  if(!canvas)return;
+  if(_chartHorasPico){try{_chartHorasPico.destroy();}catch(e){}}
+  
+  var horas=d.horasPico||{};
+  var labels=[];
+  var values=[];
+  var colors=[];
+  var maxCount=0;
+  var maxHora=0;
+  for(var i=0;i<24;i++){
+    var c=Number(horas[i]||0);
+    if(c>maxCount){maxCount=c;maxHora=i;}
+  }
+  for(var i=0;i<24;i++){
+    var ampm=i>=12?'pm':'am';
+    var h12=i>12?i-12:(i===0?12:i);
+    labels.push(h12+ampm);
+    values.push(Number(horas[i]||0));
+    // Color: pico violeta intenso, demas violeta claro
+    colors.push(i===maxHora?'#a78bfa':(Number(horas[i]||0)>0?'#7c5cfc':'#3a3a4a'));
+  }
+  
+  _chartHorasPico=new Chart(canvas.getContext('2d'),{
+    type:'bar',
+    data:{labels:labels,datasets:[{
+      data:values,
+      backgroundColor:colors,
+      borderRadius:2,
+      categoryPercentage:0.85
+    }]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label:function(ctx){
+              var pct=maxCount>0?Math.round((ctx.raw/maxCount)*100):0;
+              return ctx.raw+' ventas ('+pct+'% del pico)';
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{font:{size:8},color:'#9ca3af',autoSkip:false,maxRotation:0},grid:{display:false}},
+        y:{ticks:{font:{size:9},color:'#9ca3af'},grid:{color:'rgba(255,255,255,.05)'},beginAtZero:true}
+      }
+    }
+  });
 }
 
 // Renderiza las 2 cajas inferiores: habitaciones danadas + proyeccion del mes
