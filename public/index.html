@@ -249,6 +249,27 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar personal extra</div>
 </div>
 </div></div></div></div>
+<div class="ov" id="mDescargarNequi"><div class="modal" style="max-width:440px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">↩ Descargar Nequi a efectivo</div><button class="mc" onclick="closeM('mDescargarNequi')">✕</button></div>
+<div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#c4b5fd">💡 Cuando retiras dinero del Nequi al cajero, el saldo del Nequi baja y el del Efectivo en caja sube por la misma cantidad.</div>
+<div id="dnSaldoActual" style="background:#18181f;border-radius:6px;padding:10px;margin-bottom:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase">Saldo Nequi disponible</div><div id="dnSaldoCifra" style="font-size:18px;font-weight:700;color:#a855f7">$0</div></div>
+<label style="font-size:11px;color:#9ca3af">Monto a descargar</label>
+<input type="number" id="dnMonto" min="0" placeholder="0" style="width:100%;margin-bottom:8px">
+<label style="font-size:11px;color:#9ca3af">Fecha del descargo</label>
+<input type="date" id="dnFecha" style="width:100%;margin-bottom:8px">
+<label style="font-size:11px;color:#9ca3af">Nota (opcional)</label>
+<input type="text" id="dnNota" placeholder="Ej: retiro Banco Caja Social" style="margin-bottom:12px">
+<div style="display:flex;gap:6px">
+<button class="btn bk" style="flex:1" onclick="closeM('mDescargarNequi')">Cancelar</button>
+<button class="btn bg" style="flex:1;background:rgba(168,85,247,.18);color:#a855f7;border:1px solid #a855f7" onclick="saveDescargarNequi()">↩ Descargar</button>
+</div>
+</div></div>
+<div class="ov" id="mHistorialDescargos"><div class="modal" style="max-width:520px;max-height:80vh;overflow-y:auto"><div class="mh"><div class="mt">📋 Historial de descargos Nequi</div><button class="mc" onclick="closeM('mHistorialDescargos')">✕</button></div>
+<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Aquí ves todos los descargos del mes seleccionado. Puedes anular un descargo si fue un error.</div>
+<div id="hdLista"><p style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Cargando...</p></div>
+<div style="display:flex;gap:6px;margin-top:10px">
+<button class="btn bk full" onclick="closeM('mHistorialDescargos')">Cerrar</button>
+</div>
+</div></div>
 <div class="ov" id="mAddGastoMes"><div class="modal" style="max-width:480px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">➕ Agregar Gasto del Mes</div><button class="mc" onclick="closeM('mAddGastoMes')">✕</button></div>
 <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#86efac">💡 Este gasto se descontará automáticamente del saldo disponible según el método de pago elegido.</div>
 <label style="font-size:11px;color:#9ca3af">Categoría</label>
@@ -5661,7 +5682,7 @@ function renderGastosMes(d){
   h+='<div style="display:flex;flex-direction:column;gap:6px">';
   h+='<div style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💵 Efectivo en caja</span><b style="font-size:16px;color:#22c55e">'+fmt(s.efectivoEnCaja||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.efectivo||0)+' ventas + '+fmt(d.descargos.total||0)+' descargos − '+fmt(g.efectivo||0)+' gastos</div></div>';
   h+='<div style="background:rgba(24,95,165,.08);border:0.5px solid rgba(24,95,165,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💳 Caja tarjeta</span><b style="font-size:16px;color:#3b82f6">'+fmt(s.cajaTarjeta||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.tarjeta||0)+' ventas − '+fmt(g.tarjeta||0)+' gastos</div></div>';
-  h+='<div style="background:rgba(168,85,247,.08);border:0.5px solid rgba(168,85,247,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">📱 Nequi</span><b style="font-size:16px;color:#a855f7">'+fmt(s.nequiDisponible||0)+'</b></div><div style="font-size:10px;color:#6b7280;margin-bottom:8px">'+fmt(v.nequi||0)+' ventas − '+fmt(d.descargos.total||0)+' descargados</div><div style="display:flex;gap:6px"><button class="btn sm" style="flex:1;background:rgba(168,85,247,.15);color:#a855f7;border:0.5px solid rgba(168,85,247,.4);font-size:11px">↩ Descargar a efectivo</button><button class="btn sm" style="flex:1;background:#2e2e3a;color:#9ca3af;font-size:11px">📋 Historial ('+(d.descargos.cantidad||0)+')</button></div></div>';
+  h+='<div style="background:rgba(168,85,247,.08);border:0.5px solid rgba(168,85,247,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">📱 Nequi</span><b style="font-size:16px;color:#a855f7">'+fmt(s.nequiDisponible||0)+'</b></div><div style="font-size:10px;color:#6b7280;margin-bottom:8px">'+fmt(v.nequi||0)+' ventas − '+fmt(d.descargos.total||0)+' descargados</div><div style="display:flex;gap:6px"><button class="btn sm" style="flex:1;background:rgba(168,85,247,.15);color:#a855f7;border:0.5px solid rgba(168,85,247,.4);font-size:11px" onclick="openDescargarNequi('+(s.nequiDisponible||0)+')">↩ Descargar a efectivo</button><button class="btn sm" style="flex:1;background:#2e2e3a;color:#9ca3af;font-size:11px" onclick="openHistorialDescargos()">📋 Historial ('+(d.descargos.cantidad||0)+')</button></div></div>';
   h+='</div></div>';
   h+='</div>';
   // 3 tarjetas resumen
@@ -5805,6 +5826,86 @@ function _doSaveGastoMes(fecha,cat,concepto,monto,payMethod){
   },function(){
     toast('✓ Gasto agregado','ok');
     closeM('mAddGastoMes');
+    loadGastosMes();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
+function openDescargarNequi(saldoActual){
+  if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  document.getElementById('dnSaldoCifra').textContent=fmt(saldoActual||0);
+  document.getElementById('dnMonto').value='';
+  var hoy=new Date();
+  var fechaHoy=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  document.getElementById('dnFecha').value=fechaHoy;
+  document.getElementById('dnNota').value='';
+  window._dnSaldo=Number(saldoActual||0);
+  openM('mDescargarNequi');
+}
+function saveDescargarNequi(){
+  var monto=Number(document.getElementById('dnMonto').value||0);
+  var fecha=document.getElementById('dnFecha').value;
+  var nota=document.getElementById('dnNota').value.trim();
+  var saldo=window._dnSaldo||0;
+  if(monto<=0){toast('El monto debe ser mayor a 0','err');return;}
+  if(!fecha){toast('Selecciona la fecha','err');return;}
+  if(monto>saldo){
+    if(!confirm('⚠️ Estás descargando MÁS de lo disponible en Nequi.\n\nDisponible: '+fmt(saldo)+'\nDescargo: '+fmt(monto)+'\n\n¿Continuar de todos modos?'))return;
+  }
+  rpc('descargarNequi',{
+    fecha:fecha,
+    monto:monto,
+    nota:nota,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Descargo registrado','ok');
+    closeM('mDescargarNequi');
+    loadGastosMes();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
+function openHistorialDescargos(){
+  if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var mes=document.getElementById('gmPick').value;
+  if(!mes){toast('Selecciona un mes','err');return;}
+  var cont=document.getElementById('hdLista');
+  cont.innerHTML='<p style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Cargando...</p>';
+  openM('mHistorialDescargos');
+  rpc('getGastosMesResumen',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(d){
+    var lista=(d.descargos&&d.descargos.lista)||[];
+    if(!lista.length){
+      cont.innerHTML='<div style="background:#22222c;border:0.5px dashed #2e2e3a;border-radius:8px;padding:30px;text-align:center"><div style="font-size:32px;margin-bottom:8px">📋</div><div style="font-size:13px;color:#9ca3af">No hay descargos registrados en este mes</div></div>';
+      return;
+    }
+    var h='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:8px;overflow:hidden">';
+    lista.forEach(function(item,idx){
+      var dia=String(item.fecha||'').split('-').reverse().join('/');
+      var anulada=item.anulada;
+      var bgRow=anulada?'rgba(239,68,68,.04)':'transparent';
+      var colorMonto=anulada?'#6b7280':'#a855f7';
+      var textDeco=anulada?'line-through':'none';
+      h+='<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:'+(idx===lista.length-1?'0':'0.5px solid rgba(46,46,58,.5)')+';background:'+bgRow+'">';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:13px;font-weight:600;color:'+colorMonto+';text-decoration:'+textDeco+'">'+fmt(item.monto||0)+'</div>';
+      h+='<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(dia)+(item.nota?' · '+esc(item.nota):'')+'</div>';
+      if(anulada)h+='<div style="font-size:10px;color:#ef4444;margin-top:2px">⚠ ANULADO por '+esc(item.anulada_por||'?')+'</div>';
+      h+='</div>';
+      if(!anulada){
+        h+='<button onclick="anularDescargo('+item.id+')" style="background:rgba(239,68,68,.12);color:#ef4444;border:0.5px solid rgba(239,68,68,.4);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">🗑️ Anular</button>';
+      }
+      h+='</div>';
+    });
+    h+='</div>';
+    cont.innerHTML=h;
+  },function(e){cont.innerHTML='<p style="color:#ef4444;text-align:center;padding:20px">Error: '+esc(e.message||'?')+'</p>';});
+}
+function anularDescargo(descargoId){
+  if(!confirm('¿Anular este descargo?\n\nEl saldo del Nequi volverá a subir y el Efectivo en caja bajará por la misma cantidad.'))return;
+  rpc('anularDescargoNequi',{
+    descargoId:descargoId,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Descargo anulado','ok');
+    closeM('mHistorialDescargos');
     loadGastosMes();
   },function(e){toast('Error: '+(e.message||'?'),'err');});
 }
