@@ -425,6 +425,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn bg" style="flex:1" onclick="saveAddVentaManual()">Guardar venta</button>
 </div>
 </div></div>
+<div class="ov" id="mEditarAno"><div class="modal" style="max-width:600px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt" id="mEditarAnoT">Editar año</div><button class="mc" onclick="closeM('mEditarAno')">✕</button></div>
+<div style="font-size:12px;color:#9ca3af;margin-bottom:10px">Ingresá los totales por mes del año pasado. Se usarán para mostrar comparativos en las gráficas.</div>
+<div id="mEditarAnoBody"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Cargando...</div></div>
+<div class="row" style="margin-top:12px"><button class="btn ba full" id="mEditarAnoSave" onclick="saveEditarAno()">Guardar año</button></div></div></div>
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
 <div class="ov" id="mExtra"><div class="modal"><div class="mh"><div class="mt">Registrar Personal Extra</div><button class="mc" onclick="closeM('mExtra')">✕</button></div>
 <label>Nombre</label><input type="text" id="exName" placeholder="Nombre completo">
@@ -5700,9 +5704,99 @@ function pintarGraficaAnoAno(g){
   });
 }
 
-// Modal Editar Año (placeholder - se completa en el siguiente paso)
+// Abre modal Editar Año - carga datos del backend y arma tabla
 function openEditarAno(ano){
-  toast('Modal Editar '+ano+' viene en el próximo paso 👍');
+  if(!sess||sess.userRole!=='ADMIN')return;
+  document.getElementById('mEditarAnoT').textContent='Editar año '+ano;
+  document.getElementById('mEditarAnoBody').innerHTML='<div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando datos...</div>';
+  openM('mEditarAno');
+  rpc('getAnoAnterior',{ano:ano,userName:sess.userName,userRole:sess.userRole},function(d){
+    var datos=d.datos||{};
+    var meses=[
+      {key:'ene',nombre:'Enero'},{key:'feb',nombre:'Febrero'},{key:'mar',nombre:'Marzo'},
+      {key:'abr',nombre:'Abril'},{key:'may',nombre:'Mayo'},{key:'jun',nombre:'Junio'},
+      {key:'jul',nombre:'Julio'},{key:'ago',nombre:'Agosto'},{key:'sep',nombre:'Septiembre'},
+      {key:'oct',nombre:'Octubre'},{key:'nov',nombre:'Noviembre'},{key:'dic',nombre:'Diciembre'}
+    ];
+    var h='<input type="hidden" id="eaAno" value="'+ano+'">';
+    h+='<div style="background:rgba(99,102,241,.08);border:0.5px solid rgba(99,102,241,.3);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#a5b4fc">';
+    h+=d.existe?('✓ Datos existentes — podés editarlos'):('📌 Sin datos — ingresá los totales');
+    h+='</div>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:12px">';
+    h+='<thead><tr style="background:#1f1f24"><th style="padding:6px;text-align:left;font-size:11px;color:#9ca3af">Mes</th><th style="padding:6px;text-align:right;font-size:11px;color:#93c5fd">💵 Ventas</th><th style="padding:6px;text-align:right;font-size:11px;color:#fca5a5">💸 Gastos</th></tr></thead>';
+    h+='<tbody>';
+    var totalV=0,totalG=0;
+    meses.forEach(function(m){
+      var v=Number(datos['ventas_'+m.key]||0);
+      var g=Number(datos['gastos_'+m.key]||0);
+      totalV+=v;
+      totalG+=g;
+      h+='<tr style="border-bottom:0.5px solid #2e2e3a">';
+      h+='<td style="padding:6px;color:#e5e7eb">'+m.nombre+'</td>';
+      h+='<td style="padding:4px"><input type="number" id="ev_'+m.key+'" value="'+v+'" min="0" style="width:100%;text-align:right;margin:0;background:#0a0a14;border:0.5px solid #2e2e3a;color:#93c5fd;padding:4px;font-size:12px"></td>';
+      h+='<td style="padding:4px"><input type="number" id="eg_'+m.key+'" value="'+g+'" min="0" style="width:100%;text-align:right;margin:0;background:#0a0a14;border:0.5px solid #2e2e3a;color:#fca5a5;padding:4px;font-size:12px"></td>';
+      h+='</tr>';
+    });
+    h+='</tbody>';
+    h+='<tfoot><tr style="background:#1f1f24;font-weight:700">';
+    h+='<td style="padding:6px;color:#e5e7eb">TOTAL</td>';
+    h+='<td id="eaTotalV" style="padding:6px;text-align:right;color:#3b82f6">'+fmt(totalV)+'</td>';
+    h+='<td id="eaTotalG" style="padding:6px;text-align:right;color:#ef4444">'+fmt(totalG)+'</td>';
+    h+='</tr></tfoot>';
+    h+='</table>';
+    h+='<div style="margin-top:10px;font-size:10px;color:#6b7280;text-align:center">💡 Los inputs se actualizan al hacer click fuera del campo</div>';
+    document.getElementById('mEditarAnoBody').innerHTML=h;
+    // Listener para recalcular totales al cambiar valores
+    meses.forEach(function(m){
+      var inpV=document.getElementById('ev_'+m.key);
+      var inpG=document.getElementById('eg_'+m.key);
+      if(inpV)inpV.addEventListener('change',recalcularTotalesEditarAno);
+      if(inpG)inpG.addEventListener('change',recalcularTotalesEditarAno);
+    });
+  },function(e){
+    document.getElementById('mEditarAnoBody').innerHTML='<div style="color:#ef4444;text-align:center;padding:20px;font-size:12px">Error: '+esc(e.message||'?')+'</div>';
+  });
+}
+
+// Recalcula totales al cambiar valores en el modal
+function recalcularTotalesEditarAno(){
+  var meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var totalV=0,totalG=0;
+  meses.forEach(function(m){
+    var v=Number(document.getElementById('ev_'+m).value||0);
+    var g=Number(document.getElementById('eg_'+m).value||0);
+    if(v<0){document.getElementById('ev_'+m).value=0;v=0;}
+    if(g<0){document.getElementById('eg_'+m).value=0;g=0;}
+    totalV+=v;
+    totalG+=g;
+  });
+  document.getElementById('eaTotalV').textContent=fmt(totalV);
+  document.getElementById('eaTotalG').textContent=fmt(totalG);
+}
+
+// Guarda los datos del año en el backend
+function saveEditarAno(){
+  if(!sess||sess.userRole!=='ADMIN')return;
+  var ano=Number(document.getElementById('eaAno').value);
+  if(!ano)return toast('Año inválido');
+  var meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var payload={ano:ano,userName:sess.userName,userRole:sess.userRole};
+  meses.forEach(function(m){
+    payload['ventas_'+m]=Number(document.getElementById('ev_'+m).value||0);
+    payload['gastos_'+m]=Number(document.getElementById('eg_'+m).value||0);
+  });
+  var btn=document.getElementById('mEditarAnoSave');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  rpc('saveAnoAnterior',payload,function(){
+    toast('✓ Datos del año '+ano+' guardados');
+    closeM('mEditarAno');
+    if(btn){btn.disabled=false;btn.textContent='Guardar año';}
+    // Recargar el dashboard para reflejar cambios
+    if(typeof loadnew==='function')loadnew();
+  },function(e){
+    toast('Error: '+esc(e.message||'?'));
+    if(btn){btn.disabled=false;btn.textContent='Guardar año';}
+  });
 }
 
 // Mini debug temporal - se quitara cuando este todo el dashboard
