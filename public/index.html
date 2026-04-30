@@ -5361,8 +5361,19 @@ function loadnew(){
       return;
     }
     var h=renderResumenRapido(d,anoData,mes);
+    h+='<div id="graf1box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica día a día...</div></div>';
     h+=renderDebugMini(d);
     el.innerHTML=h;
+    // Cargar grafica dia a dia despues (asincrono)
+    rpc('getGraficaDiaADia',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(g){
+      var box=document.getElementById('graf1box');
+      if(!box)return;
+      box.innerHTML=renderGraficaDiaADia(g,mes);
+      pintarGraficaDiaADia(g);
+    },function(){
+      var box=document.getElementById('graf1box');
+      if(box)box.innerHTML='<div style="color:#ef4444;padding:20px;text-align:center;font-size:12px">Error cargando gráfica día a día</div>';
+    });
   });
 }
 
@@ -5442,6 +5453,122 @@ function renderResumenRapido(d,anoData,mes){
   
   h+='</div></div>';
   return h;
+}
+
+// Renderiza la grafica dia a dia con cajas comparativas
+function renderGraficaDiaADia(g,mes){
+  if(!g||!g.aLaFecha){
+    return '<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Sin datos para graficar</div></div>';
+  }
+  var f=g.aLaFecha;
+  var meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  var mesActualNum=Number(mes.split('-')[1])-1;
+  var mesAntNum=mesActualNum===0?11:mesActualNum-1;
+  var nombreActual=meses[mesActualNum];
+  var nombreAnterior=meses[mesAntNum];
+  
+  // Colores ventas
+  var ventasPct=Number(f.pctVentas||0);
+  var ventasColor=ventasPct>0?'#22c55e':(ventasPct<0?'#ef4444':'#9ca3af');
+  var ventasIcon=ventasPct>0?'↑':(ventasPct<0?'↓':'—');
+  var ventasTrend=ventasPct>0?'va creciendo':(ventasPct<0?'va bajando':'igual');
+  var ventasDifTxt=(f.diferenciaVentas>=0?'+':'')+fmt(f.diferenciaVentas);
+  var ventasPctTxt=(ventasPct>0?'+':'')+ventasPct+'%';
+  
+  // Colores gastos (logica invertida: subir gastos es malo, bajarlos bueno)
+  var gastosPct=Number(f.pctGastos||0);
+  var gastosColor;
+  var gastosTrend;
+  if(gastosPct<=0){gastosColor='#22c55e';gastosTrend='controlados';}
+  else if(gastosPct<=10){gastosColor='#f59e0b';gastosTrend='leve aumento';}
+  else {gastosColor='#ef4444';gastosTrend='aumento alto';}
+  var gastosIcon=gastosPct>0?'↑':(gastosPct<0?'↓':'—');
+  var gastosDifTxt=(f.diferenciaGastos>=0?'+':'')+fmt(f.diferenciaGastos);
+  var gastosPctTxt=(gastosPct>0?'+':'')+gastosPct+'%';
+  
+  var h='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb">📊 Día a día (vs mes anterior)</div>';
+  h+='<div style="display:flex;gap:10px;font-size:11px;color:#9ca3af">';
+  h+='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#93c5fd"></span>'+esc(nombreAnterior)+'</span>';
+  h+='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#3b82f6"></span>'+esc(nombreActual)+'</span>';
+  h+='<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#ef4444"></span>Gastos</span>';
+  h+='</div></div>';
+  
+  // Caja AZUL - Ventas a la fecha
+  h+='<div style="background:rgba(59,130,246,.06);border-left:3px solid #3b82f6;border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px">';
+  h+='<div style="font-size:10px;color:#93c5fd;text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:6px">💵 Ventas a la fecha (días 1-'+g.ultimoDiaActual+')</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+esc(nombreAnterior)+'</div><div style="font-size:14px;font-weight:700;color:#93c5fd">'+fmt(f.ventasAnterior)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+esc(nombreActual)+'</div><div style="font-size:14px;font-weight:700;color:#3b82f6">'+fmt(f.ventasActual)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">Diferencia</div>';
+  h+='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap"><div style="font-size:13px;font-weight:700;color:'+ventasColor+'">'+esc(ventasDifTxt)+'</div>';
+  h+='<div style="background:rgba(34,197,94,.12);color:'+ventasColor+';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">'+ventasIcon+' '+esc(ventasPctTxt)+'</div></div>';
+  h+='<div style="font-size:10px;color:'+ventasColor+'">'+esc(ventasTrend)+'</div></div>';
+  h+='</div></div>';
+  
+  // Caja ROJA - Gastos a la fecha
+  h+='<div style="background:rgba(239,68,68,.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:12px">';
+  h+='<div style="font-size:10px;color:#fca5a5;text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:6px">💸 Gastos a la fecha (días 1-'+g.ultimoDiaActual+')</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+esc(nombreAnterior)+'</div><div style="font-size:14px;font-weight:700;color:#fca5a5">'+fmt(f.gastosAnterior)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+esc(nombreActual)+'</div><div style="font-size:14px;font-weight:700;color:#ef4444">'+fmt(f.gastosActual)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">Diferencia</div>';
+  h+='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap"><div style="font-size:13px;font-weight:700;color:'+gastosColor+'">'+esc(gastosDifTxt)+'</div>';
+  h+='<div style="background:rgba(245,158,11,.12);color:'+gastosColor+';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">'+gastosIcon+' '+esc(gastosPctTxt)+'</div></div>';
+  h+='<div style="font-size:10px;color:'+gastosColor+'">'+esc(gastosTrend)+'</div></div>';
+  h+='</div></div>';
+  
+  // Canvas para grafica
+  h+='<div style="position:relative;width:100%;height:200px"><canvas id="canvasDiaADia" role="img" aria-label="Grafica dia a dia">Grafica dia a dia.</canvas></div>';
+  
+  // Mini-tarjetas mejor/peor/promedio
+  if(g.minicards){
+    var mc=g.minicards;
+    var mejorTxt=mc.mejorDia&&mc.mejorDia.dia!=='—'?mc.mejorDia.dia+' '+meses[mesActualNum].slice(0,3):'—';
+    var peorTxt=mc.peorDia&&mc.peorDia.dia!=='—'?mc.peorDia.dia+' '+meses[mesActualNum].slice(0,3):'—';
+    h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">';
+    h+='<div style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.25);border-radius:8px;padding:8px"><div style="font-size:9px;color:#86efac;text-transform:uppercase;letter-spacing:.5px">↑ Mejor día</div><div style="font-size:13px;font-weight:700;color:#22c55e;margin-top:2px">'+esc(mejorTxt)+'</div><div style="font-size:11px;color:#9ca3af">'+fmt(mc.mejorDia.total||0)+'</div></div>';
+    h+='<div style="background:rgba(239,68,68,.08);border:0.5px solid rgba(239,68,68,.25);border-radius:8px;padding:8px"><div style="font-size:9px;color:#fca5a5;text-transform:uppercase;letter-spacing:.5px">↓ Peor día</div><div style="font-size:13px;font-weight:700;color:#ef4444;margin-top:2px">'+esc(peorTxt)+'</div><div style="font-size:11px;color:#9ca3af">'+fmt(mc.peorDia.total||0)+'</div></div>';
+    h+='<div style="background:rgba(167,139,250,.08);border:0.5px solid rgba(167,139,250,.25);border-radius:8px;padding:8px"><div style="font-size:9px;color:#c4b5fd;text-transform:uppercase;letter-spacing:.5px">Promedio diario</div><div style="font-size:13px;font-weight:700;color:#a78bfa;margin-top:2px">'+fmt(mc.promedio)+'</div><div style="font-size:11px;color:#9ca3af">por día con ventas</div></div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+// Pinta la grafica con Chart.js
+var _chartDiaADia=null;
+function pintarGraficaDiaADia(g){
+  if(!g||!g.labels||typeof Chart==='undefined')return;
+  var canvas=document.getElementById('canvasDiaADia');
+  if(!canvas)return;
+  if(_chartDiaADia){try{_chartDiaADia.destroy();}catch(e){}}
+  _chartDiaADia=new Chart(canvas.getContext('2d'),{
+    type:'bar',
+    data:{labels:g.labels,datasets:[
+      {label:'Mes anterior',data:g.seriesAnterior,backgroundColor:'#93c5fd',borderRadius:2,categoryPercentage:0.85},
+      {label:'Mes actual',data:g.seriesActual,backgroundColor:'#3b82f6',borderRadius:2,categoryPercentage:0.85},
+      {label:'Gastos',data:g.seriesGastos,backgroundColor:'#ef4444',borderRadius:2,categoryPercentage:0.85}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label:function(ctx){
+              return ctx.dataset.label+': $'+(ctx.raw||0).toLocaleString('es-CO');
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{font:{size:9},color:'#9ca3af'},grid:{display:false}},
+        y:{ticks:{callback:function(v){return '$'+(v/1000000).toFixed(0)+'M';},font:{size:9},color:'#9ca3af'},grid:{color:'rgba(255,255,255,.05)'}}
+      }
+    }
+  });
 }
 
 // Mini debug temporal - se quitara cuando este todo el dashboard
