@@ -5370,7 +5370,6 @@ function loadnew(){
     h+='<div id="rankBox" style="margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando rankings...</div></div>';
     h+=renderHorasPico(d);
     h+=renderInfoMes(d);
-    h+=renderDebugMini(d);
     el.innerHTML=h;
     // Pintar grafica horas pico despues de renderizar el HTML
     setTimeout(function(){pintarHorasPico(d);},50);
@@ -6101,46 +6100,8 @@ function saveEditarAno(){
   });
 }
 
-// Mini debug temporal - se quitara cuando este todo el dashboard
-function renderDebugMini(d){
-  var r=d.resumen||{};
-  var h='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#6b7280">';
-  h+='<div style="font-weight:700;color:#9ca3af;margin-bottom:4px">🔧 Debug (temporal)</div>';
-  h+='Total ventas: '+fmt(r.totalVentas||0)+' · ';
-  h+=(r.totalHabs||0)+' habs · ';
-  h+=(d.recepRanking||[]).length+' recep · ';
-  h+=(d.maidRanking||[]).length+' camareras · ';
-  h+=(d.habsDanadas||[]).length+' habs dañadas · ';
-  h+='proy '+(d.proyeccion||{ejecutadas:0}).ejecutadas+'/'+(d.proyeccion||{total:0}).total;
-  h+='</div>';
-  return h;
-}
 
-function _loadnewOriginal_no_usar(){
-  rpc('getMetricasMes',{mes:'',userName:sess.userName,userRole:sess.userRole},function(d){
-    console.log('METRICAS NUEVAS:',d);
-    var h='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:20px;margin-bottom:14px">';
-    h+='<div style="font-size:14px;font-weight:700;color:#86efac;margin-bottom:10px">✓ Backend conectado correctamente</div>';
-    h+='<div style="font-size:12px;color:#9ca3af;line-height:1.6">';
-    h+='<div>📅 Mes: <b style="color:#e5e7eb">'+esc(d.mes)+'</b></div>';
-    h+='<div>💰 Total ventas: <b style="color:#22c55e">'+fmt(d.resumen.totalVentas)+'</b></div>';
-    h+='<div>🏨 Habitaciones vendidas: <b style="color:#e5e7eb">'+d.resumen.totalHabs+'</b></div>';
-    h+='<div>📊 Días con ventas: <b style="color:#e5e7eb">'+d.resumen.diasConVentas+'</b></div>';
-    h+='<div>🏆 Mejor día: <b style="color:#22c55e">'+esc(d.resumen.mejorDia.fecha)+' ('+fmt(d.resumen.mejorDia.total)+', '+d.resumen.mejorDia.habs+' hab)</b></div>';
-    h+='<div>⏰ Hora pico: <b style="color:#a855f7">'+d.resumen.horaPico.hora+':00 ('+d.resumen.horaPico.count+' ventas)</b></div>';
-    h+='<div>🛏️ Ocupación: <b style="color:#f59e0b">'+d.resumen.ocupacion+'%</b></div>';
-    h+='<div>👩‍💼 Recepcionistas con ventas: <b style="color:#e5e7eb">'+d.recepRanking.length+'</b></div>';
-    h+='<div>🧹 Camareras activas: <b style="color:#e5e7eb">'+d.maidRanking.length+'</b></div>';
-    h+='<div>🔧 Habitaciones con daños: <b style="color:#e5e7eb">'+d.habsDanadas.length+'</b></div>';
-    h+='<div>🎯 Tareas proyección: <b style="color:#e5e7eb">'+d.proyeccion.ejecutadas+'/'+d.proyeccion.total+' ('+d.proyeccion.pct+'%)</b></div>';
-    h+='</div>';
-    h+='<div style="margin-top:14px;font-size:11px;color:#6b7280">📍 Esto es solo una verificación — el dashboard visual completo viene en los próximos pasos.</div>';
-    h+='</div>';
-    el.innerHTML=h;
-  },function(e){
-    el.innerHTML='<div style="color:#ef4444;padding:30px;text-align:center;font-size:13px">Error: '+esc(e.message||'?')+'</div>';
-  });
-}
+
 // ---- DASHBOARD INTEGRAL (admin) ----
 var dashInterval=null;
 function loadM(){
