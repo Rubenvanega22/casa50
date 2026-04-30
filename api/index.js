@@ -3602,19 +3602,31 @@ async function apiGetMetricasMes(p, res) {
 
   // 6. Proyeccion del mes (mes y anio son numericos en la tabla)
   const { data: proyTareas } = await supabase.from('proyeccion_tareas')
-    .select('id, anio, mes, estado, fecha_estado')
+    .select('id, anio, mes, nombre, descripcion, area, responsable, prioridad, estado, fecha_estado')
     .eq('anio', year)
     .eq('mes', month);
   let totalTareas = 0;
   let ejecutadas = 0;
   let pendientes = 0;
   let noRealizadas = 0;
+  const tareasPendientes = [];
   (proyTareas||[]).forEach(t => {
     totalTareas++;
     const est = String(t.estado||'').toLowerCase();
     if(est === 'realizado') ejecutadas++;
     else if(est === 'no_realizado' || est === 'no realizado') noRealizadas++;
-    else pendientes++; // pendiente, en_proceso, vacio
+    else {
+      pendientes++;
+      tareasPendientes.push({
+        id: t.id,
+        nombre: t.nombre || '',
+        descripcion: t.descripcion || '',
+        area: t.area || '',
+        responsable: t.responsable || '',
+        prioridad: t.prioridad || 'media',
+        estado: t.estado || 'pendiente'
+      });
+    }
   });
 
   // 7. Ocupacion promedio del mes (rooms vendidas / dias transcurridos / total rooms activos)
@@ -3641,7 +3653,8 @@ async function apiGetMetricasMes(p, res) {
       ejecutadas: ejecutadas,
       pendientes: pendientes,
       noRealizadas: noRealizadas,
-      pct: totalTareas > 0 ? Math.round((ejecutadas/totalTareas)*100) : 0
+      pct: totalTareas > 0 ? Math.round((ejecutadas/totalTareas)*100) : 0,
+      tareasPendientes: tareasPendientes
     },
     horasPico: ventasPorHora,
     ventasPorDia: ventasPorDia
