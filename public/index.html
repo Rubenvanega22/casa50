@@ -5362,6 +5362,7 @@ function loadnew(){
     }
     var h=renderResumenRapido(d,anoData,mes);
     h+='<div id="graf1box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica día a día...</div></div>';
+    h+='<div id="graf2box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica año a año...</div></div>';
     h+=renderDebugMini(d);
     el.innerHTML=h;
     // Cargar grafica dia a dia despues (asincrono)
@@ -5374,6 +5375,12 @@ function loadnew(){
       var box=document.getElementById('graf1box');
       if(box)box.innerHTML='<div style="color:#ef4444;padding:20px;text-align:center;font-size:12px">Error cargando gráfica día a día</div>';
     });
+    // Pintar grafica anio a anio (los datos ya estan en anoData)
+    var box2=document.getElementById('graf2box');
+    if(box2){
+      box2.innerHTML=renderGraficaAnoAno(anoData,ano);
+      pintarGraficaAnoAno(anoData);
+    }
   });
 }
 
@@ -5569,6 +5576,133 @@ function pintarGraficaDiaADia(g){
       }
     }
   });
+}
+
+// Renderiza la grafica año a año con cajas comparativas y boton editar
+function renderGraficaAnoAno(g,anoActual){
+  if(!g||!g.acumulados){
+    return '<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Sin datos para graficar</div></div>';
+  }
+  var ac=g.acumulados;
+  var anoAnterior=anoActual-1;
+  var meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  var nombreUltMes=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][g.ultimoMes-1]||'?';
+  
+  // Colores ventas
+  var ventasPct=Number(ac.pctVentas||0);
+  var ventasColor=ventasPct>0?'#22c55e':(ventasPct<0?'#ef4444':'#9ca3af');
+  var ventasIcon=ventasPct>0?'↑':(ventasPct<0?'↓':'—');
+  var ventasTrend;
+  if(!g.tieneAnoAnterior)ventasTrend='cargá los datos del año pasado';
+  else if(ventasPct>10)ventasTrend='excelente año';
+  else if(ventasPct>0)ventasTrend='va creciendo';
+  else if(ventasPct<0)ventasTrend='va bajando';
+  else ventasTrend='igual al año pasado';
+  var ventasDifTxt=(ac.diferenciaVentas>=0?'+':'')+fmt(ac.diferenciaVentas);
+  var ventasPctTxt=(ventasPct>0?'+':'')+ventasPct+'%';
+  
+  // Colores gastos
+  var gastosPct=Number(ac.pctGastos||0);
+  var gastosColor;
+  var gastosTrend;
+  if(!g.tieneAnoAnterior){gastosColor='#9ca3af';gastosTrend='cargá los datos del año pasado';}
+  else if(gastosPct<=0){gastosColor='#22c55e';gastosTrend='controlados';}
+  else if(gastosPct<=10){gastosColor='#f59e0b';gastosTrend='leve aumento';}
+  else {gastosColor='#ef4444';gastosTrend='aumento alto';}
+  var gastosIcon=gastosPct>0?'↑':(gastosPct<0?'↓':'—');
+  var gastosDifTxt=(ac.diferenciaGastos>=0?'+':'')+fmt(ac.diferenciaGastos);
+  var gastosPctTxt=(gastosPct>0?'+':'')+gastosPct+'%';
+  
+  var h='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb">📈 Año a año ('+anoActual+' vs '+anoAnterior+')</div>';
+  h+='<button class="btn ba xs" onclick="openEditarAno('+anoAnterior+')">✏ Editar '+anoAnterior+'</button>';
+  h+='</div>';
+  
+  if(!g.tieneAnoAnterior){
+    h+='<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px;margin-bottom:12px;text-align:center;font-size:12px;color:#fbbf24">📌 No hay datos cargados de '+anoAnterior+'. Click en "Editar '+anoAnterior+'" para ingresarlos.</div>';
+  }
+  
+  // Caja AZUL - Ventas acumuladas
+  h+='<div style="background:rgba(59,130,246,.06);border-left:3px solid #3b82f6;border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px">';
+  h+='<div style="font-size:10px;color:#93c5fd;text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:6px">💵 Ventas acumuladas (ene-'+esc(nombreUltMes.slice(0,3))+')</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+anoAnterior+'</div><div style="font-size:14px;font-weight:700;color:#93c5fd">'+fmt(ac.ventasAnterior)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+anoActual+'</div><div style="font-size:14px;font-weight:700;color:#3b82f6">'+fmt(ac.ventasActual)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">Diferencia anual</div>';
+  h+='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap"><div style="font-size:13px;font-weight:700;color:'+ventasColor+'">'+esc(ventasDifTxt)+'</div>';
+  h+='<div style="background:rgba(34,197,94,.12);color:'+ventasColor+';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">'+ventasIcon+' '+esc(ventasPctTxt)+'</div></div>';
+  h+='<div style="font-size:10px;color:'+ventasColor+'">'+esc(ventasTrend)+'</div></div>';
+  h+='</div></div>';
+  
+  // Caja ROJA - Gastos acumulados
+  h+='<div style="background:rgba(239,68,68,.06);border-left:3px solid #ef4444;border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:12px">';
+  h+='<div style="font-size:10px;color:#fca5a5;text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:6px">💸 Gastos acumulados (ene-'+esc(nombreUltMes.slice(0,3))+')</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+anoAnterior+'</div><div style="font-size:14px;font-weight:700;color:#fca5a5">'+fmt(ac.gastosAnterior)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">'+anoActual+'</div><div style="font-size:14px;font-weight:700;color:#ef4444">'+fmt(ac.gastosActual)+'</div></div>';
+  h+='<div><div style="font-size:11px;color:#9ca3af">Diferencia anual</div>';
+  h+='<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap"><div style="font-size:13px;font-weight:700;color:'+gastosColor+'">'+esc(gastosDifTxt)+'</div>';
+  h+='<div style="background:rgba(245,158,11,.12);color:'+gastosColor+';padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">'+gastosIcon+' '+esc(gastosPctTxt)+'</div></div>';
+  h+='<div style="font-size:10px;color:'+gastosColor+'">'+esc(gastosTrend)+'</div></div>';
+  h+='</div></div>';
+  
+  // Canvas grafica
+  h+='<div style="position:relative;width:100%;height:240px"><canvas id="canvasAnoAno" role="img" aria-label="Grafica anio a anio">Grafica anio a anio.</canvas></div>';
+  
+  // Mejor mes
+  if(g.mejorMes&&g.mejorMes.mes!=='—'){
+    var nombreMejorMes=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][g.mejorMes.mes-1]||'?';
+    h+='<div style="margin-top:12px;background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.25);border-radius:8px;padding:8px;text-align:center">';
+    h+='<div style="font-size:9px;color:#86efac;text-transform:uppercase;letter-spacing:.5px">🏆 Mejor mes del año</div>';
+    h+='<div style="font-size:13px;font-weight:700;color:#22c55e;margin-top:2px">'+esc(nombreMejorMes)+' '+anoActual+'</div>';
+    h+='<div style="font-size:11px;color:#9ca3af">'+fmt(g.mejorMes.total)+'</div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+// Pinta grafica anio a anio con Chart.js (4 lineas)
+var _chartAnoAno=null;
+function pintarGraficaAnoAno(g){
+  if(!g||!g.seriesVentasActual||typeof Chart==='undefined')return;
+  var canvas=document.getElementById('canvasAnoAno');
+  if(!canvas)return;
+  if(_chartAnoAno){try{_chartAnoAno.destroy();}catch(e){}}
+  var labels=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  _chartAnoAno=new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{labels:labels,datasets:[
+      {label:'Ventas '+(g.anoAnterior),data:g.seriesVentasAnterior,borderColor:'#93c5fd',borderDash:[5,5],borderWidth:2,pointRadius:3,tension:0.3,backgroundColor:'transparent'},
+      {label:'Ventas '+(g.ano),data:g.seriesVentasActual,borderColor:'#3b82f6',borderWidth:2.5,pointRadius:4,tension:0.3,backgroundColor:'transparent'},
+      {label:'Gastos '+(g.anoAnterior),data:g.seriesGastosAnterior,borderColor:'#fca5a5',borderDash:[5,5],borderWidth:2,pointRadius:3,tension:0.3,backgroundColor:'transparent'},
+      {label:'Gastos '+(g.ano),data:g.seriesGastosActual,borderColor:'#ef4444',borderWidth:2.5,pointRadius:4,tension:0.3,backgroundColor:'transparent'}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:true,position:'bottom',labels:{font:{size:10},color:'#9ca3af',boxWidth:14,padding:10}},
+        tooltip:{
+          callbacks:{
+            label:function(ctx){
+              if(ctx.raw===null)return ctx.dataset.label+': sin datos';
+              return ctx.dataset.label+': $'+(ctx.raw||0).toLocaleString('es-CO');
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{font:{size:10},color:'#9ca3af'},grid:{display:false}},
+        y:{ticks:{callback:function(v){return '$'+(v/1000000).toFixed(0)+'M';},font:{size:9},color:'#9ca3af'},grid:{color:'rgba(255,255,255,.05)'}}
+      }
+    }
+  });
+}
+
+// Modal Editar Año (placeholder - se completa en el siguiente paso)
+function openEditarAno(ano){
+  toast('Modal Editar '+ano+' viene en el próximo paso 👍');
 }
 
 // Mini debug temporal - se quitara cuando este todo el dashboard
