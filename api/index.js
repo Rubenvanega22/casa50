@@ -256,6 +256,7 @@ module.exports = async function handler(req, res) {
      case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
       case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
       case 'getResumenMes':      return await apiGetResumenMes(payload, res);
+      case 'getMetricasMes':      return await apiGetMetricasMes(payload, res);
       case 'getGastosMesResumen': return await apiGetGastosMesResumen(payload, res);
       case 'addGastoMes':         return await apiAddGastoMes(payload, res);
       case 'editGastoMes':        return await apiEditGastoMes(payload, res);
@@ -3110,6 +3111,190 @@ async function apiGetPrintTurno(p, res) {
       nequi: totalNq,
       total: totalEf + totalTa + totalNq
     }
+  });
+}
+
+// ==================== METRICAS MES (DASHBOARD NUEVO) ====================
+// Devuelve resumen rapido, ranking recepcion, ranking camareras, habs danadas, proyeccion
+// Para el modulo de Metricas reorganizado
+async function apiGetMetricasMes(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const mes = String(p.mes || '').trim();
+  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
+
+  const [yearStr, monthStr] = mes.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const firstDay = `${mes}-01`;
+  const lastDayDate = new Date(year, month, 0);
+  const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
+  const daysInMonth = lastDayDate.getDate();
+
+  // 1. Ventas del mes (de la tabla sales)
+  const ventasMes = await fetchAll(() => supabase.from('sales')
+    .select('id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .neq('anulada', true));
+
+  // 2. Datos por dia (para encontrar mejor dia y hora pico)
+  const ventasPorDia = {};
+  const ventasPorHora = {};
+  for(let i=0; i<24; i++) ventasPorHora[i] = 0;
+  let totalVentas = 0;
+  let totalHabs = 0;
+  
+  (ventasMes||[]).forEach(v => {
+    if(v.anulada) return;
+    if(v.type !== 'SALE') return; // Solo ventas iniciales para contar habitaciones
+    const dia = v.business_day;
+    if(!ventasPorDia[dia]) ventasPorDia[dia] = { total:0, habs:0 };
+    ventasPorDia[dia].total += Number(v.total||0);
+    ventasPorDia[dia].habs++;
+    totalVentas += Number(v.total||0);
+    totalHabs++;
+    // Hora pico (basado en hora real del check-in)
+    if(v.ts_ms){
+      const d = new Date(Number(v.ts_ms));
+      // Ajuste UTC-5 Colombia
+      const hora = (d.getUTCHours() - 5 + 24) % 24;
+      ventasPorHora[hora] = (ventasPorHora[hora]||0) + 1;
+    }
+  });
+
+  // Mejor dia
+  let mejorDia = { fecha: '—', total: 0, habs: 0 };
+  Object.keys(ventasPorDia).forEach(fecha => {
+    const d = ventasPorDia[fecha];
+    if(d.total > mejorDia.total) mejorDia = { fecha:fecha, total:d.total, habs:d.habs };
+  });
+
+  // Hora pico
+  let horaPico = 0;
+  let pickCount = 0;
+  Object.keys(ventasPorHora).forEach(h => {
+    if(ventasPorHora[h] > pickCount){
+      pickCount = ventasPorHora[h];
+      horaPico = Number(h);
+    }
+  });
+
+  // 3. Ranking recepcionistas (este mes)
+  const recepMap = {};
+  (ventasMes||[]).forEach(v => {
+    if(v.anulada || v.type !== 'SALE') return;
+    const nm = v.user_name || '?';
+    if(!recepMap[nm]) recepMap[nm] = { nombre:nm, habs:0, total:0, turnos:0, fallas:0 };
+    recepMap[nm].habs++;
+    recepMap[nm].total += Number(v.total||0);
+  });
+
+  // Contar turnos trabajados y fallas (de tabla shift_log y shift_failures)
+  const { data: shiftLogs } = await supabase.from('shift_log')
+    .select('user_name, business_day')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay);
+  const turnosPorRecep = {};
+  (shiftLogs||[]).forEach(s => {
+    const nm = s.user_name || '?';
+    if(!turnosPorRecep[nm]) turnosPorRecep[nm] = 0;
+    turnosPorRecep[nm]++;
+  });
+
+  const { data: failures } = await supabase.from('shift_failures')
+    .select('user_name, business_day')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay);
+  const fallasPorRecep = {};
+  (failures||[]).forEach(f => {
+    const nm = f.user_name || '?';
+    if(!fallasPorRecep[nm]) fallasPorRecep[nm] = 0;
+    fallasPorRecep[nm]++;
+  });
+
+  Object.keys(recepMap).forEach(nm => {
+    recepMap[nm].turnos = turnosPorRecep[nm] || 0;
+    recepMap[nm].fallas = fallasPorRecep[nm] || 0;
+  });
+
+  const recepRanking = Object.values(recepMap).sort((a,b) => b.total - a.total);
+
+  // 4. Ranking camareras
+  const maidLogs = await fetchAll(() => supabase.from('maid_log')
+    .select('maid_name, business_day, started_ms, finished_ms, state_to')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .gt('finished_ms', 0)
+    .eq('state_to', 'AVAILABLE'));
+
+  const maidMap = {};
+  (maidLogs||[]).forEach(l => {
+    const nm = l.maid_name || '?';
+    if(!maidMap[nm]) maidMap[nm] = { nombre:nm, habs:0, totalMins:0 };
+    maidMap[nm].habs++;
+    maidMap[nm].totalMins += Math.round((Number(l.finished_ms) - Number(l.started_ms))/60000);
+  });
+  const maidRanking = Object.values(maidMap).sort((a,b) => b.habs - a.habs);
+
+  // 5. Habitaciones mas danadas
+  const { data: roomIssues } = await supabase.from('room_issues')
+    .select('room_id, costo, descripcion, business_day')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay);
+  const roomMap = {};
+  (roomIssues||[]).forEach(i => {
+    const rid = i.room_id || '?';
+    if(!roomMap[rid]) roomMap[rid] = { roomId:rid, count:0, totalCosto:0 };
+    roomMap[rid].count++;
+    roomMap[rid].totalCosto += Number(i.costo||0);
+  });
+  const habsDanadas = Object.values(roomMap).sort((a,b) => b.count - a.count).slice(0,5);
+
+  // 6. Proyeccion del mes
+  const { data: proyTareas } = await supabase.from('proyeccion_tareas')
+    .select('id, mes, fecha_estado, estado')
+    .eq('mes', mes);
+  let totalTareas = 0;
+  let ejecutadas = 0;
+  let pendientes = 0;
+  let noRealizadas = 0;
+  (proyTareas||[]).forEach(t => {
+    totalTareas++;
+    if(t.estado === 'OK' || t.fecha_estado) ejecutadas++;
+    else if(t.estado === 'NO') noRealizadas++;
+    else pendientes++;
+  });
+
+  // 7. Ocupacion promedio del mes (rooms vendidas / dias transcurridos / total rooms activos)
+  const diasConVentas = Object.keys(ventasPorDia).length;
+  const habsPorDia = diasConVentas > 0 ? totalHabs / diasConVentas : 0;
+  // Suponemos 30 habitaciones activas (esto se puede mejorar luego)
+  const ocupacionPct = Math.min(100, Math.round((habsPorDia / 30) * 100));
+
+  return ok(res, {
+    mes: mes,
+    resumen: {
+      mejorDia: mejorDia,
+      horaPico: { hora: horaPico, count: pickCount },
+      ocupacion: ocupacionPct,
+      totalVentas: totalVentas,
+      totalHabs: totalHabs,
+      diasConVentas: diasConVentas
+    },
+    recepRanking: recepRanking,
+    maidRanking: maidRanking,
+    habsDanadas: habsDanadas,
+    proyeccion: {
+      total: totalTareas,
+      ejecutadas: ejecutadas,
+      pendientes: pendientes,
+      noRealizadas: noRealizadas,
+      pct: totalTareas > 0 ? Math.round((ejecutadas/totalTareas)*100) : 0
+    },
+    horasPico: ventasPorHora,
+    ventasPorDia: ventasPorDia
   });
 }
 
