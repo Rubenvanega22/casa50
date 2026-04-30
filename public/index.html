@@ -685,32 +685,14 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <!-- METRICAS -->
 <div class="pnl" id="pnl-metrics">
-<div id="metv2box" style="display:none;background:#0a0a14;border:1px solid #6366f1;border-radius:10px;padding:14px;margin-bottom:14px">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-<div style="font-size:13px;font-weight:700;color:#a5b4fc">Version nueva (en construccion)</div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+<div style="font-size:18px;font-weight:900;color:#a78bfa">📊 Métricas</div>
 <div style="display:flex;gap:6px;align-items:center">
-<input type="month" id="mesv2" style="width:auto;margin:0;font-size:11px" onchange="loadnew()">
-<button class="btn ba xs" onclick="loadnew()">Cargar</button>
-<button class="btn bk xs" onclick="togglenew()">Cerrar</button>
+<input type="month" id="mesv2" style="width:auto;margin:0" onchange="loadnew()">
+<button class="refresh-btn" onclick="loadnew()">↻ Actualizar</button>
 </div>
 </div>
-<div id="contv2"><p style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Click en "Cargar" para ver la version nueva</p></div>
-</div>
-<div style="margin-bottom:10px;display:flex;justify-content:flex-end">
-<button class="btn xs" style="background:rgba(99,102,241,.15);color:#a5b4fc;border:0.5px solid #6366f1" onclick="togglenew()">Probar version nueva</button>
-</div>
-<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-<input type="date" id="mDay" style="width:auto;margin:0" onchange="loadM()">
-<select id="mSh" style="width:auto;margin:0" onchange="loadM()">
-<option value="">Todos los turnos</option>
-<option value="SHIFT_1">Turno 1</option>
-<option value="SHIFT_2">Turno 2</option>
-<option value="SHIFT_3">Turno 3</option>
-</select>
-<button class="btn bk xs" onclick="openGoal()">Meta</button>
-<button class="refresh-btn" onclick="loadM()">↻</button>
-</div>
-<div id="metCont"></div>
+<div id="contv2"><div style="color:#9ca3af;text-align:center;padding:30px;font-size:13px">⏳ Cargando dashboard...</div></div>
 </div>
 <!-- MES -->
 <div class="pnl" id="pnl-month">
@@ -6102,30 +6084,16 @@ function saveEditarAno(){
 
 
 
-// ---- DASHBOARD INTEGRAL (admin) ----
-var dashInterval=null;
+// ---- DASHBOARD METRICAS (redirige al nuevo dashboard) ----
 function loadM(){
-  if(!sess)return;
-  var day=document.getElementById('mDay').value||sess.businessDay;
-  var el=document.getElementById('metCont');
- if(!el.innerHTML.trim())el.innerHTML='<div style="color:#9ca3af;padding:20px;text-align:center">Cargando dashboard...</div>';
-  clearInterval(dashInterval);
- 
-    Promise.all([
-    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:''},r,function(){r({});});}),
-    new Promise(function(r){rpc('metricsHourly',{businessDay:day},r,function(){r({});});}),
-    new Promise(function(r){rpc('maidPanel',{userRole:sess.userRole,businessDay:day},r,function(){r({});});}),
-    new Promise(function(r){rpc('monthMetrics',{yearMonth:day.substring(0,7)},r,function(){r({});}); }),
-    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:'SHIFT_1'},r,function(){r({});});}),
-    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:'SHIFT_2'},r,function(){r({});});}),
-    new Promise(function(r){rpc('metrics',{businessDay:day,shiftId:'SHIFT_3'},r,function(){r({});});})
-  ]).then(function(res){
-    var barEf=Number(((res[4]||{}).totals||{}).shiftBarEfectivo||0)+Number(((res[5]||{}).totals||{}).shiftBarEfectivo||0)+Number(((res[6]||{}).totals||{}).shiftBarEfectivo||0);
-    var barTj=Number(((res[4]||{}).totals||{}).shiftBarTarjeta||0)+Number(((res[5]||{}).totals||{}).shiftBarTarjeta||0)+Number(((res[6]||{}).totals||{}).shiftBarTarjeta||0);
-    var barNq=Number(((res[4]||{}).totals||{}).shiftBarNequi||0)+Number(((res[5]||{}).totals||{}).shiftBarNequi||0)+Number(((res[6]||{}).totals||{}).shiftBarNequi||0);
-    el.innerHTML=renderDashboard(res[0],res[1],res[2],res[3],day,barEf,barTj,barNq);
-    dashInterval=setInterval(function(){loadM();},30000);
-  });
+  if(!sess||sess.userRole!=='ADMIN')return;
+  // Asegurar que el input mesv2 tenga el mes actual
+  var inp=document.getElementById('mesv2');
+  if(inp&&!inp.value){
+    var n=new Date();
+    inp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  }
+  loadnew();
 }
 
 function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
