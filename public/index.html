@@ -5348,7 +5348,119 @@ function loadnew(){
   var el=document.getElementById('contv2');
   if(!el)return;
   el.innerHTML='<div style="color:#9ca3af;padding:30px;text-align:center;font-size:13px">⏳ Cargando dashboard nuevo...</div>';
-  rpc('getMetricasMes',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(d){
+  // Cargar tambien grafica anio para tener crecimiento vs ano anterior
+  var ano=Number(mes.split('-')[0]);
+  Promise.all([
+    new Promise(function(r){rpc('getMetricasMes',{mes:mes,userName:sess.userName,userRole:sess.userRole},r,function(){r({});});}),
+    new Promise(function(r){rpc('getGraficaAnoAno',{ano:ano,userName:sess.userName,userRole:sess.userRole},r,function(){r({});});})
+  ]).then(function(res){
+    var d=res[0]||{};
+    var anoData=res[1]||{};
+    if(!d.resumen){
+      el.innerHTML='<div style="color:#ef4444;padding:30px;text-align:center;font-size:13px">Error cargando metricas</div>';
+      return;
+    }
+    var h=renderResumenRapido(d,anoData,mes);
+    h+=renderDebugMini(d);
+    el.innerHTML=h;
+  });
+}
+
+// Renderiza las 4 mini-tarjetas del resumen rapido
+function renderResumenRapido(d,anoData,mes){
+  var r=d.resumen||{};
+  var ac=anoData.acumulados||{ventasActual:0,ventasAnterior:0,pctVentas:0,gastosActual:0,gastosAnterior:0,pctGastos:0};
+  
+  // Mejor dia
+  var mejorDiaTxt='—';
+  var mejorDiaSub='Sin datos';
+  if(r.mejorDia&&r.mejorDia.fecha&&r.mejorDia.fecha!=='—'){
+    var f=r.mejorDia.fecha.split('-');
+    var meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    mejorDiaTxt=Number(f[2])+' '+meses[Number(f[1])-1];
+    mejorDiaSub=fmt(r.mejorDia.total)+' · '+r.mejorDia.habs+' hab';
+  }
+  
+  // Hora pico
+  var horaPicoTxt='—';
+  var horaPicoSub='Sin datos';
+  if(r.horaPico&&r.horaPico.count>0){
+    var h12=r.horaPico.hora;
+    var ampm=h12>=12?'pm':'am';
+    var h12d=h12>12?h12-12:(h12===0?12:h12);
+    horaPicoTxt=h12d+ampm;
+    var totalVentasMes=r.totalHabs||1;
+    var pctDia=Math.round((r.horaPico.count/totalVentasMes)*100);
+    horaPicoSub=r.horaPico.count+' ventas · '+pctDia+'% del mes';
+  }
+  
+  // Ventas vs ano anterior
+  var ventasPct=ac.pctVentas||0;
+  var ventasColor=ventasPct>0?'#22c55e':(ventasPct<0?'#ef4444':'#9ca3af');
+  var ventasIcon=ventasPct>0?'↑':(ventasPct<0?'↓':'—');
+  var ventasTxt=(ventasPct>0?'+':'')+ventasPct+'%';
+  var ventasSub=ac.ventasAnterior>0?'vs '+(Number(mes.split('-')[0])-1):'sin datos del año pasado';
+  
+  // Gastos vs ano anterior
+  var gastosPct=ac.pctGastos||0;
+  var gastosColor=gastosPct<=5?'#22c55e':(gastosPct<=15?'#f59e0b':'#ef4444');
+  var gastosIcon=gastosPct>0?'↑':(gastosPct<0?'↓':'—');
+  var gastosTxt=(gastosPct>0?'+':'')+gastosPct+'%';
+  var gastosSub=ac.gastosAnterior>0?'vs '+(Number(mes.split('-')[0])-1):'sin datos del año pasado';
+  
+  var h='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:14px;margin-bottom:14px">';
+  h+='<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:10px">📊 Resumen rápido del mes</div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">';
+  
+  // Mini tarjeta 1 - Mejor dia
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:8px;padding:10px">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">🏆 Mejor día</div>';
+  h+='<div style="font-size:16px;font-weight:700;color:#22c55e;margin-top:3px">'+esc(mejorDiaTxt)+'</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(mejorDiaSub)+'</div>';
+  h+='</div>';
+  
+  // Mini tarjeta 2 - Hora pico
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:8px;padding:10px">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">⏰ Hora pico</div>';
+  h+='<div style="font-size:16px;font-weight:700;color:#a855f7;margin-top:3px">'+esc(horaPicoTxt)+'</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(horaPicoSub)+'</div>';
+  h+='</div>';
+  
+  // Mini tarjeta 3 - Ventas vs ano
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:8px;padding:10px">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">💵 Ventas acumuladas ene-mes</div>';
+  h+='<div style="font-size:16px;font-weight:700;color:'+ventasColor+';margin-top:3px">'+ventasIcon+' '+esc(ventasTxt)+'</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(ventasSub)+'</div>';
+  h+='</div>';
+  
+  // Mini tarjeta 4 - Gastos vs ano
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:8px;padding:10px">';
+  h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">💸 Gastos acumulados ene-mes</div>';
+  h+='<div style="font-size:16px;font-weight:700;color:'+gastosColor+';margin-top:3px">'+gastosIcon+' '+esc(gastosTxt)+'</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-top:1px">'+esc(gastosSub)+'</div>';
+  h+='</div>';
+  
+  h+='</div></div>';
+  return h;
+}
+
+// Mini debug temporal - se quitara cuando este todo el dashboard
+function renderDebugMini(d){
+  var r=d.resumen||{};
+  var h='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#6b7280">';
+  h+='<div style="font-weight:700;color:#9ca3af;margin-bottom:4px">🔧 Debug (temporal)</div>';
+  h+='Total ventas: '+fmt(r.totalVentas||0)+' · ';
+  h+=(r.totalHabs||0)+' habs · ';
+  h+=(d.recepRanking||[]).length+' recep · ';
+  h+=(d.maidRanking||[]).length+' camareras · ';
+  h+=(d.habsDanadas||[]).length+' habs dañadas · ';
+  h+='proy '+(d.proyeccion||{ejecutadas:0}).ejecutadas+'/'+(d.proyeccion||{total:0}).total;
+  h+='</div>';
+  return h;
+}
+
+function _loadnewOriginal_no_usar(){
+  rpc('getMetricasMes',{mes:'',userName:sess.userName,userRole:sess.userRole},function(d){
     console.log('METRICAS NUEVAS:',d);
     var h='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:20px;margin-bottom:14px">';
     h+='<div style="font-size:14px;font-weight:700;color:#86efac;margin-bottom:10px">✓ Backend conectado correctamente</div>';
