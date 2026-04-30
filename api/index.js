@@ -260,6 +260,8 @@ module.exports = async function handler(req, res) {
       case 'addGastoMes':         return await apiAddGastoMes(payload, res);
       case 'editGastoMes':        return await apiEditGastoMes(payload, res);
       case 'anularGastoMes':      return await apiAnularGastoMes(payload, res);
+      case 'descargarNequi':      return await apiDescargarNequi(payload, res);
+      case 'anularDescargoNequi': return await apiAnularDescargoNequi(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
       case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
@@ -3242,7 +3244,7 @@ async function apiAddGastoMes(p, res) {
   const fecha = String(p.fecha||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
   const categoria = String(p.categoria||'').trim();
-  const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social'];
+  const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L'];
   if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida. Validas: '+CATEGORIAS_VALIDAS.join(', '));
   const concepto = String(p.concepto||'').trim();
   if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
@@ -3303,7 +3305,7 @@ async function apiEditGastoMes(p, res) {
   }
   if(p.categoria !== undefined){
     const categoria = String(p.categoria||'').trim();
-    const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social'];
+    const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L'];
     if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida');
     updates.categoria = categoria;
   }
@@ -3316,6 +3318,52 @@ async function apiEditGastoMes(p, res) {
   const { error } = await supabase.from('gastos_mes').update(updates).eq('id', gastoId);
   if(error) return err(res, error.message);
   return ok(res, { gastoId: gastoId });
+}
+
+// ==================== DESCARGAR NEQUI A EFECTIVO ====================
+async function apiDescargarNequi(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const fecha = String(p.fecha||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
+  const monto = Number(p.monto||0);
+  if(monto<=0) return err(res,'Monto debe ser mayor a 0');
+  const nota = String(p.nota||'').trim();
+  const mes = fecha.substring(0,7);
+  const now = Date.now();
+  const { data, error } = await supabase.from('descargos_nequi').insert({
+    ts_ms: now,
+    fecha: fecha,
+    mes: mes,
+    monto: monto,
+    nota: nota || null,
+    created_by: userName
+  }).select().single();
+  if(error) return err(res, error.message);
+  return ok(res, { descargo: data });
+}
+
+// ==================== ANULAR DESCARGO NEQUI ====================
+async function apiAnularDescargoNequi(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const descargoId = Number(p.descargoId||0);
+  if(!descargoId) return err(res,'descargoId requerido');
+  const { data: descargoActual, error: errD } = await supabase.from('descargos_nequi').select('*').eq('id', descargoId).maybeSingle();
+  if(errD) return err(res, errD.message);
+  if(!descargoActual) return err(res,'Descargo no encontrado');
+  if(descargoActual.anulada) return err(res,'Este descargo ya esta anulado');
+  const { error } = await supabase.from('descargos_nequi').update({
+    anulada: true,
+    anulada_ms: Date.now(),
+    anulada_por: userName
+  }).eq('id', descargoId);
+  if(error) return err(res, error.message);
+  return ok(res, { descargoId: descargoId });
 }
 
 // ==================== ANULAR GASTO DEL MES ====================
