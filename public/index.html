@@ -5368,6 +5368,7 @@ function loadnew(){
     h+='<div id="graf1box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica día a día...</div></div>';
     h+='<div id="graf2box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica año a año...</div></div>';
     h+='<div id="rankBox" style="margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando rankings...</div></div>';
+    h+=renderInfoMes(d);
     h+=renderDebugMini(d);
     el.innerHTML=h;
     // Cargar metricas del mes anterior para el comparativo de rankings
@@ -5804,6 +5805,71 @@ function renderRankings(d,dPrev){
       h+='</div>';
       h+='</div>';
     });
+  }
+  h+='</div>';
+  
+  h+='</div>';
+  return h;
+}
+
+// Renderiza las 2 cajas inferiores: habitaciones danadas + proyeccion del mes
+function renderInfoMes(d){
+  var habsDanadas=d.habsDanadas||[];
+  var proy=d.proyeccion||{total:0,ejecutadas:0,pendientes:0,noRealizadas:0,pct:0};
+  
+  var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
+  
+  // PANEL IZQUIERDA - Habitaciones más dañadas
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:4px">🔧 Habitaciones más dañadas</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Mes en curso · # reportes · costo</div>';
+  if(!habsDanadas.length){
+    h+='<div style="background:rgba(34,197,94,.06);border:0.5px solid rgba(34,197,94,.2);border-radius:8px;padding:14px;text-align:center;font-size:12px;color:#86efac">✓ Sin reportes de daños este mes</div>';
+  } else {
+    habsDanadas.slice(0,5).forEach(function(r,i){
+      var bg=i===0?'rgba(239,68,68,.08)':'transparent';
+      var roomColor=i===0?'#ef4444':'#e5e7eb';
+      var countColor=i===0?'#ef4444':'#e5e7eb';
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:8px;background:'+bg+';border-radius:6px;margin-bottom:4px">';
+      h+='<div style="font-size:13px;font-weight:700;color:'+roomColor+';min-width:42px">'+esc(String(r.roomId))+'</div>';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:11px;color:#9ca3af">';
+      h+=r.totalCosto>0?(fmt(r.totalCosto)+' en reparaciones'):'sin costos registrados';
+      h+='</div>';
+      h+='</div>';
+      h+='<div style="text-align:right">';
+      h+='<div style="font-size:13px;font-weight:700;color:'+countColor+'">'+r.count+'</div>';
+      h+='<div style="font-size:9px;color:#9ca3af">'+(r.count===1?'reporte':'reportes')+'</div>';
+      h+='</div>';
+      h+='</div>';
+    });
+  }
+  h+='</div>';
+  
+  // PANEL DERECHA - Proyeccion del mes
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:4px">🎯 Proyección del mes</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Tareas ejecutadas vs plan</div>';
+  if(proy.total===0){
+    h+='<div style="background:rgba(245,158,11,.06);border:0.5px solid rgba(245,158,11,.2);border-radius:8px;padding:14px;text-align:center;font-size:12px;color:#fbbf24">📌 Sin proyección creada para este mes</div>';
+  } else {
+    // Barra de progreso
+    var barColor=proy.pct>=80?'#22c55e':proy.pct>=50?'#f59e0b':'#ef4444';
+    h+='<div style="margin-bottom:12px">';
+    h+='<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">';
+    h+='<span style="color:#9ca3af">'+proy.ejecutadas+' de '+proy.total+' tareas</span>';
+    h+='<span style="font-weight:700;color:'+barColor+'">'+proy.pct+'%</span>';
+    h+='</div>';
+    h+='<div style="height:8px;background:#22222c;border-radius:4px;overflow:hidden">';
+    h+='<div style="width:'+proy.pct+'%;height:100%;background:'+barColor+';transition:width .5s"></div>';
+    h+='</div>';
+    h+='</div>';
+    // Detalles
+    h+='<div style="font-size:11px;color:#9ca3af">';
+    h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid #2e2e3a"><span>✓ Ejecutadas</span><span style="color:#22c55e;font-weight:700">'+proy.ejecutadas+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid #2e2e3a"><span>⏳ Pendientes</span><span style="color:#f59e0b;font-weight:700">'+proy.pendientes+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:4px 0"><span>✗ No realizadas</span><span style="color:#ef4444;font-weight:700">'+proy.noRealizadas+'</span></div>';
+    h+='</div>';
   }
   h+='</div>';
   
