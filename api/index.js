@@ -3584,33 +3584,37 @@ async function apiGetMetricasMes(p, res) {
   });
   const maidRanking = Object.values(maidMap).sort((a,b) => b.habs - a.habs);
 
-  // 5. Habitaciones mas danadas
+  // 5. Habitaciones mas danadas (filtrar por created_at del mes en curso)
+  const firstDayTs = `${firstDay}T00:00:00`;
+  const lastDayTs = `${lastDay}T23:59:59`;
   const { data: roomIssues } = await supabase.from('room_issues')
-    .select('room_id, costo, descripcion, business_day')
-    .gte('business_day', firstDay)
-    .lte('business_day', lastDay);
+    .select('room_id, type, description, resolved, created_at')
+    .gte('created_at', firstDayTs)
+    .lte('created_at', lastDayTs);
   const roomMap = {};
   (roomIssues||[]).forEach(i => {
     const rid = i.room_id || '?';
-    if(!roomMap[rid]) roomMap[rid] = { roomId:rid, count:0, totalCosto:0 };
+    if(!roomMap[rid]) roomMap[rid] = { roomId:rid, count:0, totalCosto:0, pendientes:0 };
     roomMap[rid].count++;
-    roomMap[rid].totalCosto += Number(i.costo||0);
+    if(!i.resolved) roomMap[rid].pendientes++;
   });
   const habsDanadas = Object.values(roomMap).sort((a,b) => b.count - a.count).slice(0,5);
 
-  // 6. Proyeccion del mes
+  // 6. Proyeccion del mes (mes y anio son numericos en la tabla)
   const { data: proyTareas } = await supabase.from('proyeccion_tareas')
-    .select('id, mes, fecha_estado, estado')
-    .eq('mes', mes);
+    .select('id, anio, mes, estado, fecha_estado')
+    .eq('anio', year)
+    .eq('mes', month);
   let totalTareas = 0;
   let ejecutadas = 0;
   let pendientes = 0;
   let noRealizadas = 0;
   (proyTareas||[]).forEach(t => {
     totalTareas++;
-    if(t.estado === 'OK' || t.fecha_estado) ejecutadas++;
-    else if(t.estado === 'NO') noRealizadas++;
-    else pendientes++;
+    const est = String(t.estado||'').toLowerCase();
+    if(est === 'realizado') ejecutadas++;
+    else if(est === 'no_realizado' || est === 'no realizado') noRealizadas++;
+    else pendientes++; // pendiente, en_proceso, vacio
   });
 
   // 7. Ocupacion promedio del mes (rooms vendidas / dias transcurridos / total rooms activos)
