@@ -108,25 +108,7 @@ function mapRoom(r) {
     payMethod: r.pay_method || ''
   };
 }
-// ==================== HELPER DE PAGINACION ====================
-// Trae TODAS las filas de una consulta Supabase, paginando en lotes de 1000.
-// Se usa para consultas de rangos largos (ej: mes completo) donde Supabase
-// corta por defecto a 1000 filas aunque pidas mas con .range().
-//
-// Uso: const sales = await fetchAll(() => supabase.from('sales').select('...').like('business_day', '2026-04%'));
-async function fetchAll(queryBuilder, batchSize = 1000) {
-  const all = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await queryBuilder().range(from, from + batchSize - 1);
-    if (error) throw error;
-    if (!data || !data.length) break;
-    all.push(...data);
-    if (data.length < batchSize) break;
-    from += batchSize;
-  }
-  return all;
-}
+
 // ==================== HANDLER PRINCIPAL ====================
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
@@ -224,7 +206,6 @@ module.exports = async function handler(req, res) {
       case 'getShiftFailures':  return await apiGetShiftFailures(payload, res);
      case 'saveObservacionTurno':   return await apiSaveObservacionTurno(payload, res);
       case 'getObservacionesTurno':  return await apiGetObservacionesTurno(payload, res);
-      case 'getProductosMes':        return await apiGetProductosMes(payload, res);
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
@@ -232,12 +213,6 @@ module.exports = async function handler(req, res) {
       case 'addStock':               return await apiAddStock(payload, res);
       case 'ingresoBodega':          return await apiIngresoBodega(payload, res);
       case 'trasladoRecepcion':      return await apiTrasladoRecepcion(payload, res);
-      case 'devolverABodega':        return await apiDevolverABodega(payload, res);
-      case 'agregarPersonaManual':   return await apiAgregarPersonaManual(payload, res);
-      case 'getHabitacionesTurno':   return await apiGetHabitacionesTurno(payload, res);
-      case 'getExtrasHabitacion':    return await apiGetExtrasHabitacion(payload, res);
-      case 'agregarHoraExtraManual': return await apiAgregarHoraExtraManual(payload, res);
-      case 'getPersonasHabitacion':  return await apiGetPersonasHabitacion(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -245,23 +220,6 @@ module.exports = async function handler(req, res) {
       case 'saveCortesia':       return await apiSaveCortesia(payload, res);
       case 'saveRoomBarcode':    return await apiSaveRoomBarcode(payload, res);
       case 'anularVenta':        return await apiAnularVenta(payload, res);
-      case 'anularVentaModulo':  return await apiAnularVentaModulo(payload, res);
-      case 'agregarVentaManual': return await apiAgregarVentaManual(payload, res);
-      case 'listGastosTurno':    return await apiListGastosTurno(payload, res);
-      case 'agregarGastoManual': return await apiAgregarGastoManual(payload, res);
-      case 'editarGastoModulo':  return await apiEditarGastoModulo(payload, res);
-      case 'anularGastoModulo':  return await apiAnularGastoModulo(payload, res);
-      case 'ajusteInventario':   return await apiAjusteInventario(payload, res);
-      case 'ajusteInventarioV2': return await apiAjusteInventarioV2(payload, res);
-     case 'getHistorialAjustes': return await apiGetHistorialAjustes(payload, res); 
-      case 'getPrintTurno':      return await apiGetPrintTurno(payload, res);
-      case 'getResumenMes':      return await apiGetResumenMes(payload, res);
-      case 'getGastosMesResumen': return await apiGetGastosMesResumen(payload, res);
-      case 'addGastoMes':         return await apiAddGastoMes(payload, res);
-      case 'editGastoMes':        return await apiEditGastoMes(payload, res);
-      case 'anularGastoMes':      return await apiAnularGastoMes(payload, res);
-      case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
-      case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -295,7 +253,7 @@ async function apiGetRooms(req, res) {
 // ==================== LOGIN ====================
 async function apiLogin(p, res) {
   const now = Date.now();
-  let bDay = businessDay(now);
+  const bDay = businessDay(now);
   let shift = String(p.shiftId||'').trim()||currentShiftId(now);
   shift = normalizeShiftId(shift);
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shift)) shift=currentShiftId(now);
@@ -311,12 +269,7 @@ async function apiLogin(p, res) {
       if(logoutT3&&logoutT3.length){
         const logoutHour = new Date(Number(logoutT3[0].ts_ms) + (-5*3600000)).getUTCHours();
         // Solo cambia a SHIFT_1 si el logout fue tambien en la madrugada
-        if(logoutHour >= 0 && logoutHour < 6){
-          shift = 'SHIFT_1';
-          // Avanzar el business_day un día porque este SHIFT_1 pertenece al dia siguiente comercialmente
-          const tomorrow = new Date(now + 24 * 3600 * 1000);
-          bDay = tomorrow.toISOString().slice(0,10);
-        }
+        if(logoutHour >= 0 && logoutHour < 6) shift = 'SHIFT_1';
       }
     }
   }
@@ -397,8 +350,8 @@ async function apiLogin(p, res) {
               .in('action', ['LOGIN','RELOGIN'])
               .limit(1);
             // Si el nuevo turno NO estaba abierto aun, bloquear
-           if(!newShiftOpen || !newShiftOpen.length) {
-              // No bloquear — registrar advertencia y dejar entrar
+            if(!newShiftOpen || !newShiftOpen.length) {
+              return err(res, 'TURNO_NO_CERRADO:' + prevLogin[0].user_name);
             }
             // Si ya estaba abierto, dejar pasar (turno anterior en pendiente cierre)
           }
@@ -409,11 +362,11 @@ async function apiLogin(p, res) {
     const { data: existing } = await supabase.from('shift_log').select('user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
     if (existing && existing.user_name.toLowerCase() !== userName.toLowerCase()) {
       const { data: logout } = await supabase.from('shift_log').select('id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
-    if (!logout || !logout.length) {
-        // No bloquear — permitir reingreso
+      if (!logout || !logout.length) {
+        return err(res, 'Este turno ya tiene recepcionista: ' + existing.user_name);
       }
     }
- await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
+    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now, fromMs } });
@@ -529,7 +482,7 @@ async function apiCheckIn(p, res) {
 async function apiCheckOut(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const shift = currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const obs = String(p.checkoutObs || p.obs || '').trim();
@@ -563,14 +516,6 @@ async function apiCheckOut(p, res) {
     meta_json: JSON.stringify({ lastCheckoutMs: now, checkoutObs: obs })
   });
 
-  const checkInMs = Number(room.check_in_ms || 0);
-  if (checkInMs > 0) {
-    await supabase.from('sales')
-      .update({ checkout_ms: now })
-      .eq('room_id', roomId)
-      .eq('type', 'SALE')
-      .eq('check_in_ms', checkInMs);
-  }
   return ok(res, { roomId, checkoutMs: now });
 }
 
@@ -898,7 +843,7 @@ async function apiSetDisabled(p, res) {
 async function apiRefund(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const shift = currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const amount = Math.max(1, Number(p.amount || 0));
@@ -921,7 +866,7 @@ async function apiRefund(p, res) {
 async function apiTaxi(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const shift = currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
   const { data } = await supabase.from('taxi_expenses').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
@@ -1163,13 +1108,11 @@ async function apiCloseShift(p, res) {
   let totalProductos=0, totalProductosEf=0, totalProductosTa=0, totalProductosNq=0;
 
   (salesRes.data || []).forEach(r => {
-    if (r.anulada) return;
     if (String(r.room_id) === '304') return;
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
     if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'REFUND') totalRefunds += t;
-    if (r.type === 'RENEWAL') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
-    if (r.type === 'EXTENSION') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
+    if (r.type === 'EXTENSION' || r.type === 'RENEWAL') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
   });
   (taxiRes.data||[]).forEach(r=>{totalTaxi+=Number(r.amount||0);});
   (prodRes.data||[]).forEach(r=>{
@@ -1201,7 +1144,15 @@ async function apiCloseShift(p, res) {
     total_productos_nq: totalProductosNq
   });
 
-  // Bar bar_sales removido - duplicaba valores de room_products
+  const barNQ=Number(p.barNQ||0),barTj=Number(p.barTarjeta||0);
+  if(barNQ+barTj>0){
+    await supabase.from('bar_sales').insert({
+      ts_ms:now,business_day:bDay,shift_id:shift,
+      user_name:userName,description:'Bar turno cierre',
+      amount_cash:barNQ,amount_card:barTj,amount_nequi:0,
+      total:barNQ+barTj
+    });
+  }
   return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
 }
 
@@ -1232,14 +1183,13 @@ async function apiMetrics(p, res) {
   (salesRes.data||[]).forEach(r=>{
     const t=Number(r.total||0),type=r.type,pm=String(r.pay_method||'').toUpperCase(),sid=r.shift_id;
     const isRev=type==='SALE'||type==='EXTENSION'||type==='RENEWAL';
-    if(r.anulada)return;
     const skip304 = String(r.room_id) === '304';
     if(isRev){
       if(!skip304){
         dayTotal+=t;
         if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
       }
-      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0)});
+      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||'')});
       if(!shiftFilter||sid===shiftFilter){
         if(!skip304){
           shiftSales+=t;
@@ -1248,7 +1198,7 @@ async function apiMetrics(p, res) {
         }
       }
     }
-    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
+    if(type==='REFUND'){dayRefunds+=t;if(!shiftFilter||sid===shiftFilter)shiftSales+=t;allSalesList.push({tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
   });
 const {data:prodSales}=await supabase.from('room_products').select('*').eq('business_day',bDay);
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
@@ -1265,10 +1215,9 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
     taxiList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,roomId:r.room_id||'',amount:a,businessDay:r.business_day||''});
   });
 
- let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
+  let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=a;shiftBarEfe+=Number(r.amount_cash||0);shiftBarTar+=Number(r.amount_card||0);shiftBarNeq+=Number(r.amount_nequi||0);}});
-  const{data:roomProdsBar}=await supabase.from('room_products').select('shift_id,pay_method,total,is_cortesia').eq('business_day',bDay).eq('is_cortesia',false);
-  (roomProdsBar||[]).forEach(r=>{const t=Number(r.total||0),pm=String(r.pay_method||'EFECTIVO').toUpperCase();dayBar+=t;if(pm==='TARJETA'){dayBarTar+=t;}else if(pm==='NEQUI'){dayBarNeq+=t;}else{dayBarEfe+=t;}if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=t;if(pm==='TARJETA'){shiftBarTar+=t;}else if(pm==='NEQUI'){shiftBarNeq+=t;}else{shiftBarEfe+=t;}}});
+  (loansRes.data||[]).forEach(r=>{dayLoans+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
 
   const dayNet=dayTotal+dayBar+dayRefunds-dayTaxi-dayLoans-dayExtraStaff-dayGastos;
@@ -1328,147 +1277,50 @@ async function apiMetricsHourly(p, res) {
 async function apiMonthMetrics(p, res) {
   const ym = String(p.yearMonth || '');
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
-
-  // Queries que pueden superar 1000 filas — usan el helper fetchAll
-  const salesData = await fetchAll(() => supabase.from('sales')
-    .select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada')
-    .like('business_day', ym+'%'));
-  const maidLogsData = await fetchAll(() => supabase.from('maid_log')
-    .select('maid_name,finished_ms,started_ms,state_to')
-    .like('business_day', ym+'%'));
-  const roomProdsData = await fetchAll(() => supabase.from('room_products')
-    .select('business_day,shift_id,pay_method,total,is_cortesia')
-    .like('business_day', ym+'%'));
-
-  // Queries pequeñas — se mantienen con Promise.all normal
-  const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
-    supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
-    supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
-    supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
-    supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
-    supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-    supabase.from('bar_sales').select('business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
-  ]);
-
-  // Envolver los arrays paginados en {data: ...} para compatibilidad con el código existente
-  const salesRes = { data: salesData };
-  const maidLogsRes = { data: maidLogsData };
-  const roomProdsRes = { data: roomProdsData };
-
-  const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
-  const mkShift = () => ({
-    responsable:'—',
-    tj_hab:0,tj_padd:0,tj_had:0,tj_bar:0,
-    ef_hab:0,ef_padd:0,ef_had:0,ef_bar:0,
-    nq_hab:0,nq_padd:0,nq_had:0,nq_bar:0,
-    gastos:0,taxis:0,turnos:0,
-    roomsSold:0
-  });
-  const mkDay = (d) => {
-    const o = {day:d,roomsSold:0,people:0};
-    SHIFTS.forEach(s=>{o[s]=mkShift();});
-    return o;
-  };
-
+  const { data: sales } = await supabase.from('sales').select('business_day,type,total,people,user_name').like('business_day', ym + '%');
+  const { data: taxi } = await supabase.from('taxi_expenses').select('business_day,amount').like('business_day', ym + '%');
+  const { data: loansMonth } = await supabase.from('loans').select('business_day,amount').like('business_day', ym + '%');
+  const { data: extraMonth } = await supabase.from('extra_staff').select('business_day,payment').like('business_day', ym + '%');
+  const { data: maidLogsMonth } = await supabase.from('maid_log').select('maid_name,finished_ms,started_ms,state_to').like('business_day', ym + '%');
   const dayMap = {};
-  const getDay = d => { if(!dayMap[d])dayMap[d]=mkDay(d); return dayMap[d]; };
-
-  // Responsables por turno/día
-  (shiftLogRes.data||[]).forEach(r=>{
-    const d=getDay(r.business_day);
-    const sid=r.shift_id;
-    if(SHIFTS.includes(sid)&&d[sid].responsable==='—') d[sid].responsable=r.user_name||'—';
-  });
-
-  // Ventas
-  (salesRes.data||[]).forEach(r=>{
-    if(r.anulada)return;
-    if(String(r.room_id)==='304') return;
-    const d=getDay(r.business_day);
-    const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
-    const s=d[sid];
-    const t=Number(r.total||0), pm=String(r.pay_method||'EFECTIVO').toUpperCase();
-    const epv=Number(r.extra_people_value||0);
- if(r.type==='SALE'){
-      d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
-      const base=t-epv;
-      if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
-      else if(pm==='NEQUI'){s.nq_hab+=base;s.nq_padd+=epv;}
-      else if(pm==='MIXTO'){s.ef_hab+=Number(r.amount_1||0);s.tj_hab+=Number(r.amount_2||0);s.nq_hab+=Number(r.amount_3||0);}
-      else{s.ef_hab+=base;s.ef_padd+=epv;}
-    }
-    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
-      if(pm==='TARJETA')s.tj_had+=t;
-      else if(pm==='NEQUI')s.nq_had+=t;
-      else if(pm==='MIXTO'){s.ef_had+=Number(r.amount_1||0);s.tj_had+=Number(r.amount_2||0);s.nq_had+=Number(r.amount_3||0);}
-      else s.ef_had+=t;
-    }
-  });
-
-  // Bar productos
-  (roomProdsRes.data||[]).forEach(r=>{
-    if(r.is_cortesia)return;
-    const d=getDay(r.business_day);
-    const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
-    const s=d[sid], pm=String(r.pay_method||'EFECTIVO').toUpperCase(), t=Number(r.total||0);
-    if(pm==='TARJETA')s.tj_bar+=t;
-    else if(pm==='NEQUI')s.nq_bar+=t;
-    else s.ef_bar+=t;
-  });
-
-
-  // Gastos
-  (taxiRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
-  (loansRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
-  (extraRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].turnos+=Number(r.payment||0);});
-
+  const ed = d => { if(!dayMap[d])dayMap[d]={day:d,sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0}; return dayMap[d]; };
+  (sales||[]).forEach(r=>{const d=ed(r.business_day),t=Number(r.total||0);if(['SALE','EXTENSION','RENEWAL'].includes(r.type)){d.sales+=t;if(r.type==='SALE'){d.roomsSold++;d.people+=Number(r.people||0);}}if(r.type==='REFUND')d.refunds+=t;});
+  (taxi||[]).forEach(r=>{ed(r.business_day).taxi+=Number(r.amount||0);});
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
-
-  // Calcular netos por turno y totales por día
-  days.forEach(d=>{
-    d.totalTarjeta=0;d.totalEfectivo=0;d.totalNequi=0;d.totalGastos=0;d.netodia=0;
-    SHIFTS.forEach(sid=>{
-      const s=d[sid];
-      s.totalTarjeta=s.tj_hab+s.tj_padd+s.tj_had+s.tj_bar;
-      s.totalEfectivo=s.ef_hab+s.ef_padd+s.ef_had+s.ef_bar;
-      s.totalNequi=s.nq_hab+s.nq_padd+s.nq_had+s.nq_bar;
-      s.totalGastos=s.gastos+s.taxis+s.turnos;
-   s.netoTurno=s.totalTarjeta+s.totalEfectivo+s.totalNequi-s.totalGastos;
-      d.totalTarjeta+=s.totalTarjeta;
-      d.totalEfectivo+=s.totalEfectivo;
-      d.totalNequi+=s.totalNequi;
-      d.totalGastos+=s.totalGastos;
-    });
-    d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;
-  });
-
-  const monthTotals={sales:0,tarjeta:0,efectivo:0,nequi:0,gastos:0,neto:0,roomsSold:0,people:0,expenses:0};
-  days.forEach(d=>{
-    monthTotals.tarjeta+=d.totalTarjeta;
-    monthTotals.efectivo+=d.totalEfectivo;
-    monthTotals.nequi+=d.totalNequi;
-    monthTotals.gastos+=d.totalGastos;
-    monthTotals.neto+=d.netodia;
-    monthTotals.roomsSold+=d.roomsSold;
-    monthTotals.people+=d.people||0;
-  });
-  monthTotals.sales=monthTotals.tarjeta+monthTotals.efectivo+monthTotals.nequi;
-  monthTotals.expenses=monthTotals.gastos;
-
-  // Rankings
+  days.forEach(d=>{d.net=d.sales+d.refunds-d.taxi;});
+ 
+  const mesLoans=(loansMonth||[]).reduce((a,r)=>a+Number(r.amount||0),0);
+  const mesExtra=(extraMonth||[]).reduce((a,r)=>a+Number(r.payment||0),0);
+  const mesTaxi=days.reduce((a,d)=>a+d.taxi,0);
+  const monthTotals = days.reduce((acc,d)=>{acc.sales+=d.sales;acc.refunds+=d.refunds;acc.taxi+=d.taxi;acc.net+=d.net;acc.people+=d.people;acc.roomsSold+=d.roomsSold;return acc;},{sales:0,refunds:0,taxi:0,net:0,people:0,roomsSold:0});
+  monthTotals.expenses=mesLoans+mesExtra+mesTaxi;
   const recepMes={};
-  (salesRes.data||[]).filter(r=>r.type==='SALE').forEach(r=>{const nm=r.user_name||'?';if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};recepMes[nm].habs++;recepMes[nm].total+=Number(r.total||0);});
+  (sales||[]).filter(r=>r.type==='SALE').forEach(r=>{
+    const nm=r.user_name||'?';
+    if(!recepMes[nm])recepMes[nm]={nombre:nm,habs:0,total:0};
+    recepMes[nm].habs++;recepMes[nm].total+=Number(r.total||0);
+  });
   const recepRankingMes=Object.values(recepMes).sort((a,b)=>b.total-a.total);
-
   const maidMes={};
-  (maidLogsRes.data||[]).filter(r=>Number(r.finished_ms||0)>0&&r.state_to==='AVAILABLE').forEach(r=>{const nm=r.maid_name||'?';if(!maidMes[nm])maidMes[nm]={nombre:nm,habs:0,totalMins:0};maidMes[nm].habs++;maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);});
+  (maidLogsMonth||[]).filter(r=>Number(r.finished_ms||0)>0&&r.state_to==='AVAILABLE').forEach(r=>{
+    const nm=r.maid_name||'?';
+    if(!maidMes[nm])maidMes[nm]={nombre:nm,habs:0,totalMins:0};
+    maidMes[nm].habs++;maidMes[nm].totalMins+=Math.round((Number(r.finished_ms)-Number(r.started_ms))/60000);
+  });
   const maidRankingMes=Object.values(maidMes).sort((a,b)=>b.habs-a.habs);
-
-  const errorMap={};
-  (failuresRes.data||[]).forEach(f=>{const nm=f.user_name||'?';if(!errorMap[nm])errorMap[nm]={nombre:nm,total:0,detalles:[]};let fallas=[];try{fallas=Array.isArray(f.failures)?f.failures:JSON.parse(f.failures||'[]');}catch(e){}errorMap[nm].total+=fallas.length;errorMap[nm].detalles.push({fecha:f.business_day,turno:f.shift_id,fallas,creadoPor:f.created_by||''});});
-  const errorRanking=Object.values(errorMap).sort((a,b)=>b.total-a.total);
-
-  return ok(res, { yearMonth:ym, monthTotals, days, recepRankingMes, maidRankingMes, errorRanking });
+  // Ranking de errores recepcionistas
+  const { data: failures } = await supabase.from('shift_failures').select('*').like('business_day', ym + '%');
+  const errorMap = {};
+  (failures||[]).forEach(f => {
+    const nm = f.user_name || '?';
+    if(!errorMap[nm]) errorMap[nm] = { nombre: nm, total: 0, detalles: [] };
+    let fallas = [];
+    try { fallas = Array.isArray(f.failures) ? f.failures : JSON.parse(f.failures || '[]'); } catch(e) {}
+    errorMap[nm].total += fallas.length;
+    errorMap[nm].detalles.push({ fecha: f.business_day, turno: f.shift_id, fallas, creadoPor: f.created_by || '' });
+  });
+  const errorRanking = Object.values(errorMap).sort((a, b) => b.total - a.total);
+  return ok(res, { yearMonth: ym, monthTotals, days, recepRankingMes, maidRankingMes, errorRanking });
 }
 
 // ==================== PANEL CAMARERAS ====================
@@ -1699,7 +1551,6 @@ async function apiGetDailyCuadre(p, res) {
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
-    if(r.anulada)return;
     if(String(r.room_id) === '304') return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
     if(r.type==='SALE'){
@@ -1708,13 +1559,7 @@ async function apiGetDailyCuadre(p, res) {
       else if(pm==='MIXTO'){c[sid].efectivoHab+=Number(r.amount_1||0);c[sid].tarjetaHab+=Number(r.amount_2||0);c[sid].nequiHab=(c[sid].nequiHab||0)+Number(r.amount_3||0);}
       else{c[sid].efectivoHab+=habVal;c[sid].efectivoPersonas+=epv;}
     }
-    if(r.type==='RENEWAL'){
-      const habVal=t-epv;
-      if(pm==='TARJETA'){c[sid].tarjetaHab+=habVal;c[sid].tarjetaPersonas+=epv;}
-      else if(pm==='MIXTO'){c[sid].efectivoHab+=Number(r.amount_1||0);c[sid].tarjetaHab+=Number(r.amount_2||0);c[sid].nequiHab=(c[sid].nequiHab||0)+Number(r.amount_3||0);}
-      else{c[sid].efectivoHab+=habVal;c[sid].efectivoPersonas+=epv;}
-    }
-    if(r.type==='EXTENSION'){
+    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
       if(pm==='TARJETA')c[sid].tarjetaHoras+=t;
       else if(pm==='MIXTO'){c[sid].efectivoHoras+=Number(r.amount_1||0);c[sid].tarjetaHoras+=Number(r.amount_2||0);}
       else c[sid].efectivoHoras+=t;
@@ -1740,185 +1585,6 @@ async function apiGetDailyCuadre(p, res) {
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
 
-async function apiGetPersonasHabitacion(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const businessDayParam = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  const roomId = String(p.roomId||'').trim();
-  if(!businessDayParam) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  if(!roomId) return err(res,'roomId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price')
-    .eq('business_day', businessDayParam)
-    .eq('shift_id', shiftId)
-    .eq('room_id', roomId)
-    .in('type', ['SALE', 'ANULADA'])
-    .eq('duration_hrs', 0)
-    .eq('base_price', 0)
-    .gt('extra_people_value', 0)
-    .order('ts_ms', { ascending: true });
-  if(error) return err(res, error.message);
-  return ok(res, { personas: data || [] });
-}
-async function apiAgregarHoraExtraManual(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar horas extra manualmente');
-  const businessDayParam = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  const roomId = String(p.roomId||'').trim();
-  const extraHrs = Number(p.extraHrs||0);
-  const total = Number(p.total||0);
-  const payMethod = String(p.payMethod||'EFECTIVO').toUpperCase();
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!businessDayParam) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  if(!roomId) return err(res,'roomId requerido');
-  if(extraHrs<=0||extraHrs>6) return err(res,'Horas extra inválidas (1-6)');
-  if(total<=0) return err(res,'Total inválido');
-  if(!motivo||motivo.length<5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
-  const room = await getRoom(roomId);
-  if(!room) return err(res,'Habitación no existe');
-  const now = Date.now();
-  const noteFinal = '[MANUAL] '+motivo;
-  let amount_1=null, amount_2=null, amount_3=null, pay_method_2=null;
-  if(payMethod==='MIXTO'){
-    amount_1=Number(p.amount_1||0);
-    amount_2=Number(p.amount_2||0);
-    amount_3=Number(p.amount_3||0);
-    if((amount_1+amount_2+amount_3)!==total) return err(res,'Suma del mixto debe ser igual al total');
-    pay_method_2='MIXTO';
-  }
-  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
-    ts_ms: now,
-    business_day: businessDayParam,
-    shift_id: shiftId,
-    user_role: 'ADMIN',
-    user_name: userName,
-    type: 'EXTENSION',
-    room_id: roomId,
-    category: room.category,
-    duration_hrs: extraHrs,
-    base_price: total,
-    people: Number(room.people||0),
-    extra_hours: extraHrs,
-    extra_hours_value: total,
-    total: total,
-    pay_method: payMethod,
-    pay_method_2: pay_method_2,
-    amount_1: amount_1,
-    amount_2: amount_2,
-    amount_3: amount_3,
-    note: noteFinal,
-    anulada: false
-  }).select('id').single();
-  if(errIns) return err(res,'Error guardando hora extra: '+errIns.message);
-  await supabase.from('state_history').insert({
-    ts_ms: now,
-    business_day: businessDayParam,
-    shift_id: shiftId,
-    user_role: userRole,
-    user_name: userName,
-    room_id: roomId,
-    from_state: 'AJUSTE',
-    to_state: 'HORA_EXTRA_MANUAL',
-    people: Number(room.people||0),
-    meta_json: JSON.stringify({
-      accion:'HORA_EXTRA_AGREGADA_MANUAL',
-      saleId: inserted.id,
-      motivo: motivo,
-      total: total,
-      pay_method: payMethod,
-      extra_hours: extraHrs
-    })
-  });
-  return ok(res,{saleId:inserted.id, total, extraHrs});
-}
-async function apiGetExtrasHabitacion(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const businessDayParam = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  const roomId = String(p.roomId||'').trim();
-  if(!businessDayParam) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  if(!roomId) return err(res,'roomId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note')
-    .eq('business_day', businessDayParam)
-    .eq('shift_id', shiftId)
-    .eq('room_id', roomId)
-    .in('type', ['EXTENSION', 'ANULADA'])
-    .gt('extra_hours', 0)
-    .order('ts_ms', { ascending: true });
-  if(error) return err(res, error.message);
-  return ok(res, { extras: data || [] });
-}
-async function apiGetHabitacionesTurno(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const businessDayParam = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  if(!businessDayParam) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('room_id, category, type, anulada, duration_hrs, base_price, extra_people_value')
-    .eq('business_day', businessDayParam)
-    .eq('shift_id', shiftId)
-    .in('type', ['SALE', 'RENEWAL', 'EXTENSION']);
-  if(error) return err(res, error.message);
-  const habitacionesMap = {};
-  (data||[]).forEach(r => {
-    if(r.anulada) return;
-    if(!habitacionesMap[r.room_id]) {
-      habitacionesMap[r.room_id] = { roomId: r.room_id, category: r.category, countExtensiones: 0, countPersonasAdicionales: 0 };
-    }
-    if(r.type === 'EXTENSION') habitacionesMap[r.room_id].countExtensiones++;
-    if(r.type === 'SALE' && Number(r.duration_hrs||0)===0 && Number(r.base_price||0)===0 && Number(r.extra_people_value||0)>0){
-      habitacionesMap[r.room_id].countPersonasAdicionales++;
-    }
-  });
-  const habitaciones = Object.values(habitacionesMap).sort((a,b) => String(a.roomId).localeCompare(String(b.roomId)));
-  return ok(res, { habitaciones });
-}
-async function apiAgregarPersonaManual(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Sin permiso');
-  const now = Date.now();
-  const businessDayParam = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  const roomId = String(p.roomId||'').trim();
-  const cantidad = Number(p.cantidad||0);
-  const payMethod = String(p.payMethod||'EFECTIVO').toUpperCase();
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!businessDayParam) return err(res,'Día requerido');
-  if(!shiftId) return err(res,'Turno requerido');
-  if(!roomId) return err(res,'Habitación requerida');
-  if(cantidad<=0) return err(res,'Cantidad inválida');
-  if(!motivo||motivo.length<5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
-  const room = await getRoom(roomId);
-  if(!room) return err(res,'Habitación no existe');
-  const cfg = MASTER_PRICING[room.category]||MASTER_PRICING['Junior'];
-  const costPerPerson = Number(cfg.extraPerson||0);
-  const totalCost = costPerPerson * cantidad;
-  await supabase.from('sales').insert({
-    ts_ms:now, business_day:businessDayParam, shift_id:shiftId,
-    user_role:'ADMIN', user_name:userName, type:'SALE',
-    room_id:roomId, category:room.category, duration_hrs:0,
-    base_price:0, people:cantidad, included_people:Number(cfg.included||2),
-    extra_people:cantidad, extra_people_value:costPerPerson,
-    total:totalCost, pay_method:payMethod,
-    check_in_ms:0, due_ms:0,
-    note:'[MANUAL] '+motivo
-  });
-  return ok(res,{roomId,cantidad,totalCost,businessDay:businessDayParam,shiftId});
-}
 async function apiAddExtraPerson(p, res) {
   const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
   const userName=String(p.userName||'').trim(),roomId=String(p.roomId||'').trim();
@@ -2047,7 +1713,7 @@ async function apiUpdatePayMethod(p, res) {
   const bDay=businessDay(now);
   const shift=currentShiftId(now);
   const checkInMs=Number(room.check_in_ms||0);
-  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
+  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).eq('type','SALE').eq('shift_id',shift).eq('check_in_ms',checkInMs);
   await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,payMethod});
 }
@@ -2300,8 +1966,8 @@ async function apiGetProducts(p, res) {
   return ok(res, { products: (data || []).map(r => ({
     id: r.id, nombre: r.nombre, codigoBarras: r.codigo_barras || '',
     precio: Number(r.precio || 0), categoria: r.categoria || '',
-    stockActual: Number(r.stock_actual || 0), stockBodega: Number(r.stock_bodega || 0),
-    stockMinimo: Number(r.stock_minimo || 5), activo: !!r.activo
+    stockActual: Number(r.stock_actual || 0), stockMinimo: Number(r.stock_minimo || 5),
+    activo: !!r.activo
   })) });
 }
 
@@ -2317,15 +1983,14 @@ async function apiSaveProduct(p, res) {
   if(!nombre) return err(res,'Nombre requerido');
   if(!precio) return err(res,'Precio requerido');
   if(id) {
-    // Al EDITAR no se modifica stock_actual — para ajustar stock usar apiAjusteInventario
     await supabase.from('products').update({
       nombre, codigo_barras: codigo||null, precio, categoria,
-      stock_minimo: stockMinimo
+      stock_actual: stockActual, stock_minimo: stockMinimo
     }).eq('id', id);
   } else {
     await supabase.from('products').insert({
       nombre, codigo_barras: codigo||null, precio, categoria,
-      stock_actual: 0, stock_bodega: stockActual, stock_minimo: stockMinimo, activo: true
+      stock_actual: stockActual, stock_minimo: stockMinimo, activo: true
     });
   }
   return ok(res, {});
@@ -2378,7 +2043,7 @@ async function apiGetRoomProducts(p, res) {
 async function apiAddRoomProduct(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const shift = currentShiftId(now);
   const roomId = String(p.roomId||'').trim();
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||1);
@@ -2458,7 +2123,7 @@ async function apiDeleteRoomProduct(p, res) {
 async function apiSaveCortesia(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const shift = currentShiftId(now);
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||1);
   const userName = String(p.userName||'').trim();
@@ -2500,20 +2165,7 @@ async function apiGetObservacionesTurno(p, res) {
   const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
   return ok(res,{obs:obs||[]});
 }
-async function apiGetProductosMes(p, res) {
-  const ym=String(p.yearMonth||'');
-  if(!ym)return err(res,'yearMonth requerido');
-  const {data:prods}=await supabase.from('room_products').select('total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
-  const {data:cors}=await supabase.from('room_products').select('total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
-  const {data:prodsList}=await supabase.from('products').select('id,precio');
-  const totalVentas=(prods||[]).reduce((a,r)=>a+Number(r.total||0),0);
-  const totalEf=(prods||[]).filter(r=>r.pay_method==='EFECTIVO').reduce((a,r)=>a+Number(r.total||0),0);
-  const totalTa=(prods||[]).filter(r=>r.pay_method==='TARJETA').reduce((a,r)=>a+Number(r.total||0),0);
-  const totalNq=(prods||[]).filter(r=>r.pay_method==='NEQUI').reduce((a,r)=>a+Number(r.total||0),0);
-  const precioMap={};(prodsList||[]).forEach(p=>{precioMap[p.id]=Number(p.precio||0);});
-  const totalCortesias=(cors||[]).reduce((a,r)=>a+Number(r.cantidad||0)*Number(precioMap[r.product_id]||0),0);
-  return ok(res,{yearMonth:ym,totalVentas,totalEf,totalTa,totalNq,totalCortesias});
-}
+
 async function apiGetInventarioByDay(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
   const {data:products}=await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
@@ -2523,20 +2175,11 @@ async function apiGetInventarioByDay(p, res) {
   const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
   const {data:movements}=await supabase.from('stock_movements').select('*').eq('business_day',bd);
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
- const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
-  const ayerStr=ayer.getFullYear()+'-'+String(ayer.getMonth()+1).padStart(2,'0')+'-'+String(ayer.getDate()).padStart(2,'0');
-  const {data:salesAyer}=await supabase.from('room_products').select('product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
-  const {data:entriesAyer}=await supabase.from('stock_entries').select('product_id,cantidad').eq('business_day',ayerStr);
   const rows=products.map(function(prod){
     const totalVentas=(sales||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const totalCortesias=(sales||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const totalEntradas=(entries||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
-    const ventasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
-    const cortesiasAyer=(salesAyer||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
-    const entradasAyer=(entriesAyer||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
-   const totalTraslados=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
-    const totalDevoluciones=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
-    const saldoInicialReal=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados-totalEntradas+totalDevoluciones;
+    const saldoInicial=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalEntradas;
     const turnosData={};
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
@@ -2552,17 +2195,15 @@ const trasladoTotal=movsProd.filter(m=>m.tipo==='traslado_recepcion').reduce((a,
 shifts.forEach(function(sid){
   const movsSid=movsProd.filter(m=>m.shift_id===sid);
   turnosData[sid].ingresoBodega=movsSid.filter(m=>m.tipo==='ingreso_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
-  var trasladoTurno=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
-  var devolucionTurno=movsSid.filter(m=>m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
-  turnosData[sid].trasladoRecepcion=trasladoTurno-devolucionTurno;
+  turnosData[sid].trasladoRecepcion=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
 });
-return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial:saldoInicialReal,saldoActual:Number(prod.stock_actual||0),stockBodega:Number(prod.stock_bodega||0),turnos:turnosData};
+return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial,saldoActual:Number(prod.stock_actual||0),stockBodega:Number(prod.stock_bodega||0),turnos:turnosData};
   });
   const resumenTurnos={};
   shifts.forEach(function(sid){
     const venTurno=(sales||[]).filter(s=>s.shift_id===sid&&!s.is_cortesia);
     const corTurno=(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia);
-    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.cantidad||0)*Number(s.precio_unit||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
+    resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.total||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
   });
   return ok(res,{rows,resumenTurnos,businessDay:bd});
 }
@@ -2590,31 +2231,6 @@ async function apiIngresoBodega(p, res) {
   return ok(res,{productId,nuevoBodega});
 }
 
-async function apiDevolverABodega(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
-  const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
-  const productId = Number(p.productId||0);
-  const cantidad = Number(p.cantidad||0);
-  const nota = String(p.nota||'').trim();
-  if(!productId) return err(res,'productId requerido');
-  if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
-  if(!prod) return err(res,'Producto no existe');
-  if(Number(prod.stock_actual||0)<cantidad) return err(res,'No hay suficiente en recepción. Hay: '+prod.stock_actual);
-  const nuevoBodega = Number(prod.stock_bodega||0) + cantidad;
-  const nuevoRecepcion = Number(prod.stock_actual||0) - cantidad;
-  await supabase.from('products').update({stock_bodega:nuevoBodega, stock_actual:nuevoRecepcion}).eq('id',productId);
-  await supabase.from('stock_movements').insert({
-    ts_ms:now, business_day:bDay, shift_id:shift,
-    user_name:String(p.userName||''), user_role:userRole,
-    product_id:productId, product_name:prod.nombre,
-    tipo:'devolucion_bodega', cantidad, nota
-  });
-  return ok(res,{productId,nuevoBodega,nuevoRecepcion});
-}
 async function apiTrasladoRecepcion(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
@@ -2640,249 +2256,6 @@ async function apiTrasladoRecepcion(p, res) {
   });
   return ok(res,{productId,nuevoBodega,nuevoRecepcion});
 }
-async function apiListGastosTurno(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  const businessDay_ = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  if(!businessDay_) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase.from('loans')
-    .select('*')
-    .eq('business_day', businessDay_)
-    .eq('shift_id', shiftId)
-    .order('ts_ms', {ascending:true});
-  if(error) return err(res, error.message);
-  return ok(res, {gastos: data||[]});
-}
-async function apiAgregarGastoManual(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar gastos manuales');
-  const businessDay_ = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  const borrowerName = String(p.borrowerName||'').trim();
-  const amount = Number(p.amount||0);
-  const note = String(p.note||'').trim();
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!businessDay_) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  if(!borrowerName) return err(res,'borrowerName requerido');
-  if(amount<=0) return err(res,'Monto inválido');
-  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const now = Date.now();
-  const { data, error } = await supabase.from('loans').insert({
-    ts_ms: now,
-    business_day: businessDay_,
-    shift_id: shiftId,
-    user_name: userName,
-    borrower_name: borrowerName,
-    amount: amount,
-    note: note,
-    manual: true,
-    motivo_manual: motivo,
-    anulada: false
-  }).select('id').single();
-  if(error) return err(res,'Error guardando: '+error.message);
-  return ok(res,{gastoId:data.id, amount});
-}
-async function apiEditarGastoModulo(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
-  const gastoId = Number(p.gastoId||0);
-  const borrowerName = String(p.borrowerName||'').trim();
-  const amount = Number(p.amount||0);
-  const note = String(p.note||'').trim();
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!gastoId) return err(res,'gastoId requerido');
-  if(!borrowerName) return err(res,'borrowerName requerido');
-  if(amount<=0) return err(res,'Monto inválido');
-  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const now = Date.now();
-  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
-  if(errGasto) return err(res, errGasto.message);
-  if(!gasto) return err(res,'Gasto no encontrado');
-  if(gasto.anulada) return err(res,'No se puede editar un gasto anulado');
-  // Si ya fue editado antes, NO sobreescribir el amount_original
-  const amountOriginal = gasto.amount_original!==null && gasto.amount_original!==undefined
-    ? gasto.amount_original
-    : gasto.amount;
-  await supabase.from('loans').update({
-    borrower_name: borrowerName,
-    amount: amount,
-    note: note,
-    editada: true,
-    editada_ms: now,
-    editada_por: userName,
-    amount_original: amountOriginal,
-    motivo_edicion: motivo
-  }).eq('id', gastoId);
-  return ok(res,{gastoId, amount});
-}
-async function apiAnularGastoModulo(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
-  const gastoId = Number(p.gastoId||0);
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!gastoId) return err(res,'gastoId requerido');
-  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const now = Date.now();
-  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
-  if(errGasto) return err(res, errGasto.message);
-  if(!gasto) return err(res,'Gasto no encontrado');
-  if(gasto.anulada) return err(res,'Este gasto ya está anulado');
-  await supabase.from('loans').update({
-    anulada: true,
-    anulada_ms: now,
-    anulada_por: userName,
-    motivo_anulacion: motivo
-  }).eq('id', gastoId);
-  return ok(res,{gastoId, anulada:true});
-}
-async function apiAgregarVentaManual(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede agregar ventas manuales');
-  const businessDay_ = String(p.businessDay||'').trim();
-  const shiftId = String(p.shiftId||'').trim();
-  const roomId = String(p.roomId||'').trim();
-  const category = String(p.category||'').trim();
-  const durationHrs = Number(p.durationHrs||0);
-  const people = Number(p.people||0);
-  const arrivalType = String(p.arrivalType||'WALK').trim();
-  const arrivalPlate = String(p.arrivalPlate||'').trim();
-  const horaIn = String(p.horaIn||'').trim();
-  const horaOut = String(p.horaOut||'').trim();
-  const total = Number(p.total||0);
-  const payMethod = String(p.payMethod||'').trim();
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!businessDay_) return err(res,'businessDay requerido');
-  if(!shiftId) return err(res,'shiftId requerido');
-  if(!roomId) return err(res,'roomId requerido');
-  if(!horaIn||!horaOut) return err(res,'horaIn y horaOut requeridas');
-  if(total<=0) return err(res,'Total inválido');
-  if(!payMethod) return err(res,'payMethod requerido');
-  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  let amount_1=null, amount_2=null, amount_3=null, pay_method_2=null;
-  if(payMethod==='MIXTO'){
-    amount_1=Number(p.amount_1||0);
-    amount_2=Number(p.amount_2||0);
-    amount_3=Number(p.amount_3||0);
-    if((amount_1+amount_2+amount_3)!==total) return err(res,'Suma del mixto debe ser igual al total');
-    pay_method_2='MIXTO';
-  }
-  const dateBase = businessDay_;
-  const checkInIso = dateBase+'T'+horaIn+':00-05:00';
-  const checkOutIso = dateBase+'T'+horaOut+':00-05:00';
-  let checkInMs = new Date(checkInIso).getTime();
-  let dueMs = new Date(checkOutIso).getTime();
-  if(dueMs<=checkInMs) dueMs += 24*60*60*1000;
-  const now = Date.now();
-  const included = (people>2)?2:people;
-  const extraPeople = Math.max(0,people-included);
-  const extraPeopleValue = extraPeople*20000;
-  const noteFinal = '[MANUAL] '+motivo;
-  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
-    ts_ms: now,
-    business_day: businessDay_,
-    shift_id: shiftId,
-    user_role: userRole,
-    user_name: userName,
-    type: 'SALE',
-    room_id: roomId,
-    category: category,
-    duration_hrs: durationHrs,
-    base_price: total - extraPeopleValue,
-    people: people,
-    included_people: included,
-    extra_people: extraPeople,
-    extra_people_value: extraPeopleValue,
-    extra_hours: 0,
-    extra_hours_value: 0,
-    total: total,
-    arrival_type: arrivalType,
-    arrival_plate: arrivalPlate,
-    pay_method: payMethod,
-    pay_method_2: pay_method_2,
-    amount_1: amount_1,
-    amount_2: amount_2,
-    amount_3: amount_3,
-    paid_with: total,
-    change_given: 0,
-    check_in_ms: checkInMs,
-    due_ms: dueMs,
-    checkout_ms: dueMs,
-    note: noteFinal,
-    anulada: false
-  }).select('id').single();
-  if(errIns) return err(res, 'Error guardando venta: '+errIns.message);
-  await supabase.from('state_history').insert({
-    ts_ms: now,
-    business_day: businessDay_,
-    shift_id: shiftId,
-    user_role: userRole,
-    user_name: userName,
-    room_id: roomId,
-    from_state: 'AJUSTE',
-    to_state: 'VENTA_MANUAL',
-    people: people,
-    meta_json: JSON.stringify({
-      accion:'VENTA_AGREGADA_MANUAL',
-      saleId: inserted.id,
-      motivo: motivo,
-      total: total,
-      pay_method: payMethod,
-      duration_hrs: durationHrs,
-      hora_in: horaIn,
-      hora_out: horaOut
-    })
-  });
-  return ok(res,{saleId:inserted.id, total});
-}
-async function apiAnularVentaModulo(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='RECEPTION'&&userRole!=='ADMIN') return err(res,'Sin permiso');
-  const saleId = Number(p.saleId||0);
-  const motivo = String(p.motivo||'').trim();
-  const userName = String(p.userName||'').trim();
-  if(!saleId) return err(res,'saleId requerido');
-  if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const now = Date.now();
-  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
-  if(errSale) return err(res, errSale.message);
-  if(!sale) return err(res,'Venta no encontrada');
-  if(sale.anulada) return err(res,'Esta venta ya está anulada');
-  const motivoFinal = '[AJUSTE-ANULACION] ' + motivo;
-  await supabase.from('sales').update({
-    type:'ANULADA',
-    note: motivoFinal,
-    anulada: true,
-    anulada_ms: now,
-    anulada_por: userName
-  }).eq('id', saleId);
-  await supabase.from('state_history').insert({
-    ts_ms: now,
-    business_day: sale.business_day,
-    shift_id: sale.shift_id,
-    user_role: userRole,
-    user_name: userName,
-    room_id: sale.room_id,
-    from_state: 'AJUSTE',
-    to_state: 'ANULADA',
-    people: 0,
-    meta_json: JSON.stringify({
-      accion:'ANULADA_DESDE_AJUSTE',
-      saleId: saleId,
-      motivo: motivo,
-      total_anulado: sale.total,
-      pay_method: sale.pay_method,
-      business_day_original: sale.business_day,
-      shift_original: sale.shift_id
-    })
-  });
-  return ok(res,{saleId, anulada:true});
-}
 async function apiAnularVenta(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN') return err(res,'Sin permiso');
@@ -2899,7 +2272,7 @@ async function apiAnularVenta(p, res) {
   if(!room) return err(res,'Habitacion no existe');
   if(room.state!=='OCCUPIED') return err(res,'Solo se puede anular si está ocupada');
   // Marcar todas las ventas de esta estadia como ANULADA
-  await supabase.from('sales').update({type:'ANULADA',note:motivo,anulada:true,anulada_ms:now,anulada_por:userName}).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  await supabase.from('sales').update({type:'ANULADA',note:motivo}).eq('room_id',roomId).eq('check_in_ms',checkInMs);
   // Devolver habitacion a disponible
   await supabase.from('rooms').update({
     state:'AVAILABLE', state_since_ms:now, people:0,
@@ -2926,989 +2299,4 @@ async function apiSaveRoomBarcode(p, res) {
   if(!barcode) return err(res,'barcode requerido');
   await supabase.from('rooms').update({ barcode }).eq('room_id', roomId);
   return ok(res, { roomId, barcode });
-}
-// ==================== AJUSTE DE INVENTARIO (ADMIN) ====================
-// Gestiona ajustes de stock del bar con 3 tipos:
-//  - venta_olvidada: Descuenta stock + suma al cuadre (recep olvidó registrar)
-//  - faltante_cobrado: Descuenta stock + suma al cuadre (alguien paga el faltante)
-//  - ajuste_sin_dinero: Solo ajusta stock (rotura, vencido, sobrante, conteo)
-async function apiAjusteInventario(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const now = Date.now();
-  const productId = Number(p.productId||0);
-  const cantidad = Number(p.cantidad||0);
-  const tipo = String(p.tipoAjuste||'').trim();
-  const motivo = String(p.motivo||'').trim();
-  const adminName = String(p.userName||'').trim();
-
-  if(!productId) return err(res,'productId requerido');
-  if(!cantidad || cantidad === 0) return err(res,'Cantidad invalida');
-  if(!['venta_olvidada','faltante_cobrado','ajuste_sin_dinero'].includes(tipo)) return err(res,'Tipo de ajuste invalido');
-  if(motivo.length < 3) return err(res,'Motivo requerido (minimo 3 caracteres)');
-  if(!adminName) return err(res,'Admin requerido');
-
-  const afectaCuadre = (tipo === 'venta_olvidada' || tipo === 'faltante_cobrado');
-  const bDayAjuste = afectaCuadre ? String(p.businessDay||'').trim() : businessDay(now);
-  const shiftAjuste = afectaCuadre ? String(p.shiftId||'').trim() : currentShiftId(now);
-  const payMethodAjuste = afectaCuadre ? String(p.payMethod||'EFECTIVO').toUpperCase() : '';
-  const recepNameAjuste = afectaCuadre ? String(p.recepName||'').trim() : '';
-
-  if(afectaCuadre) {
-    if(!bDayAjuste) return err(res,'Fecha del turno requerida');
-    if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAjuste)) return err(res,'Turno invalido');
-    if(!['EFECTIVO','TARJETA','NEQUI'].includes(payMethodAjuste)) return err(res,'Metodo de pago invalido');
-    if(cantidad <= 0) return err(res,'Cantidad debe ser positiva en venta olvidada/faltante');
-  }
-
-  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
-  if(!prod) return err(res,'Producto no existe');
-
-  const vaDescontar = (cantidad > 0);
-  if(vaDescontar && Number(prod.stock_actual||0) < cantidad) {
-    return err(res,'Stock insuficiente. Hay '+prod.stock_actual+' unidades');
-  }
-
-  const nuevoStock = Number(prod.stock_actual||0) - cantidad;
-  await supabase.from('products').update({ stock_actual: nuevoStock }).eq('id',productId);
-
-  await supabase.from('stock_movements').insert({
-    ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
-    user_name: adminName, user_role: 'ADMIN',
-    product_id: productId, product_name: prod.nombre,
-    tipo: 'ajuste_'+tipo,
-    cantidad: cantidad,
-    nota: motivo
-  });
-
-  if(afectaCuadre) {
-    const precioUnit = Number(prod.precio||0);
-    const total = precioUnit * cantidad;
-    await supabase.from('room_products').insert({
-      ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
-      room_id: 'AJUSTE', check_in_ms: 0,
-      product_id: productId, product_name: prod.nombre,
-      cantidad: cantidad, precio_unit: precioUnit,
-      total: total, pay_method: payMethodAjuste,
-      user_name: recepNameAjuste || adminName,
-      is_cortesia: false,
-      created_by_admin: true,
-      tipo_ajuste: tipo,
-      motivo_ajuste: motivo
-    });
-  }
-
-  return ok(res, { productId, nuevoStock, tipo, afectaCuadre });
-}
-// ==================== IMPRESION DE TURNO (RECIBO TERMICO) ====================
-// Devuelve los datos consolidados por producto + método de pago para imprimir
-async function apiGetPrintTurno(p, res) {
-  const bd = String(p.businessDay || businessDay(Date.now()));
-  const sid = String(p.shiftId || '').trim();
-  if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(sid)) return err(res,'Turno invalido');
-
-  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
-  if(!products || !products.length) return ok(res,{rows:[],totals:{},cortesias:[],businessDay:bd,shiftId:sid});
-
-  const { data: salesDay } = await supabase.from('room_products').select('*').eq('business_day',bd);
-  const { data: movements } = await supabase.from('stock_movements').select('*').eq('business_day',bd);
-  const { data: entries } = await supabase.from('stock_entries').select('*').eq('business_day',bd);
-
-  const salesShift = (salesDay||[]).filter(s => s.shift_id === sid);
-
-  const { data: shiftLog } = await supabase.from('shift_log')
-    .select('user_name').eq('business_day',bd).eq('shift_id',sid)
-    .eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN'])
-    .order('ts_ms').limit(1);
-  const recepName = shiftLog && shiftLog.length ? shiftLog[0].user_name : '—';
-
-  const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
-  const shiftIdx = SHIFTS.indexOf(sid);
-
-  const rows = products.map(function(prod){
-    const entTurno = (movements||[])
-      .filter(m => m.product_id === prod.id && m.shift_id === sid && m.tipo === 'traslado_recepcion')
-      .reduce((a,m) => a + Number(m.cantidad||0), 0);
-
-    const ventasT = salesShift.filter(s => s.product_id === prod.id && !s.is_cortesia);
-    const efT = ventasT.filter(s => s.pay_method === 'EFECTIVO').reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const taT = ventasT.filter(s => s.pay_method === 'TARJETA').reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const nqT = ventasT.filter(s => s.pay_method === 'NEQUI').reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const corItems = salesShift.filter(s => s.product_id === prod.id && s.is_cortesia);
-    const corT = corItems.reduce((a,s) => a + Number(s.cantidad||0), 0);
-
-    const vendidasT = efT + taT + nqT;
-    const valorT = ventasT.reduce((a,s) => a + Number(s.total||0), 0);
-
-    const totalVentasDia = (salesDay||[]).filter(s => s.product_id === prod.id && !s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const totalCortesiasDia = (salesDay||[]).filter(s => s.product_id === prod.id && s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const totalTrasladosDia = (movements||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
-    const totalEntradasDia = (entries||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
-    const saldoInicialDia = Number(prod.stock_actual||0) + totalVentasDia + totalCortesiasDia - totalTrasladosDia - totalEntradasDia;
-
-    let saldoTurno = saldoInicialDia;
-    let saldoInicialTurno = saldoInicialDia;
-    for(let i = 0; i <= shiftIdx; i++) {
-      if(i === shiftIdx) saldoInicialTurno = saldoTurno;
-      const s = SHIFTS[i];
-      const entsUntil = (movements||[]).filter(m => m.product_id === prod.id && m.shift_id === s && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
-      const venUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && !x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
-      const corUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
-      saldoTurno = saldoTurno + entsUntil - venUntil - corUntil;
-    }
-
-    return {
-      id: prod.id,
-      nombre: prod.nombre,
-      categoria: prod.categoria || 'Sin categoría',
-      precio: Number(prod.precio||0),
-      entrada: entTurno,
-      efectivo: efT,
-      tarjeta: taT,
-      nequi: nqT,
-      cortesia: corT,
-      vendidas: vendidasT,
-      saldoInicial: saldoInicialTurno,
-      saldo: saldoTurno,
-      valor: valorT
-    };
-  });
-
-  const rowsFiltradas = rows.filter(r =>
-    r.entrada > 0 || r.efectivo > 0 || r.tarjeta > 0 || r.nequi > 0 || r.cortesia > 0 || r.saldo !== 0
-  );
-
-  const gruposMap = {};
-  rows.forEach(r => {
-    if(!gruposMap[r.categoria]) gruposMap[r.categoria] = 0;
-    gruposMap[r.categoria] += r.saldo;
-  });
-  rowsFiltradas.forEach(r => { r.grupoTotal = gruposMap[r.categoria] || 0; });
-
-  const cortesias = salesShift
-    .filter(s => s.is_cortesia)
-    .map(s => ({
-      nombre: s.product_name || '',
-      cantidad: Number(s.cantidad||0),
-      destinatario: s.cortesia_destinatario || ''
-    }));
-
-  const totalEf = salesShift.filter(s => !s.is_cortesia && s.pay_method === 'EFECTIVO').reduce((a,s) => a + Number(s.total||0), 0);
-  const totalTa = salesShift.filter(s => !s.is_cortesia && s.pay_method === 'TARJETA').reduce((a,s) => a + Number(s.total||0), 0);
-  const totalNq = salesShift.filter(s => !s.is_cortesia && s.pay_method === 'NEQUI').reduce((a,s) => a + Number(s.total||0), 0);
-
-  return ok(res, {
-    businessDay: bd,
-    shiftId: sid,
-    recepName: recepName,
-    rows: rowsFiltradas,
-    cortesias: cortesias,
-    totals: {
-      efectivo: totalEf,
-      tarjeta: totalTa,
-      nequi: totalNq,
-      total: totalEf + totalTa + totalNq
-    }
-  });
-}
-
-// ==================== GASTOS DEL MES (NUEVO MODULO) ====================
-// Devuelve ventas, gastos y descargos del mes para el modulo de Gastos del Mes
-async function apiGetGastosMesResumen(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const mes = String(p.mes || '').trim();
-  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
-
-  const [yearStr, monthStr] = mes.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const firstDay = `${mes}-01`;
-  const lastDayDate = new Date(year, month, 0);
-  const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
-
-  // 1. Ventas del mes desde la tabla "sales" (NO room_products)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
-    .gte('business_day', firstDay)
-    .lte('business_day', lastDay)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
-    .neq('anulada', true));
-  
-  let ventasEfectivo = 0;
-  let ventasTarjeta = 0;
-  let ventasNequi = 0;
-  let totalVentas = 0;
-  let cantVentas = 0;
-  
-  (ventasMes||[]).forEach(v => {
-    if(v.anulada) return;
-    cantVentas++;
-    totalVentas += Number(v.total||0);
-    // Si es MIXTO usa amount_1/2/3
-    if(v.pay_method === 'MIXTO' || v.pay_method_2) {
-      ventasEfectivo += Number(v.amount_1||0);
-      ventasTarjeta += Number(v.amount_2||0);
-      ventasNequi += Number(v.amount_3||0);
-    } else {
-      const total = Number(v.total||0);
-      const pm = String(v.pay_method||'').toUpperCase();
-      if(pm === 'EFECTIVO') ventasEfectivo += total;
-      else if(pm === 'TARJETA') ventasTarjeta += total;
-      else if(pm === 'NEQUI') ventasNequi += total;
-    }
-  });
-
-  // 2. Gastos del mes desde la nueva tabla "gastos_mes"
-  const { data: gastosMes, error: errG } = await supabase.from('gastos_mes')
-    .select('*')
-    .eq('mes', mes)
-    .order('fecha', { ascending: true })
-    .order('ts_ms', { ascending: true });
-  if(errG) return err(res, errG.message);
-
-  let gastosEfectivo = 0;
-  let gastosTarjeta = 0;
-  let totalGastos = 0;
-  let cantGastos = 0;
-  const gastosPorCategoria = {};
-  
-  (gastosMes||[]).forEach(g => {
-    if(g.anulada) return;
-    cantGastos++;
-    const monto = Number(g.monto||0);
-    totalGastos += monto;
-    if(g.pay_method === 'EFECTIVO') gastosEfectivo += monto;
-    else if(g.pay_method === 'TARJETA') gastosTarjeta += monto;
-    if(!gastosPorCategoria[g.categoria]) gastosPorCategoria[g.categoria] = 0;
-    gastosPorCategoria[g.categoria] += monto;
-  });
-
-  // 3. Descargos de Nequi del mes
-  const { data: descargos, error: errD } = await supabase.from('descargos_nequi')
-    .select('*')
-    .eq('mes', mes)
-    .order('fecha', { ascending: true });
-  if(errD) return err(res, errD.message);
-
-  let totalDescargos = 0;
-  (descargos||[]).forEach(d => {
-    if(d.anulada) return;
-    totalDescargos += Number(d.monto||0);
-  });
-
-  // 4. Calculos finales (donde esta la plata HOY)
-  const efectivoEnCaja = ventasEfectivo + totalDescargos - gastosEfectivo;
-  const cajaTarjeta = ventasTarjeta - gastosTarjeta;
-  const nequiDisponible = ventasNequi - totalDescargos;
-  const utilidad = totalVentas - totalGastos;
-
-  return ok(res, {
-    mes: mes,
-    ventas: {
-      total: totalVentas,
-      efectivo: ventasEfectivo,
-      tarjeta: ventasTarjeta,
-      nequi: ventasNequi,
-      cantidad: cantVentas
-    },
-    gastos: {
-      total: totalGastos,
-      efectivo: gastosEfectivo,
-      tarjeta: gastosTarjeta,
-      cantidad: cantGastos,
-      lista: gastosMes || [],
-      porCategoria: gastosPorCategoria
-    },
-    descargos: {
-      total: totalDescargos,
-      cantidad: (descargos||[]).filter(d => !d.anulada).length,
-      lista: descargos || []
-    },
-    saldos: {
-      efectivoEnCaja: efectivoEnCaja,
-      cajaTarjeta: cajaTarjeta,
-      nequiDisponible: nequiDisponible
-    },
-    utilidad: utilidad
-  });
-}
-
-// ==================== AGREGAR GASTO DEL MES ====================
-async function apiAddGastoMes(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const userName = String(p.userName||'').trim();
-  if(!userName) return err(res,'Usuario requerido');
-  const fecha = String(p.fecha||'').trim();
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
-  const categoria = String(p.categoria||'').trim();
-  const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social'];
-  if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida. Validas: '+CATEGORIAS_VALIDAS.join(', '));
-  const concepto = String(p.concepto||'').trim();
-  if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
-  const monto = Number(p.monto||0);
-  if(monto<=0) return err(res,'Monto debe ser mayor a 0');
-  const payMethod = String(p.payMethod||'').toUpperCase();
-  if(!['EFECTIVO','TARJETA'].includes(payMethod)) return err(res,'Metodo de pago invalido (solo EFECTIVO o TARJETA)');
-  const mes = fecha.substring(0,7);
-  const now = Date.now();
-  const { data, error } = await supabase.from('gastos_mes').insert({
-    ts_ms: now,
-    fecha: fecha,
-    mes: mes,
-    categoria: categoria,
-    concepto: concepto,
-    monto: monto,
-    pay_method: payMethod,
-    created_by: userName
-  }).select().single();
-  if(error) return err(res, error.message);
-  return ok(res, { gasto: data });
-}
-
-// ==================== EDITAR GASTO DEL MES ====================
-async function apiEditGastoMes(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const userName = String(p.userName||'').trim();
-  if(!userName) return err(res,'Usuario requerido');
-  const gastoId = Number(p.gastoId||0);
-  if(!gastoId) return err(res,'gastoId requerido');
-  const motivo = String(p.motivo||'').trim();
-  if(motivo.length<5) return err(res,'Motivo de edicion requerido (min 5 caracteres)');
-  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
-  if(errG) return err(res, errG.message);
-  if(!gastoActual) return err(res,'Gasto no encontrado');
-  if(gastoActual.anulada) return err(res,'No se puede editar un gasto anulado');
-  const updates = {
-    edited_ms: Date.now(),
-    edited_by: userName,
-    motivo_edicion: motivo
-  };
-  if(p.concepto !== undefined){
-    const concepto = String(p.concepto||'').trim();
-    if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
-    updates.concepto = concepto;
-  }
-  if(p.monto !== undefined){
-    const monto = Number(p.monto||0);
-    if(monto<=0) return err(res,'Monto debe ser mayor a 0');
-    if(updates.monto_original === undefined) updates.monto_original = gastoActual.monto;
-    updates.monto = monto;
-  }
-  if(p.payMethod !== undefined){
-    const payMethod = String(p.payMethod||'').toUpperCase();
-    if(!['EFECTIVO','TARJETA'].includes(payMethod)) return err(res,'Metodo de pago invalido');
-    updates.pay_method = payMethod;
-  }
-  if(p.categoria !== undefined){
-    const categoria = String(p.categoria||'').trim();
-    const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social'];
-    if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida');
-    updates.categoria = categoria;
-  }
-  if(p.fecha !== undefined){
-    const fecha = String(p.fecha||'').trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida');
-    updates.fecha = fecha;
-    updates.mes = fecha.substring(0,7);
-  }
-  const { error } = await supabase.from('gastos_mes').update(updates).eq('id', gastoId);
-  if(error) return err(res, error.message);
-  return ok(res, { gastoId: gastoId });
-}
-
-// ==================== ANULAR GASTO DEL MES ====================
-async function apiAnularGastoMes(p, res) {
-  const userRole = String(p.userRole||'').toUpperCase();
-  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
-  const userName = String(p.userName||'').trim();
-  if(!userName) return err(res,'Usuario requerido');
-  const gastoId = Number(p.gastoId||0);
-  if(!gastoId) return err(res,'gastoId requerido');
-  const motivo = String(p.motivo||'').trim();
-  if(motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
-  if(errG) return err(res, errG.message);
-  if(!gastoActual) return err(res,'Gasto no encontrado');
-  if(gastoActual.anulada) return err(res,'Este gasto ya esta anulado');
-  const { error } = await supabase.from('gastos_mes').update({
-    anulada: true,
-    anulada_ms: Date.now(),
-    anulada_por: userName,
-    motivo_anulacion: motivo
-  }).eq('id', gastoId);
-  if(error) return err(res, error.message);
-  return ok(res, { gastoId: gastoId });
-}
-
-// ==================== RESUMEN MENSUAL (INVENTARIO MES) ====================
-// Devuelve el flujo completo del mes por producto, día y turno
-async function apiGetResumenMes(p, res) {
-  const mes = String(p.mes || '').trim();
-  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
-
-  const [yearStr, monthStr] = mes.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const firstDay = `${mes}-01`;
-  const lastDayDate = new Date(year, month, 0);
-  const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
-  const daysInMonth = lastDayDate.getDate();
-
-  const prevMonth = month === 1 ? 12 : month - 1;
-  const prevYear = month === 1 ? year - 1 : year;
-  const prevMes = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
-
-  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
-  if(!products || !products.length) return ok(res,{rows:[],totals:{},daysTotals:{},mes:mes});
-
-  const { data: cierreAnt } = await supabase.from('cierre_mes').select('*').eq('mes',prevMes);
-  const cierreMap = {};
-  (cierreAnt||[]).forEach(c => { cierreMap[c.product_id] = c; });
-
-  const salesMes = await fetchAll(() => supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const movementsMes = await fetchAll(() => supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const entriesMes = await fetchAll(() => supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-
-
-  const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
-
-  const rows = products.map(function(prod){
-    const cierreProd = cierreMap[prod.id] || {};
-    const siRec = Number(cierreProd.stock_recepcion||0);
-    const siBod = Number(cierreProd.stock_bodega||0);
-    const siTotal = siRec + siBod;
-
-    const compras = (entriesMes||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
-
-    const ventasProd = (salesMes||[]).filter(s => s.product_id === prod.id && !s.is_cortesia);
-    const cortesiasProd = (salesMes||[]).filter(s => s.product_id === prod.id && s.is_cortesia);
-    const cantVendida = ventasProd.reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const valorVendido = ventasProd.reduce((a,s) => a + Number(s.total||0), 0);
-    const cantCortesias = cortesiasProd.reduce((a,s) => a + Number(s.cantidad||0), 0);
-    const valorCortesias = cortesiasProd.reduce((a,s) => a + Number(s.total||0), 0);
-
-    const porDia = {};
-    for(let d = 1; d <= daysInMonth; d++) {
-      const fecha = `${mes}-${String(d).padStart(2,'0')}`;
-      porDia[fecha] = {
-        valorDia: 0,
-        turnos: {
-          SHIFT_1: {b:0,e:0,v:0,c:0,s:0},
-          SHIFT_2: {b:0,e:0,v:0,c:0,s:0},
-          SHIFT_3: {b:0,e:0,v:0,c:0,s:0}
-        }
-      };
-    }
-// Llenar B: entradas a bodega (stock_entries = compras a proveedor + ajustes de suma)
-    (entriesMes||[]).filter(e => e.product_id === prod.id).forEach(function(e){
-      const fecha = e.business_day;
-      const sid = e.shift_id || 'SHIFT_1';
-      if(porDia[fecha] && porDia[fecha].turnos[sid]) {
-        porDia[fecha].turnos[sid].b += Number(e.cantidad||0);
-      }
-    });
-    (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').forEach(function(m){
-      const fecha = m.business_day;
-      if(porDia[fecha] && porDia[fecha].turnos[m.shift_id]) {
-        porDia[fecha].turnos[m.shift_id].e += Number(m.cantidad||0);
-      }
-    });
-    (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'devolucion_bodega').forEach(function(m){
-      const fecha = m.business_day;
-      if(porDia[fecha] && porDia[fecha].turnos[m.shift_id]) {
-        porDia[fecha].turnos[m.shift_id].e -= Number(m.cantidad||0);
-      }
-    });
-    // Ajuste por conteo de recepcion: cuenta como entrada (E) en el resumen
-    // Solo se aplica a partir del 2026-04-30 para no afectar ajustes anteriores
-    (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'recepcion_conteo' && m.business_day >= '2026-04-30').forEach(function(m){
-      const fecha = m.business_day;
-      if(porDia[fecha] && porDia[fecha].turnos[m.shift_id]) {
-        porDia[fecha].turnos[m.shift_id].e += Number(m.cantidad||0);
-      }
-    });
-
-    (salesMes||[]).filter(s => s.product_id === prod.id).forEach(function(s){
-      const fecha = s.business_day;
-      if(!porDia[fecha] || !porDia[fecha].turnos[s.shift_id]) return;
-      if(s.is_cortesia) {
-        porDia[fecha].turnos[s.shift_id].c += Number(s.cantidad||0);
-      } else {
-        porDia[fecha].turnos[s.shift_id].v += Number(s.cantidad||0);
-        porDia[fecha].valorDia += Number(s.total||0);
-      }
-    });
-
-    let saldoRec = siRec;
-    Object.keys(porDia).sort().forEach(function(fecha){
-      SHIFTS.forEach(function(sid){
-        const t = porDia[fecha].turnos[sid];
-        saldoRec = saldoRec + t.e - t.v - t.c;
-        t.s = saldoRec;
-      });
-    });
-
-    return {
-      id: prod.id,
-      nombre: prod.nombre,
-      categoria: prod.categoria || 'Sin categoría',
-      precioCompra: Number(prod.precio_compra||0),
-      precioVenta: Number(prod.precio||0),
-      bodega: Number(prod.stock_actual||0),
-      siMes: siTotal,
-      siRec: siRec,
-      siBod: siBod,
-      compras: compras,
-      cantVendida: cantVendida,
-      valorVendido: valorVendido,
-      cantCortesias: cantCortesias,
-      valorCortesias: valorCortesias,
-      porDia: porDia
-    };
-  });
-
-  const totalSiAnterior = rows.reduce((a,r) => a + (r.siRec + r.siBod) * r.precioCompra, 0);
-  const totalCompras = (entriesMes||[]).reduce((a,e) => {
-    const prod = products.find(p => p.id === e.product_id);
-    const costo = prod ? Number(prod.precio_compra||0) : 0;
-    return a + Number(e.cantidad||0) * costo;
-  }, 0);
-  const totalVendido = (salesMes||[]).filter(s => !s.is_cortesia).reduce((a,s) => a + Number(s.total||0), 0);
-  const totalCortesiasValor = (salesMes||[]).filter(s => s.is_cortesia).reduce((a,s) => a + Number(s.total||0), 0);
-  const totalGanancia = totalVendido - totalCompras - totalCortesiasValor;
-
-  const daysTotals = {};
-  for(let d = 1; d <= daysInMonth; d++) {
-    const fecha = `${mes}-${String(d).padStart(2,'0')}`;
-    daysTotals[fecha] = 0;
-  }
-  (salesMes||[]).filter(s => !s.is_cortesia).forEach(function(s){
-    if(daysTotals[s.business_day] !== undefined) {
-      daysTotals[s.business_day] += Number(s.total||0);
-    }
-  });
-
-  return ok(res, {
-    mes: mes,
-    daysInMonth: daysInMonth,
-    rows: rows,
-    totals: {
-      siAnterior: totalSiAnterior,
-      compras: totalCompras,
-      vendido: totalVendido,
-      cortesias: totalCortesiasValor,
-      ganancia: totalGanancia
-    },
-    daysTotals: daysTotals
-  });
-}
-// ==================== UPDATE PRECIO COMPRA ====================
-// Permite editar el precio de compra desde el Resumen (solo ADMIN)
-async function apiUpdatePrecioCompra(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const productId = Number(p.productId||0);
-  const precioCompra = Number(p.precioCompra||0);
-  if(!productId) return err(res,'productId requerido');
-  if(precioCompra < 0) return err(res,'Precio invalido');
-
-  await supabase.from('products').update({ precio_compra: precioCompra }).eq('id', productId);
-  return ok(res, { productId, precioCompra });
-}
-async function apiChangePaymentMethod(p, res) {
-  try {
-    const saleId = Number(p.saleId || 0);
-    const newPm = String(p.newPayMethod || '').toUpperCase();
-    const newPm2 = String(p.newPayMethod2 || '');
-    const newA1 = Number(p.newAmount1 || 0);
-    const newA2 = Number(p.newAmount2 || 0);
-    const newA3 = Number(p.newAmount3 || 0);
-    const reason = String(p.reason || '').trim();
-    const userName = String(p.userName || '');
-    const userRole = String(p.userRole || '');
-    if (!saleId) return err(res, 'Falta saleId');
-    if (!['EFECTIVO','TARJETA','NEQUI','MIXTO'].includes(newPm)) return err(res, 'Metodo invalido');
-    if (!reason) return err(res, 'Falta motivo');
-    if (!userName) return err(res, 'Falta usuario');
-    const { data: saleData, error: saleErr } = await supabase.from('sales').select('*').eq('id', saleId).single();
-    if (saleErr || !saleData) return err(res, 'Venta no encontrada');
-    if (saleData.anulada) return err(res, 'No se puede modificar una venta anulada');
-    const total = Number(saleData.total || 0);
-    if (newPm === 'MIXTO') {
-      if (Math.round(newA1 + newA2 + newA3) !== Math.round(total)) return err(res, 'La suma del MIXTO no cuadra con el total ('+total+')');
-    } else {
-      if (newPm === 'EFECTIVO' && Math.round(newA1) !== Math.round(total)) return err(res, 'amount_1 debe igualar al total');
-      if (newPm === 'TARJETA'  && Math.round(newA2) !== Math.round(total)) return err(res, 'amount_2 debe igualar al total');
-      if (newPm === 'NEQUI'    && Math.round(newA3) !== Math.round(total)) return err(res, 'amount_3 debe igualar al total');
-    }
-    const nowMs = Date.now();
-    const { error: insErr } = await supabase.from('payment_method_changes').insert({
-      sale_id: saleId,
-      changed_at_ms: nowMs,
-      business_day: saleData.business_day,
-      shift_id: saleData.shift_id,
-      user_role: userRole,
-      user_name: userName,
-      old_pay_method: saleData.pay_method || '',
-      old_pay_method_2: saleData.pay_method_2 || '',
-      old_amount_1: Number(saleData.amount_1 || 0),
-      old_amount_2: Number(saleData.amount_2 || 0),
-      old_amount_3: Number(saleData.amount_3 || 0),
-      new_pay_method: newPm,
-      new_pay_method_2: newPm2,
-      new_amount_1: newA1,
-      new_amount_2: newA2,
-      new_amount_3: newA3,
-      total: total,
-      reason: reason
-    });
-    if (insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
-    const { error: updErr } = await supabase.from('sales').update({
-      pay_method: newPm,
-      pay_method_2: newPm2,
-      amount_1: newA1,
-      amount_2: newA2,
-      amount_3: newA3
-    }).eq('id', saleId);
-    if (updErr) return err(res, 'Error actualizando venta: ' + updErr.message);
-    return ok(res, { changed: true, saleId: saleId });
-  } catch (e) {
-    return err(res, e.message || String(e));
-  }
-}
-// ==================== AJUSTE DE INVENTARIO V2 (13 ESCENARIOS) ====================
-// Maneja todos los escenarios de ajuste: BODEGA, RECEPCION, FALTANTES, AJUSTE
-// ==================== HISTORIAL DE AJUSTES (BITÁCORA) ====================
-// Devuelve el historial de ajustes hechos por admin, filtrado por mes
-async function apiGetHistorialAjustes(p, res) {
-  const mes = String(p.mes || '').trim();
-  const filtroTipo = String(p.filtroTipo || '').trim(); // 'BODEGA', 'RECEPCION' o '' para todos
-  const filtroProducto = Number(p.filtroProducto || 0);
-  const filtroAdmin = String(p.filtroAdmin || '').trim();
-
-  let firstDay, lastDay;
-  if(/^\d{4}-\d{2}$/.test(mes)) {
-    const [yearStr, monthStr] = mes.split('-');
-    const year = Number(yearStr);
-    const month = Number(monthStr);
-    firstDay = `${mes}-01`;
-    const lastDayDate = new Date(year, month, 0);
-    lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
-  } else {
-    return err(res, 'Mes invalido (formato YYYY-MM)');
-  }
-
-  let query = supabase.from('ajustes').select('*')
-    .gte('business_day', firstDay)
-    .lte('business_day', lastDay)
-    .order('ts_ms', { ascending: false });
-
-  if(filtroTipo === 'BODEGA') query = query.eq('categoria', 'BODEGA');
-  else if(filtroTipo === 'RECEPCION') query = query.eq('categoria', 'RECEPCION');
-  if(filtroProducto > 0) query = query.eq('product_id', filtroProducto);
-  if(filtroAdmin) query = query.eq('admin_name', filtroAdmin);
-
-  const { data, error } = await query;
-  if(error) return err(res, error.message);
-
-  const items = (data||[]).map(a => ({
-    id: a.id,
-    ts_ms: Number(a.ts_ms || 0),
-    categoria: a.categoria || '',
-    tipo: a.tipo || '',
-    productId: a.product_id,
-    productName: a.product_name || '',
-    cantidad: Number(a.cantidad || 0),
-    afectaStock: a.afecta_stock || '',
-    afectaCuadre: !!a.afecta_cuadre,
-    businessDay: a.business_day || '',
-    shiftId: a.shift_id || '',
-    recepName: a.recep_name || '',
-    payMethod: a.pay_method || '',
-    payMethodViejo: a.pay_method_viejo || '',
-    productoViejoId: a.producto_viejo_id,
-    valorAfectado: Number(a.valor_afectado || 0),
-    motivo: a.motivo || '',
-    adminName: a.admin_name || '',
-    createdAt: a.created_at
-  }));
-
-  const totalBodega = items.filter(x => x.categoria === 'BODEGA').length;
-  const totalRecepcion = items.filter(x => x.categoria === 'RECEPCION').length;
-
-  return ok(res, {
-    mes: mes,
-    items: items,
-    total: items.length,
-    totalBodega: totalBodega,
-    totalRecepcion: totalRecepcion
-  });
-}
-async function apiAjusteInventarioV2(p, res) {
-  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const now = Date.now();
-  const adminName = String(p.userName||'').trim();
-  if(!adminName) return err(res,'Admin requerido');
-
-  const categoria = String(p.categoria||'').toUpperCase().trim();
-  const tipo = String(p.tipo||'').trim();
-  const productId = Number(p.productId||0);
-  const cantidad = Number(p.cantidad||0);
-  const motivo = String(p.motivo||'').trim();
-
-  if(!['BODEGA','RECEPCION'].includes(categoria)) return err(res,'Categoria invalida (solo BODEGA o RECEPCION)');
-  if(!tipo) return err(res,'Tipo requerido');
-  if(!productId) return err(res,'Producto requerido');
-  if(motivo.length < 3) return err(res,'Motivo minimo 3 letras');
-
-  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
-  if(!prod) return err(res,'Producto no existe');
-
-  const precio = Number(prod.precio||0);
-  const precioCompra = Number(prod.precio_compra||0);
-
-  let afectaStock = 'ninguno';
-  let afectaCuadre = false;
-  let businessDayAj = '';
-  let shiftAj = '';
-  let recepNameAj = '';
-  let payMethodAj = '';
-  let payMethodViejo = '';
-  let productoViejoId = null;
-  let valorAfectado = 0;
-  let nuevoStockBod = Number(prod.stock_actual||0);
-
-  // ========== BODEGA (no afecta cuadre) ==========
-  if(categoria === 'BODEGA') {
-    afectaStock = 'bodega';
-    afectaCuadre = false;
-    businessDayAj = businessDay(now);
-    shiftAj = currentShiftId(now);
-    valorAfectado = cantidad * precioCompra;
-
-    // Tipos: roto, vencido, conteo, robo, ingreso_extra, salida_extra
-    if(tipo === 'conteo' || tipo === 'ingreso_extra') {
-      // Suman o restan segun el signo de cantidad
-      if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
-      if(nuevoStockBod < 0) return err(res,'Resultado negativo en bodega');
-    } else if(tipo === 'roto' || tipo === 'vencido' || tipo === 'robo' || tipo === 'salida_extra') {
-      // Siempre restan
-      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-      if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock bodega insuficiente. Hay '+prod.stock_actual);
-      nuevoStockBod = Number(prod.stock_actual||0) - cantidad;
-    } else {
-      return err(res,'Tipo de bodega invalido: '+tipo);
-    }
-
-    await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-
-    await supabase.from('stock_movements').insert({
-      ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-      user_name: adminName, user_role: 'ADMIN',
-      product_id: productId, product_name: prod.nombre,
-      tipo: 'bodega_'+tipo,
-      cantidad: cantidad,
-      nota: motivo
-    });
-  }
-
-  // ========== RECEPCION (afecta cuadre y stock) ==========
-  else if(categoria === 'RECEPCION') {
-    afectaCuadre = true;
-    businessDayAj = String(p.businessDay||'').trim();
-    shiftAj = String(p.shiftId||'').trim();
-    recepNameAj = String(p.recepName||'').trim();
-    payMethodAj = String(p.payMethod||'EFECTIVO').toUpperCase();
-
-    // Para conteo: si no envía fecha/turno/recep, los completamos con valores actuales
-    if(tipo === 'conteo') {
-      if(!businessDayAj) businessDayAj = businessDay(now);
-      if(!shiftAj) shiftAj = currentShiftId(now);
-      if(!recepNameAj) recepNameAj = adminName;
-    } else {
-      if(!businessDayAj) return err(res,'Fecha requerida');
-      if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftAj)) return err(res,'Turno invalido');
-      if(!recepNameAj) return err(res,'Recepcionista requerida');
-    }
-
-    // Escenario 5: ajuste por conteo (NO afecta cuadre, solo stock_actual)
-    if(tipo === 'conteo') {
-      if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
-      afectaCuadre = false;
-      afectaStock = 'recepcion';
-      valorAfectado = 0;
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
-      if(nuevoStockBod < 0) return err(res,'Resultado negativo. Stock actual: '+prod.stock_actual);
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-      await supabase.from('stock_movements').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        user_name: recepNameAj, user_role: 'ADMIN',
-        product_id: productId, product_name: prod.nombre,
-        tipo: 'recepcion_conteo',
-        cantidad: cantidad,
-        nota: motivo
-      });
-    }
-
-    // Escenario 4: agregar venta olvidada
-    else if(tipo === 'venta_olvidada') {
-      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-      afectaStock = 'recepcion';
-      valorAfectado = cantidad * precio;
-      nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: cantidad, precio_unit: precio,
-        total: valorAfectado, pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'venta_olvidada',
-        motivo_ajuste: motivo
-      });
-    }
-
-    // Escenario 3: quitar venta (vendio de mas)
-    else if(tipo === 'venta_duplicada') {
-      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-      afectaStock = 'recepcion';
-      valorAfectado = -(cantidad * precio);
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: -cantidad, precio_unit: precio,
-        total: -(cantidad * precio), pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'venta_duplicada',
-        motivo_ajuste: motivo
-      });
-    }
-
-    // Escenario 2: cambiar metodo de pago
-    else if(tipo === 'metodo_pago') {
-      payMethodViejo = String(p.payMethodViejo||'').toUpperCase();
-      if(!payMethodViejo) return err(res,'Metodo anterior requerido');
-      if(payMethodViejo === payMethodAj) return err(res,'Los metodos son iguales');
-      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-      afectaStock = 'ninguno';
-      valorAfectado = cantidad * precio;
-
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: -cantidad, precio_unit: precio,
-        total: -(cantidad * precio), pay_method: payMethodViejo,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'metodo_pago_resta',
-        motivo_ajuste: motivo
-      });
-      await supabase.from('room_products').insert({
-        ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: cantidad, precio_unit: precio,
-        total: cantidad * precio, pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'metodo_pago_suma',
-        motivo_ajuste: motivo
-      });
-    }
-
-    // Escenario 1: cambiar producto vendido por otro
-    else if(tipo === 'producto') {
-      productoViejoId = Number(p.productoViejoId||0);
-      if(!productoViejoId) return err(res,'Producto viejo requerido');
-      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-
-      const { data: prodViejo } = await supabase.from('products').select('*').eq('id',productoViejoId).single();
-      if(!prodViejo) return err(res,'Producto viejo no existe');
-      const precioViejo = Number(prodViejo.precio||0);
-
-      afectaStock = 'ambos';
-      valorAfectado = (cantidad * precio) - (cantidad * precioViejo);
-
-      const nuevoStockViejo = Number(prodViejo.stock_actual||0) + cantidad;
-      await supabase.from('products').update({ stock_actual: nuevoStockViejo }).eq('id',productoViejoId);
-
-      nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
-      await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
-
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productoViejoId, product_name: prodViejo.nombre,
-        cantidad: -cantidad, precio_unit: precioViejo,
-        total: -(cantidad * precioViejo), pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'producto_resta',
-        motivo_ajuste: motivo
-      });
-      await supabase.from('room_products').insert({
-        ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: cantidad, precio_unit: precio,
-        total: cantidad * precio, pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'producto_suma',
-        motivo_ajuste: motivo
-      });
-    }
-
-    else {
-      return err(res,'Tipo de recepcion invalido: '+tipo);
-    }
-  }
-
-  // ========== REGISTRAR EN TABLA AUDITABLE ==========
-  await supabase.from('ajustes').insert({
-    ts_ms: now,
-    categoria: categoria,
-    tipo: tipo,
-    product_id: productId,
-    product_name: prod.nombre,
-    cantidad: cantidad,
-    afecta_stock: afectaStock,
-    afecta_cuadre: afectaCuadre,
-    business_day: businessDayAj,
-    shift_id: shiftAj,
-    recep_name: recepNameAj,
-    pay_method: payMethodAj,
-    pay_method_viejo: payMethodViejo,
-    producto_viejo_id: productoViejoId,
-    valor_afectado: valorAfectado,
-    motivo: motivo,
-    admin_name: adminName
-  });
-
-  return ok(res, {
-    categoria: categoria,
-    tipo: tipo,
-    productId: productId,
-    cantidad: cantidad,
-    afectaCuadre: afectaCuadre,
-    valorAfectado: valorAfectado,
-    nuevoStockBodega: nuevoStockBod
-  });
 }
