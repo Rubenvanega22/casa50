@@ -5367,8 +5367,23 @@ function loadnew(){
     var h=renderResumenRapido(d,anoData,mes);
     h+='<div id="graf1box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica día a día...</div></div>';
     h+='<div id="graf2box" style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando gráfica año a año...</div></div>';
+    h+='<div id="rankBox" style="margin-bottom:14px"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">⏳ Cargando rankings...</div></div>';
     h+=renderDebugMini(d);
     el.innerHTML=h;
+    // Cargar metricas del mes anterior para el comparativo de rankings
+    var mesAntStr=(function(){
+      var p=mes.split('-');
+      var y=Number(p[0]),m=Number(p[1])-1;
+      if(m===0){m=12;y--;}
+      return y+'-'+String(m).padStart(2,'0');
+    })();
+    rpc('getMetricasMes',{mes:mesAntStr,userName:sess.userName,userRole:sess.userRole},function(dPrev){
+      var box=document.getElementById('rankBox');
+      if(box)box.innerHTML=renderRankings(d,dPrev||{});
+    },function(){
+      var box=document.getElementById('rankBox');
+      if(box)box.innerHTML=renderRankings(d,{});
+    });
     // Cargar grafica dia a dia despues (asincrono)
     rpc('getGraficaDiaADia',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(g){
       var box=document.getElementById('graf1box');
@@ -5702,6 +5717,98 @@ function pintarGraficaAnoAno(g){
       }
     }
   });
+}
+
+// Renderiza los 2 rankings lado a lado (camareras + recepcion) con comparativo vs mes anterior
+function renderRankings(d,dPrev){
+  var maidActual=(d.maidRanking||[]);
+  var maidPrev=(dPrev.maidRanking||[]);
+  var recepActual=(d.recepRanking||[]);
+  var recepPrev=(dPrev.recepRanking||[]);
+  
+  // Crear maps por nombre del mes anterior para comparar
+  var maidPrevMap={};
+  maidPrev.forEach(function(r){maidPrevMap[r.nombre]=r;});
+  var recepPrevMap={};
+  recepPrev.forEach(function(r){recepPrevMap[r.nombre]=r;});
+  
+  var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  
+  // RANKING CAMARERAS
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:4px">🏆 Ranking camareras</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Habitaciones aseadas en el mes</div>';
+  if(!maidActual.length){
+    h+='<p style="color:#6b7280;font-size:12px;text-align:center;padding:10px">Sin datos</p>';
+  } else {
+    var topMaid=maidActual.slice(0,5);
+    topMaid.forEach(function(r,i){
+      var prev=maidPrevMap[r.nombre];
+      var diff=prev?(r.habs-prev.habs):null;
+      var diffTxt='';
+      var diffColor='#9ca3af';
+      if(diff!==null){
+        if(diff>0){diffTxt='+'+diff+' vs mes ant';diffColor='#22c55e';}
+        else if(diff<0){diffTxt=diff+' vs mes ant';diffColor='#ef4444';}
+        else {diffTxt='igual al mes ant';diffColor='#9ca3af';}
+      }
+      var bg=i===0?'rgba(245,158,11,.1)':'transparent';
+      var medalla=i===0?'<div style="width:24px;height:24px;border-radius:50%;background:#fac775;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#633806">1</div>':'<div style="width:24px;height:24px;border-radius:50%;background:#22222c;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9ca3af">'+(i+1)+'</div>';
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:8px;background:'+bg+';border-radius:6px;margin-bottom:4px">';
+      h+=medalla;
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:12px;font-weight:500;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.nombre)+'</div>';
+      var promMin=r.habs>0?Math.round(r.totalMins/r.habs):0;
+      h+='<div style="font-size:10px;color:#9ca3af">prom '+promMin+' min/hab</div>';
+      h+='</div>';
+      h+='<div style="text-align:right">';
+      h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb">'+r.habs+'</div>';
+      if(diffTxt)h+='<div style="font-size:9px;color:'+diffColor+'">'+esc(diffTxt)+'</div>';
+      h+='</div>';
+      h+='</div>';
+    });
+  }
+  h+='</div>';
+  
+  // RANKING RECEPCION
+  h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:4px">⭐ Ranking recepción</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Ventas + turnos + fallas en el mes</div>';
+  if(!recepActual.length){
+    h+='<p style="color:#6b7280;font-size:12px;text-align:center;padding:10px">Sin datos</p>';
+  } else {
+    var topRecep=recepActual.slice(0,5);
+    topRecep.forEach(function(r,i){
+      var prev=recepPrevMap[r.nombre];
+      var diff=prev?(r.total-prev.total):null;
+      var diffTxt='';
+      var diffColor='#9ca3af';
+      if(diff!==null){
+        if(diff>0){diffTxt='+'+fmt(diff)+' vs mes ant';diffColor='#22c55e';}
+        else if(diff<0){diffTxt=fmt(diff)+' vs mes ant';diffColor='#ef4444';}
+        else {diffTxt='igual al mes ant';diffColor='#9ca3af';}
+      }
+      var bg=i===0?'rgba(245,158,11,.1)':'transparent';
+      var medalla=i===0?'<div style="width:24px;height:24px;border-radius:50%;background:#fac775;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#633806">1</div>':'<div style="width:24px;height:24px;border-radius:50%;background:#22222c;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9ca3af">'+(i+1)+'</div>';
+      var fallasColor=r.fallas===0?'#22c55e':r.fallas<=2?'#f59e0b':'#ef4444';
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:8px;background:'+bg+';border-radius:6px;margin-bottom:4px">';
+      h+=medalla;
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:12px;font-weight:500;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.nombre)+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af">'+(r.turnos||0)+' turnos · <span style="color:'+fallasColor+'">'+r.fallas+' fallas</span></div>';
+      h+='</div>';
+      h+='<div style="text-align:right">';
+      h+='<div style="font-size:13px;font-weight:700;color:#22c55e">'+fmt(r.total)+'</div>';
+      h+='<div style="font-size:9px;color:#9ca3af">'+r.habs+' hab</div>';
+      if(diffTxt)h+='<div style="font-size:9px;color:'+diffColor+'">'+esc(diffTxt)+'</div>';
+      h+='</div>';
+      h+='</div>';
+    });
+  }
+  h+='</div>';
+  
+  h+='</div>';
+  return h;
 }
 
 // Abre modal Editar Año - carga datos del backend y arma tabla
