@@ -3477,13 +3477,19 @@ async function apiGetMetricasMes(p, res) {
   const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
   const daysInMonth = lastDayDate.getDate();
 
-  // 1. Ventas del mes (de la tabla sales)
+// 1. Ventas del mes (de la tabla sales)
   const ventasMes = await fetchAll(() => supabase.from('sales')
     .select('id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
+
+  // 1b. Ventas del bar (de la tabla room_products)
+  const ventasBar = await fetchAll(() => supabase.from('room_products')
+    .select('business_day, total, is_cortesia')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay));
 
   // 2. Datos por dia (para encontrar mejor dia y hora pico)
   const ventasPorDia = {};
@@ -3494,12 +3500,13 @@ async function apiGetMetricasMes(p, res) {
   
   (ventasMes||[]).forEach(v => {
     if(v.anulada) return;
-    if(v.type !== 'SALE') return; // Solo ventas iniciales para contar habitaciones
-    const dia = v.business_day;
-    if(!ventasPorDia[dia]) ventasPorDia[dia] = { total:0, habs:0 };
-    ventasPorDia[dia].total += Number(v.total||0);
-    ventasPorDia[dia].habs++;
+    // SALE/RENEWAL/EXTENSION: suman al total de ventas (dinero)
     totalVentas += Number(v.total||0);
+    if(!ventasPorDia[v.business_day]) ventasPorDia[v.business_day] = { total:0, habs:0 };
+    ventasPorDia[v.business_day].total += Number(v.total||0);
+    // Solo SALE cuenta como habitacion vendida (para contador y hora pico)
+    if(v.type !== 'SALE') return;
+    ventasPorDia[v.business_day].habs++;
     totalHabs++;
     // Hora pico (basado en hora real del check-in)
     if(v.ts_ms){
@@ -3508,6 +3515,17 @@ async function apiGetMetricasMes(p, res) {
       const hora = (d.getUTCHours() - 5 + 24) % 24;
       ventasPorHora[hora] = (ventasPorHora[hora]||0) + 1;
     }
+  });
+
+  // Sumar ventas del bar al totalVentas y por dia (sin contar como "habitacion")
+  (ventasBar||[]).forEach(v => {
+    if(v.is_cortesia) return; // Cortesias no suman
+    const total = Number(v.total||0);
+    if(total <= 0) return;
+    totalVentas += total;
+    const dia = v.business_day;
+    if(!ventasPorDia[dia]) ventasPorDia[dia] = { total:0, habs:0 };
+    ventasPorDia[dia].total += total;
   });
 
   // Mejor dia
@@ -3676,7 +3694,7 @@ async function apiGetGastosMesResumen(p, res) {
   const lastDayDate = new Date(year, month, 0);
   const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
 
-  // 1. Ventas del mes desde la tabla "sales" (NO room_products)
+  // 1. Ventas del mes desde la tabla "sales" (habitaciones + extensiones)
   const ventasMes = await fetchAll(() => supabase.from('sales')
     .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
     .gte('business_day', firstDay)
@@ -3707,6 +3725,37 @@ async function apiGetGastosMesResumen(p, res) {
       else if(pm === 'NEQUI') ventasNequi += total;
     }
   });
+
+  // 1b. Ventas del bar desde la tabla "room_products" (productos consumidos en habitaciones)
+  const ventasBar = await fetchAll(() => supabase.from('room_products')
+    .select('total, pay_method, is_cortesia')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay));
+  
+  let ventasBarEfectivo = 0;
+  let ventasBarTarjeta = 0;
+  let ventasBarNequi = 0;
+  let totalVentasBar = 0;
+  let cantVentasBar = 0;
+  
+  (ventasBar||[]).forEach(v => {
+    if(v.is_cortesia) return; // Cortesias NO suman
+    const total = Number(v.total||0);
+    if(total <= 0) return;
+    cantVentasBar++;
+    totalVentasBar += total;
+    const pm = String(v.pay_method||'').toUpperCase();
+    if(pm === 'EFECTIVO') ventasBarEfectivo += total;
+    else if(pm === 'TARJETA') ventasBarTarjeta += total;
+    else if(pm === 'NEQUI') ventasBarNequi += total;
+  });
+  
+  // Sumar las ventas del bar a los totales generales
+  ventasEfectivo += ventasBarEfectivo;
+  ventasTarjeta += ventasBarTarjeta;
+  ventasNequi += ventasBarNequi;
+  totalVentas += totalVentasBar;
+  cantVentas += cantVentasBar;
 
   // 2. Gastos del mes desde la nueva tabla "gastos_mes"
   const { data: gastosMes, error: errG } = await supabase.from('gastos_mes')
