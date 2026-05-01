@@ -3954,7 +3954,7 @@ async function apiAddGastoMes(p, res) {
   const fecha = String(p.fecha||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
   const categoria = String(p.categoria||'').trim();
-  const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L'];
+  const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L','Préstamo'];
   if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida. Validas: '+CATEGORIAS_VALIDAS.join(', '));
   const concepto = String(p.concepto||'').trim();
   if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
@@ -4015,7 +4015,7 @@ async function apiEditGastoMes(p, res) {
   }
   if(p.categoria !== undefined){
     const categoria = String(p.categoria||'').trim();
-    const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L'];
+    const CATEGORIAS_VALIDAS = ['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L','Préstamo'];
     if(!CATEGORIAS_VALIDAS.includes(categoria)) return err(res,'Categoria invalida');
     updates.categoria = categoria;
   }
