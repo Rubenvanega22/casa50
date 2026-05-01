@@ -265,6 +265,13 @@ module.exports = async function handler(req, res) {
       case 'addGastoMes':         return await apiAddGastoMes(payload, res);
       case 'editGastoMes':        return await apiEditGastoMes(payload, res);
       case 'anularGastoMes':      return await apiAnularGastoMes(payload, res);
+      case 'getCajaPaolaResumen': return await apiGetCajaPaolaResumen(payload, res);
+      case 'addCajaEntrega':      return await apiAddCajaEntrega(payload, res);
+      case 'addCajaGasto':        return await apiAddCajaGasto(payload, res);
+      case 'editCajaGasto':       return await apiEditCajaGasto(payload, res);
+      case 'deleteCajaGasto':     return await apiDeleteCajaGasto(payload, res);
+      case 'aprobarCajaEntrega':  return await apiAprobarCajaEntrega(payload, res);
+      case 'anularCajaEntrega':   return await apiAnularCajaEntrega(payload, res);
       case 'descargarNequi':      return await apiDescargarNequi(payload, res);
       case 'anularDescargoNequi': return await apiAnularDescargoNequi(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
@@ -4091,6 +4098,334 @@ async function apiAnularGastoMes(p, res) {
   }).eq('id', gastoId);
   if(error) return err(res, error.message);
   return ok(res, { gastoId: gastoId });
+}
+
+// ==================== CAJA PAOLA → RUBEN ====================
+// Movimiento interno PRIVADO entre Paola y Ruben
+// NO afecta el efectivo en caja publico
+
+// 1. Resumen: 3 saldos + entregas + gastos del mes
+async function apiGetCajaPaolaResumen(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const mes = String(p.mes || '').trim();
+  if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
+
+  // Leer todos los movimientos del mes (excepto anulados)
+  const { data: movs, error: errM } = await supabase.from('caja_paola')
+    .select('*')
+    .eq('mes', mes)
+    .order('ts_ms', { ascending: false });
+  if(errM) return err(res, errM.message);
+
+  // Separar entregas y gastos
+  const entregas = [];
+  const gastosRuben = [];
+  let totalEntregasAprobadas = 0;
+  let totalEntregasPendientes = 0;
+  let totalGastos = 0;
+
+  (movs||[]).forEach(m => {
+    if(m.anulada) return; // Anulados no cuentan ni se muestran en listas activas
+    if(m.tipo === 'entrega'){
+      entregas.push(m);
+      if(m.estado === 'aprobada') totalEntregasAprobadas += Number(m.monto||0);
+      else if(m.estado === 'pendiente') totalEntregasPendientes += Number(m.monto||0);
+    } else if(m.tipo === 'gasto'){
+      gastosRuben.push(m);
+      totalGastos += Number(m.monto||0);
+    }
+  });
+
+  // Calcular el "Efectivo en caja del mes" (publico) para validacion del cuadre
+  // Reusamos la misma logica que apiGetGastosMesResumen
+  const [yearStr, monthStr] = mes.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const firstDay = `${mes}-01`;
+  const lastDayDate = new Date(year, month, 0);
+  const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
+
+  // Ventas en efectivo (sales)
+  const ventasMes = await fetchAll(() => supabase.from('sales')
+    .select('total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .neq('anulada', true));
+
+  let ventasEfectivo = 0;
+  (ventasMes||[]).forEach(v => {
+    if(v.anulada) return;
+    if(v.pay_method === 'MIXTO' || v.pay_method_2){
+      ventasEfectivo += Number(v.amount_1||0);
+    } else if(String(v.pay_method||'').toUpperCase() === 'EFECTIVO'){
+      ventasEfectivo += Number(v.total||0);
+    }
+  });
+
+  // Ventas del bar en efectivo
+  const ventasBar = await fetchAll(() => supabase.from('room_products')
+    .select('total, pay_method, is_cortesia')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay));
+  (ventasBar||[]).forEach(v => {
+    if(v.is_cortesia) return;
+    const total = Number(v.total||0);
+    if(total <= 0) return;
+    if(String(v.pay_method||'').toUpperCase() === 'EFECTIVO'){
+      ventasEfectivo += total;
+    }
+  });
+
+  // Descargos de Nequi a efectivo (suman al efectivo)
+  const { data: descargos } = await supabase.from('descargos_nequi')
+    .select('monto, anulada')
+    .eq('mes', mes)
+    .neq('anulada', true);
+  let totalDescargos = 0;
+  (descargos||[]).forEach(d => {
+    if(d.anulada) return;
+    totalDescargos += Number(d.monto||0);
+  });
+
+  // Gastos publicos en efectivo (gastos_mes con pay_method=EFECTIVO)
+  const { data: gastosPublic } = await supabase.from('gastos_mes')
+    .select('monto, pay_method, anulada')
+    .eq('mes', mes)
+    .neq('anulada', true);
+  let gastosPublicEfectivo = 0;
+  (gastosPublic||[]).forEach(g => {
+    if(g.anulada) return;
+    if(String(g.pay_method||'').toUpperCase() === 'EFECTIVO'){
+      gastosPublicEfectivo += Number(g.monto||0);
+    }
+  });
+
+  // Efectivo en caja publico = ventas efectivo + descargos - gastos publicos efectivo
+  const efectivoEnCajaPublico = ventasEfectivo + totalDescargos - gastosPublicEfectivo;
+
+  // Calcular los 3 saldos privados
+  const saldoPaola = efectivoEnCajaPublico - totalEntregasAprobadas - totalGastos;
+  const cajaFuerteRuben = totalEntregasAprobadas;
+  // total Gastos Ruben ya esta calculado
+
+  // Validar cuadre (deben sumar al efectivo publico)
+  const sumaPrivados = saldoPaola + cajaFuerteRuben + totalGastos;
+  const cuadra = Math.abs(sumaPrivados - efectivoEnCajaPublico) < 1; // tolerancia 1 peso
+
+  return ok(res, {
+    mes: mes,
+    efectivoEnCajaPublico: efectivoEnCajaPublico,
+    saldos: {
+      paola: saldoPaola,
+      cajaFuerteRuben: cajaFuerteRuben,
+      gastosRuben: totalGastos
+    },
+    entregas: {
+      lista: entregas,
+      totalAprobadas: totalEntregasAprobadas,
+      totalPendientes: totalEntregasPendientes
+    },
+    gastos: {
+      lista: gastosRuben,
+      total: totalGastos
+    },
+    cuadre: {
+      sumaPrivados: sumaPrivados,
+      cuadra: cuadra,
+      diferencia: efectivoEnCajaPublico - sumaPrivados
+    }
+  });
+}
+
+// 2. Crear entrega (Paola → Ruben), queda pendiente de aprobacion
+async function apiAddCajaEntrega(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const monto = Number(p.monto||0);
+  if(monto<=0) return err(res,'Monto debe ser mayor a 0');
+  const nota = String(p.nota||'').trim();
+
+  const now = Date.now();
+  const fecha = new Date(now).toISOString().slice(0,10); // YYYY-MM-DD UTC
+  const mes = fecha.substring(0,7);
+
+  const { data, error } = await supabase.from('caja_paola').insert({
+    ts_ms: now,
+    fecha: fecha,
+    mes: mes,
+    tipo: 'entrega',
+    monto: monto,
+    nota: nota || null,
+    estado: 'pendiente',
+    created_by: userName
+  }).select().single();
+  if(error) return err(res, error.message);
+  return ok(res, { entrega: data });
+}
+
+// 3. Crear gasto Ruben (lo paga Paola en nombre de Ruben)
+async function apiAddCajaGasto(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const monto = Number(p.monto||0);
+  if(monto<=0) return err(res,'Monto debe ser mayor a 0');
+  const concepto = String(p.concepto||'').trim();
+  if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
+  const fecha = String(p.fecha||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
+  const mes = fecha.substring(0,7);
+
+  const { data, error } = await supabase.from('caja_paola').insert({
+    ts_ms: Date.now(),
+    fecha: fecha,
+    mes: mes,
+    tipo: 'gasto',
+    monto: monto,
+    concepto: concepto,
+    estado: 'aprobada', // los gastos se "aprueban" al instante (no requieren PIN)
+    created_by: userName
+  }).select().single();
+  if(error) return err(res, error.message);
+  return ok(res, { gasto: data });
+}
+
+// 4. Editar gasto Ruben existente (cualquier campo)
+async function apiEditCajaGasto(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const movId = Number(p.movId||0);
+  if(!movId) return err(res,'movId requerido');
+
+  const { data: gastoActual, error: errG } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  if(errG) return err(res, errG.message);
+  if(!gastoActual) return err(res,'Movimiento no encontrado');
+  if(gastoActual.tipo !== 'gasto') return err(res,'Solo se editan gastos, no entregas');
+  if(gastoActual.anulada) return err(res,'No se puede editar un gasto anulado');
+
+  const updates = {
+    edited_ms: Date.now(),
+    edited_by: userName
+  };
+  if(p.monto !== undefined){
+    const monto = Number(p.monto||0);
+    if(monto<=0) return err(res,'Monto debe ser mayor a 0');
+    updates.monto = monto;
+  }
+  if(p.concepto !== undefined){
+    const concepto = String(p.concepto||'').trim();
+    if(concepto.length<3) return err(res,'Concepto requerido (min 3 caracteres)');
+    updates.concepto = concepto;
+  }
+  if(p.fecha !== undefined){
+    const fecha = String(p.fecha||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
+    updates.fecha = fecha;
+    updates.mes = fecha.substring(0,7);
+  }
+
+  const { error } = await supabase.from('caja_paola').update(updates).eq('id', movId);
+  if(error) return err(res, error.message);
+  return ok(res, { movId: movId });
+}
+
+// 5. Eliminar gasto Ruben (anular logico, no borra fila)
+async function apiDeleteCajaGasto(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const movId = Number(p.movId||0);
+  if(!movId) return err(res,'movId requerido');
+
+  const { data: gastoActual, error: errG } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  if(errG) return err(res, errG.message);
+  if(!gastoActual) return err(res,'Movimiento no encontrado');
+  if(gastoActual.tipo !== 'gasto') return err(res,'Solo se eliminan gastos, no entregas');
+  if(gastoActual.anulada) return err(res,'Este gasto ya fue eliminado');
+
+  const { error } = await supabase.from('caja_paola').update({
+    anulada: true,
+    anulada_ms: Date.now(),
+    anulada_por: userName
+  }).eq('id', movId);
+  if(error) return err(res, error.message);
+  return ok(res, { movId: movId });
+}
+
+// 6. Aprobar entrega (Ruben con PIN)
+async function apiAprobarCajaEntrega(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const movId = Number(p.movId||0);
+  if(!movId) return err(res,'movId requerido');
+  const pin = String(p.pin||'').trim();
+  if(!pin) return err(res,'PIN requerido');
+
+  // Verificar PIN contra config_caja
+  const { data: cfg, error: errC } = await supabase.from('config_caja')
+    .select('value')
+    .eq('key', 'pin_ruben')
+    .maybeSingle();
+  if(errC) return err(res, errC.message);
+  if(!cfg) return err(res,'PIN no configurado');
+  if(String(cfg.value).trim() !== pin) return err(res,'PIN incorrecto');
+
+  // Validar la entrega
+  const { data: entrega, error: errE } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  if(errE) return err(res, errE.message);
+  if(!entrega) return err(res,'Entrega no encontrada');
+  if(entrega.tipo !== 'entrega') return err(res,'Solo se aprueban entregas');
+  if(entrega.anulada) return err(res,'Esta entrega esta anulada');
+  if(entrega.estado !== 'pendiente') return err(res,'Solo se aprueban entregas pendientes');
+
+  // Aprobar
+  const now = Date.now();
+  const { error } = await supabase.from('caja_paola').update({
+    estado: 'aprobada',
+    approved_ms: now,
+    approved_by: userName
+  }).eq('id', movId);
+  if(error) return err(res, error.message);
+  return ok(res, { movId: movId, monto: entrega.monto });
+}
+
+// 7. Anular entrega pendiente (solo si NO esta aprobada)
+async function apiAnularCajaEntrega(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+  const movId = Number(p.movId||0);
+  if(!movId) return err(res,'movId requerido');
+
+  const { data: entrega, error: errE } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  if(errE) return err(res, errE.message);
+  if(!entrega) return err(res,'Entrega no encontrada');
+  if(entrega.tipo !== 'entrega') return err(res,'Solo se anulan entregas');
+  if(entrega.anulada) return err(res,'Esta entrega ya esta anulada');
+  if(entrega.estado === 'aprobada') return err(res,'No se puede anular una entrega ya aprobada');
+
+  const motivo = String(p.motivo||'').trim() || 'Anulada por el creador';
+
+  const { error } = await supabase.from('caja_paola').update({
+    anulada: true,
+    estado: 'anulada',
+    anulada_ms: Date.now(),
+    anulada_por: userName,
+    motivo_anulacion: motivo
+  }).eq('id', movId);
+  if(error) return err(res, error.message);
+  return ok(res, { movId: movId });
 }
 
 // ==================== RESUMEN MENSUAL (INVENTARIO MES) ====================
