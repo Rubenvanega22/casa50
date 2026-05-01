@@ -3446,15 +3446,33 @@ async function apiGetGraficaAnoAno(p, res) {
   const hoyMonth = hoy.getMonth() + 1;
   const ultimoMes = (ano === hoyYear) ? hoyMonth : 12;
 
-  // Poner null en meses futuros del año actual
-  const ventasActualFinal = ventasPorMes.map((v, i) => i < ultimoMes ? v : null);
-  const gastosActualFinal = gastosPorMes.map((v, i) => i < ultimoMes ? v : null);
-
   // 2. Año anterior (de la tabla ventas_gastos_anuales)
   const { data: anoAnt } = await supabase.from('ventas_gastos_anuales')
     .select('*')
     .eq('ano', anoAnterior)
     .maybeSingle();
+
+  // 2b. Año actual MANUAL (override de meses pasados)
+  const { data: anoActualManual } = await supabase.from('ventas_gastos_anuales')
+    .select('*')
+    .eq('ano', ano)
+    .maybeSingle();
+
+  // Si hay valores manuales del año actual, sobrescribir el calculado
+  const mesesKey = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  if(anoActualManual){
+    mesesKey.forEach((m, i) => {
+      const ventaManual = Number(anoActualManual[`ventas_${m}`]||0);
+      const gastoManual = Number(anoActualManual[`gastos_${m}`]||0);
+      // Solo sobrescribir si el manual tiene valor (>0)
+      if(ventaManual > 0) ventasPorMes[i] = ventaManual;
+      if(gastoManual > 0) gastosPorMes[i] = gastoManual;
+    });
+  }
+
+  // Poner null en meses futuros del año actual (DESPUES del override)
+  const ventasActualFinal = ventasPorMes.map((v, i) => i < ultimoMes ? v : null);
+  const gastosActualFinal = gastosPorMes.map((v, i) => i < ultimoMes ? v : null);
 
   const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const ventasAnterior = meses.map(m => Number(anoAnt ? (anoAnt[`ventas_${m}`]||0) : 0));
