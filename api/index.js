@@ -3223,6 +3223,12 @@ async function apiGetGraficaDiaADia(p, res) {
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
 
+  // 1b. Ventas del bar mes actual
+  const ventasBarActual = await fetchAll(() => supabase.from('room_products')
+    .select('business_day, total, is_cortesia')
+    .gte('business_day', firstDayActual)
+    .lte('business_day', lastDayActual));
+
   // 2. Ventas mes anterior
   const ventasAnterior = await fetchAll(() => supabase.from('sales')
     .select('business_day, total, type, anulada')
@@ -3230,6 +3236,12 @@ async function apiGetGraficaDiaADia(p, res) {
     .lte('business_day', lastDayAnterior)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
+
+  // 2b. Ventas del bar mes anterior
+  const ventasBarAnterior = await fetchAll(() => supabase.from('room_products')
+    .select('business_day, total, is_cortesia')
+    .gte('business_day', firstDayAnterior)
+    .lte('business_day', lastDayAnterior));
 
   // 3. Gastos del mes actual (de gastos_mes)
   const { data: gastosActual } = await supabase.from('gastos_mes')
@@ -3257,10 +3269,28 @@ async function apiGetGraficaDiaADia(p, res) {
       datosActual[v.business_day] += Number(v.total||0);
     }
   });
+  // Sumar ventas del bar al mes actual
+  (ventasBarActual||[]).forEach(v => {
+    if(v.is_cortesia) return; // Cortesias no suman
+    const total = Number(v.total||0);
+    if(total <= 0) return;
+    if(datosActual[v.business_day] !== undefined){
+      datosActual[v.business_day] += total;
+    }
+  });
   (ventasAnterior||[]).forEach(v => {
     if(v.anulada) return;
     if(datosAnterior[v.business_day] !== undefined){
       datosAnterior[v.business_day] += Number(v.total||0);
+    }
+  });
+  // Sumar ventas del bar al mes anterior
+  (ventasBarAnterior||[]).forEach(v => {
+    if(v.is_cortesia) return; // Cortesias no suman
+    const total = Number(v.total||0);
+    if(total <= 0) return;
+    if(datosAnterior[v.business_day] !== undefined){
+      datosAnterior[v.business_day] += total;
     }
   });
   (gastosActual||[]).forEach(g => {
@@ -3367,14 +3397,19 @@ async function apiGetGraficaAnoAno(p, res) {
   const anoAnterior = ano - 1;
   const firstDay = `${ano}-01-01`;
   const lastDay = `${ano}-12-31`;
-
-  // 1. Ventas y gastos del año actual (calculados desde sales y gastos_mes)
+// 1. Ventas y gastos del año actual (calculados desde sales, room_products y gastos_mes)
   const ventasActual = await fetchAll(() => supabase.from('sales')
     .select('business_day, total, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
+
+  // 1b. Ventas del bar (room_products) del año actual
+  const ventasBarActual = await fetchAll(() => supabase.from('room_products')
+    .select('business_day, total, is_cortesia')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay));
 
   const { data: gastosActual } = await supabase.from('gastos_mes')
     .select('mes, monto, anulada')
@@ -3390,6 +3425,14 @@ async function apiGetGraficaAnoAno(p, res) {
     if(v.anulada) return;
     const m = Number(v.business_day.split('-')[1]) - 1;
     if(m >= 0 && m <= 11) ventasPorMes[m] += Number(v.total||0);
+  });
+  // Sumar ventas del bar al mes correspondiente
+  (ventasBarActual||[]).forEach(v => {
+    if(v.is_cortesia) return; // Cortesias no suman
+    const total = Number(v.total||0);
+    if(total <= 0) return;
+    const m = Number(v.business_day.split('-')[1]) - 1;
+    if(m >= 0 && m <= 11) ventasPorMes[m] += total;
   });
   (gastosActual||[]).forEach(g => {
     if(g.anulada) return;
