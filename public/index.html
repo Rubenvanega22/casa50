@@ -5620,7 +5620,10 @@ function renderGraficaAnoAno(g,anoActual){
   var h='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px;margin-bottom:14px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">';
   h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb">📈 Año a año ('+anoActual+' vs '+anoAnterior+')</div>';
-  h+='<button class="btn ba xs" onclick="openEditarAno('+anoAnterior+')">✏ Editar '+anoAnterior+'</button>';
+  h+='<div style="display:flex;gap:6px">';
+  h+='<button class="btn bk xs" onclick="openEditarAno('+anoAnterior+')" title="Editar datos del año anterior">✏ '+anoAnterior+'</button>';
+  h+='<button class="btn ba xs" onclick="openEditarAno('+anoActual+')" title="Editar meses pasados del año actual">✏ '+anoActual+'</button>';
+  h+='</div>';
   h+='</div>';
   
   if(!g.tieneAnoAnterior){
