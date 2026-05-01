@@ -3243,6 +3243,16 @@ async function apiGetGraficaDiaADia(p, res) {
     .gte('business_day', firstDayAnterior)
     .lte('business_day', lastDayAnterior));
 
+  // 2c. Ventas diarias MANUALES del mes actual (override)
+  const { data: manualActual } = await supabase.from('ventas_diarias_manuales')
+    .select('fecha, total_ventas')
+    .eq('mes', mes);
+
+  // 2d. Ventas diarias MANUALES del mes anterior (override)
+  const { data: manualAnterior } = await supabase.from('ventas_diarias_manuales')
+    .select('fecha, total_ventas')
+    .eq('mes', mesAnterior);
+
   // 3. Gastos del mes actual (de gastos_mes)
   const { data: gastosActual } = await supabase.from('gastos_mes')
     .select('fecha, monto, anulada')
@@ -3278,6 +3288,13 @@ async function apiGetGraficaDiaADia(p, res) {
       datosActual[v.business_day] += total;
     }
   });
+  // OVERRIDE: si hay valores manuales para el mes actual, sobrescribir el calculado
+  (manualActual||[]).forEach(m => {
+    const fechaStr = String(m.fecha);
+    if(datosActual[fechaStr] !== undefined){
+      datosActual[fechaStr] = Number(m.total_ventas||0);
+    }
+  });
   (ventasAnterior||[]).forEach(v => {
     if(v.anulada) return;
     if(datosAnterior[v.business_day] !== undefined){
@@ -3291,6 +3308,13 @@ async function apiGetGraficaDiaADia(p, res) {
     if(total <= 0) return;
     if(datosAnterior[v.business_day] !== undefined){
       datosAnterior[v.business_day] += total;
+    }
+  });
+  // OVERRIDE: si hay valores manuales para el mes anterior, sobrescribir el calculado
+  (manualAnterior||[]).forEach(m => {
+    const fechaStr = String(m.fecha);
+    if(datosAnterior[fechaStr] !== undefined){
+      datosAnterior[fechaStr] = Number(m.total_ventas||0);
     }
   });
   (gastosActual||[]).forEach(g => {
@@ -3452,13 +3476,19 @@ async function apiGetGraficaAnoAno(p, res) {
     .eq('ano', anoAnterior)
     .maybeSingle();
 
-  // 2b. Año actual MANUAL (override de meses pasados)
+  // 2b. Año actual MANUAL (override de meses pasados — totales mensuales)
   const { data: anoActualManual } = await supabase.from('ventas_gastos_anuales')
     .select('*')
     .eq('ano', ano)
     .maybeSingle();
 
-  // Si hay valores manuales del año actual, sobrescribir el calculado
+  // 2c. Ventas diarias MANUALES del año actual (override mas preciso)
+  const { data: ventasDiariasManuales } = await supabase.from('ventas_diarias_manuales')
+    .select('mes, total_ventas')
+    .gte('mes', `${ano}-01`)
+    .lte('mes', `${ano}-12`);
+
+  // Si hay valores manuales del año actual (por mes total), sobrescribir el calculado
   const mesesKey = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   if(anoActualManual){
     mesesKey.forEach((m, i) => {
@@ -3467,6 +3497,21 @@ async function apiGetGraficaAnoAno(p, res) {
       // Solo sobrescribir si el manual tiene valor (>0)
       if(ventaManual > 0) ventasPorMes[i] = ventaManual;
       if(gastoManual > 0) gastosPorMes[i] = gastoManual;
+    });
+  }
+
+  // Override mas preciso: sumar ventas diarias manuales por mes
+  if(ventasDiariasManuales && ventasDiariasManuales.length > 0){
+    const ventasManualesPorMes = [0,0,0,0,0,0,0,0,0,0,0,0];
+    ventasDiariasManuales.forEach(d => {
+      const mesNum = Number(String(d.mes).split('-')[1]) - 1;
+      if(mesNum >= 0 && mesNum <= 11){
+        ventasManualesPorMes[mesNum] += Number(d.total_ventas||0);
+      }
+    });
+    // Aplicar override solo si hay valor
+    ventasManualesPorMes.forEach((total, i) => {
+      if(total > 0) ventasPorMes[i] = total;
     });
   }
 
