@@ -249,6 +249,22 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="font-size:11px;margin-top:6px">Próximamente — editar / anular / agregar personal extra</div>
 </div>
 </div></div></div></div>
+<!-- ==================== MODAL CAJA PAOLA → RUBEN ==================== -->
+<div class="ov" id="mCajaPaola">
+  <div class="md" style="max-width:780px;width:96%;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:0.5px solid #2e2e3a">
+      <div>
+        <div style="font-size:16px;font-weight:500;color:#c4b5fd">🔒 Caja Paola → Ruben</div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:2px">Movimiento interno · No afecta nada por fuera</div>
+      </div>
+      <button onclick="closeM('mCajaPaola')" style="background:rgba(127,127,127,.15);color:#9ca3af;border:0.5px solid #2e2e3a;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">✕ Cerrar</button>
+    </div>
+    <div id="mCajaPaolaBody">
+      <div style="color:#9ca3af;text-align:center;padding:30px;font-size:13px">⏳ Cargando...</div>
+    </div>
+  </div>
+</div>
+
 <div class="ov" id="mDescargarNequi"><div class="modal" style="max-width:440px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">↩ Descargar Nequi a efectivo</div><button class="mc" onclick="closeM('mDescargarNequi')">✕</button></div>
 <div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#c4b5fd">💡 Cuando retiras dinero del Nequi al cajero, el saldo del Nequi baja y el del Efectivo en caja sube por la misma cantidad.</div>
 <div id="dnSaldoActual" style="background:#18181f;border-radius:6px;padding:10px;margin-bottom:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase">Saldo Nequi disponible</div><div id="dnSaldoCifra" style="font-size:18px;font-weight:700;color:#a855f7">$0</div></div>
@@ -6446,7 +6462,7 @@ function renderGastosMes(d){
   h+='<div style="font-size:10px;color:#3b82f6;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">💰 Dónde está la plata HOY</div>';
   h+='<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Sí cambia con gastos y descargos del Nequi</div>';
   h+='<div style="display:flex;flex-direction:column;gap:6px">';
-  h+='<div style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💵 Efectivo en caja</span><b style="font-size:16px;color:#22c55e">'+fmt(s.efectivoEnCaja||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.efectivo||0)+' ventas + '+fmt(d.descargos.total||0)+' descargos − '+fmt(g.efectivo||0)+' gastos</div></div>';
+  h+='<div id="cardEfectivoCaja" style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.3);border-radius:6px;padding:10px;cursor:pointer;user-select:none" onclick="cajaPaolaTap()"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💵 Efectivo en caja</span><b style="font-size:16px;color:#22c55e">'+fmt(s.efectivoEnCaja||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.efectivo||0)+' ventas + '+fmt(d.descargos.total||0)+' descargos − '+fmt(g.efectivo||0)+' gastos</div></div>';
   h+='<div style="background:rgba(24,95,165,.08);border:0.5px solid rgba(24,95,165,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">💳 Caja tarjeta</span><b style="font-size:16px;color:#3b82f6">'+fmt(s.cajaTarjeta||0)+'</b></div><div style="font-size:10px;color:#6b7280">'+fmt(v.tarjeta||0)+' ventas − '+fmt(g.tarjeta||0)+' gastos</div></div>';
   h+='<div style="background:rgba(168,85,247,.08);border:0.5px solid rgba(168,85,247,.3);border-radius:6px;padding:10px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:12px;color:#9ca3af;font-weight:500">📱 Nequi</span><b style="font-size:16px;color:#a855f7">'+fmt(s.nequiDisponible||0)+'</b></div><div style="font-size:10px;color:#6b7280;margin-bottom:8px">'+fmt(v.nequi||0)+' ventas − '+fmt(d.descargos.total||0)+' descargados</div><div style="display:flex;gap:6px"><button class="btn sm" style="flex:1;background:rgba(168,85,247,.15);color:#a855f7;border:0.5px solid rgba(168,85,247,.4);font-size:11px" onclick="openDescargarNequi('+(s.nequiDisponible||0)+')">↩ Descargar a efectivo</button><button class="btn sm" style="flex:1;background:#2e2e3a;color:#9ca3af;font-size:11px" onclick="openHistorialDescargos()">📋 Historial ('+(d.descargos.cantidad||0)+')</button></div></div>';
   h+='</div></div>';
@@ -6595,6 +6611,160 @@ function _doSaveGastoMes(fecha,cat,concepto,monto,payMethod){
     loadGastosMes();
   },function(e){toast('Error: '+(e.message||'?'),'err');});
 }
+// ==================== CAJA PAOLA → RUBEN (oculto) ====================
+// Detector de 3 toques rapidos sobre la card "Efectivo en caja"
+var _cpTaps=0,_cpTimer=null;
+function cajaPaolaTap(){
+  _cpTaps++;
+  if(_cpTimer)clearTimeout(_cpTimer);
+  _cpTimer=setTimeout(function(){_cpTaps=0;},800);
+  if(_cpTaps>=3){
+    _cpTaps=0;
+    if(_cpTimer)clearTimeout(_cpTimer);
+    openCajaPaola();
+  }
+}
+
+// Abre el modal oculto de Caja Paola → Ruben
+function openCajaPaola(){
+  if(!sess||sess.userRole!=='ADMIN')return;
+  var mes=document.getElementById('gmPick').value;
+  if(!mes){
+    var hoy=new Date();
+    mes=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+  }
+  loadCajaPaola(mes);
+  openM('mCajaPaola');
+}
+
+// Carga el resumen del backend y pinta la pantalla principal
+function loadCajaPaola(mes){
+  var el=document.getElementById('mCajaPaolaBody');
+  if(!el)return;
+  el.innerHTML='<div style="color:#9ca3af;text-align:center;padding:30px;font-size:13px">⏳ Cargando...</div>';
+  window._cpMes=mes;
+  rpc('getCajaPaolaResumen',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(d){
+    el.innerHTML=renderCajaPaola(d);
+  },function(e){
+    el.innerHTML='<div style="color:#ef4444;padding:30px;text-align:center;font-size:13px">Error: '+esc(e.message||'?')+'</div>';
+  });
+}
+
+// Pinta la pantalla principal (3 saldos + cuadre + botones + 2 listas)
+function renderCajaPaola(d){
+  var s=d.saldos||{paola:0,cajaFuerteRuben:0,gastosRuben:0};
+  var entregas=(d.entregas&&d.entregas.lista)||[];
+  var gastos=(d.gastos&&d.gastos.lista)||[];
+  var totalE=Number(d.entregas&&d.entregas.totalAprobadas||0);
+  var totalG=Number(d.gastos&&d.gastos.total||0);
+  var publico=Number(d.efectivoEnCajaPublico||0);
+  var cuadra=d.cuadre&&d.cuadre.cuadra;
+  var diff=Number(d.cuadre&&d.cuadre.diferencia||0);
+
+  var h='';
+  // Linea gris arriba: Efectivo en caja del mes (publico, referencia)
+  h+='<div style="background:rgba(127,127,127,.05);border-radius:6px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">';
+  h+='<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">💰 Efectivo en caja del mes</div><div style="font-size:11px;color:#6b7280;margin-top:2px">visible en pantalla pública</div></div>';
+  h+='<div style="font-size:18px;font-weight:500;color:#e5e7eb">'+fmt(publico)+'</div>';
+  h+='</div>';
+
+  // 3 saldos en linea
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">';
+  h+='<div style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.3);border-radius:8px;padding:12px"><div style="font-size:10px;color:#86efac;text-transform:uppercase;letter-spacing:.5px;font-weight:500">💵 Saldo Paola</div><div style="font-size:18px;font-weight:500;color:#22c55e;margin-top:4px">'+fmt(s.paola)+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">en su poder hoy</div></div>';
+  h+='<div style="background:rgba(167,139,250,.08);border:0.5px solid rgba(167,139,250,.3);border-radius:8px;padding:12px"><div style="font-size:10px;color:#c4b5fd;text-transform:uppercase;letter-spacing:.5px;font-weight:500">🔐 Caja Fuerte Ruben</div><div style="font-size:18px;font-weight:500;color:#a78bfa;margin-top:4px">'+fmt(s.cajaFuerteRuben)+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">entregas aprobadas</div></div>';
+  h+='<div style="background:rgba(239,68,68,.06);border:0.5px solid rgba(239,68,68,.3);border-radius:8px;padding:12px"><div style="font-size:10px;color:#fca5a5;text-transform:uppercase;letter-spacing:.5px;font-weight:500">💸 Gastos Ruben</div><div style="font-size:18px;font-weight:500;color:#ef4444;margin-top:4px">'+fmt(s.gastosRuben)+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">pagados por Paola</div></div>';
+  h+='</div>';
+
+  // Cuadre
+  var cuadreColor=cuadra?'#86efac':'#fca5a5';
+  var cuadreBg=cuadra?'rgba(34,197,94,.04)':'rgba(239,68,68,.06)';
+  var cuadreBorder=cuadra?'rgba(34,197,94,.2)':'rgba(239,68,68,.3)';
+  var cuadreIcon=cuadra?'✓':'⚠';
+  h+='<div style="background:'+cuadreBg+';border:0.5px solid '+cuadreBorder+';border-radius:6px;padding:8px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;font-size:11px">';
+  h+='<div style="color:'+cuadreColor+'">'+cuadreIcon+' Cuadre: '+fmt(s.paola)+' + '+fmt(s.cajaFuerteRuben)+' + '+fmt(s.gastosRuben)+'</div>';
+  h+='<div style="color:'+cuadreColor+';font-weight:500">= '+fmt(s.paola+s.cajaFuerteRuben+s.gastosRuben)+'</div>';
+  h+='</div>';
+  if(!cuadra){
+    h+='<div style="background:rgba(239,68,68,.08);border:0.5px solid rgba(239,68,68,.3);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#fca5a5;text-align:center">⚠ Hay una diferencia de '+fmt(Math.abs(diff))+' con el efectivo público</div>';
+  }
+
+  // 2 botones grandes
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
+  h+='<button onclick="openCajaEntrega('+s.paola+')" style="background:rgba(167,139,250,.15);color:#c4b5fd;border:1px solid rgba(167,139,250,.4);padding:10px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500">📤 Entregar a Ruben</button>';
+  h+='<button onclick="openCajaGasto()" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4);padding:10px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500">💸 Registrar gasto Ruben</button>';
+  h+='</div>';
+
+  // 2 listas en columnas
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+  // COLUMNA IZQ: Entregas
+  h+='<div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">';
+  h+='<div style="font-size:11px;color:#c4b5fd;text-transform:uppercase;font-weight:500;letter-spacing:.5px">📤 Entregas a Ruben</div>';
+  h+='<div style="font-size:10px;color:#9ca3af">Total: '+fmt(totalE)+'</div>';
+  h+='</div>';
+  if(!entregas.length){
+    h+='<div style="background:rgba(127,127,127,.04);border:0.5px dashed #2e2e3a;border-radius:6px;padding:14px;text-align:center;font-size:11px;color:#6b7280">Sin entregas este mes</div>';
+  } else {
+    entregas.forEach(function(e){
+      var pendiente=e.estado==='pendiente';
+      var bordeColor=pendiente?'#f59e0b':'#22c55e';
+      var bgColor=pendiente?'rgba(245,158,11,.06)':'rgba(34,197,94,.04)';
+      var badgeColor=pendiente?'#fbbf24':'#86efac';
+      var badgeBg=pendiente?'rgba(245,158,11,.2)':'rgba(34,197,94,.2)';
+      var estadoTxt=pendiente?'Pendiente':'Aprobada';
+      var fechaTxt=fT(e.ts_ms);
+      var fechaCorta=String(e.fecha||'').split('-').reverse().slice(0,2).join('/');
+      h+='<div style="background:'+bgColor+';border-left:3px solid '+bordeColor+';border-radius:0 6px 6px 0;padding:8px 10px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:6px">';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<span style="background:'+badgeBg+';color:'+badgeColor+';padding:1px 5px;border-radius:4px;font-size:9px;font-weight:500;text-transform:uppercase">'+estadoTxt+'</span>';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+esc(fechaCorta)+' '+esc(fechaTxt)+'</div>';
+      if(e.nota)h+='<div style="font-size:10px;color:#6b7280;margin-top:2px;font-style:italic">'+esc(e.nota)+'</div>';
+      h+='</div>';
+      h+='<div style="text-align:right">';
+      h+='<div style="font-size:13px;font-weight:500;color:'+badgeColor+'">'+fmt(e.monto)+'</div>';
+      if(pendiente){
+        h+='<div style="display:flex;gap:3px;margin-top:3px;justify-content:flex-end">';
+        h+='<button onclick="openCajaAprobar('+e.id+','+e.monto+',\''+esc(fechaCorta)+'\')" style="background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.4);padding:2px 6px;border-radius:4px;font-size:9px;cursor:pointer">✓ Aprobar</button>';
+        h+='<button onclick="anularCajaEntrega('+e.id+')" style="background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.4);padding:2px 6px;border-radius:4px;font-size:9px;cursor:pointer">✕</button>';
+        h+='</div>';
+      }
+      h+='</div></div></div>';
+    });
+  }
+  h+='</div>';
+
+  // COLUMNA DER: Gastos Ruben
+  h+='<div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">';
+  h+='<div style="font-size:11px;color:#fca5a5;text-transform:uppercase;font-weight:500;letter-spacing:.5px">💸 Gastos Ruben</div>';
+  h+='<div style="font-size:10px;color:#9ca3af">Total: '+fmt(totalG)+'</div>';
+  h+='</div>';
+  if(!gastos.length){
+    h+='<div style="background:rgba(127,127,127,.04);border:0.5px dashed #2e2e3a;border-radius:6px;padding:14px;text-align:center;font-size:11px;color:#6b7280">Sin gastos este mes</div>';
+  } else {
+    gastos.forEach(function(g){
+      var fechaCorta=String(g.fecha||'').split('-').reverse().slice(0,2).join('/');
+      h+='<div style="background:rgba(239,68,68,.04);border-left:3px solid #ef4444;border-radius:0 6px 6px 0;padding:8px 10px;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:start;gap:6px">';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:12px;font-weight:500;color:#e5e7eb">'+esc(g.concepto||'Sin concepto')+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-top:2px">'+esc(fechaCorta)+'</div>';
+      h+='</div>';
+      h+='<div style="text-align:right">';
+      h+='<div style="font-size:13px;font-weight:500;color:#ef4444">−'+fmt(g.monto)+'</div>';
+      h+='<div style="display:flex;gap:3px;margin-top:3px;justify-content:flex-end">';
+      h+='<button onclick="openCajaEditGasto('+g.id+',\''+esc(g.concepto||'')+'\','+g.monto+',\''+esc(g.fecha||'')+'\')" style="background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.4);padding:2px 6px;border-radius:4px;font-size:9px;cursor:pointer">✏</button>';
+      h+='<button onclick="deleteCajaGasto('+g.id+')" style="background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.4);padding:2px 6px;border-radius:4px;font-size:9px;cursor:pointer">🗑</button>';
+      h+='</div></div></div></div>';
+    });
+  }
+  h+='</div>';
+  h+='</div>'; // Fin grid
+  return h;
+}
+
 function openDescargarNequi(saldoActual){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
   document.getElementById('dnSaldoCifra').textContent=fmt(saldoActual||0);
