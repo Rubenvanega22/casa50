@@ -250,6 +250,87 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 </div></div></div></div>
 <!-- ==================== MODAL CAJA PAOLA → RUBEN ==================== -->
+<!-- Sub-modal: Entregar a Ruben (Paola crea entrega pendiente) -->
+<div class="ov" id="mCpEntregar">
+  <div class="md" style="max-width:380px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:500;color:#c4b5fd">📤 Nueva entrega a Ruben</div>
+      <button onclick="closeM('mCpEntregar')" style="background:rgba(127,127,127,.15);color:#9ca3af;border:0.5px solid #2e2e3a;padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer">✕</button>
+    </div>
+    <label style="font-size:11px;color:#9ca3af">Monto a entregar</label>
+    <input type="number" id="cpEntMonto" min="0" placeholder="0" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:500">
+    <label style="font-size:11px;color:#9ca3af">Nota (opcional)</label>
+    <input type="text" id="cpEntNota" placeholder="Entrega del miércoles" maxlength="100" style="width:100%;margin-bottom:12px">
+    <div id="cpEntPreview" style="background:rgba(167,139,250,.08);border:0.5px solid rgba(167,139,250,.3);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:11px;color:#c4b5fd;display:none">
+      📌 Saldo de Paola después de aprobada: <b id="cpEntPreviewVal">$0</b>
+    </div>
+    <div style="background:rgba(245,158,11,.08);border:0.5px solid rgba(245,158,11,.3);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:10px;color:#fbbf24">
+      ℹ️ La entrega quedará pendiente hasta que Ruben la apruebe con su PIN.
+    </div>
+    <button onclick="saveCajaEntrega()" id="cpEntSave" style="width:100%;background:rgba(167,139,250,.15);color:#c4b5fd;border:1px solid rgba(167,139,250,.4);padding:10px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer">📤 Enviar a Ruben</button>
+  </div>
+</div>
+
+<!-- Sub-modal: Aprobar entrega (Ruben ingresa PIN 2206) -->
+<div class="ov" id="mCpAprobar">
+  <div class="md" style="max-width:380px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-size:14px;font-weight:500;color:#86efac">✓ Aprobar entrega</div>
+      <button onclick="closeM('mCpAprobar')" style="background:rgba(127,127,127,.15);color:#9ca3af;border:0.5px solid #2e2e3a;padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:11px;color:#9ca3af;margin-bottom:14px">Confirma con tu PIN de 4 dígitos</div>
+    <div style="background:rgba(34,197,94,.08);border:0.5px solid rgba(34,197,94,.3);border-radius:6px;padding:10px;margin-bottom:14px">
+      <div style="font-size:10px;color:#86efac;text-transform:uppercase;letter-spacing:.5px">Entrega de Paola</div>
+      <div id="cpAprMonto" style="font-size:20px;font-weight:500;color:#22c55e;margin-top:2px">$0</div>
+      <div id="cpAprFecha" style="font-size:10px;color:#9ca3af;margin-top:2px">—</div>
+    </div>
+    <label style="font-size:11px;color:#9ca3af">PIN</label>
+    <input type="password" id="cpAprPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="• • • •" style="width:100%;margin-bottom:14px;text-align:center;letter-spacing:8px;font-size:18px">
+    <div style="display:flex;gap:8px">
+      <button onclick="closeM('mCpAprobar')" style="flex:1;background:rgba(127,127,127,.15);color:#9ca3af;border:0.5px solid #2e2e3a;padding:10px;border-radius:6px;font-size:13px;cursor:pointer">Cancelar</button>
+      <button onclick="saveCajaAprobar()" id="cpAprSave" style="flex:1;background:rgba(34,197,94,.15);color:#86efac;border:0.5px solid rgba(34,197,94,.4);padding:10px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer">✓ Aprobar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sub-modal: Registrar gasto Ruben -->
+<div class="ov" id="mCpGasto">
+  <div class="md" style="max-width:380px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:500;color:#fbbf24">💸 Nuevo gasto Ruben</div>
+      <button onclick="closeM('mCpGasto')" style="background:rgba(127,127,127,.15);color:#9ca3af;border:0.5px solid #2e2e3a;padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer">✕</button>
+    </div>
+    <label style="font-size:11px;color:#9ca3af">Concepto</label>
+    <input type="text" id="cpGasConcepto" placeholder="Ej: Compra mercado" maxlength="60" style="width:100%;margin-bottom:10px">
+    <label style="font-size:11px;color:#9ca3af">Monto</label>
+    <input type="number" id="cpGasMonto" min="0" placeholder="0" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:500">
+    <label style="font-size:11px;color:#9ca3af">Fecha</label>
+    <input type="date" id="cpGasFecha" style="width:100%;margin-bottom:12px">
+    <div style="background:rgba(245,158,11,.08);border:0.5px solid rgba(245,158,11,.3);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:10px;color:#fbbf24">
+      ℹ️ Este gasto se descontará del saldo de Paola al instante.
+    </div>
+    <button onclick="saveCajaGasto()" id="cpGasSave" style="width:100%;background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.4);padding:10px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer">💸 Registrar gasto</button>
+  </div>
+</div>
+
+<!-- Sub-modal: Editar gasto Ruben -->
+<div class="ov" id="mCpEditGasto">
+  <div class="md" style="max-width:380px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:500;color:#93c5fd">✏ Editar gasto Ruben</div>
+      <button onclick="closeM('mCpEditGasto')" style="background:rgba(127,127,127,.15);color:#9ca3af;border:0.5px solid #2e2e3a;padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer">✕</button>
+    </div>
+    <input type="hidden" id="cpEditId" value="">
+    <label style="font-size:11px;color:#9ca3af">Concepto</label>
+    <input type="text" id="cpEditConcepto" maxlength="60" style="width:100%;margin-bottom:10px">
+    <label style="font-size:11px;color:#9ca3af">Monto</label>
+    <input type="number" id="cpEditMonto" min="0" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:500">
+    <label style="font-size:11px;color:#9ca3af">Fecha</label>
+    <input type="date" id="cpEditFecha" style="width:100%;margin-bottom:14px">
+    <button onclick="saveCajaEditGasto()" id="cpEditSave" style="width:100%;background:rgba(59,130,246,.15);color:#93c5fd;border:1px solid rgba(59,130,246,.4);padding:10px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer">💾 Guardar cambios</button>
+  </div>
+</div>
+
 <div class="ov" id="mCajaPaola">
   <div class="md" style="max-width:780px;width:96%;max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:0.5px solid #2e2e3a">
@@ -6760,9 +6841,185 @@ function renderCajaPaola(d){
       h+='</div></div></div></div>';
     });
   }
-  h+='</div>';
+h+='</div>';
   h+='</div>'; // Fin grid
   return h;
+}
+
+// ============ Sub-modal: ENTREGAR A RUBEN ============
+function openCajaEntrega(saldoPaola){
+  if(!sess||sess.userRole!=='ADMIN')return;
+  document.getElementById('cpEntMonto').value='';
+  document.getElementById('cpEntNota').value='';
+  document.getElementById('cpEntPreview').style.display='none';
+  window._cpSaldoPaola=Number(saldoPaola||0);
+  openM('mCpEntregar');
+  // Listener para preview en vivo
+  var inp=document.getElementById('cpEntMonto');
+  inp.oninput=function(){
+    var monto=Number(inp.value||0);
+    var prev=document.getElementById('cpEntPreview');
+    var prevVal=document.getElementById('cpEntPreviewVal');
+    if(monto>0){
+      var nuevoSaldo=window._cpSaldoPaola-monto;
+      prevVal.textContent=fmt(nuevoSaldo);
+      prevVal.style.color=nuevoSaldo<0?'#ef4444':'#c4b5fd';
+      prev.style.display='block';
+    } else {
+      prev.style.display='none';
+    }
+  };
+}
+function saveCajaEntrega(){
+  var monto=Number(document.getElementById('cpEntMonto').value||0);
+  var nota=document.getElementById('cpEntNota').value.trim();
+  if(monto<=0){toast('El monto debe ser mayor a 0','err');return;}
+  var saldo=window._cpSaldoPaola||0;
+  if(monto>saldo){
+    if(!confirm('⚠️ El monto a entregar ('+fmt(monto)+') es MAYOR que el saldo de Paola ('+fmt(saldo)+').\n\n¿Continuar igual?'))return;
+  }
+  var btn=document.getElementById('cpEntSave');
+  if(btn){btn.disabled=true;btn.textContent='Enviando...';}
+  rpc('addCajaEntrega',{
+    monto:monto,nota:nota,
+    userName:sess.userName,userRole:sess.userRole
+  },function(){
+    toast('✓ Entrega enviada (pendiente de aprobación)','ok');
+    closeM('mCpEntregar');
+    if(btn){btn.disabled=false;btn.textContent='📤 Enviar a Ruben';}
+    loadCajaPaola(window._cpMes);
+  },function(e){
+    toast('Error: '+(e.message||'?'),'err');
+    if(btn){btn.disabled=false;btn.textContent='📤 Enviar a Ruben';}
+  });
+}
+
+// ============ Sub-modal: APROBAR ENTREGA (con PIN) ============
+function openCajaAprobar(movId,monto,fechaCorta){
+  if(!sess||sess.userRole!=='ADMIN')return;
+  window._cpAprobarId=movId;
+  document.getElementById('cpAprMonto').textContent=fmt(monto);
+  document.getElementById('cpAprFecha').textContent='Fecha: '+(fechaCorta||'—');
+  document.getElementById('cpAprPin').value='';
+  openM('mCpAprobar');
+  // Auto-focus en el PIN
+  setTimeout(function(){
+    var inp=document.getElementById('cpAprPin');
+    if(inp)inp.focus();
+  },150);
+}
+function saveCajaAprobar(){
+  var movId=window._cpAprobarId;
+  if(!movId){toast('Error: ID de entrega no encontrado','err');return;}
+  var pin=document.getElementById('cpAprPin').value.trim();
+  if(!pin){toast('Ingresa el PIN','err');return;}
+  if(pin.length<4){toast('PIN debe tener al menos 4 dígitos','err');return;}
+  var btn=document.getElementById('cpAprSave');
+  if(btn){btn.disabled=true;btn.textContent='Aprobando...';}
+  rpc('aprobarCajaEntrega',{
+    movId:movId,pin:pin,
+    userName:sess.userName,userRole:sess.userRole
+  },function(d){
+    toast('✓ Entrega aprobada · '+fmt(d.monto||0)+' a Caja Fuerte Ruben','ok');
+    closeM('mCpAprobar');
+    if(btn){btn.disabled=false;btn.textContent='✓ Aprobar';}
+    loadCajaPaola(window._cpMes);
+  },function(e){
+    toast('Error: '+(e.message||'?'),'err');
+    document.getElementById('cpAprPin').value='';
+    if(btn){btn.disabled=false;btn.textContent='✓ Aprobar';}
+  });
+}
+
+// ============ Anular entrega pendiente ============
+function anularCajaEntrega(movId){
+  if(!confirm('¿Anular esta entrega pendiente?\n\nLa plata vuelve al saldo de Paola.'))return;
+  rpc('anularCajaEntrega',{
+    movId:movId,
+    userName:sess.userName,userRole:sess.userRole
+  },function(){
+    toast('✓ Entrega anulada','ok');
+    loadCajaPaola(window._cpMes);
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
+
+// ============ Sub-modal: REGISTRAR GASTO RUBEN ============
+function openCajaGasto(){
+  if(!sess||sess.userRole!=='ADMIN')return;
+  document.getElementById('cpGasConcepto').value='';
+  document.getElementById('cpGasMonto').value='';
+  var hoy=new Date();
+  var fechaHoy=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  document.getElementById('cpGasFecha').value=fechaHoy;
+  openM('mCpGasto');
+}
+function saveCajaGasto(){
+  var concepto=document.getElementById('cpGasConcepto').value.trim();
+  var monto=Number(document.getElementById('cpGasMonto').value||0);
+  var fecha=document.getElementById('cpGasFecha').value;
+  if(concepto.length<3){toast('Concepto requerido (min 3 caracteres)','err');return;}
+  if(monto<=0){toast('El monto debe ser mayor a 0','err');return;}
+  if(!fecha){toast('Selecciona la fecha','err');return;}
+  var btn=document.getElementById('cpGasSave');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  rpc('addCajaGasto',{
+    concepto:concepto,monto:monto,fecha:fecha,
+    userName:sess.userName,userRole:sess.userRole
+  },function(){
+    toast('✓ Gasto Ruben registrado','ok');
+    closeM('mCpGasto');
+    if(btn){btn.disabled=false;btn.textContent='💸 Registrar gasto';}
+    loadCajaPaola(window._cpMes);
+  },function(e){
+    toast('Error: '+(e.message||'?'),'err');
+    if(btn){btn.disabled=false;btn.textContent='💸 Registrar gasto';}
+  });
+}
+
+// ============ Sub-modal: EDITAR GASTO RUBEN ============
+function openCajaEditGasto(movId,concepto,monto,fecha){
+  if(!sess||sess.userRole!=='ADMIN')return;
+  document.getElementById('cpEditId').value=movId;
+  document.getElementById('cpEditConcepto').value=concepto||'';
+  document.getElementById('cpEditMonto').value=monto||0;
+  document.getElementById('cpEditFecha').value=fecha||'';
+  openM('mCpEditGasto');
+}
+function saveCajaEditGasto(){
+  var movId=Number(document.getElementById('cpEditId').value||0);
+  var concepto=document.getElementById('cpEditConcepto').value.trim();
+  var monto=Number(document.getElementById('cpEditMonto').value||0);
+  var fecha=document.getElementById('cpEditFecha').value;
+  if(!movId){toast('ID inválido','err');return;}
+  if(concepto.length<3){toast('Concepto requerido (min 3 caracteres)','err');return;}
+  if(monto<=0){toast('El monto debe ser mayor a 0','err');return;}
+  if(!fecha){toast('Selecciona la fecha','err');return;}
+  var btn=document.getElementById('cpEditSave');
+  if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+  rpc('editCajaGasto',{
+    movId:movId,concepto:concepto,monto:monto,fecha:fecha,
+    userName:sess.userName,userRole:sess.userRole
+  },function(){
+    toast('✓ Gasto actualizado','ok');
+    closeM('mCpEditGasto');
+    if(btn){btn.disabled=false;btn.textContent='💾 Guardar cambios';}
+    loadCajaPaola(window._cpMes);
+  },function(e){
+    toast('Error: '+(e.message||'?'),'err');
+    if(btn){btn.disabled=false;btn.textContent='💾 Guardar cambios';}
+  });
+}
+
+// ============ Eliminar gasto Ruben ============
+function deleteCajaGasto(movId){
+  if(!confirm('¿Eliminar este gasto Ruben?\n\nLa plata vuelve al saldo de Paola.'))return;
+  rpc('deleteCajaGasto',{
+    movId:movId,
+    userName:sess.userName,userRole:sess.userRole
+  },function(){
+    toast('✓ Gasto eliminado','ok');
+    loadCajaPaola(window._cpMes);
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
 }
 
 function openDescargarNequi(saldoActual){
