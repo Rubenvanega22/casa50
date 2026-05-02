@@ -4471,9 +4471,21 @@ async function apiGetResumenMes(p, res) {
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
 
   const rows = products.map(function(prod){
-    const cierreProd = cierreMap[prod.id] || {};
-    const siRec = Number(cierreProd.stock_recepcion||0);
-    const siBod = Number(cierreProd.stock_bodega||0);
+    // Reconstruir saldo al inicio del mes consultado calculando hacia atras
+    // desde stock_actual / stock_bodega (que estan al dia HOY) deshaciendo
+    // todos los movimientos ocurridos desde firstDay hasta hoy.
+    const ventasFut = (salesMes||[]).concat(salesAfter).filter(s => s.product_id === prod.id && !s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const cortesiasFut = (salesMes||[]).concat(salesAfter).filter(s => s.product_id === prod.id && s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
+    const entriesFut = (entriesMes||[]).concat(entriesAfter).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
+    const movsFut = (movementsMes||[]).concat(movementsAfter).filter(m => m.product_id === prod.id);
+    const trasladosFut = movsFut.filter(m => m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
+    const devsBodFut = movsFut.filter(m => m.tipo === 'devolucion_bodega').reduce((a,m) => a + Number(m.cantidad||0), 0);
+    const ingBodFut = movsFut.filter(m => m.tipo === 'ingreso_bodega').reduce((a,m) => a + Number(m.cantidad||0), 0);
+    const conteosFut = movsFut.filter(m => m.tipo === 'recepcion_conteo').reduce((a,m) => a + Number(m.cantidad||0), 0);
+    // Recepcion: stock_actual + (lo que SALIO de recepcion) - (lo que ENTRO a recepcion)
+    const siRec = Number(prod.stock_actual||0) + ventasFut + cortesiasFut + devsBodFut - entriesFut - trasladosFut - conteosFut;
+    // Bodega: stock_bodega + (lo que SALIO de bodega) - (lo que ENTRO a bodega)
+    const siBod = Number(prod.stock_bodega||0) + trasladosFut - ingBodFut - devsBodFut;
     const siTotal = siRec + siBod;
 
     const compras = (entriesMes||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
