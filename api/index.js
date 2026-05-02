@@ -4488,7 +4488,7 @@ async function apiGetResumenMes(p, res) {
     const siBod = Number(prod.stock_bodega||0) + trasladosFut - ingBodFut - devsBodFut;
     const siTotal = siRec + siBod;
 
-    const compras = (entriesMes||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
+    const compras = (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'ingreso_bodega').reduce((a,m) => a + Number(m.cantidad||0), 0);
 
     const ventasProd = (salesMes||[]).filter(s => s.product_id === prod.id && !s.is_cortesia);
     const cortesiasProd = (salesMes||[]).filter(s => s.product_id === prod.id && s.is_cortesia);
@@ -4509,12 +4509,12 @@ async function apiGetResumenMes(p, res) {
         }
       };
     }
-// Llenar B: entradas a bodega (stock_entries = compras a proveedor + ajustes de suma)
-    (entriesMes||[]).filter(e => e.product_id === prod.id).forEach(function(e){
-      const fecha = e.business_day;
-      const sid = e.shift_id || 'SHIFT_1';
+// Llenar B: ingresos a bodega (stock_movements tipo 'ingreso_bodega' = compras del mes)
+    (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'ingreso_bodega').forEach(function(m){
+      const fecha = m.business_day;
+      const sid = m.shift_id || 'SHIFT_1';
       if(porDia[fecha] && porDia[fecha].turnos[sid]) {
-        porDia[fecha].turnos[sid].b += Number(e.cantidad||0);
+        porDia[fecha].turnos[sid].b += Number(m.cantidad||0);
       }
     });
     (movementsMes||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').forEach(function(m){
@@ -4578,10 +4578,10 @@ async function apiGetResumenMes(p, res) {
   });
 
   const totalSiAnterior = rows.reduce((a,r) => a + (r.siRec + r.siBod) * r.precioCompra, 0);
-  const totalCompras = (entriesMes||[]).reduce((a,e) => {
-    const prod = products.find(p => p.id === e.product_id);
+  const totalCompras = (movementsMes||[]).filter(m => m.tipo === 'ingreso_bodega').reduce((a,m) => {
+    const prod = products.find(p => p.id === m.product_id);
     const costo = prod ? Number(prod.precio_compra||0) : 0;
-    return a + Number(e.cantidad||0) * costo;
+    return a + Number(m.cantidad||0) * costo;
   }, 0);
   const totalVendido = (salesMes||[]).filter(s => !s.is_cortesia).reduce((a,s) => a + Number(s.total||0), 0);
   const totalCortesiasValor = (salesMes||[]).filter(s => s.is_cortesia).reduce((a,s) => a + Number(s.total||0), 0);
