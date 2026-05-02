@@ -4449,9 +4449,19 @@ async function apiGetResumenMes(p, res) {
   const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
   if(!products || !products.length) return ok(res,{rows:[],totals:{},daysTotals:{},mes:mes});
 
-  const { data: cierreAnt } = await supabase.from('cierre_mes').select('*').eq('mes',prevMes);
-  const cierreMap = {};
-  (cierreAnt||[]).forEach(c => { cierreMap[c.product_id] = c; });
+  // Saldo inicial calculado al vuelo (sin depender de tabla cierre_mes).
+  // Traemos todos los movimientos POSTERIORES al mes consultado (desde el dia siguiente
+  // a lastDay hasta hoy) para combinarlos con los del mes y poder deshacer todo
+  // desde stock_actual/stock_bodega hacia atras hasta el primer dia del mes.
+  const todayBd = businessDay(Date.now());
+  const salesPost = await fetchAll(() => supabase.from('room_products').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const movementsPost = await fetchAll(() => supabase.from('stock_movements').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const entriesPost = await fetchAll(() => supabase.from('stock_entries').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
+
+  // Combinamos movimientos del mes + posteriores = todos los movs desde firstDay hasta hoy
+  const salesAfter = (salesPost||[]);
+  const movementsAfter = (movementsPost||[]);
+  const entriesAfter = (entriesPost||[]);
 
   const salesMes = await fetchAll(() => supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
   const movementsMes = await fetchAll(() => supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
