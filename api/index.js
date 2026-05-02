@@ -1165,9 +1165,9 @@ async function apiCloseShift(p, res) {
   const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
 
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,people,room_id').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('sales').select('type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('loans').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('loans').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('extra_staff').select('payment').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
@@ -1357,7 +1357,7 @@ async function apiMonthMetrics(p, res) {
   // Queries pequeñas — se mantienen con Promise.all normal
   const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
     supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
-    supabase.from('loans').select('business_day,shift_id,amount').like('business_day', ym+'%'),
+    supabase.from('loans').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
@@ -1696,7 +1696,7 @@ async function apiGetDailyCuadre(p, res) {
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3').eq('business_day',bDay),
+    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada').eq('business_day',bDay),
     supabase.from('taxi_expenses').select('amount,shift_id').eq('business_day',bDay),
     supabase.from('extra_staff').select('payment,shift_id').eq('business_day',bDay),
     supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
