@@ -1195,7 +1195,7 @@ async function apiCloseShift(p, res) {
     else if(pm==='TARJETA')totalProductosTa+=t;
     else if(pm==='NEQUI')totalProductosNq+=t;
   });
-  (loansRes.data||[]).forEach(r=>{totalLoans+=Number(r.amount||0);});
+  (loansRes.data||[]).forEach(r=>{if(r.anulada)return;totalLoans+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{totalExtraStaff+=Number(r.payment||0);});
 
   const net = totalSales + totalRefunds - totalTaxi - totalLoans - totalExtraStaff;
@@ -1227,7 +1227,7 @@ async function apiMetrics(p, res) {
   const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes, shiftCloseRes] = await Promise.all([
     supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
     supabase.from('taxi_expenses').select('*').eq('business_day', bDay),
-    supabase.from('loans').select('*').eq('business_day', bDay).order('ts_ms'),
+    supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
     supabase.from('extra_staff').select('*').eq('business_day', bDay),
     supabase.from('bar_sales').select('*').eq('business_day', bDay),
     supabase.from('general_expenses').select('*').eq('business_day', bDay),
@@ -1433,7 +1433,7 @@ async function apiMonthMetrics(p, res) {
 
   // Gastos
   (taxiRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
-  (loansRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
+  (loansRes.data||[]).forEach(r=>{if(r.anulada)return;const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].turnos+=Number(r.payment||0);});
 
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
