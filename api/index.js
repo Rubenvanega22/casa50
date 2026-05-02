@@ -970,7 +970,7 @@ async function apiAddLoan(p, res) {
 
 async function apiGetLoans(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('loans').select('*').eq('business_day', bDay).order('ts_ms');
+  const { data } = await supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
   return ok(res, { loans: (data || []).map(r => ({ tsMs: Number(r.ts_ms), shiftId: r.shift_id, userName: r.user_name, borrowerName: r.borrower_name, amount: Number(r.amount), note: r.note })) });
 }
 
