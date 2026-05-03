@@ -1102,7 +1102,7 @@ async function apiCheckoutExtra(p, res) {
 
 async function apiGetExtra(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('extra_staff').select('*').eq('business_day', bDay).order('ts_ms');
+  const { data } = await supabase.from('extra_staff').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
   return ok(res, {
     extraStaff: (data || []).map(r => ({
       id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id,
