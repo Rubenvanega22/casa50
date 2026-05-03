@@ -3129,17 +3129,20 @@ function gmaLoadGastos(){
   cont.style.display='block';
   var inner=document.getElementById('gmaListaGastosCont');
   inner.innerHTML='<p style="color:#9ca3af;font-size:11px">Cargando...</p>';
-  // Pedimos en paralelo gastos manuales + taxis del turno
+  // Pedimos en paralelo gastos manuales + taxis + personal extra del turno
   Promise.all([
     new Promise(function(resolve){rpc('listGastosTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){resolve((d&&d.gastos)||[]);},function(){resolve([]);});}),
-    new Promise(function(resolve){rpc('listTaxisTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){resolve((d&&d.taxis)||[]);},function(){resolve([]);});})
+    new Promise(function(resolve){rpc('listTaxisTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){resolve((d&&d.taxis)||[]);},function(){resolve([]);});}),
+    new Promise(function(resolve){rpc('listExtrasTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){resolve((d&&d.extras)||[]);},function(){resolve([]);});})
   ]).then(function(results){
     var gastos=results[0]||[];
     var taxis=results[1]||[];
+    var extras=results[2]||[];
     // Marcamos cada item con su tipo para diferenciarlos al renderizar
     var items=[];
     gastos.forEach(function(g){items.push({tipo:'GASTO',data:g,ts_ms:Number(g.ts_ms||0)});});
     taxis.forEach(function(t){items.push({tipo:'TAXI',data:t,ts_ms:Number(t.ts_ms||0)});});
+    extras.forEach(function(e){if(Number(e.payment||0)>0)items.push({tipo:'TURNO',data:e,ts_ms:Number(e.ts_ms||0)});});
     // Ordenar por hora ascendente
     items.sort(function(a,b){return a.ts_ms-b.ts_ms;});
     if(!items.length){
@@ -3171,6 +3174,15 @@ function gmaLoadGastos(){
         h+='<div><div style="font-size:11px">'+tipoTagTx+(r.note||'Taxi')+(r.room_id?' · Hab '+r.room_id:'')+' · '+hh+'</div>';
         h+='<div style="font-size:10px;color:#9ca3af">Cobrado por: '+(r.user_name||'?')+'</div></div>';
         h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#f59e0b;font-size:12px">'+fmt(Number(r.amount||0))+'</b>'+btnAnularTx+'</div>';
+        h+='</div>';
+      } else if(it.tipo==='TURNO'){
+        var btnAnularTu=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="gmaAnularTurno('+r.id+')">🗑️ Anular</button>';
+        var tipoTagTu='<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">👷 TURNO</span>';
+        var areaInfo=r.area?' · '+r.area:'';
+        h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
+        h+='<div><div style="font-size:11px">'+tipoTagTu+(r.person_name||'?')+areaInfo+' · '+hh+'</div>';
+        h+='<div style="font-size:10px;color:#9ca3af">Pagado por: '+(r.paid_by||r.registered_by||'?')+'</div></div>';
+        h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#22c55e;font-size:12px">'+fmt(Number(r.payment||0))+'</b>'+btnAnularTu+'</div>';
         h+='</div>';
       }
     });
@@ -3209,6 +3221,24 @@ function gmaAnularTaxi(taxiId){
     userRole:sess.userRole
   },function(){
     toast('✓ Taxi anulado','ok');
+    gmaLoadGastos();
+    if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    if(typeof loadCuadre==='function')loadCuadre();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
+function gmaAnularTurno(extraId){
+  var motivo=prompt('Motivo de la anulación del turno (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  if(!confirm('¿Anular este turno extra? Se reflejará en el cuadre del día y en el resumen mensual.'))return;
+  rpc('deleteExtra',{
+    id:extraId,
+    motivo:motivo,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Turno anulado','ok');
     gmaLoadGastos();
     if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
     if(typeof loadCuadre==='function')loadCuadre();
