@@ -3902,6 +3902,41 @@ async function apiGetGastosMesResumen(p, res) {
     .order('fecha', { ascending: true });
   if(errD) return err(res, errD.message);
 
+  // 3b. GASTOS DEL CUADRE (los que paga la recepcionista en cada turno)
+  // Estos gastos SE PAGAN EN EFECTIVO durante el turno y nunca entran a caja
+  // Se descuentan de "Ventas en efectivo" para mostrar la plata REAL disponible
+  const [gralRes, taxiRes, extraRes, loansRes] = await Promise.all([
+    supabase.from('general_expenses')
+      .select('amount')
+      .gte('business_day', firstDay)
+      .lte('business_day', lastDay),
+    supabase.from('taxi_expenses')
+      .select('amount')
+      .gte('business_day', firstDay)
+      .lte('business_day', lastDay),
+    supabase.from('extra_staff')
+      .select('payment')
+      .gte('business_day', firstDay)
+      .lte('business_day', lastDay),
+    supabase.from('loans')
+      .select('amount')
+      .gte('business_day', firstDay)
+      .lte('business_day', lastDay)
+      .eq('manual', true)
+      .eq('anulada', false)
+  ]);
+
+  let gastosGenerales = 0, gastosTaxis = 0, gastosTurnos = 0, gastosAjustes = 0;
+  (gralRes.data||[]).forEach(r => gastosGenerales += Number(r.amount||0));
+  (taxiRes.data||[]).forEach(r => gastosTaxis += Number(r.amount||0));
+  (extraRes.data||[]).forEach(r => gastosTurnos += Number(r.payment||0));
+  (loansRes.data||[]).forEach(r => gastosAjustes += Number(r.amount||0));
+  const gastosCuadre = gastosGenerales + gastosTaxis + gastosTurnos + gastosAjustes;
+
+  // Descontar los gastos del cuadre de las ventas en efectivo
+  // (esa plata YA se pagó en el turno, nunca llegó a caja)
+  ventasEfectivo = ventasEfectivo - gastosCuadre;
+
   let totalDescargos = 0;
   (descargos||[]).forEach(d => {
     if(d.anulada) return;
@@ -3912,7 +3947,7 @@ async function apiGetGastosMesResumen(p, res) {
   const efectivoEnCaja = ventasEfectivo + totalDescargos - gastosEfectivo;
   const cajaTarjeta = ventasTarjeta - gastosTarjeta;
   const nequiDisponible = ventasNequi - totalDescargos;
-  const utilidad = totalVentas - totalGastos;
+  const utilidad = totalVentas - totalGastos - gastosCuadre;
 
   return ok(res, {
     mes: mes,
@@ -3940,6 +3975,13 @@ async function apiGetGastosMesResumen(p, res) {
       efectivoEnCaja: efectivoEnCaja,
       cajaTarjeta: cajaTarjeta,
       nequiDisponible: nequiDisponible
+    },
+    gastosCuadre: {
+      generales: gastosGenerales,
+      taxis: gastosTaxis,
+      turnos: gastosTurnos,
+      ajustes: gastosAjustes,
+      total: gastosCuadre
     },
     utilidad: utilidad
   });
