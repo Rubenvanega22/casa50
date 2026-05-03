@@ -950,9 +950,22 @@ async function apiDeleteTaxi(p, res) {
   const userRole = String(p.userRole || '').toUpperCase();
   if(userRole !== 'RECEPTION' && userRole !== 'ADMIN') return err(res, 'Sin permiso');
   const id = Number(p.id || 0);
+  const motivo = String(p.motivo || '').trim();
+  const userName = String(p.userName || '').trim();
   if(!id) return err(res, 'id requerido');
-  await supabase.from('taxi_expenses').delete().eq('id', id);
-  return ok(res, { deleted: true });
+  if(!motivo || motivo.length < 5) return err(res, 'Motivo requerido (min 5 caracteres)');
+  const { data: taxi, error: errTaxi } = await supabase.from('taxi_expenses').select('*').eq('id', id).maybeSingle();
+  if(errTaxi) return err(res, errTaxi.message);
+  if(!taxi) return err(res, 'Taxi no encontrado');
+  if(taxi.anulada) return err(res, 'Este taxi ya está anulado');
+  const now = Date.now();
+  await supabase.from('taxi_expenses').update({
+    anulada: true,
+    anulada_ms: now,
+    anulada_por: userName,
+    motivo_anulacion: motivo
+  }).eq('id', id);
+  return ok(res, { anulada: true, id });
 }
 
 // ==================== PRESTAMOS ====================
@@ -1166,7 +1179,7 @@ async function apiCloseShift(p, res) {
 
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
     supabase.from('sales').select('type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('taxi_expenses').select('amount').eq('shift_id', shift).gte('ts_ms', loginMs),
+    supabase.from('taxi_expenses').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('loans').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('extra_staff').select('payment').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
@@ -1185,7 +1198,7 @@ async function apiCloseShift(p, res) {
     if (r.type === 'RENEWAL') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'EXTENSION') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
   });
-  (taxiRes.data||[]).forEach(r=>{totalTaxi+=Number(r.amount||0);});
+  (taxiRes.data||[]).forEach(r=>{if(r.anulada)return;totalTaxi+=Number(r.amount||0);});
   (prodRes.data||[]).forEach(r=>{
     if(r.is_cortesia)return;
     const t=Number(r.total||0);
@@ -1226,7 +1239,7 @@ async function apiMetrics(p, res) {
 
   const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes, shiftCloseRes] = await Promise.all([
     supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
-    supabase.from('taxi_expenses').select('*').eq('business_day', bDay),
+    supabase.from('taxi_expenses').select('*').eq('business_day', bDay).eq('anulada', false),
     supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
     supabase.from('extra_staff').select('*').eq('business_day', bDay),
     supabase.from('bar_sales').select('*').eq('business_day', bDay),
@@ -1356,7 +1369,7 @@ async function apiMonthMetrics(p, res) {
 
   // Queries pequeñas — se mantienen con Promise.all normal
   const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
-    supabase.from('taxi_expenses').select('business_day,shift_id,amount').like('business_day', ym+'%'),
+    supabase.from('taxi_expenses').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     supabase.from('loans').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     supabase.from('extra_staff').select('business_day,shift_id,payment').like('business_day', ym+'%').gt('payment',0),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
@@ -1432,7 +1445,7 @@ async function apiMonthMetrics(p, res) {
 
 
   // Gastos
-  (taxiRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
+  (taxiRes.data||[]).forEach(r=>{if(r.anulada)return;const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
   (loansRes.data||[]).forEach(r=>{if(r.anulada)return;const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].turnos+=Number(r.payment||0);});
 
@@ -1697,7 +1710,7 @@ async function apiGetDailyCuadre(p, res) {
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
     supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada').eq('business_day',bDay),
-    supabase.from('taxi_expenses').select('amount,shift_id').eq('business_day',bDay),
+    supabase.from('taxi_expenses').select('amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     supabase.from('extra_staff').select('payment,shift_id').eq('business_day',bDay),
     supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
     supabase.from('general_expenses').select('amount,shift_id').eq('business_day',bDay),
@@ -3270,7 +3283,7 @@ async function apiGetGraficaDiaADia(p, res) {
   // Estos se descuentan del calculo automatico (no se suman como gastos_mes)
   const [gralAct, taxiAct, extraAct, loansAct] = await Promise.all([
     supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('taxi_expenses').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    supabase.from('taxi_expenses').select('amount, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
     supabase.from('extra_staff').select('payment, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
     supabase.from('loans').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
   ]);
@@ -3278,7 +3291,7 @@ async function apiGetGraficaDiaADia(p, res) {
   // 3c. GASTOS DEL CUADRE del mes anterior
   const [gralAnt, taxiAnt, extraAnt, loansAnt] = await Promise.all([
     supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('taxi_expenses').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    supabase.from('taxi_expenses').select('amount, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
     supabase.from('extra_staff').select('payment, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
     supabase.from('loans').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
   ]);
@@ -3974,6 +3987,7 @@ async function apiGetGastosMesResumen(p, res) {
       .lte('business_day', lastDay),
     supabase.from('taxi_expenses')
       .select('amount')
+      .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
     supabase.from('extra_staff')
