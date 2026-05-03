@@ -3260,11 +3260,66 @@ async function apiGetGraficaDiaADia(p, res) {
     .select('fecha, total_ventas')
     .eq('mes', mesAnterior);
 
-  // 3. Gastos del mes actual (de gastos_mes)
+// 3. Gastos del mes actual (de gastos_mes)
   const { data: gastosActual } = await supabase.from('gastos_mes')
     .select('fecha, monto, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
+
+  // 3b. GASTOS DEL CUADRE del mes actual (general + taxi + turnos + loans manuales)
+  // Estos se descuentan del calculo automatico (no se suman como gastos_mes)
+  const [gralAct, taxiAct, extraAct, loansAct] = await Promise.all([
+    supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    supabase.from('taxi_expenses').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    supabase.from('extra_staff').select('payment, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    supabase.from('loans').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
+  ]);
+
+  // 3c. GASTOS DEL CUADRE del mes anterior
+  const [gralAnt, taxiAnt, extraAnt, loansAnt] = await Promise.all([
+    supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    supabase.from('taxi_expenses').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    supabase.from('extra_staff').select('payment, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    supabase.from('loans').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
+  ]);
+
+  // Agrupar gastos del cuadre POR DIA (mes actual)
+  const gastosCuadreDiaActual = {};
+  (gralAct.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaActual[d] = (gastosCuadreDiaActual[d]||0) + Number(r.amount||0);
+  });
+  (taxiAct.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaActual[d] = (gastosCuadreDiaActual[d]||0) + Number(r.amount||0);
+  });
+  (extraAct.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaActual[d] = (gastosCuadreDiaActual[d]||0) + Number(r.payment||0);
+  });
+  (loansAct.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaActual[d] = (gastosCuadreDiaActual[d]||0) + Number(r.amount||0);
+  });
+
+  // Agrupar gastos del cuadre POR DIA (mes anterior)
+  const gastosCuadreDiaAnterior = {};
+  (gralAnt.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaAnterior[d] = (gastosCuadreDiaAnterior[d]||0) + Number(r.amount||0);
+  });
+  (taxiAnt.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaAnterior[d] = (gastosCuadreDiaAnterior[d]||0) + Number(r.amount||0);
+  });
+  (extraAnt.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaAnterior[d] = (gastosCuadreDiaAnterior[d]||0) + Number(r.payment||0);
+  });
+  (loansAnt.data||[]).forEach(r => {
+    const d = r.business_day;
+    gastosCuadreDiaAnterior[d] = (gastosCuadreDiaAnterior[d]||0) + Number(r.amount||0);
+  });
 
   // Agrupar por dia
   const datosActual = {};
@@ -3286,13 +3341,20 @@ async function apiGetGraficaDiaADia(p, res) {
       datosActual[v.business_day] += Number(v.total||0);
     }
   });
-  // Sumar ventas del bar al mes actual
+ // Sumar ventas del bar al mes actual
   (ventasBarActual||[]).forEach(v => {
     if(v.is_cortesia) return; // Cortesias no suman
     const total = Number(v.total||0);
     if(total <= 0) return;
     if(datosActual[v.business_day] !== undefined){
       datosActual[v.business_day] += total;
+    }
+  });
+  // RESTAR gastos del cuadre del mes actual (esa plata ya se pago en el turno)
+  // IMPORTANTE: esto se hace ANTES del override manual. Si hay manual, lo sobrescribe igual.
+  Object.keys(gastosCuadreDiaActual).forEach(fecha => {
+    if(datosActual[fecha] !== undefined){
+      datosActual[fecha] -= Number(gastosCuadreDiaActual[fecha]||0);
     }
   });
   // OVERRIDE: si hay valores manuales para el mes actual, sobrescribir el calculado
