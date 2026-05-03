@@ -160,6 +160,7 @@ module.exports = async function handler(req, res) {
       case 'refund':            return await apiRefund(payload, res);
       case 'taxi':              return await apiTaxi(payload, res);
       case 'deleteTaxi':        return await apiDeleteTaxi(payload, res);
+      case 'listTaxisTurno':    return await apiListTaxisTurno(payload, res);
       case 'addLoan':           return await apiAddLoan(payload, res);
       case 'getLoans':          return await apiGetLoans(payload, res);
       case 'registerExtraStaff':return await apiRegisterExtra(payload, res);
@@ -966,6 +967,23 @@ async function apiDeleteTaxi(p, res) {
     motivo_anulacion: motivo
   }).eq('id', id);
   return ok(res, { anulada: true, id });
+}
+
+// Lista taxis del turno (incluye anulados para mostrar historial visual)
+async function apiListTaxisTurno(p, res) {
+  const userRole = String(p.userRole || '').toUpperCase();
+  if(userRole !== 'RECEPTION' && userRole !== 'ADMIN') return err(res, 'Sin permiso');
+  const businessDay_ = String(p.businessDay || '').trim();
+  const shiftId = String(p.shiftId || '').trim();
+  if(!businessDay_) return err(res, 'businessDay requerido');
+  if(!shiftId) return err(res, 'shiftId requerido');
+  const { data, error } = await supabase.from('taxi_expenses')
+    .select('*')
+    .eq('business_day', businessDay_)
+    .eq('shift_id', shiftId)
+    .order('ts_ms');
+  if(error) return err(res, error.message);
+  return ok(res, { taxis: data || [] });
 }
 
 // ==================== PRESTAMOS ====================
