@@ -3129,30 +3129,53 @@ function gmaLoadGastos(){
   cont.style.display='block';
   var inner=document.getElementById('gmaListaGastosCont');
   inner.innerHTML='<p style="color:#9ca3af;font-size:11px">Cargando...</p>';
-  rpc('listGastosTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){
-    var gastos=(d&&d.gastos)||[];
-    if(!gastos.length){
+  // Pedimos en paralelo gastos manuales + taxis del turno
+  Promise.all([
+    new Promise(function(resolve){rpc('listGastosTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){resolve((d&&d.gastos)||[]);},function(){resolve([]);});}),
+    new Promise(function(resolve){rpc('listTaxisTurno',{businessDay:day,shiftId:shift,userName:sess.userName,userRole:sess.userRole},function(d){resolve((d&&d.taxis)||[]);},function(){resolve([]);});})
+  ]).then(function(results){
+    var gastos=results[0]||[];
+    var taxis=results[1]||[];
+    // Marcamos cada item con su tipo para diferenciarlos al renderizar
+    var items=[];
+    gastos.forEach(function(g){items.push({tipo:'GASTO',data:g,ts_ms:Number(g.ts_ms||0)});});
+    taxis.forEach(function(t){items.push({tipo:'TAXI',data:t,ts_ms:Number(t.ts_ms||0)});});
+    // Ordenar por hora ascendente
+    items.sort(function(a,b){return a.ts_ms-b.ts_ms;});
+    if(!items.length){
       inner.innerHTML='<p style="color:#9ca3af;font-size:11px">No hay gastos registrados en este turno.</p>';
       return;
     }
     var h='';
-    gastos.forEach(function(r){
+    items.forEach(function(it){
+      var r=it.data;
       var fecha=new Date(Number(r.ts_ms||0));
       var hh=String(fecha.getHours()).padStart(2,'0')+':'+String(fecha.getMinutes()).padStart(2,'0');
       var anulada=r.anulada?true:false;
       var styleRow=anulada?'opacity:0.5;text-decoration:line-through':'';
-      var manualTag=r.manual?'<span style="background:#FAEEDA;color:#633806;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">MANUAL</span>':'';
-      var btnAnular=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="gmaAnularGasto('+r.id+')">🗑️ Anular</button>';
-      var btnEditar=anulada?'':'<button class="btn sm" style="background:rgba(245,158,11,.15);color:#f59e0b;border:0.5px solid #f59e0b;padding:3px 6px;font-size:10px;margin-right:4px" onclick="gmaEditarGasto('+r.id+')">✏️ Editar</button>';
-      var editTag=r.editada?'<span style="background:#f59e0b;color:#1f1f24;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">EDITADA</span>':'';
-      h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
-      h+='<div><div style="font-size:11px">'+manualTag+editTag+(r.borrower_name||'?')+' · '+hh+(r.note?' · "'+r.note+'"':'')+'</div>';
-      h+='<div style="font-size:10px;color:#9ca3af">Registrado por: '+(r.user_name||'?')+'</div></div>';
-      h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#ef4444;font-size:12px">'+fmt(Number(r.amount||0))+'</b>'+btnEditar+btnAnular+'</div>';
-      h+='</div>';
+      if(it.tipo==='GASTO'){
+        var manualTag=r.manual?'<span style="background:#FAEEDA;color:#633806;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">MANUAL</span>':'';
+        var btnAnular=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="gmaAnularGasto('+r.id+')">🗑️ Anular</button>';
+        var btnEditar=anulada?'':'<button class="btn sm" style="background:rgba(245,158,11,.15);color:#f59e0b;border:0.5px solid #f59e0b;padding:3px 6px;font-size:10px;margin-right:4px" onclick="gmaEditarGasto('+r.id+')">✏️ Editar</button>';
+        var editTag=r.editada?'<span style="background:#f59e0b;color:#1f1f24;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">EDITADA</span>':'';
+        var tipoTag='<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">💰 GASTO</span>';
+        h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
+        h+='<div><div style="font-size:11px">'+tipoTag+manualTag+editTag+(r.borrower_name||'?')+' · '+hh+(r.note?' · "'+r.note+'"':'')+'</div>';
+        h+='<div style="font-size:10px;color:#9ca3af">Registrado por: '+(r.user_name||'?')+'</div></div>';
+        h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#ef4444;font-size:12px">'+fmt(Number(r.amount||0))+'</b>'+btnEditar+btnAnular+'</div>';
+        h+='</div>';
+      } else if(it.tipo==='TAXI'){
+        var btnAnularTx=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="gmaAnularTaxi('+r.id+')">🗑️ Anular</button>';
+        var tipoTagTx='<span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:1px 5px;border-radius:3px;font-size:9px;margin-right:4px">🚕 TAXI</span>';
+        h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
+        h+='<div><div style="font-size:11px">'+tipoTagTx+(r.note||'Taxi')+(r.room_id?' · Hab '+r.room_id:'')+' · '+hh+'</div>';
+        h+='<div style="font-size:10px;color:#9ca3af">Cobrado por: '+(r.user_name||'?')+'</div></div>';
+        h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#f59e0b;font-size:12px">'+fmt(Number(r.amount||0))+'</b>'+btnAnularTx+'</div>';
+        h+='</div>';
+      }
     });
     inner.innerHTML=h;
-  },function(e){inner.innerHTML='<p style="color:#ef4444;font-size:11px">Error: '+(e.message||'?')+'</p>';});
+  });
 }
 function gmaAnularGasto(gastoId){
   var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
@@ -3171,6 +3194,24 @@ function gmaAnularGasto(gastoId){
     if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
     if(typeof loadCuadre==='function')loadCuadre();
     if(typeof mcpLoadGastos==='function')mcpLoadGastos();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
+function gmaAnularTaxi(taxiId){
+  var motivo=prompt('Motivo de la anulación del taxi (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  if(!confirm('¿Anular este taxi? Se reflejará en el cuadre del día y en el resumen mensual.'))return;
+  rpc('deleteTaxi',{
+    id:taxiId,
+    motivo:motivo,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Taxi anulado','ok');
+    gmaLoadGastos();
+    if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    if(typeof loadCuadre==='function')loadCuadre();
   },function(e){toast('Error: '+(e.message||'?'),'err');});
 }
 function gmaEditarGasto(gastoId){
