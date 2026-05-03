@@ -208,6 +208,14 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo del cambio <span style="color:#ef4444">*</span></label>
 <textarea id="mcpReason" placeholder="Ej: La recepcionista marcó mal el método de pago" style="width:100%;min-height:50px;font-size:12px;margin-bottom:10px"></textarea>
 <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#f59e0b">⚠️ Este cambio quedará registrado en el historial con tu nombre y fecha. El cuadre se recalculará automáticamente.</div>
+</div>
+<div id="mcpAnulVentaSection" style="display:none;border-top:2px dashed #2e2e3a;padding-top:12px;margin-top:8px">
+<div style="font-size:11px;color:#ef4444;text-transform:uppercase;font-weight:700;margin-bottom:8px">🗑️ Anular esta venta</div>
+<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px;margin-bottom:10px;font-size:11px;color:#fca5a5">⚠️ Esto anula la venta del cuadre. Los productos del bar asociados se mantienen (ya se consumieron). Quedará registrado en el historial.</div>
+<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo de anulación <span style="color:#ef4444">*</span></label>
+<textarea id="mcpAnulVentaMotivo" placeholder="Ej: cliente nunca llegó, venta duplicada, error de digitación, etc." style="min-height:50px;margin-bottom:10px"></textarea>
+<button class="btn br full" onclick="anularVentaDesdeAjuste()">🗑️ Anular venta seleccionada</button>
+</div>
 <div id="mcpTabGastos" style="display:none">
 <button id="mcpBtnAddGasto" onclick="openAddGastoManual()" style="width:100%;padding:10px;background:rgba(34,197,94,.12);border:1px solid #22c55e;border-radius:8px;color:#22c55e;cursor:pointer;font-size:12px;font-weight:700;margin-bottom:10px">➕ Agregar gasto olvidado</button>
 <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;font-weight:700;margin-bottom:6px">Selecciona el gasto</div>
@@ -2840,6 +2848,8 @@ function selectVentaParaCambio(saleId){
   document.getElementById('mcpDetActual').textContent=detalle;
   document.getElementById('mcpDetVenta').style.display='block';
   document.getElementById('mcpMetodoSection').style.display='block';
+  document.getElementById('mcpAnulVentaSection').style.display='block';
+  document.getElementById('mcpAnulVentaMotivo').value='';
   document.getElementById('mcpMixtoBlock').style.display='none';
   ['mcpBtnEF','mcpBtnTJ','mcpBtnNQ','mcpBtnMX'].forEach(function(id){var b=document.getElementById(id);b.style.background='#1a1a22';b.style.borderColor='#2e2e3a';});
   document.getElementById('mcpMixtoTotal').textContent=fmt(s.total);
@@ -3422,6 +3432,26 @@ function saveChangePayMethod(){
     if(mcpState.role==='ADMIN')loadCuadreAdmin();
     else loadCuadre();
   },function(e){toast('Error: '+(e.message||'?'),'err');});
+}
+function anularVentaDesdeAjuste(){
+  if(!mcpState.selectedSaleId){toast('Selecciona una venta primero','err');return;}
+  var motivo=(document.getElementById('mcpAnulVentaMotivo')||{}).value||'';
+  if(!motivo.trim()||motivo.trim().length<5){toast('El motivo es obligatorio (mínimo 5 caracteres)','err');return;}
+  var s=mcpState.sales.find(function(x){return Number(x.id)===Number(mcpState.selectedSaleId);});
+  if(!s){toast('Venta no encontrada','err');return;}
+  conf('¿Anular la venta de Hab '+s.roomId+' por '+fmt(s.total)+'?\n\nLos productos del bar asociados se mantienen (ya se consumieron).\n\nEsta acción quedará registrada en el historial.',function(){
+    rpc('anularVentaModulo',{
+      saleId:s.id,
+      motivo:motivo.trim(),
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(){
+      toast('✓ Venta anulada','ok');
+      closeM('mChangePay');
+      if(mcpState.role==='ADMIN')loadCuadreAdmin();
+      else loadCuadre();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
 }
 function loadCuadre(){
   if(!sess)return;
