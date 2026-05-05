@@ -1508,6 +1508,12 @@ async function apiMonthMetrics(p, res) {
       else if(pm==='MIXTO'){s.ef_had+=Number(r.amount_1||0);s.tj_had+=Number(r.amount_2||0);s.nq_had+=Number(r.amount_3||0);}
       else s.ef_had+=t;
     }
+    // Devoluciones (REFUND): se descuentan de la seccion segun metodo de pago
+    if(r.type==='REFUND'){
+      if(pm==='TARJETA') s.tj_hab+=t;
+      else if(pm==='NEQUI') s.nq_hab+=t;
+      else s.ef_hab+=t;
+    }
   });
 
   // Bar productos
