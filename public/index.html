@@ -5453,7 +5453,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       h+='<tr><td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;font-weight:700;color:'+color+'">'+label+'</td>';
       vals.forEach(function(v,i){
         var sid=shifts[i];
-        var sl2=(ms[i].allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid;});
+        var sl2=(ms[i].allSalesList||[]).filter(function(s){return (!s.anulada||s.devolucionEfectivo===true)&&s.shiftId===sid;});
         var barVal=barGetter?barGetter(ms[i]):0;
         var cellId='admD_'+pm+'_'+_admDesKey+'_'+i;
         var des=_desgloseRows(sl2,pm,barVal,color);
