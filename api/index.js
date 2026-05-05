@@ -1310,19 +1310,35 @@ async function apiMetrics(p, res) {
   (salesRes.data||[]).forEach(r=>{
     const t=Number(r.total||0),type=r.type,pm=String(r.pay_method||'').toUpperCase(),sid=r.shift_id;
     const isRev=type==='SALE'||type==='EXTENSION'||type==='RENEWAL';
-    if(r.anulada)return;
+    // Devolucion cruzada: anulada pero con devolucion en efectivo
+    const esCruzada = r.anulada && r.devolucion_efectivo;
+    const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
+    if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
     const skip304 = String(r.room_id) === '304';
-    if(isRev){
+    if(isRev || (esCruzada && type==='ANULADA')){
       if(!skip304){
-        dayTotal+=t;
-        if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
+        if(esCruzada){
+          // Suma a metodo original (banco tiene la plata) + resta del efectivo (caja entrego)
+          if(metodoOriginal==='TARJETA') dayTar+=t;
+          else if(metodoOriginal==='NEQUI') dayNeq+=t;
+          dayEfe -= t; // Resta porque salio de caja
+        } else {
+          dayTotal+=t;
+          if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
+        }
       }
-      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0)});
+      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal});
       if(!shiftFilter||sid===shiftFilter){
         if(!skip304){
-          shiftSales+=t;
-          if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
-          if(type==='SALE'){shiftRooms++;shiftPeople+=Number(r.people||0);}
+          if(esCruzada){
+            if(metodoOriginal==='TARJETA') shiftTar+=t;
+            else if(metodoOriginal==='NEQUI') shiftNeq+=t;
+            shiftEfe -= t;
+          } else {
+            shiftSales+=t;
+            if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
+            if(type==='SALE'){shiftRooms++;shiftPeople+=Number(r.people||0);}
+          }
         }
       }
     }
@@ -1409,7 +1425,7 @@ async function apiMonthMetrics(p, res) {
 
   // Queries que pueden superar 1000 filas — usan el helper fetchAll
   const salesData = await fetchAll(() => supabase.from('sales')
-    .select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada')
+    .select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada,devolucion_efectivo,devolucion_metodo_original')
     .like('business_day', ym+'%'));
   const maidLogsData = await fetchAll(() => supabase.from('maid_log')
     .select('maid_name,finished_ms,started_ms,state_to')
@@ -1460,14 +1476,25 @@ async function apiMonthMetrics(p, res) {
 
   // Ventas
   (salesRes.data||[]).forEach(r=>{
-    if(r.anulada)return;
+    // Devolucion cruzada: anulada pero con devolucion en efectivo
+    const esCruzada = r.anulada && r.devolucion_efectivo;
+    const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
+    if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
     if(String(r.room_id)==='304') return;
     const d=getDay(r.business_day);
     const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
     const s=d[sid];
     const t=Number(r.total||0), pm=String(r.pay_method||'EFECTIVO').toUpperCase();
     const epv=Number(r.extra_people_value||0);
- if(r.type==='SALE'){
+    if(esCruzada){
+      // La venta queda en su seccion original (banco/Nequi tiene la plata)
+      // Y se resta del efectivo (caja entrego al cliente)
+      if(metodoOriginal==='TARJETA') s.tj_hab+=t;
+      else if(metodoOriginal==='NEQUI') s.nq_hab+=t;
+      s.ef_hab -= t;  // Resta porque salio efectivo de caja
+      return;  // No procesar como venta normal
+    }
+    if(r.type==='SALE'){
       d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
       const base=t-epv;
       if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
@@ -1760,7 +1787,7 @@ async function apiGetDailyCuadre(p, res) {
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada').eq('business_day',bDay),
+    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
     supabase.from('taxi_expenses').select('amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     supabase.from('extra_staff').select('payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
@@ -1777,9 +1804,20 @@ async function apiGetDailyCuadre(p, res) {
 
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
-    if(r.anulada)return;
+    // Devolucion cruzada: anulada pero con devolucion en efectivo
+    const esCruzada = r.anulada && r.devolucion_efectivo;
+    const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
+    if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
     if(String(r.room_id) === '304') return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
+    if(esCruzada){
+      // La venta queda en su seccion original (el banco/Nequi tiene la plata)
+      // Y se resta del efectivo (la caja entrego la plata al cliente)
+      if(metodoOriginal==='TARJETA') c[sid].tarjetaHab+=t;
+      else if(metodoOriginal==='NEQUI') c[sid].nequiHab=(c[sid].nequiHab||0)+t;
+      c[sid].efectivoHab -= t;  // Resta porque salio efectivo de caja
+      return;  // No procesar como venta normal
+    }
     if(r.type==='SALE'){
       const habVal=t-epv;
       if(pm==='TARJETA'){c[sid].tarjetaHab+=habVal;c[sid].tarjetaPersonas+=epv;}
@@ -2971,13 +3009,37 @@ async function apiAnularVenta(p, res) {
   const motivo = String(p.motivo||'').trim();
   const checkInMs = Number(p.checkInMs||0);
   const userName = String(p.userName||'').trim();
+  const devolucionEfectivo = p.devolucionEfectivo === true;
   if(!roomId) return err(res,'roomId requerido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido');
   const room = await getRoom(roomId);
   if(!room) return err(res,'Habitacion no existe');
   if(room.state!=='OCCUPIED') return err(res,'Solo se puede anular si está ocupada');
-  // Marcar todas las ventas de esta estadia como ANULADA
-  await supabase.from('sales').update({type:'ANULADA',note:motivo,anulada:true,anulada_ms:now,anulada_por:userName}).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  // Si es devolucion en efectivo, leer el metodo de pago original de la venta
+  let metodoOriginal = null;
+  if(devolucionEfectivo){
+    const { data: ventaOriginal } = await supabase.from('sales')
+      .select('pay_method')
+      .eq('room_id',roomId)
+      .eq('check_in_ms',checkInMs)
+      .eq('type','SALE')
+      .maybeSingle();
+    if(!ventaOriginal) return err(res,'No se encontro venta original');
+    const pm = String(ventaOriginal.pay_method||'').toUpperCase();
+    if(pm !== 'TARJETA' && pm !== 'NEQUI') return err(res,'Devolucion en efectivo solo aplica si pago fue TARJETA o NEQUI');
+    metodoOriginal = pm;
+  }
+  // Marcar todas las ventas de esta estadia como ANULADA (con o sin devolucion cruzada)
+  const updateData = {
+    type:'ANULADA',
+    note:motivo,
+    anulada:true,
+    anulada_ms:now,
+    anulada_por:userName,
+    devolucion_efectivo: devolucionEfectivo,
+    devolucion_metodo_original: metodoOriginal
+  };
+  await supabase.from('sales').update(updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
   // Devolver habitacion a disponible
   await supabase.from('rooms').update({
     state:'AVAILABLE', state_since_ms:now, people:0,
@@ -3935,7 +3997,7 @@ async function apiGetGastosMesResumen(p, res) {
 
   // 1. Ventas del mes desde la tabla "sales" (habitaciones + extensiones)
   const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
+    .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type, devolucion_efectivo, devolucion_metodo_original')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -3963,6 +4025,22 @@ async function apiGetGastosMesResumen(p, res) {
       else if(pm === 'TARJETA') ventasTarjeta += total;
       else if(pm === 'NEQUI') ventasNequi += total;
     }
+  });
+
+  // Devoluciones cruzadas: ventas anuladas con devolucion en efectivo
+  // El banco/Nequi tiene la plata (suma a tarjeta/nequi) pero la caja entrego (resta del efectivo)
+  const ventasCruzadas = await fetchAll(() => supabase.from('sales')
+    .select('total, devolucion_metodo_original')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .eq('anulada', true)
+    .eq('devolucion_efectivo', true));
+  (ventasCruzadas||[]).forEach(v => {
+    const t = Number(v.total||0);
+    const metodoOriginal = String(v.devolucion_metodo_original||'').toUpperCase();
+    if(metodoOriginal === 'TARJETA') ventasTarjeta += t;  // Banco tiene la plata
+    else if(metodoOriginal === 'NEQUI') ventasNequi += t;  // Nequi tiene la plata
+    ventasEfectivo -= t;  // Caja entrego efectivo al cliente
   });
 
   // 1b. Ventas del bar desde la tabla "room_products" (productos consumidos en habitaciones)
@@ -4332,6 +4410,18 @@ async function apiGetCajaPaolaResumen(p, res) {
     } else if(String(v.pay_method||'').toUpperCase() === 'EFECTIVO'){
       ventasEfectivo += Number(v.total||0);
     }
+  });
+
+  // Devoluciones cruzadas: ventas anuladas con devolucion en efectivo
+  // La caja entrego esa plata al cliente, asi que se resta del efectivo del mes
+  const ventasCruzadasCP = await fetchAll(() => supabase.from('sales')
+    .select('total')
+    .gte('business_day', firstDay)
+    .lte('business_day', lastDay)
+    .eq('anulada', true)
+    .eq('devolucion_efectivo', true));
+  (ventasCruzadasCP||[]).forEach(v => {
+    ventasEfectivo -= Number(v.total||0);  // Caja entrego efectivo al cliente
   });
 
   // Ventas del bar en efectivo
