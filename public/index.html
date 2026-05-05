@@ -3942,6 +3942,14 @@ function _desgloseRows(sl,pm,barVal,color){
 function parseFmtInput(id){var el=document.getElementById(id);if(!el)return 0;return Number(String(el.value||'').replace(/\./g,'').replace(/[^0-9]/g,''))||0;}
 function fmtBarInput(el){var v=String(el.value||'').replace(/\./g,'').replace(/[^0-9]/g,'');if(!v){el.value='';return;}el.value=Number(v).toLocaleString('es-CO');}
 function _cRow(label,val,color){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3a"><span style="color:#9ca3af;font-size:12px">'+label+'</span><span style="font-weight:700;color:'+color+'">'+fmt(val)+'</span></div>';}
+function fmtTimeHM(mins){
+  mins=Math.max(0,Math.round(Number(mins||0)));
+  if(mins<60) return mins+' min';
+  var h=Math.floor(mins/60);
+  var m=mins%60;
+  if(m===0) return h+'h';
+  return h+'h '+m+'min';
+}
 function updCuadre(){
   var barEf=parseFmtInput('barEfInput');
   var barTj=parseFmtInput('barTjInput');
@@ -5670,8 +5678,18 @@ h+='</div>';
         }
         if(maidLog){
           var cleanMins=Math.round((Number(maidLog.finishedMs)-Number(maidLog.startedMs))/60000);
-          h+='<div style="background:#22222c;border-radius:6px;padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px"><span style="font-size:11px;font-weight:500;color:#a78bfa">'+esc(maidLog.maidName)+'</span><span style="font-size:10px;font-weight:500;color:#22c55e;background:rgba(34,197,94,.1);padding:2px 7px;border-radius:20px">'+cleanMins+' min</span></div>';
-          h+='<div style="font-size:10px;color:#9ca3af">Aseo: '+fT(maidLog.startedMs)+' → '+fT(maidLog.finishedMs)+'</div></div>';
+          var suciaMins=checkoutReal?Math.round((Number(maidLog.startedMs)-checkoutReal)/60000):0;
+          h+='<div style="background:#22222c;border-radius:6px;padding:8px 10px">';
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(46,46,58,.5)">';
+          h+='<span style="font-size:11px;font-weight:600;color:#a78bfa">👷 '+esc(maidLog.maidName)+'</span>';
+          h+='<span style="font-size:10px;font-weight:500;color:#22c55e;background:rgba(34,197,94,.1);padding:2px 8px;border-radius:20px">'+fmtTimeHM(cleanMins)+'</span>';
+          h+='</div>';
+          h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px">';
+          h+='<div style="display:flex;justify-content:space-between;padding:3px 6px;background:rgba(245,158,11,.06);border-radius:4px"><span style="color:#9ca3af">⏰ Sucia por</span><b style="color:#f59e0b">'+fmtTimeHM(suciaMins)+'</b></div>';
+          h+='<div style="display:flex;justify-content:space-between;padding:3px 6px;background:rgba(167,139,250,.06);border-radius:4px"><span style="color:#9ca3af">⏱ Duración</span><b style="color:#a78bfa">'+fmtTimeHM(cleanMins)+'</b></div>';
+          h+='<div style="display:flex;justify-content:space-between;padding:3px 6px;background:#1a1a22;border-radius:4px"><span style="color:#9ca3af">🧹 Aseo inicio</span><b style="color:#e5e7eb">'+fT(maidLog.startedMs)+'</b></div>';
+          h+='<div style="display:flex;justify-content:space-between;padding:3px 6px;background:#1a1a22;border-radius:4px"><span style="color:#9ca3af">✅ Aseo fin</span><b style="color:#e5e7eb">'+fT(maidLog.finishedMs)+'</b></div>';
+          h+='</div></div>';
         } else {
           h+='<div style="background:#22222c;border-radius:6px;padding:6px 8px;font-size:10px;color:#6b7280;font-style:italic">Sin aseo registrado aún</div>';
         }
