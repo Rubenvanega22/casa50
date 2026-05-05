@@ -3670,7 +3670,13 @@ sl.forEach(function(s){
       var pm=s.payMethod||'EFECTIVO';
       var tot=Number(s.total||0);
       var tipo=s.type||'SALE';
-      if(tipo==='REFUND'){ef_hab+=tot;return;}
+      if(tipo==='REFUND'){
+        // Devolucion: se descuenta de la seccion segun metodo de pago
+        if(pm==='TARJETA') tj_hab+=tot;
+        else if(pm==='NEQUI') nq_hab+=tot;
+        else ef_hab+=tot;
+        return;
+      }
       if(tipo==='EXTENSION'||tipo==='RENEWAL'){
         // Horas adicionales
         if(pm==='TARJETA')tj_hadd+=tot;
@@ -3828,6 +3834,8 @@ function _desgloseRows(sl,pm,barVal,color){
   var amountKey = pm==='EFECTIVO'?'amount_1':pm==='TARJETA'?'amount_2':'amount_3';
   var ventas=sl.filter(function(s){return !s.devolucionEfectivo && (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');});
   var exts=sl.filter(function(s){return !s.devolucionEfectivo && (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&s.type==='EXTENSION';});
+  // Devoluciones manuales (boton "Registrar Devolucion") - se filtran por metodo de pago
+  var refundsManuales=sl.filter(function(s){return s.type==='REFUND' && s.payMethod===pm;});
   // Devoluciones cruzadas: aparecen en TARJETA/NEQUI con etiqueta naranja, en EFECTIVO con linea roja
   var cruzadasEnSeccion=sl.filter(function(s){return s.devolucionEfectivo===true && s.metodoOriginal===pm;});
   var cruzadasEfectivo=(pm==='EFECTIVO')?sl.filter(function(s){return s.devolucionEfectivo===true;}):[];
@@ -3893,10 +3901,25 @@ function _desgloseRows(sl,pm,barVal,color){
     h+='<span style="color:'+color+'">'+fmt(barVal)+'</span>';
     h+='</div>';
   }
+  // Devoluciones manuales (boton "Registrar Devolucion") - linea roja con monto negativo
+  var totalRefundsManuales=0;
+  if(refundsManuales.length){
+    h+='<div style="font-size:10px;font-weight:700;color:#ef4444;text-transform:uppercase;margin:8px 0 5px">Devoluciones</div>';
+    refundsManuales.forEach(function(s){
+      var motivoCorto=String(s.note||'').substring(0,40);
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(239,68,68,.08);border-left:3px solid #ef4444;border-radius:4px;margin:4px 0">';
+      h+='<div><div style="color:#ef4444;font-size:11px;font-weight:600">🔴 Hab '+s.roomId+' — Devolución</div>';
+      if(motivoCorto)h+='<div style="font-size:10px;color:#fca5a5;margin-top:2px">'+esc(motivoCorto)+'</div>';
+      h+='</div>';
+      h+='<span style="color:#ef4444;font-weight:600">'+fmt(s.total)+'</span>';
+      h+='</div>';
+      totalRefundsManuales+=Number(s.total||0);
+    });
+  }
   // Devoluciones cruzadas en EFECTIVO: linea roja con monto negativo
   var totalDevolucionesEfe=0;
   if(cruzadasEfectivo.length){
-    h+='<div style="font-size:10px;font-weight:700;color:#ef4444;text-transform:uppercase;margin:8px 0 5px">Devoluciones</div>';
+    h+='<div style="font-size:10px;font-weight:700;color:#ef4444;text-transform:uppercase;margin:8px 0 5px">Devoluciones cruzadas</div>';
     cruzadasEfectivo.forEach(function(s){
       var origen=s.metodoOriginal==='TARJETA'?'tarjeta':'nequi';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(239,68,68,.08);border-left:3px solid #ef4444;border-radius:4px;margin:4px 0">';
@@ -3910,7 +3933,7 @@ function _desgloseRows(sl,pm,barVal,color){
   var tot=ventas.reduce(function(a,s){return a+Number(s.total||0);},0)+exts.reduce(function(a,s){return a+Number(s.total||0);},0)+barVal;
   // Sumar las cruzadas de esta seccion (TARJETA/NEQUI - banco tiene la plata) y restar las devoluciones (EFECTIVO - caja entrego)
   var totalCruzadasEnSeccion=cruzadasEnSeccion.reduce(function(a,s){return a+Number(s.total||0);},0);
-  tot+=totalCruzadasEnSeccion-totalDevolucionesEfe;
+  tot+=totalCruzadasEnSeccion-totalDevolucionesEfe+totalRefundsManuales;
   h+='<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:6px 0;margin-top:4px;border-top:1px solid rgba(46,46,58,.6)">';
   h+='<span>Total</span><span style="color:'+color+'">'+fmt(tot)+'</span>';
   h+='</div>';
