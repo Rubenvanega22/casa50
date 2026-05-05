@@ -3659,12 +3659,14 @@ function loadCuadre(){
 
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
-    var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sess.shiftId&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
+    var sl=(m.allSalesList||[]).filter(function(s){return (!s.anulada||s.devolucionEfectivo===true)&&s.shiftId===sess.shiftId&&(!fromMs||Number(s.tsMs||s.checkInMs||0)>=fromMs);});
     var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId&&(!fromMs||Number(l.tsMs||0)>=fromMs);});
     var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0&&(!fromMs||Number(e.tsMs||0)>=fromMs);});
     var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId&&(!fromMs||Number(tx.tsMs||0)>=fromMs);});
     var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0,nq_hab=0,nq_padd=0,nq_hadd=0;
 sl.forEach(function(s){
+      // Saltar cruzadas: el backend ya las sumo a TARJETA/NEQUI y resto del EFECTIVO
+      if(s.devolucionEfectivo===true) return;
       var pm=s.payMethod||'EFECTIVO';
       var tot=Number(s.total||0);
       var tipo=s.type||'SALE';
@@ -3824,10 +3826,13 @@ function toggleAdmDesCell(id){
 }
 function _desgloseRows(sl,pm,barVal,color){
   var amountKey = pm==='EFECTIVO'?'amount_1':pm==='TARJETA'?'amount_2':'amount_3';
-  var ventas=sl.filter(function(s){return (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');});
-  var exts=sl.filter(function(s){return (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&s.type==='EXTENSION';});
+  var ventas=sl.filter(function(s){return !s.devolucionEfectivo && (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');});
+  var exts=sl.filter(function(s){return !s.devolucionEfectivo && (s.payMethod===pm||(s.payMethod==='MIXTO'&&Number(s[amountKey]||0)>0))&&s.type==='EXTENSION';});
+  // Devoluciones cruzadas: aparecen en TARJETA/NEQUI con etiqueta naranja, en EFECTIVO con linea roja
+  var cruzadasEnSeccion=sl.filter(function(s){return s.devolucionEfectivo===true && s.metodoOriginal===pm;});
+  var cruzadasEfectivo=(pm==='EFECTIVO')?sl.filter(function(s){return s.devolucionEfectivo===true;}):[];
   var h='';
-  if(ventas.length){
+  if(ventas.length || cruzadasEnSeccion.length){
     h+='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin-bottom:5px">Ventas base</div>';
     ventas.forEach(function(s){
       var epv=Number(s.extraPeopleValue||0);
@@ -3835,6 +3840,15 @@ function _desgloseRows(sl,pm,barVal,color){
       h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)">';
       h+='<span style="color:#9ca3af">Hab '+s.roomId+' — '+esc(s.category)+' '+s.durationHrs+'h</span>';
       h+='<span style="color:'+color+'">'+fmt(habVal)+'</span>';
+      h+='</div>';
+    });
+    // Mostrar las cruzadas con etiqueta naranja "ELIMINADA - Consignada al banco/Nequi"
+    cruzadasEnSeccion.forEach(function(s){
+      var dest=(pm==='TARJETA')?'al banco':'en Nequi';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.4);border-radius:6px;margin:4px 0">';
+      h+='<div><div style="color:#fbbf24;font-size:11px;font-weight:600">⚠️ Hab '+s.roomId+' — '+esc(s.category||'')+' '+s.durationHrs+'h</div>';
+      h+='<div style="font-size:10px;color:#fcd34d;margin-top:2px">ELIMINADA · 💰 Consignada '+dest+'</div></div>';
+      h+='<span style="color:#fbbf24;font-weight:600">'+fmt(s.total)+'</span>';
       h+='</div>';
     });
   }
@@ -3879,7 +3893,24 @@ function _desgloseRows(sl,pm,barVal,color){
     h+='<span style="color:'+color+'">'+fmt(barVal)+'</span>';
     h+='</div>';
   }
+  // Devoluciones cruzadas en EFECTIVO: linea roja con monto negativo
+  var totalDevolucionesEfe=0;
+  if(cruzadasEfectivo.length){
+    h+='<div style="font-size:10px;font-weight:700;color:#ef4444;text-transform:uppercase;margin:8px 0 5px">Devoluciones</div>';
+    cruzadasEfectivo.forEach(function(s){
+      var origen=s.metodoOriginal==='TARJETA'?'tarjeta':'nequi';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:rgba(239,68,68,.08);border-left:3px solid #ef4444;border-radius:4px;margin:4px 0">';
+      h+='<div><div style="color:#ef4444;font-size:11px;font-weight:600">🔴 Devolución Hab '+s.roomId+'</div>';
+      h+='<div style="font-size:10px;color:#fca5a5;margin-top:2px">Cliente canceló · Pagado en '+origen+'</div></div>';
+      h+='<span style="color:#ef4444;font-weight:600">−'+fmt(s.total)+'</span>';
+      h+='</div>';
+      totalDevolucionesEfe+=Number(s.total||0);
+    });
+  }
   var tot=ventas.reduce(function(a,s){return a+Number(s.total||0);},0)+exts.reduce(function(a,s){return a+Number(s.total||0);},0)+barVal;
+  // Sumar las cruzadas de esta seccion (TARJETA/NEQUI - banco tiene la plata) y restar las devoluciones (EFECTIVO - caja entrego)
+  var totalCruzadasEnSeccion=cruzadasEnSeccion.reduce(function(a,s){return a+Number(s.total||0);},0);
+  tot+=totalCruzadasEnSeccion-totalDevolucionesEfe;
   h+='<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:6px 0;margin-top:4px;border-top:1px solid rgba(46,46,58,.6)">';
   h+='<span>Total</span><span style="color:'+color+'">'+fmt(tot)+'</span>';
   h+='</div>';
