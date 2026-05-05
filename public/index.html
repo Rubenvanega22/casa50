@@ -6805,7 +6805,9 @@ function renderGastosMes(d){
   h+='</div>';
   // 3 tarjetas resumen
   h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">';
-  h+='<div style="background:#22222c;border-radius:8px;padding:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Ventas del mes</div><div style="font-size:20px;font-weight:700">'+fmt(v.total||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+(v.cantidad||0)+' ventas</div></div>';
+  var gastosCuadreTotal=Number((d.gastosCuadre||{}).total||0);
+  var ventasNetas=Number(v.total||0)-gastosCuadreTotal;
+  h+='<div style="background:#22222c;border-radius:8px;padding:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Ventas del mes (neto)</div><div style="font-size:20px;font-weight:700">'+fmt(ventasNetas)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+(v.cantidad||0)+' ventas · descontados gastos</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:12px"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Gastos del mes</div><div style="font-size:20px;font-weight:700;color:#ef4444">−'+fmt(g.total||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+(g.cantidad||0)+' gastos</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:12px;border-left:3px solid #22c55e"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Utilidad neta</div><div style="font-size:20px;font-weight:700;color:#22c55e">'+fmt(d.utilidad||0)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">Ventas − gastos</div></div>';
   h+='</div>';
