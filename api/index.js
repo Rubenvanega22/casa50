@@ -1616,7 +1616,10 @@ async function apiMaidPanel(p, res) {
     id: r.id, tsMs:Number(r.ts_ms), businessDay:r.business_day, shiftId:r.shift_id,
     maidName:r.maid_name, roomId:r.room_id, action:r.action, state:r.state, note:r.note,
     startedMs:Number(r.started_ms||r.ts_ms||0), finishedMs:Number(r.finished_ms||0),
-    stateFrom:r.state_from||'', stateTo:r.state_to||''
+    stateFrom:r.state_from||'', stateTo:r.state_to||'',
+    category: r.category||'',
+    checkInMs: Number(r.check_in_ms||0),
+    checkoutMs: Number(r.checkout_ms||0)
   }));
 
   return ok(res, { bizDay:bDay, serverShift:shift, activeMaids:Object.values(activeMaids), dirtyRooms, contaminatedRooms, shiftReport, serverNowMs:now, maidLogs });
