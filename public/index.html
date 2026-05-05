@@ -1961,23 +1961,80 @@ function confirmAddPerson(){
 }
 function doAnularVenta(){
   if(!curRoom)return;
+  var pm=String(curRoom.payMethod||'EFECTIVO').toUpperCase();
+  var esTarjetaONequi=(pm==='TARJETA'||pm==='NEQUI');
   var h='<div class="mh"><div class="mt">🗑 Anular Venta — Hab '+curRoom.roomId+'</div><button class="mc" onclick="closeM(\'mAnularVenta\')">✕</button></div>';
-  h+='<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#fca5a5">⚠️ Esta acción anula la venta completamente. La habitación quedará disponible y la venta no sumará al cuadre.</div>';
+  h+='<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#fca5a5">⚠️ Esta acción anula la venta completamente. La habitación quedará disponible.</div>';
+  if(esTarjetaONequi){
+    h+='<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:10px;margin-bottom:12px">';
+    h+='<div style="font-size:12px;color:#fcd34d;font-weight:600;margin-bottom:8px">💳 Esta venta fue en '+pm+'</div>';
+    h+='<div style="font-size:12px;color:#fde68a;margin-bottom:10px">¿El cliente alcanzó a pagar?</div>';
+    h+='<div style="display:flex;gap:6px">';
+    h+='<button id="btnPagoSi" type="button" onclick="setPagoOption(true)" style="flex:1;padding:10px;background:rgba(34,197,94,.15);border:1px solid #22c55e;border-radius:6px;color:#22c55e;cursor:pointer;font-size:12px;font-weight:600">✅ SÍ pagó (devolví en efectivo)</button>';
+    h+='<button id="btnPagoNo" type="button" onclick="setPagoOption(false)" style="flex:1;padding:10px;background:#1a1a22;border:1px solid #2e2e3a;border-radius:6px;color:#9ca3af;cursor:pointer;font-size:12px;font-weight:600">❌ NO pagó (fue error)</button>';
+    h+='</div>';
+    h+='<div id="explicacionPago" style="margin-top:8px;font-size:11px;color:#9ca3af"></div>';
+    h+='</div>';
+  }
   h+='<label>Motivo de anulación (obligatorio)</label>';
   h+='<textarea id="anularMotivo" rows="3" placeholder="Explica por qué se anula esta venta..." style="margin-bottom:10px"></textarea>';
   h+='<button class="btn br full" onclick="confirmarAnularVenta()">Confirmar Anulación</button>';
   var modal=document.getElementById('mAnularVenta');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAnularVenta';div.innerHTML='<div class="modal"><div id="mAnularVentaB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAnularVenta');});document.body.appendChild(div);}
   document.getElementById('mAnularVentaB').innerHTML=h;
+  // Estado inicial
+  window.anularPagoOption=null;
   openM('mAnularVenta');
+}
+function setPagoOption(pago){
+  window.anularPagoOption=pago;
+  var btnSi=document.getElementById('btnPagoSi');
+  var btnNo=document.getElementById('btnPagoNo');
+  var exp=document.getElementById('explicacionPago');
+  if(pago){
+    btnSi.style.background='rgba(34,197,94,.3)';btnSi.style.borderWidth='2px';
+    btnNo.style.background='#1a1a22';btnNo.style.borderWidth='1px';btnNo.style.borderColor='#2e2e3a';
+    exp.innerHTML='💰 La plata SÍ está en el banco/Nequi. Se descontará el equivalente del efectivo del cuadre.';
+    exp.style.color='#86efac';
+  }else{
+    btnNo.style.background='rgba(239,68,68,.2)';btnNo.style.borderColor='#ef4444';btnNo.style.borderWidth='2px';btnNo.style.color='#ef4444';
+    btnSi.style.background='rgba(34,197,94,.15)';btnSi.style.borderWidth='1px';
+    exp.innerHTML='⚠️ Se anulará la venta como si nunca hubiera existido.';
+    exp.style.color='#fca5a5';
+  }
 }
 function confirmarAnularVenta(){
   var motivo=(document.getElementById('anularMotivo')||{}).value||'';
   if(!motivo.trim()||motivo.trim().length<5){toast('El motivo es obligatorio (mínimo 5 caracteres).','err');return;}
   if(!curRoom)return;
-  conf('¿Anular la venta de Hab '+curRoom.roomId+'? Esta acción no se puede deshacer.',function(){
-    rpc('anularVenta',{roomId:curRoom.roomId,motivo:motivo.trim(),userName:sess.userName,userRole:sess.userRole,checkInMs:curRoom.checkInMs||0},
-      function(){toast('✓ Venta anulada.','ok');closeM('mAnularVenta');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});loadCuadre();},
+  var pm=String(curRoom.payMethod||'EFECTIVO').toUpperCase();
+  var esTarjetaONequi=(pm==='TARJETA'||pm==='NEQUI');
+  // Si fue tarjeta o nequi, debe haber elegido SI o NO
+  if(esTarjetaONequi&&window.anularPagoOption===null){
+    toast('Selecciona si el cliente pagó o no antes de continuar.','err');
+    return;
+  }
+  var devolucionEfectivo=(esTarjetaONequi&&window.anularPagoOption===true);
+  var msgConf='¿Anular la venta de Hab '+curRoom.roomId+'? Esta acción no se puede deshacer.';
+  if(devolucionEfectivo){
+    msgConf='¿Anular Hab '+curRoom.roomId+'?\n\n'+pm+' quedará en el cuadre (banco tiene la plata).\nEFECTIVO se descontará automáticamente (caja entregó la plata).';
+  }
+  conf(msgConf,function(){
+    rpc('anularVenta',{
+      roomId:curRoom.roomId,
+      motivo:motivo.trim(),
+      userName:sess.userName,
+      userRole:sess.userRole,
+      checkInMs:curRoom.checkInMs||0,
+      devolucionEfectivo:devolucionEfectivo
+    },
+      function(){
+        toast(devolucionEfectivo?'✓ Venta anulada con devolución cruzada.':'✓ Venta anulada.','ok');
+        closeM('mAnularVenta');closeM('mRoom');
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+        loadCuadre();
+        if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+      },
       function(e){toast(e.message||String(e),'err');}
     );
   });
