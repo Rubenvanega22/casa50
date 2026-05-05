@@ -4372,8 +4372,22 @@ async function apiGetCajaPaolaResumen(p, res) {
     }
   });
 
-  // Efectivo en caja publico = ventas efectivo + descargos - gastos publicos efectivo
-  const efectivoEnCajaPublico = ventasEfectivo + totalDescargos - gastosPublicEfectivo;
+  // Gastos del cuadre (los que paga la recepcionista en cada turno - ya salieron de caja)
+  // Mismo calculo que apiGetGastosMesResumen para que las dos pantallas coincidan
+  const [gralResCP, taxiResCP, extraResCP, loansResCP] = await Promise.all([
+    supabase.from('general_expenses').select('amount').gte('business_day', firstDay).lte('business_day', lastDay),
+    supabase.from('taxi_expenses').select('amount').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
+    supabase.from('extra_staff').select('payment').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
+    supabase.from('loans').select('amount').gte('business_day', firstDay).lte('business_day', lastDay).eq('manual', true).eq('anulada', false)
+  ]);
+  let gastosCuadreCP = 0;
+  (gralResCP.data||[]).forEach(r => gastosCuadreCP += Number(r.amount||0));
+  (taxiResCP.data||[]).forEach(r => gastosCuadreCP += Number(r.amount||0));
+  (extraResCP.data||[]).forEach(r => gastosCuadreCP += Number(r.payment||0));
+  (loansResCP.data||[]).forEach(r => gastosCuadreCP += Number(r.amount||0));
+
+  // Efectivo en caja publico = ventas efectivo + descargos - gastos publicos efectivo - gastos del cuadre
+  const efectivoEnCajaPublico = ventasEfectivo + totalDescargos - gastosPublicEfectivo - gastosCuadreCP;
 
   // Calcular los 3 saldos privados
   const saldoPaola = efectivoEnCajaPublico - totalEntregasAprobadas - totalGastos;
