@@ -266,6 +266,9 @@ module.exports = async function handler(req, res) {
       case 'getGastosMesResumen': return await apiGetGastosMesResumen(payload, res);
       case 'addGastoMes':         return await apiAddGastoMes(payload, res);
       case 'editGastoMes':        return await apiEditGastoMes(payload, res);
+      case 'createRetiro':        return await apiCreateRetiro(payload, res);
+      case 'getRetiros':          return await apiGetRetiros(payload, res);
+      case 'anularRetiro':        return await apiAnularRetiro(payload, res);
       case 'anularGastoMes':      return await apiAnularGastoMes(payload, res);
       case 'getCajaPaolaResumen': return await apiGetCajaPaolaResumen(payload, res);
       case 'addCajaEntrega':      return await apiAddCajaEntrega(payload, res);
@@ -1365,6 +1368,26 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
   (roomProdsBar||[]).forEach(r=>{const t=Number(r.total||0),pm=String(r.pay_method||'EFECTIVO').toUpperCase();dayBar+=t;if(pm==='TARJETA'){dayBarTar+=t;}else if(pm==='NEQUI'){dayBarNeq+=t;}else{dayBarEfe+=t;}if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=t;if(pm==='TARJETA'){shiftBarTar+=t;}else if(pm==='NEQUI'){shiftBarNeq+=t;}else{shiftBarEfe+=t;}}});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
 
+  // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
+  // Restar retiros activos del dia origen del cuadre del dia
+  // Los retiros se descuentan de las ventas del dia origen y metodo correspondiente
+  const { data: retirosDia } = await supabase.from('retiros_dueno')
+    .select('monto, pay_method, anulado')
+    .eq('dia_origen', bDay)
+    .eq('anulado', false);
+  let dayRetirosEfe = 0;
+  let dayRetirosTar = 0;
+  (retirosDia||[]).forEach(r=>{
+    const monto = Number(r.monto||0);
+    const pm = String(r.pay_method||'').toUpperCase();
+    if(pm==='EFECTIVO') dayRetirosEfe += monto;
+    else if(pm==='TARJETA') dayRetirosTar += monto;
+  });
+  // Restar retiros del total general y de los desgloses
+  dayTotal -= (dayRetirosEfe + dayRetirosTar);
+  dayEfe -= dayRetirosEfe;
+  dayTar -= dayRetirosTar;
+
   const dayNet=dayTotal+dayBar+dayRefunds-dayTaxi-dayLoans-dayExtraStaff-dayGastos;
   const shiftNet=shiftSales+shiftBar-shiftTaxi-shiftGastos;
 
@@ -1532,6 +1555,22 @@ async function apiMonthMetrics(p, res) {
   (taxiRes.data||[]).forEach(r=>{if(r.anulada)return;const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].taxis+=Number(r.amount||0);});
   (loansRes.data||[]).forEach(r=>{if(r.anulada)return;const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].gastos+=Number(r.amount||0);});
   (extraRes.data||[]).forEach(r=>{if(r.anulada)return;const d=getDay(r.business_day);const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';d[sid].turnos+=Number(r.payment||0);});
+
+  // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
+  // Restar retiros activos de las ventas del dia origen y metodo correspondiente
+  // Esto cumple la regla de oro: el retiro se ve reflejado en el Mes
+  const { data: retirosMes } = await supabase.from('retiros_dueno')
+    .select('dia_origen, monto, pay_method, anulado')
+    .like('dia_origen', ym+'%')
+    .eq('anulado', false);
+  (retirosMes||[]).forEach(r=>{
+    const d=dayMap[r.dia_origen];
+    if(!d) return;
+    const monto=Number(r.monto||0);
+    const pm=String(r.pay_method||'').toUpperCase();
+    if(pm==='EFECTIVO') d.SHIFT_1.ef_hab -= monto;
+    else if(pm==='TARJETA') d.SHIFT_1.tj_hab -= monto;
+  });
 
   const days = Object.values(dayMap).sort((a,b)=>a.day.localeCompare(b.day));
 
@@ -4080,6 +4119,26 @@ async function apiGetGastosMesResumen(p, res) {
   ventasEfectivo += ventasBarEfectivo;
   ventasTarjeta += ventasBarTarjeta;
   ventasNequi += ventasBarNequi;
+
+  // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
+  // Restar retiros activos del mes de las ventas (regla de oro)
+  // El retiro se ve reflejado en la pantalla "Gastos Mes" como menos ventas
+  const retirosMesGM = await fetchAll(() => supabase.from('retiros_dueno')
+    .select('monto, pay_method, anulado')
+    .gte('dia_origen', firstDay)
+    .lte('dia_origen', lastDay)
+    .eq('anulado', false));
+  let totalRetirosEfectivo = 0;
+  let totalRetirosTarjeta = 0;
+  (retirosMesGM||[]).forEach(r => {
+    const monto = Number(r.monto||0);
+    const pm = String(r.pay_method||'').toUpperCase();
+    if(pm === 'EFECTIVO') totalRetirosEfectivo += monto;
+    else if(pm === 'TARJETA') totalRetirosTarjeta += monto;
+  });
+  ventasEfectivo -= totalRetirosEfectivo;
+  ventasTarjeta -= totalRetirosTarjeta;
+  totalVentas -= (totalRetirosEfectivo + totalRetirosTarjeta);
   totalVentas += totalVentasBar;
   cantVentas += cantVentasBar;
 
@@ -4236,6 +4295,204 @@ async function apiAddGastoMes(p, res) {
 }
 
 // ==================== EDITAR GASTO DEL MES ====================
+// ==================== RETIROS DEL DUEÑO (AHORRO SILENCIOSO) ====================
+async function apiAnularRetiro(p, res) {
+  const userName = String(p.userName||'').trim();
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN puede anular retiros');
+  
+  const retiroId = Number(p.retiroId||0);
+  const motivo = String(p.motivo||'').trim();
+  
+  // Validaciones
+  if(retiroId <= 0) return err(res, 'ID de retiro invalido');
+  if(motivo.length < 5) return err(res, 'Motivo de anulacion obligatorio (minimo 5 caracteres)');
+  
+  // Verificar que el retiro existe y no esta ya anulado
+  const { data: retiroExistente, error: errBusqueda } = await supabase.from('retiros_dueno')
+    .select('*')
+    .eq('id', retiroId)
+    .single();
+  
+  if(errBusqueda || !retiroExistente) return err(res, 'Retiro no encontrado');
+  if(retiroExistente.anulado === true) return err(res, 'Este retiro ya esta anulado');
+  
+  // Anular el retiro (NO se borra, queda en historial)
+  const now = Date.now();
+  const { error: errUpdate } = await supabase.from('retiros_dueno').update({
+    anulado: true,
+    anulado_ms: now,
+    anulado_por: userName,
+    motivo_anulacion: motivo
+  }).eq('id', retiroId);
+  
+  if(errUpdate) return err(res, 'Error al anular: '+errUpdate.message);
+  
+  return ok(res, {
+    retiroId: retiroId,
+    monto: Number(retiroExistente.monto||0),
+    payMethod: retiroExistente.pay_method,
+    diaOrigen: retiroExistente.dia_origen,
+    mensaje: 'Retiro anulado. La plata vuelve donde estaba ($'+Number(retiroExistente.monto||0).toLocaleString('es-CO')+' en '+retiroExistente.pay_method+' del dia '+retiroExistente.dia_origen+').'
+  });
+}
+
+async function apiGetRetiros(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN puede ver retiros');
+  
+  const mes = String(p.mes||'').trim(); // formato YYYY-MM (opcional)
+  
+  // Construir query base
+  let query = supabase.from('retiros_dueno').select('*');
+  
+  // Filtrar por mes si se proporciona
+  if(mes && mes.match(/^\d{4}-\d{2}$/)) {
+    const inicio = mes + '-01';
+    // Calcular fin de mes
+    const [yyyy, mm] = mes.split('-').map(Number);
+    const finMes = new Date(yyyy, mm, 0).getDate(); // ultimo dia del mes
+    const fin = mes + '-' + String(finMes).padStart(2,'0');
+    query = query.gte('business_day', inicio).lte('business_day', fin);
+  }
+  
+  const { data, error } = await query.order('ts_ms', { ascending: false });
+  
+  if(error) return err(res, 'Error al consultar: '+error.message);
+  
+  // Mapear a formato camelCase y calcular totales
+  const retiros = (data||[]).map(r => ({
+    id: r.id,
+    tsMs: Number(r.ts_ms),
+    businessDay: r.business_day,
+    diaOrigen: r.dia_origen,
+    shiftId: r.shift_id,
+    monto: Number(r.monto||0),
+    payMethod: r.pay_method,
+    motivo: r.motivo || '',
+    userName: r.user_name,
+    anulado: r.anulado === true,
+    anuladoMs: Number(r.anulado_ms||0),
+    anuladoPor: r.anulado_por || '',
+    motivoAnulacion: r.motivo_anulacion || ''
+  }));
+  
+  // Calcular totales SOLO de retiros activos (no anulados)
+  let totalEfectivo = 0;
+  let totalTarjeta = 0;
+  let cantidadActivos = 0;
+  retiros.forEach(r => {
+    if(r.anulado) return;
+    cantidadActivos++;
+    if(r.payMethod === 'EFECTIVO') totalEfectivo += r.monto;
+    else if(r.payMethod === 'TARJETA') totalTarjeta += r.monto;
+  });
+  
+  return ok(res, {
+    retiros: retiros,
+    totalEfectivo: totalEfectivo,
+    totalTarjeta: totalTarjeta,
+    totalGeneral: totalEfectivo + totalTarjeta,
+    cantidad: cantidadActivos,
+    cantidadTotal: retiros.length
+  });
+}
+
+async function apiCreateRetiro(p, res) {
+  const userName = String(p.userName||'').trim();
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN puede registrar retiros');
+  
+  const diaOrigen = String(p.diaOrigen||'').trim();
+  const monto = Number(p.monto||0);
+  const payMethod = String(p.payMethod||'').toUpperCase();
+  const motivo = String(p.motivo||'').trim();
+  
+  // Validaciones basicas
+  if(!diaOrigen.match(/^\d{4}-\d{2}-\d{2}$/)) return err(res, 'Dia origen invalido (formato YYYY-MM-DD)');
+  if(monto <= 0) return err(res, 'El monto debe ser mayor a 0');
+  if(payMethod !== 'EFECTIVO' && payMethod !== 'TARJETA') return err(res, 'Metodo de pago invalido');
+  
+  // VALIDACION ESTRICTA: verificar disponibilidad del dia origen
+  // Sumar ventas de ese dia y metodo (solo SALE/RENEWAL/EXTENSION, no anuladas, no devolucion cruzada)
+  const { data: ventasDia } = await supabase.from('sales')
+    .select('total, pay_method, pay_method_2, amount_1, amount_2, amount_3, type, anulada, devolucion_efectivo')
+    .eq('business_day', diaOrigen)
+    .in('type', ['SALE','RENEWAL','EXTENSION']);
+  
+  let disponible = 0;
+  (ventasDia||[]).forEach(v => {
+    if(v.anulada && !v.devolucion_efectivo) return;
+    const t = Number(v.total||0);
+    const pm = String(v.pay_method||'EFECTIVO').toUpperCase();
+    if(pm === 'MIXTO') {
+      // Para MIXTO: leer del amount correspondiente
+      if(payMethod === 'EFECTIVO') disponible += Number(v.amount_1||0);
+      else if(payMethod === 'TARJETA') disponible += Number(v.amount_2||0);
+    } else if(pm === payMethod) {
+      disponible += t;
+    }
+  });
+  
+  // Restar bar productos del dia con ese metodo (tambien cuenta como ventas)
+  const { data: barDia } = await supabase.from('room_products')
+    .select('total, pay_method, is_cortesia')
+    .eq('business_day', diaOrigen);
+  (barDia||[]).forEach(b => {
+    if(b.is_cortesia) return;
+    const pm = String(b.pay_method||'EFECTIVO').toUpperCase();
+    if(pm === payMethod) disponible += Number(b.total||0);
+  });
+  
+  // Restar retiros previos del mismo dia y metodo (no anulados)
+  const { data: retirosPrev } = await supabase.from('retiros_dueno')
+    .select('monto')
+    .eq('dia_origen', diaOrigen)
+    .eq('pay_method', payMethod)
+    .eq('anulado', false);
+  let yaRetirado = 0;
+  (retirosPrev||[]).forEach(r => { yaRetirado += Number(r.monto||0); });
+  
+  const disponibleNeto = disponible - yaRetirado;
+  
+  if(monto > disponibleNeto) {
+    return err(res, 'Solo hay $'+disponibleNeto.toLocaleString('es-CO')+' disponibles en '+payMethod+' del dia '+diaOrigen+'. Ya se retiraron $'+yaRetirado.toLocaleString('es-CO')+' previamente.');
+  }
+  
+  // Crear el retiro
+  const now = Date.now();
+  const today = new Date(now - 5*3600*1000).toISOString().slice(0,10); // UTC-5 Colombia
+  const hour = new Date(now - 5*3600*1000).getUTCHours();
+  let shiftId = 'SHIFT_1';
+  if(hour >= 14 && hour < 21) shiftId = 'SHIFT_2';
+  else if(hour >= 21 || hour < 6) shiftId = 'SHIFT_3';
+  
+  const { data, error } = await supabase.from('retiros_dueno').insert({
+    ts_ms: now,
+    business_day: today,
+    dia_origen: diaOrigen,
+    shift_id: shiftId,
+    monto: monto,
+    pay_method: payMethod,
+    motivo: motivo || null,
+    user_name: userName,
+    user_role: 'ADMIN',
+    anulado: false
+  }).select().single();
+  
+  if(error) return err(res, 'Error al guardar: '+error.message);
+  
+  return ok(res, {
+    id: data.id,
+    monto: monto,
+    payMethod: payMethod,
+    diaOrigen: diaOrigen,
+    disponibleAntes: disponibleNeto,
+    disponibleDespues: disponibleNeto - monto,
+    yaRetiradoTotal: yaRetirado + monto
+  });
+}
+
 async function apiEditGastoMes(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
