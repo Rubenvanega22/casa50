@@ -7452,21 +7452,16 @@ function openEditGastoMes(gastoId){
   var h='<div class="mh"><div class="mt">✏️ Editar Gasto del Mes</div><button class="mc" onclick="closeM(\'mEditGastoMes\')">✕</button></div>';
   h+='<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#f59e0b">⚠️ Cualquier cambio quedará registrado con tu nombre, fecha y motivo. Se reflejará en todas las pantallas.</div>';
   h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Categoría</label>';
-  h+='<select id="egmCategoria" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<select id="egmesCategoria" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
   CATEGORIAS.forEach(function(c){
     var sel=(c===gasto.categoria)?' selected':'';
     h+='<option value="'+esc(c)+'"'+sel+'>'+esc(c)+'</option>';
   });
   h+='</select>';
   h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Fecha</label>';
-  h+='<input type="date" id="egmFecha" value="'+esc(gasto.fecha||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<input type="date" id="egmesFecha" value="'+esc(gasto.fecha||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
   h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Concepto</label>';
-  h+='<input type="text" id="egmConcepto" value="'+esc(gasto.concepto||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
-  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Monto</label>';
-  h+='<input type="number" id="egmMonto" value="'+Number(gasto.monto||0)+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
-  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Método de pago</label>';
-  h+='<select id="egmPayMethod" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
-  var pmActual=String(gasto.pay_method||'EFECTIVO').toUpperCase();
+  h+='<input type="number" id="egmesMonto" value="'+Number(gasto.monto||0)+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
   h+='<option value="EFECTIVO"'+(pmActual==='EFECTIVO'?' selected':'')+'>Efectivo</option>';
   h+='<option value="TARJETA"'+(pmActual==='TARJETA'?' selected':'')+'>Tarjeta</option>';
   h+='</select>';
@@ -7489,12 +7484,12 @@ function openEditGastoMes(gastoId){
 function saveEditGastoMes(){
   var gasto=window._editGastoCurrent;
   if(!gasto){toast('No hay gasto seleccionado','err');return;}
-  var categoria=document.getElementById('egmCategoria').value;
-  var fecha=document.getElementById('egmFecha').value;
-  var concepto=String(document.getElementById('egmConcepto').value||'').trim();
-  var monto=Number(document.getElementById('egmMonto').value||0);
-  var payMethod=document.getElementById('egmPayMethod').value;
-  var motivo=String(document.getElementById('egmMotivo').value||'').trim();
+  var categoria=document.getElementById('egmesCategoria').value;
+  var fecha=document.getElementById('egmesFecha').value;
+  var concepto=String(document.getElementById('egmesConcepto').value||'').trim();
+  var monto=Number(document.getElementById('egmesMonto').value||0);
+  var payMethod=document.getElementById('egmesPayMethod').value;
+  var motivo=String(document.getElementById('egmesMotivo').value||'').trim();
   if(motivo.length<5){toast('El motivo es obligatorio (mínimo 5 caracteres)','err');return;}
   if(concepto.length<3){toast('Concepto debe tener al menos 3 caracteres','err');return;}
   if(monto<=0){toast('Monto debe ser mayor a 0','err');return;}
