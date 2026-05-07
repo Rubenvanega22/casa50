@@ -6866,6 +6866,8 @@ function renderGastosMes(d){
   h+='<div style="font-size:13px;font-weight:700">Detalle de gastos · '+(g.cantidad||0)+' movimientos</div>';
   h+='<button class="btn sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:0.5px solid #22c55e;font-weight:500" onclick="openAddGastoMes()">➕ Agregar gasto</button>';
   h+='</div>';
+  // Guardar la lista para que la edicion pueda encontrar los gastos
+  window._lastGastosMes=g.lista||[];
   h+=renderGastosMesTabla(g.lista||[]);
   return h;
 }
@@ -7419,7 +7421,7 @@ function openMenuGastoMes(gastoId){
   if(opcion===null)return;
   opcion=String(opcion||'').trim();
   if(opcion==='1'){
-    toast('🚧 Editar gasto - próximo mini-paso','warn');
+    openEditGastoMes(gastoId);
   } else if(opcion==='2'){
     var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
     if(motivo===null)return;
@@ -7438,6 +7440,75 @@ function openMenuGastoMes(gastoId){
   } else {
     toast('Opción inválida','err');
   }
+}
+function openEditGastoMes(gastoId){
+  // Buscar el gasto en los datos cargados
+  if(!window._lastGastosMes){toast('No hay datos cargados','err');return;}
+  var gasto=window._lastGastosMes.find(function(g){return Number(g.id)===Number(gastoId);});
+  if(!gasto){toast('Gasto no encontrado','err');return;}
+  window._editGastoCurrent=gasto;
+  // Construir el modal
+  var CATEGORIAS=['Compras Bar','Aseo','Mantenimiento','Gastos Generales','Servicios','Caja Menor','Nomina','Seguridad Social','Entrega M','Entrega L','Préstamo'];
+  var h='<div class="mh"><div class="mt">✏️ Editar Gasto del Mes</div><button class="mc" onclick="closeM(\'mEditGastoMes\')">✕</button></div>';
+  h+='<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#f59e0b">⚠️ Cualquier cambio quedará registrado con tu nombre, fecha y motivo. Se reflejará en todas las pantallas.</div>';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Categoría</label>';
+  h+='<select id="egmCategoria" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  CATEGORIAS.forEach(function(c){
+    var sel=(c===gasto.categoria)?' selected':'';
+    h+='<option value="'+esc(c)+'"'+sel+'>'+esc(c)+'</option>';
+  });
+  h+='</select>';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Fecha</label>';
+  h+='<input type="date" id="egmFecha" value="'+esc(gasto.fecha||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Concepto</label>';
+  h+='<input type="text" id="egmConcepto" value="'+esc(gasto.concepto||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Monto</label>';
+  h+='<input type="number" id="egmMonto" value="'+Number(gasto.monto||0)+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Método de pago</label>';
+  h+='<select id="egmPayMethod" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  var pmActual=String(gasto.pay_method||'EFECTIVO').toUpperCase();
+  h+='<option value="EFECTIVO"'+(pmActual==='EFECTIVO'?' selected':'')+'>Efectivo</option>';
+  h+='<option value="TARJETA"'+(pmActual==='TARJETA'?' selected':'')+'>Tarjeta</option>';
+  h+='</select>';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo del cambio <span style="color:#ef4444">*</span></label>';
+  h+='<textarea id="egmMotivo" placeholder="Ej: corregir monto, cambiar fecha, etc." style="width:100%;min-height:60px;font-size:12px;margin-bottom:12px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px"></textarea>';
+  h+='<button class="btn ba full" onclick="saveEditGastoMes()" style="margin-bottom:6px">💾 Guardar cambios</button>';
+  h+='<button class="btn full" style="background:#1a1a22;color:#9ca3af" onclick="closeM(\'mEditGastoMes\')">Cancelar</button>';
+  // Crear o actualizar el modal
+  var modal=document.getElementById('mEditGastoMes');
+  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mEditGastoMes';div.innerHTML='<div class="modal"><div id="mEditGastoMesB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mEditGastoMes');});document.body.appendChild(div);}
+  document.getElementById('mEditGastoMesB').innerHTML=h;
+  openM('mEditGastoMes');
+}
+function saveEditGastoMes(){
+  var gasto=window._editGastoCurrent;
+  if(!gasto){toast('No hay gasto seleccionado','err');return;}
+  var categoria=document.getElementById('egmCategoria').value;
+  var fecha=document.getElementById('egmFecha').value;
+  var concepto=String(document.getElementById('egmConcepto').value||'').trim();
+  var monto=Number(document.getElementById('egmMonto').value||0);
+  var payMethod=document.getElementById('egmPayMethod').value;
+  var motivo=String(document.getElementById('egmMotivo').value||'').trim();
+  if(motivo.length<5){toast('El motivo es obligatorio (mínimo 5 caracteres)','err');return;}
+  if(concepto.length<3){toast('Concepto debe tener al menos 3 caracteres','err');return;}
+  if(monto<=0){toast('Monto debe ser mayor a 0','err');return;}
+  rpc('editGastoMes',{
+    gastoId:gasto.id,
+    categoria:categoria,
+    fecha:fecha,
+    concepto:concepto,
+    monto:monto,
+    payMethod:payMethod,
+    motivo:motivo,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Gasto actualizado','ok');
+    closeM('mEditGastoMes');
+    loadGastosMes();
+  },function(e){
+    toast('Error: '+(e.message||'?'),'err');
+  });
 }
 function loadMo(){
   var ym=document.getElementById('moPick').value;
