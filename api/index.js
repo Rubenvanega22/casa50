@@ -3731,6 +3731,20 @@ async function apiGetGraficaAnoAno(p, res) {
     const m = Number(v.business_day.split('-')[1]) - 1;
     if(m >= 0 && m <= 11) ventasPorMes[m] += total;
   });
+
+  // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
+  // Restar retiros activos del año (regla de oro - grafica año a año)
+  const { data: retirosGAA } = await supabase.from('retiros_dueno')
+    .select('dia_origen, monto, anulado')
+    .gte('dia_origen', firstDay)
+    .lte('dia_origen', lastDay)
+    .eq('anulado', false);
+  (retirosGAA||[]).forEach(r => {
+    const monto = Number(r.monto||0);
+    const m = Number(r.dia_origen.split('-')[1]) - 1;
+    if(m >= 0 && m <= 11) ventasPorMes[m] -= monto;
+  });
+
   (gastosActual||[]).forEach(g => {
     if(g.anulada) return;
     const m = Number(g.mes.split('-')[1]) - 1;
