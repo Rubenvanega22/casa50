@@ -9600,8 +9600,11 @@ function ajBuscarProd(q){
   }).slice(0,8);
   if(!lista.length){ cont.innerHTML = '<div style="padding:8px;color:#9ca3af;font-size:11px;text-align:center">Sin resultados</div>'; return; }
   var h = '';
+  var tabAj = (window._aj && window._aj.tabActual) || 'BODEGA';
+  var stockKey = (tabAj === 'BODEGA') ? 'stockBodega' : 'stockActual';
+  var stockLbl = (tabAj === 'BODEGA') ? 'Bodega' : 'Recepción';
   lista.forEach(function(p){
-    h += '<div onclick="ajSelProd('+p.id+')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid rgba(46,46,58,.5);font-size:12px;color:#e5e7eb">'+esc(p.nombre)+' <span style="color:#9ca3af;font-size:10px">· Stock: '+(p.stockActual||0)+' · '+fmt(p.precio)+'</span></div>';
+    h += '<div onclick="ajSelProd('+p.id+')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid rgba(46,46,58,.5);font-size:12px;color:#e5e7eb">'+esc(p.nombre)+' <span style="color:#9ca3af;font-size:10px">· '+stockLbl+': '+(p[stockKey]||0)+' · '+fmt(p.precio)+'</span></div>';
   });
   cont.innerHTML = h;
 }
@@ -9622,9 +9625,12 @@ function ajPintarProdStats(){
   var el = document.getElementById('ajProdStats');
   if(!p || !el){ if(el)el.style.display='none'; return; }
   el.style.display='block';
-  var stockCol = p.stockActual<=0?'#ef4444':p.stockActual<=p.stockMinimo?'#f59e0b':'#22c55e';
+  var tabAj = (window._aj && window._aj.tabActual) || 'BODEGA';
+  var stockShow = (tabAj === 'BODEGA') ? (p.stockBodega||0) : (p.stockActual||0);
+  var stockLbl = (tabAj === 'BODEGA') ? 'Stock bodega' : 'Stock recepción';
+  var stockCol = stockShow<=0?'#ef4444':stockShow<=p.stockMinimo?'#f59e0b':'#22c55e';
   el.innerHTML = '<div style="display:flex;gap:10px;font-size:11px;padding:6px 0;border-top:1px solid rgba(46,46,58,.5)">'+
-    '<span style="color:#9ca3af">Stock: <b style="color:'+stockCol+'">'+(p.stockActual||0)+'</b></span>'+
+    '<span style="color:#9ca3af">'+stockLbl+': <b style="color:'+stockCol+'">'+stockShow+'</b></span>'+
     '<span style="color:#9ca3af">Precio: <b style="color:#e5e7eb">'+fmt(p.precio)+'</b></span>'+
     '<span style="color:#9ca3af">Categoría: <b style="color:#a78bfa">'+esc(p.categoria||'—')+'</b></span>'+
     '</div>';
@@ -9787,6 +9793,7 @@ function ajRenderPreview(){
   if(!e){ cont.innerHTML=''; return; }
 
   var stockActual = Number(prod.stockActual||0);
+  var stockBodega = Number(prod.stockBodega||0);
   var precio = Number(prod.precio||0);
 
   var h = '<div style="background:rgba(251,191,36,.06);border:1px dashed rgba(251,191,36,.4);border-radius:10px;padding:12px;margin-bottom:12px">';
@@ -9796,9 +9803,9 @@ function ajRenderPreview(){
     var delta = cant;
     if(e.tipo !== 'conteo' && e.tipo !== 'ingreso_extra') delta = -Math.abs(cant);
     if(e.tipo === 'ingreso_extra') delta = Math.abs(cant);
-    var newStock = stockActual + delta;
+    var newStock = stockBodega + delta;
     h += '<table style="width:100%;font-size:11px"><tr><td style="color:#9ca3af;padding:3px 0">📦 Stock bodega:</td>';
-    h += '<td style="color:#fca5a5">'+stockActual+'</td><td style="color:#fbbf24;text-align:center">→</td>';
+    h += '<td style="color:#fca5a5">'+stockBodega+'</td><td style="color:#fbbf24;text-align:center">→</td>';
     h += '<td style="color:#86efac;font-weight:700">'+newStock+' ('+(delta>=0?'+':'')+delta+')</td></tr></table>';
     h += '<div style="font-size:10px;color:#6b7280;margin-top:4px">ℹ️ No afecta el cuadre</div>';
   }

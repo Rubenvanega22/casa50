@@ -5163,7 +5163,7 @@ async function apiGetResumenMes(p, res) {
       categoria: prod.categoria || 'Sin categoría',
       precioCompra: Number(prod.precio_compra||0),
       precioVenta: Number(prod.precio||0),
-      bodega: Number(prod.stock_actual||0),
+      bodega: Number(prod.stock_bodega||0),
       siMes: siTotal,
       siRec: siRec,
       siBod: siBod,
@@ -5384,7 +5384,7 @@ async function apiAjusteInventarioV2(p, res) {
   let payMethodViejo = '';
   let productoViejoId = null;
   let valorAfectado = 0;
-  let nuevoStockBod = Number(prod.stock_actual||0);
+  let nuevoStockBod = Number(prod.stock_bodega||0);
 
   // ========== BODEGA (no afecta cuadre) ==========
   if(categoria === 'BODEGA') {
@@ -5398,18 +5398,18 @@ async function apiAjusteInventarioV2(p, res) {
     if(tipo === 'conteo' || tipo === 'ingreso_extra') {
       // Suman o restan segun el signo de cantidad
       if(cantidad === 0) return err(res,'Cantidad no puede ser 0');
-      nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
+      nuevoStockBod = Number(prod.stock_bodega||0) + cantidad;
       if(nuevoStockBod < 0) return err(res,'Resultado negativo en bodega');
     } else if(tipo === 'roto' || tipo === 'vencido' || tipo === 'robo' || tipo === 'salida_extra') {
       // Siempre restan
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-      if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock bodega insuficiente. Hay '+prod.stock_actual);
-      nuevoStockBod = Number(prod.stock_actual||0) - cantidad;
+      if(Number(prod.stock_bodega||0) < cantidad) return err(res,'Stock bodega insuficiente. Hay '+prod.stock_bodega);
+      nuevoStockBod = Number(prod.stock_bodega||0) - cantidad;
     } else {
       return err(res,'Tipo de bodega invalido: '+tipo);
     }
 
-    await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+    await supabase.from('products').update({ stock_bodega: nuevoStockBod }).eq('id',productId);
 
     await supabase.from('stock_movements').insert({
       ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
