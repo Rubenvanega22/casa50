@@ -6845,8 +6845,72 @@ function ventasMesSecretClick(){
   }
 }
 function openRetirosDuenoModal(){
-  // Por ahora solo un mensaje - lo implementamos en el siguiente paso
-  toast('🚧 Modal de retiros - próximo paso','warn');
+  // Cargar datos del mes actual
+  var hoy=new Date();
+  var mesActual=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+  window._retirosMesActual=mesActual;
+  
+  // Mostrar modal con loading
+  renderRetirosDuenoModal({loading:true});
+  
+  rpc('getRetiros',{mes:mesActual,userName:sess.userName,userRole:sess.userRole},function(d){
+    window._retirosData=d;
+    renderRetirosDuenoModal(d);
+  },function(e){
+    toast('Error al cargar retiros: '+(e.message||'?'),'err');
+    closeM('mRetirosDueno');
+  });
+}
+function renderRetirosDuenoModal(d){
+  var h='<div class="mh"><div class="mt">💰 Retiros del Dueño</div><button class="mc" onclick="closeM(\'mRetirosDueno\')">✕</button></div>';
+  
+  if(d.loading){
+    h+='<p style="color:#9ca3af;text-align:center;padding:30px">Cargando...</p>';
+  } else {
+    var mesNombre=window._retirosMesActual||'';
+    var meses=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    var mesDisplay='';
+    if(mesNombre){
+      var partes=mesNombre.split('-');
+      mesDisplay=meses[Number(partes[1])]+' '+partes[0];
+    }
+    
+    h+='<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#f59e0b">⚠️ Los retiros se descuentan de las ventas del día origen. Se reflejan en todas las pantallas (Mes, Cuadre, Métricas).</div>';
+    
+    // Total ahorrado del mes
+    h+='<div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(168,85,247,.12));border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:14px;margin-bottom:14px">';
+    h+='<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">💎 TOTAL AHORRADO · '+mesDisplay+'</div>';
+    h+='<div style="font-size:26px;font-weight:800;color:#22c55e;margin-bottom:8px">'+fmt(d.totalGeneral||0)+'</div>';
+    h+='<div style="display:flex;flex-direction:column;gap:6px">';
+    h+='<div style="display:flex;justify-content:space-between;padding:8px 10px;background:rgba(34,197,94,.08);border-radius:6px"><span style="font-size:12px;color:#9ca3af">💵 En efectivo</span><b style="color:#22c55e">'+fmt(d.totalEfectivo||0)+'</b></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:8px 10px;background:rgba(59,130,246,.08);border-radius:6px"><span style="font-size:12px;color:#9ca3af">💳 En tarjeta</span><b style="color:#3b82f6">'+fmt(d.totalTarjeta||0)+'</b></div>';
+    h+='</div>';
+    h+='<div style="font-size:10px;color:#6b7280;margin-top:8px;text-align:center">'+(d.cantidad||0)+' retiros activos · '+(d.cantidadTotal||0)+' total (incluye anulados)</div>';
+    h+='</div>';
+    
+    // Botones de acción
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    h+='<button class="btn ba" style="padding:14px;font-size:13px;font-weight:700" onclick="openNuevoRetiroModal()">➕ Nuevo Retiro</button>';
+    h+='<button class="btn" style="padding:14px;font-size:13px;font-weight:700;background:#22222c;color:#a78bfa;border:1px solid #a78bfa" onclick="openHistorialRetirosModal()">📋 Ver Historial</button>';
+    h+='</div>';
+  }
+  
+  // Crear o actualizar modal
+  var modalViejo=document.getElementById('mRetirosDueno');
+  if(modalViejo) modalViejo.remove();
+  var div=document.createElement('div');
+  div.className='ov';
+  div.id='mRetirosDueno';
+  div.innerHTML='<div class="modal" style="max-width:480px"><div id="mRetirosDuenoB">'+h+'</div></div>';
+  div.addEventListener('click',function(e){if(e.target===div)closeM('mRetirosDueno');});
+  document.body.appendChild(div);
+  openM('mRetirosDueno');
+}
+function openNuevoRetiroModal(){
+  toast('🚧 Nuevo retiro - próximo paso','warn');
+}
+function openHistorialRetirosModal(){
+  toast('🚧 Historial - próximo paso','warn');
 }
 function loadGastosMes(){
   var mes=document.getElementById('gmPick').value;
