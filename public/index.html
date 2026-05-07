@@ -7461,12 +7461,17 @@ function openEditGastoMes(gastoId){
   h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Fecha</label>';
   h+='<input type="date" id="egmesFecha" value="'+esc(gasto.fecha||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
   h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Concepto</label>';
+  h+='<input type="text" id="egmesConcepto" value="'+esc(gasto.concepto||'')+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Monto</label>';
   h+='<input type="number" id="egmesMonto" value="'+Number(gasto.monto||0)+'" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Método de pago</label>';
+  h+='<select id="egmesPayMethod" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  var pmActual=String(gasto.pay_method||'EFECTIVO').toUpperCase();
   h+='<option value="EFECTIVO"'+(pmActual==='EFECTIVO'?' selected':'')+'>Efectivo</option>';
   h+='<option value="TARJETA"'+(pmActual==='TARJETA'?' selected':'')+'>Tarjeta</option>';
   h+='</select>';
   h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo del cambio <span style="color:#ef4444">*</span></label>';
-  h+='<textarea id="egmMotivo" placeholder="Ej: corregir monto, cambiar fecha, etc." style="width:100%;min-height:60px;font-size:12px;margin-bottom:12px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px"></textarea>';
+  h+='<textarea id="egmesMotivo" placeholder="Ej: corregir monto, cambiar fecha, etc." style="width:100%;min-height:60px;font-size:12px;margin-bottom:12px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px"></textarea>';
   h+='<button class="btn ba full" onclick="saveEditGastoMes()" style="margin-bottom:6px">💾 Guardar cambios</button>';
   h+='<button class="btn full" style="background:#1a1a22;color:#9ca3af" onclick="closeM(\'mEditGastoMes\')">Cancelar</button>';
   // Eliminar modal anterior si existe (evita duplicados con mismo ID)
