@@ -6815,6 +6815,39 @@ function _dash_card(label,val,color){
 function _dash_trophy(label,val,sub,color){
   return '<div style="background:#22222c;border-radius:10px;padding:10px;border-left:3px solid '+color+'"><div style="font-size:10px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">'+label+'</div><div style="font-size:14px;font-weight:800;color:'+color+'">'+esc(String(val))+'</div><div style="font-size:10px;color:#9ca3af;margin-top:2px">'+esc(String(sub))+'</div></div>';
 }
+// ===== ACCESO SECRETO A RETIROS DEL DUEÑO =====
+// 5 clicks en el titulo "Ventas del mes" + clave 7777 = abre modal de retiros
+window._ventasMesClickCount = 0;
+window._ventasMesClickTimer = null;
+function ventasMesSecretClick(){
+  // Solo ADMIN puede acceder
+  if(sess.userRole !== 'ADMIN') return;
+  
+  window._ventasMesClickCount++;
+  
+  // Resetear el contador si pasan más de 3 segundos sin click
+  if(window._ventasMesClickTimer) clearTimeout(window._ventasMesClickTimer);
+  window._ventasMesClickTimer = setTimeout(function(){
+    window._ventasMesClickCount = 0;
+  }, 3000);
+  
+  // Al llegar a 5 clicks, pedir clave
+  if(window._ventasMesClickCount >= 5){
+    window._ventasMesClickCount = 0;
+    if(window._ventasMesClickTimer) clearTimeout(window._ventasMesClickTimer);
+    var clave = prompt('🔒 Clave de acceso:');
+    if(clave === null) return;
+    if(String(clave).trim() === '7777'){
+      openRetirosDuenoModal();
+    } else {
+      toast('Clave incorrecta','err');
+    }
+  }
+}
+function openRetirosDuenoModal(){
+  // Por ahora solo un mensaje - lo implementamos en el siguiente paso
+  toast('🚧 Modal de retiros - próximo paso','warn');
+}
 function loadGastosMes(){
   var mes=document.getElementById('gmPick').value;
   if(!mes){toast('Selecciona un mes','err');return;}
@@ -6835,7 +6868,7 @@ function renderGastosMes(d){
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">';
   // Sección A: Ventas del mes
   h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
-  h+='<div style="font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:4px">📈 Ventas del mes</div>';
+  h+='<div id="ventasMesHeader" style="font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:700;letter-spacing:0.5px;margin-bottom:4px;cursor:pointer;user-select:none" onclick="ventasMesSecretClick()">📈 Ventas del mes</div>';
   h+='<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Crece cada día · NO cambia por gastos</div>';
   h+='<div style="background:#18181f;border-radius:6px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:#9ca3af;margin-bottom:4px">VENTAS DEL MES (TOTAL)</div><div style="font-size:22px;font-weight:700">'+fmt(v.total||0)+'</div></div>';
   h+='<div style="display:flex;flex-direction:column;gap:6px">';
