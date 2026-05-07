@@ -3877,6 +3877,21 @@ async function apiGetMetricasMes(p, res) {
     ventasPorDia[dia].total += total;
   });
 
+  // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
+  // Restar retiros activos del totalVentas y de las ventas por dia (regla de oro)
+  // Esto cumple la regla de oro: el retiro se ve reflejado en Metricas
+  const { data: retirosMM } = await supabase.from('retiros_dueno')
+    .select('dia_origen, monto, anulado')
+    .gte('dia_origen', firstDay)
+    .lte('dia_origen', lastDay)
+    .eq('anulado', false);
+  (retirosMM||[]).forEach(r => {
+    const monto = Number(r.monto||0);
+    const dia = r.dia_origen;
+    totalVentas -= monto;
+    if(ventasPorDia[dia]) ventasPorDia[dia].total -= monto;
+  });
+
   // Mejor dia
   let mejorDia = { fecha: '—', total: 0, habs: 0 };
   Object.keys(ventasPorDia).forEach(fecha => {
