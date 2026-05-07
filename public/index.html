@@ -6907,7 +6907,148 @@ function renderRetirosDuenoModal(d){
   openM('mRetirosDueno');
 }
 function openNuevoRetiroModal(){
-  toast('🚧 Nuevo retiro - próximo paso','warn');
+  // Cerrar modal principal antes de abrir el de nuevo retiro
+  closeM('mRetirosDueno');
+  
+  // Calcular fecha de hoy en formato YYYY-MM-DD (Colombia UTC-5)
+  var hoy=new Date();
+  var hoyStr=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0')+'-'+String(hoy.getDate()).padStart(2,'0');
+  
+  var h='<div class="mh"><div class="mt">➕ Nuevo Retiro</div><button class="mc" onclick="closeM(\'mNuevoRetiro\');openRetirosDuenoModal();">✕</button></div>';
+  
+  h+='<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px;margin-bottom:12px;font-size:11px;color:#f59e0b">⚠️ Este retiro se descontará de las ventas del día y método que selecciones.</div>';
+  
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Día del que retiro:</label>';
+  h+='<input type="date" id="nrDiaOrigen" value="'+hoyStr+'" max="'+hoyStr+'" onchange="nrUpdateDisponible()" style="width:100%;font-size:13px;margin-bottom:10px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px">';
+  
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Método:</label>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+  h+='<button id="nrPmEfectivo" class="btn" style="padding:10px;background:rgba(34,197,94,.15);color:#22c55e;border:2px solid #22c55e;font-weight:700" onclick="nrSetPm(\'EFECTIVO\')">💵 Efectivo</button>';
+  h+='<button id="nrPmTarjeta" class="btn" style="padding:10px;background:#1a1a22;color:#9ca3af;border:1px solid #2e2e3a" onclick="nrSetPm(\'TARJETA\')">💳 Tarjeta</button>';
+  h+='</div>';
+  
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Monto a retirar:</label>';
+  h+='<input type="number" id="nrMonto" placeholder="0" min="0" oninput="nrValidar()" style="width:100%;font-size:16px;margin-bottom:10px;padding:10px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px;font-weight:700">';
+  
+  // Indicador de disponibilidad
+  h+='<div id="nrDisponible" style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:#9ca3af;text-align:center">Cargando disponibilidad...</div>';
+  
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px">Motivo (opcional):</label>';
+  h+='<textarea id="nrMotivo" placeholder="Ej: ahorro mensual, compra X, etc." style="width:100%;min-height:50px;font-size:12px;margin-bottom:12px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px"></textarea>';
+  
+  h+='<button id="nrBtnGuardar" class="btn ba full" style="margin-bottom:6px" onclick="nrConfirmarRetiro()">💾 Confirmar Retiro</button>';
+  h+='<button class="btn full" style="background:#1a1a22;color:#9ca3af" onclick="closeM(\'mNuevoRetiro\');openRetirosDuenoModal();">Cancelar</button>';
+  
+  // Variables iniciales
+  window._nrPm='EFECTIVO';
+  window._nrDisponibleNeto=0;
+  
+  // Crear modal
+  var modalViejo=document.getElementById('mNuevoRetiro');
+  if(modalViejo) modalViejo.remove();
+  var div=document.createElement('div');
+  div.className='ov';
+  div.id='mNuevoRetiro';
+  div.innerHTML='<div class="modal" style="max-width:480px"><div id="mNuevoRetiroB">'+h+'</div></div>';
+  div.addEventListener('click',function(e){if(e.target===div){closeM('mNuevoRetiro');openRetirosDuenoModal();}});
+  document.body.appendChild(div);
+  openM('mNuevoRetiro');
+  
+  // Cargar disponibilidad inicial
+  nrUpdateDisponible();
+}
+function nrSetPm(pm){
+  window._nrPm=pm;
+  // Actualizar visual de los botones
+  var btnEf=document.getElementById('nrPmEfectivo');
+  var btnTa=document.getElementById('nrPmTarjeta');
+  if(pm==='EFECTIVO'){
+    btnEf.style.background='rgba(34,197,94,.15)';
+    btnEf.style.color='#22c55e';
+    btnEf.style.border='2px solid #22c55e';
+    btnEf.style.fontWeight='700';
+    btnTa.style.background='#1a1a22';
+    btnTa.style.color='#9ca3af';
+    btnTa.style.border='1px solid #2e2e3a';
+    btnTa.style.fontWeight='400';
+  } else {
+    btnTa.style.background='rgba(59,130,246,.15)';
+    btnTa.style.color='#3b82f6';
+    btnTa.style.border='2px solid #3b82f6';
+    btnTa.style.fontWeight='700';
+    btnEf.style.background='#1a1a22';
+    btnEf.style.color='#9ca3af';
+    btnEf.style.border='1px solid #2e2e3a';
+    btnEf.style.fontWeight='400';
+  }
+  nrUpdateDisponible();
+}
+function nrUpdateDisponible(){
+  var dia=document.getElementById('nrDiaOrigen').value;
+  var pm=window._nrPm||'EFECTIVO';
+  var cont=document.getElementById('nrDisponible');
+  if(!dia){cont.innerHTML='<span style="color:#ef4444">Selecciona un día</span>';return;}
+  cont.innerHTML='<span style="color:#9ca3af">Calculando disponibilidad...</span>';
+  
+  // Llamar al backend para calcular disponible (usamos getMetrics del día)
+  rpc('getMetrics',{businessDay:dia,userName:sess.userName,userRole:sess.userRole},function(d){
+    var t=d.totals||{};
+    var disponibleBruto=0;
+    if(pm==='EFECTIVO') disponibleBruto=Number(t.totalEfectivo||0)+Number(t.barEfectivo||0);
+    else if(pm==='TARJETA') disponibleBruto=Number(t.totalTarjeta||0)+Number(t.barTarjeta||0);
+    
+    // Nota: el backend ya descuenta retiros previos en totalEfectivo/totalTarjeta
+    // (porque modificamos apiMetrics en la fase 2D-3)
+    window._nrDisponibleNeto=disponibleBruto;
+    
+    var color=disponibleBruto>0?'#22c55e':'#ef4444';
+    var icono=pm==='EFECTIVO'?'💵':'💳';
+    cont.innerHTML='<div style="font-size:10px;color:#6b7280;margin-bottom:4px">DISPONIBLE EN '+pm+' DEL DÍA '+dia+'</div><div style="font-size:18px;font-weight:800;color:'+color+'">'+icono+' '+fmt(disponibleBruto)+'</div>';
+    
+    nrValidar();
+  },function(e){
+    cont.innerHTML='<span style="color:#ef4444">Error al cargar: '+(e.message||'?')+'</span>';
+  });
+}
+function nrValidar(){
+  var monto=Number(document.getElementById('nrMonto').value||0);
+  var disp=window._nrDisponibleNeto||0;
+  var btn=document.getElementById('nrBtnGuardar');
+  if(monto<=0){btn.disabled=true;btn.style.opacity='0.5';return;}
+  if(monto>disp){btn.disabled=true;btn.style.opacity='0.5';return;}
+  btn.disabled=false;btn.style.opacity='1';
+}
+function nrConfirmarRetiro(){
+  var dia=document.getElementById('nrDiaOrigen').value;
+  var monto=Number(document.getElementById('nrMonto').value||0);
+  var pm=window._nrPm||'EFECTIVO';
+  var motivo=String(document.getElementById('nrMotivo').value||'').trim();
+  
+  if(!dia){toast('Selecciona un día','err');return;}
+  if(monto<=0){toast('Monto debe ser mayor a 0','err');return;}
+  if(monto>window._nrDisponibleNeto){toast('Monto excede disponible','err');return;}
+  
+  // Confirmación visual
+  var pmLabel=pm==='EFECTIVO'?'EFECTIVO 💵':'TARJETA 💳';
+  if(!confirm('¿Confirmás retirar '+fmt(monto)+' en '+pmLabel+' del día '+dia+'?\n\nEste monto se descontará de las ventas del día '+dia+' y se verá reflejado en todas las pantallas.')) return;
+  
+  // Enviar al backend
+  rpc('createRetiro',{
+    diaOrigen:dia,
+    monto:monto,
+    payMethod:pm,
+    motivo:motivo,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(d){
+    toast('✓ Retiro de '+fmt(monto)+' registrado','ok');
+    closeM('mNuevoRetiro');
+    openRetirosDuenoModal();
+    // Refrescar la pantalla de gastos del mes para que muestre el cambio
+    loadGastosMes();
+  },function(e){
+    toast('Error: '+(e.message||'?'),'err');
+  });
 }
 function openHistorialRetirosModal(){
   toast('🚧 Historial - próximo paso','warn');
