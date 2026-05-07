@@ -3524,6 +3524,36 @@ async function apiGetGraficaDiaADia(p, res) {
       datosActual[v.business_day] += total;
     }
   });
+
+  // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
+  // Restar retiros activos del mes actual (regla de oro - grafica dia a dia)
+  const { data: retirosGDDActual } = await supabase.from('retiros_dueno')
+    .select('dia_origen, monto, anulado')
+    .gte('dia_origen', firstDayActual)
+    .lte('dia_origen', lastDayActual)
+    .eq('anulado', false);
+  (retirosGDDActual||[]).forEach(r => {
+    const dia = r.dia_origen;
+    const monto = Number(r.monto||0);
+    if(datosActual[dia] !== undefined){
+      datosActual[dia] -= monto;
+    }
+  });
+
+  // Restar retiros activos del mes anterior tambien (para comparacion justa)
+  const { data: retirosGDDAnterior } = await supabase.from('retiros_dueno')
+    .select('dia_origen, monto, anulado')
+    .gte('dia_origen', firstDayAnterior)
+    .lte('dia_origen', lastDayAnterior)
+    .eq('anulado', false);
+  (retirosGDDAnterior||[]).forEach(r => {
+    const dia = r.dia_origen;
+    const monto = Number(r.monto||0);
+    if(datosAnterior[dia] !== undefined){
+      datosAnterior[dia] -= monto;
+    }
+  });
+
   // RESTAR gastos del cuadre del mes actual (esa plata ya se pago en el turno)
   // IMPORTANTE: esto se hace ANTES del override manual. Si hay manual, lo sobrescribe igual.
   Object.keys(gastosCuadreDiaActual).forEach(fecha => {
