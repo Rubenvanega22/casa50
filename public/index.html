@@ -6990,8 +6990,8 @@ function nrUpdateDisponible(){
   if(!dia){cont.innerHTML='<span style="color:#ef4444">Selecciona un día</span>';return;}
   cont.innerHTML='<span style="color:#9ca3af">Calculando disponibilidad...</span>';
   
-  // Llamar al backend para calcular disponible (usamos getMetrics del día)
-  rpc('getMetrics',{businessDay:dia,userName:sess.userName,userRole:sess.userRole},function(d){
+  // Llamar al backend para calcular disponible (usamos metrics del día)
+  rpc('metrics',{businessDay:dia,userName:sess.userName,userRole:sess.userRole},function(d){
     var t=d.totals||{};
     var disponibleBruto=0;
     if(pm==='EFECTIVO') disponibleBruto=Number(t.totalEfectivo||0)+Number(t.barEfectivo||0);
