@@ -23,7 +23,13 @@
 9. Calendario — hasta 4 personas por turno
 10. Admin — borrar registro camareras
 
+### Cambios completados (cont.)
+11. Fix doMaidFinish: ahora usa loadMaidLogInline()
+12. Fix saveMaidLog: funcionando correctamente con modal mMaidLog
+13. Funciones loadCfg, openGoal, saveGoal implementadas
+
+### Limpieza de repo (2026-05-07)
+- Eliminados api_index.js y casa50_index.html (copias viejas v3.1 en raíz)
+
 ### Pendiente
-- Fix doMaidFinish: quitar loadMaidLog()
-- Fix saveMaidLog: código roto
-- Agregar funciones loadCfg, openGoal, saveGoal
+- (sin pendientes activos)
