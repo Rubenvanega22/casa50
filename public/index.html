@@ -6893,14 +6893,19 @@ function renderGastosMesTabla(lista){
   h+='<th style="text-align:right;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:110px">Total cat.</th>';
   h+='<th style="width:50px"></th>';
   h+='</tr></thead><tbody>';
-  Object.keys(porCat).sort().forEach(function(cat){
+  var catKeys=Object.keys(porCat).sort();
+  catKeys.forEach(function(cat,catIdx){
     var items=porCat[cat].items;
     var totalCat=porCat[cat].total;
     var bgCat=colores[cat]||'#22222c';
     items.forEach(function(item,idx){
       var dia=String(item.fecha||'').split('-')[2]||'';
       var pmTag=item.pay_method==='EFECTIVO'?'<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:2px 6px;border-radius:4px;font-size:10px">Efectivo</span>':'<span style="background:rgba(59,130,246,.15);color:#3b82f6;padding:2px 6px;border-radius:4px;font-size:10px">Tarjeta</span>';
-      h+='<tr style="border-top:'+(idx===0?'1.5px solid #2e2e3a':'0.5px solid rgba(46,46,58,.5)')+';background:'+bgCat+'">';
+      // Separador grueso entre categorias (excepto la primera)
+      var bordeArriba='0.5px solid rgba(46,46,58,.5)';
+      if(idx===0 && catIdx>0) bordeArriba='3px solid #6b7280';
+      else if(idx===0) bordeArriba='1.5px solid #2e2e3a';
+      h+='<tr style="border-top:'+bordeArriba+';background:'+bgCat+'">';
       if(idx===0){
         h+='<td rowspan="'+items.length+'" style="padding:10px 12px;vertical-align:top;border-right:0.5px solid rgba(46,46,58,.5)"><div style="font-size:12px;font-weight:500">'+(iconos[cat]||'•')+' '+esc(cat)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+items.length+' '+(items.length===1?'item':'items')+'</div></td>';
       }
