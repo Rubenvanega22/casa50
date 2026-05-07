@@ -7474,10 +7474,16 @@ function openEditGastoMes(gastoId){
   h+='<textarea id="egmMotivo" placeholder="Ej: corregir monto, cambiar fecha, etc." style="width:100%;min-height:60px;font-size:12px;margin-bottom:12px;padding:8px;background:#1a1a22;color:#e5e7eb;border:1px solid #2e2e3a;border-radius:6px"></textarea>';
   h+='<button class="btn ba full" onclick="saveEditGastoMes()" style="margin-bottom:6px">💾 Guardar cambios</button>';
   h+='<button class="btn full" style="background:#1a1a22;color:#9ca3af" onclick="closeM(\'mEditGastoMes\')">Cancelar</button>';
-  // Crear o actualizar el modal
-  var modal=document.getElementById('mEditGastoMes');
-  if(!modal){var div=document.createElement('div');div.className='ov';div.id='mEditGastoMes';div.innerHTML='<div class="modal"><div id="mEditGastoMesB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mEditGastoMes');});document.body.appendChild(div);}
-  document.getElementById('mEditGastoMesB').innerHTML=h;
+  // Eliminar modal anterior si existe (evita duplicados con mismo ID)
+  var modalViejo=document.getElementById('mEditGastoMes');
+  if(modalViejo)modalViejo.remove();
+  // Crear modal nuevo limpio
+  var div=document.createElement('div');
+  div.className='ov';
+  div.id='mEditGastoMes';
+  div.innerHTML='<div class="modal"><div id="mEditGastoMesB">'+h+'</div></div>';
+  div.addEventListener('click',function(e){if(e.target===div)closeM('mEditGastoMes');});
+  document.body.appendChild(div);
   openM('mEditGastoMes');
 }
 function saveEditGastoMes(){
