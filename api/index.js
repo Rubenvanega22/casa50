@@ -2385,6 +2385,10 @@ async function apiCrearReporteMant(p, res) {
 
   const fotoUrl = String(p.fotoDanoUrl||'').trim() || null;
 
+  // Prioridad: obligatoria para ADMIN/RECEPTION, NULL para MAID
+  const prioridadInput = String(p.prioridad||'').toLowerCase().trim();
+  const prioridadesValidas = ['urgente','normal','baja'];
+
   // Regla: 1 reporte activo por ubicacion
   const estadosActivos = [
     'PENDIENTE_RECEPCION','NOTA_ACTIVA',
@@ -2401,13 +2405,33 @@ async function apiCrearReporteMant(p, res) {
     return err(res, 'Ya hay un reporte activo en esta ubicacion (estado: '+existentes[0].estado+')');
   }
 
-  // En Fase 1 todos los reportes nacen en PENDIENTE_RECEPCION.
-  // En Fase 2 se agregara el shortcut para que recepcion vaya directo a NOTA_ACTIVA.
-  const estadoInicial = 'PENDIENTE_RECEPCION';
+  // Estado inicial y prioridad segun quien reporta:
+  //  - MAID -> PENDIENTE_RECEPCION, prioridad NULL (la decide recepcion al aprobar - Fase 6)
+  //  - ADMIN o RECEPTION -> NOTA_ACTIVA directo, prioridad obligatoria
+  //    (ellos son los que aprueban, no tiene sentido que se aprueben a si mismos)
+  let estadoInicial;
+  let prioridadFinal = null;
+  let aprobadoPor = null;
+  let aprobadoMs = null;
 
   const now = Date.now();
   const bDay = businessDay(now);
   const shift = currentShiftId(now);
+
+  if(userRole === 'MAID') {
+    estadoInicial = 'PENDIENTE_RECEPCION';
+    prioridadFinal = null;
+  } else {
+    // ADMIN o RECEPTION
+    estadoInicial = 'NOTA_ACTIVA';
+    if(!prioridadesValidas.includes(prioridadInput)) {
+      return err(res,'Prioridad requerida (urgente, normal o baja)');
+    }
+    prioridadFinal = prioridadInput;
+    // Auditoria: como saltean aprobacion, dejamos rastro de quien "aprobo"
+    aprobadoPor = userName;
+    aprobadoMs = now;
+  }
 
   const {data: inserted, error} = await supabase.from('room_issues').insert({
     // Campos originales (compat con apiAddRoomIssue + ranking existente)
@@ -2418,6 +2442,7 @@ async function apiCrearReporteMant(p, res) {
     created_by: userName,
     // Campos nuevos del flujo
     estado: estadoInicial,
+    prioridad: prioridadFinal,
     reportado_por_rol: userRole,
     reportado_ms: now,
     business_day: bDay,
@@ -2425,6 +2450,8 @@ async function apiCrearReporteMant(p, res) {
     foto_dano_url: fotoUrl,
     ubicacion_tipo: ubicacionTipo,
     ubicacion_id: ubicacionId,
+    aprobado_por: aprobadoPor,
+    aprobado_ms: aprobadoMs,
     anulada: false,
     editada: false
   }).select().single();
@@ -2434,6 +2461,7 @@ async function apiCrearReporteMant(p, res) {
   return ok(res, {
     id: inserted.id,
     estado: estadoInicial,
+    prioridad: prioridadFinal,
     ubicacionTipo: ubicacionTipo,
     ubicacionId: ubicacionId
   });
