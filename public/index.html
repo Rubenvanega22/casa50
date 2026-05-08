@@ -153,6 +153,15 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .ext-tab{flex:1;padding:7px;background:#22222c;border:2px solid #2e2e3a;border-radius:7px;text-align:center;cursor:pointer;font-size:11px;font-weight:700}
 .ext-tab.on{border-color:#7c5cfc;background:rgba(124,92,252,.1);color:#a78bfa}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* Bombillito de daño activo (Fase 3 mantenimiento) */
+.rc{position:relative}
+.bomb{position:absolute;top:4px;right:4px;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.85);box-shadow:0 0 8px currentColor;z-index:5;pointer-events:none}
+.bomb.urgente{background:#ef4444;color:#ef4444;animation:blink 1.2s ease-in-out infinite}
+.bomb.normal{background:#f59e0b;color:#f59e0b;animation:blink 1.2s ease-in-out infinite}
+.bomb.baja{background:#22c55e;color:#22c55e;animation:blink 1.2s ease-in-out infinite}
+.bomb.verificar{background:#22c55e;color:#22c55e;display:flex;align-items:center;justify-content:center}
+.bomb.verificar::after{content:'✓';font-size:10px;color:#fff;font-weight:900;line-height:1}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)}}
 </style>
 </head>
 <body>
@@ -1396,6 +1405,15 @@ if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs)
   if(eff==='CO'){var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0);if(since){var mC=Math.round((now-since)/60000);h+='<div class="ri">Desde: <b>'+fT(since)+'</b></div><div class="ri" style="color:#3b82f6">'+mC+' min</div>';}}
   if(r.noteMinor)h+='<div style="font-size:10px;font-weight:800;color:#f59e0b;margin-top:2px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">📝 NOTA</div>';
   card.innerHTML=h;
+  // Bombillito de daño activo (Fase 3 mantenimiento)
+  if(r.danoActivo){
+    var bomb=document.createElement('div');
+    var pri=r.danoActivo.prioridad||'normal';
+    var clase=(r.danoActivo.estado==='ESPERA_VERIFICACION')?'verificar':pri;
+    bomb.className='bomb '+clase;
+    bomb.title='Daño: '+(r.danoActivo.descripcion||'');
+    card.appendChild(bomb);
+  }
   card.onclick=function(){openRoom(r.roomId);};
   return card;
 }
