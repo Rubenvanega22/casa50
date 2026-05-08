@@ -212,6 +212,9 @@ module.exports = async function handler(req, res) {
       case 'editRoomIssue':     return await apiEditRoomIssue(payload, res);
       case 'resolveRoomIssue':  return await apiResolveRoomIssue(payload, res);
       case 'deleteRoomIssue':   return await apiDeleteRoomIssue(payload, res);
+      // Modulo de mantenimiento (nuevo flujo con estados)
+      case 'getReportesActivos':return await apiGetReportesActivos(payload, res);
+      case 'crearReporteMant':  return await apiCrearReporteMant(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -2292,6 +2295,148 @@ async function apiDeleteRoomIssue(p, res) {
   if(!id)return err(res,'id requerido');
   await supabase.from('room_issues').delete().eq('id',id);
   return ok(res,{});
+}
+
+// ==================== MANTENIMIENTO (Modulo nuevo) ====================
+// Reusa la tabla room_issues con campos extendidos.
+// Estados activos: PENDIENTE_RECEPCION, NOTA_ACTIVA, ESPERA_VERIFICACION, RECHAZADO_VERIFICACION
+// Estados terminales: VERIFICADO, RECHAZADO_REC
+// Filtra siempre anulada=false en lecturas.
+
+async function apiGetReportesActivos(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION','MAID','MAINTENANCE'].includes(userRole)) {
+    return err(res,'Sin permiso');
+  }
+
+  // Estados que se consideran "activos" en el flujo
+  let estadosFiltro = [
+    'PENDIENTE_RECEPCION','NOTA_ACTIVA',
+    'ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'
+  ];
+
+  // Mantenedor solo ve los que tiene que atender
+  if(userRole === 'MAINTENANCE') {
+    estadosFiltro = ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'];
+  }
+
+  let query = supabase.from('room_issues')
+    .select('*')
+    .eq('anulada', false)
+    .in('estado', estadosFiltro)
+    .order('reportado_ms', {ascending: false});
+
+  // Camarera solo ve sus propios reportes
+  if(userRole === 'MAID') {
+    const userName = String(p.userName||'').trim();
+    query = query.eq('created_by', userName);
+  }
+
+  const {data, error} = await query;
+  if(error) return err(res,'Error consultando reportes: '+error.message);
+
+  return ok(res, {
+    reportes: (data||[]).map(r => ({
+      id: r.id,
+      ubicacionTipo: r.ubicacion_tipo || 'habitacion',
+      ubicacionId: r.ubicacion_id || r.room_id || '',
+      descripcion: r.description || '',
+      prioridad: r.prioridad || null,
+      estado: r.estado || null,
+      reportadoPor: r.created_by || '',
+      reportadoPorRol: r.reportado_por_rol || null,
+      reportadoMs: Number(r.reportado_ms || 0),
+      businessDay: r.business_day || null,
+      shiftId: r.shift_id || null,
+      fotoDanoUrl: r.foto_dano_url || null,
+      aprobadoPor: r.aprobado_por || null,
+      aprobadoMs: Number(r.aprobado_ms || 0),
+      comentarioRecepcion: r.comentario_recepcion || null,
+      arregladoPor: r.arreglado_por || null,
+      arregladoMs: Number(r.arreglado_ms || 0),
+      arregloNota: r.arreglo_nota || null,
+      fotoArregloUrl: r.foto_arreglo_url || null,
+      verificadoPor: r.verificado_por || null,
+      verificadoMs: Number(r.verificado_ms || 0),
+      motivoRechazo: r.motivo_rechazo || null
+    }))
+  });
+}
+
+async function apiCrearReporteMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION','MAID'].includes(userRole)) {
+    return err(res,'Sin permiso');
+  }
+
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res,'Usuario requerido');
+
+  const ubicacionTipo = String(p.ubicacionTipo||'habitacion').toLowerCase();
+  if(!['habitacion','zona_comun'].includes(ubicacionTipo)) {
+    return err(res,'Ubicacion invalida (habitacion o zona_comun)');
+  }
+
+  const ubicacionId = String(p.ubicacionId||'').trim();
+  if(!ubicacionId) return err(res,'Ubicacion ID requerida');
+
+  const descripcion = String(p.descripcion||'').trim();
+  if(descripcion.length < 3) return err(res,'Descripcion minima 3 caracteres');
+
+  const fotoUrl = String(p.fotoDanoUrl||'').trim() || null;
+
+  // Regla: 1 reporte activo por ubicacion
+  const estadosActivos = [
+    'PENDIENTE_RECEPCION','NOTA_ACTIVA',
+    'ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'
+  ];
+  const {data: existentes} = await supabase.from('room_issues')
+    .select('id, estado')
+    .eq('anulada', false)
+    .eq('ubicacion_tipo', ubicacionTipo)
+    .eq('ubicacion_id', ubicacionId)
+    .in('estado', estadosActivos);
+
+  if(existentes && existentes.length > 0) {
+    return err(res, 'Ya hay un reporte activo en esta ubicacion (estado: '+existentes[0].estado+')');
+  }
+
+  // En Fase 1 todos los reportes nacen en PENDIENTE_RECEPCION.
+  // En Fase 2 se agregara el shortcut para que recepcion vaya directo a NOTA_ACTIVA.
+  const estadoInicial = 'PENDIENTE_RECEPCION';
+
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const shift = currentShiftId(now);
+
+  const {data: inserted, error} = await supabase.from('room_issues').insert({
+    // Campos originales (compat con apiAddRoomIssue + ranking existente)
+    room_id: (ubicacionTipo === 'habitacion') ? ubicacionId : '',
+    type: 'dano',
+    description: descripcion,
+    resolved: false,
+    created_by: userName,
+    // Campos nuevos del flujo
+    estado: estadoInicial,
+    reportado_por_rol: userRole,
+    reportado_ms: now,
+    business_day: bDay,
+    shift_id: shift,
+    foto_dano_url: fotoUrl,
+    ubicacion_tipo: ubicacionTipo,
+    ubicacion_id: ubicacionId,
+    anulada: false,
+    editada: false
+  }).select().single();
+
+  if(error) return err(res,'Error al crear reporte: '+error.message);
+
+  return ok(res, {
+    id: inserted.id,
+    estado: estadoInicial,
+    ubicacionTipo: ubicacionTipo,
+    ubicacionId: ubicacionId
+  });
 }
 
 // ==================== PROYECCION ====================
