@@ -724,6 +724,26 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Marcar arreglo (Mantenedor — Fase 4 G3) -->
+<div class="ov" id="mMarcarArreglo"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt" id="maTitulo">✓ Marcar arreglo</div>
+    <button class="mc" onclick="closeM('mMarcarArreglo')">✕</button>
+  </div>
+  <div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">
+    <div style="color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Daño <span id="maPrioridad" style="font-weight:700">NORMAL</span></div>
+    <div id="maDesc" style="color:#e5e7eb"></div>
+  </div>
+  <label>Nota del trabajo (obligatoria)</label>
+  <textarea id="maNota" rows="3" placeholder="Qué arreglaste, materiales usados, etc. (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Foto del arreglo (opcional)</label>
+  <input type="file" id="maFoto" accept="image/*" capture="environment">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mMarcarArreglo')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doMarcarArreglo()">✓ Confirmar arreglo</button>
+  </div>
+</div></div>
+
 <!-- LOGIN -->
 <div id="ls">
 <div class="card">
@@ -5159,13 +5179,164 @@ function deleteIssue(id,rid){
     );
   });
 }
-// ---- MANTENEDOR: pantalla "Mis Daños" (Fase 4 G2 placeholder) ----
+// ---- MANTENEDOR: pantalla "Mis Daños" (Fase 4 G3) ----
 function loadMisDanos(){
   var el=document.getElementById('misDanosCont');
   if(!el)return;
   if(!sess||sess.userRole!=='MAINTENANCE'){el.innerHTML='<div style="color:#ef4444">Acceso solo MAINTENANCE</div>';return;}
-  el.innerHTML='<div style="padding:20px;text-align:center"><div style="font-size:18px;margin-bottom:8px">Hola Don '+esc(sess.userName)+' 👋</div><div style="color:#9ca3af">Cargando tus daños... (placeholder G2 — vista completa en G3)</div></div>';
-  // En G3 reemplazo este placeholder por: llamada a getMisDanos + render con cards/secciones por prioridad
+  el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af">Cargando...</div>';
+  rpc('getMisDanos',{userRole:sess.userRole, userName:sess.userName}, function(d){
+    window._misDanos = d;
+    renderMisDanos(d);
+  }, function(e){
+    el.innerHTML='<div style="color:#ef4444;padding:16px">Error: '+esc(e.message||String(e))+'</div>';
+  });
+}
+
+function renderMisDanos(d){
+  var el=document.getElementById('misDanosCont');
+  if(!el)return;
+  var c=d.contadores||{urgentes:0,normales:0,bajas:0,terminadosHoy:0};
+  var reportes=d.reportes||[];
+  var totalActivos=reportes.length;
+
+  function fmtHace(ms){
+    if(!ms)return '';
+    var diff=Date.now()-Number(ms);
+    var min=Math.round(diff/60000);
+    if(min<1)return 'recién';
+    if(min<60)return 'hace '+min+' min';
+    var hrs=Math.round(min/60);
+    if(hrs<24)return 'hace '+hrs+' h';
+    var dd=Math.round(hrs/24);
+    return 'hace '+dd+' día'+(dd===1?'':'s');
+  }
+
+  var h='';
+  // Saludo
+  h+='<div style="padding:14px 12px 8px"><div style="font-size:18px;font-weight:700;color:#e5e7eb">Hola Don '+esc(sess.userName)+' 👋</div>';
+  h+='<div style="font-size:13px;color:#9ca3af;margin-top:2px">Tenés '+totalActivos+' daño'+(totalActivos===1?'':'s')+' activo'+(totalActivos===1?'':'s')+'</div></div>';
+
+  // 2 cards
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px">';
+  h+='<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);border-radius:10px;padding:14px;text-align:center">';
+  h+='<div style="font-size:28px;font-weight:900;color:#ef4444">'+c.urgentes+'</div>';
+  h+='<div style="font-size:10px;color:#fca5a5;text-transform:uppercase;letter-spacing:.5px">Urgentes</div>';
+  h+='</div>';
+  h+='<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:14px;text-align:center">';
+  h+='<div style="font-size:28px;font-weight:900;color:#22c55e">'+c.terminadosHoy+'</div>';
+  h+='<div style="font-size:10px;color:#86efac;text-transform:uppercase;letter-spacing:.5px">Hechos hoy</div>';
+  h+='</div>';
+  h+='</div>';
+
+  if(!totalActivos){
+    h+='<div style="padding:30px 16px;text-align:center;color:#9ca3af">No tenés daños asignados.</div>';
+    el.innerHTML=h;
+    return;
+  }
+
+  // Agrupar por prioridad
+  var grupos={urgente:[],normal:[],baja:[]};
+  reportes.forEach(function(r){
+    var k=r.prioridad==='urgente'?'urgente':r.prioridad==='baja'?'baja':'normal';
+    grupos[k].push(r);
+  });
+
+  var labels={urgente:{title:'🔴 URGENTES',color:'#ef4444'},normal:{title:'🟡 NORMALES',color:'#f59e0b'},baja:{title:'🟢 BAJAS',color:'#22c55e'}};
+  ['urgente','normal','baja'].forEach(function(k){
+    var arr=grupos[k];
+    if(!arr.length)return;
+    var lbl=labels[k];
+    h+='<div style="padding:8px 12px 4px;font-size:11px;font-weight:700;color:'+lbl.color+';text-transform:uppercase;letter-spacing:1px">'+lbl.title+' ('+arr.length+')</div>';
+    arr.forEach(function(r){
+      var ubi=(r.ubicacionTipo==='zona_comun')?r.ubicacionId:('Hab '+r.ubicacionId);
+      var hace=fmtHace(r.reportadoMs);
+      var rechazo=(r.estado==='RECHAZADO_VERIFICACION');
+      h+='<div style="margin:6px 12px;background:#18181f;border:1px solid '+(rechazo?'#ef4444':lbl.color)+';border-left:4px solid '+lbl.color+';border-radius:8px;padding:12px">';
+      if(rechazo){
+        h+='<div style="background:rgba(239,68,68,.15);color:#ef4444;font-size:10px;font-weight:700;padding:4px 8px;border-radius:4px;display:inline-block;margin-bottom:6px">⚠ ARREGLO RECHAZADO — RETOMAR</div>';
+        if(r.motivoRechazo) h+='<div style="font-size:11px;color:#fca5a5;margin-bottom:6px">Motivo: '+esc(r.motivoRechazo)+'</div>';
+      }
+      h+='<div style="font-size:14px;font-weight:700;color:#e5e7eb;margin-bottom:2px">'+esc(ubi)+'</div>';
+      h+='<div style="font-size:13px;color:#e5e7eb;margin-bottom:6px">'+esc(r.descripcion||'')+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:'+(r.fotoDanoUrl?'8':'10')+'px">Reportado por '+esc(r.reportadoPor||'?')+(hace?' • '+hace:'')+'</div>';
+      if(r.fotoDanoUrl){
+        h+='<div style="margin-bottom:10px"><img src="'+r.fotoDanoUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #2e2e3a" alt="Foto del daño"></div>';
+      }
+      h+='<button class="btn bg" style="width:100%;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openMarcarArreglo('+r.id+')">✓ Marqué hecho</button>';
+      h+='</div>';
+    });
+  });
+
+  el.innerHTML=h;
+}
+
+function openMarcarArreglo(reporteId){
+  if(!sess||sess.userRole!=='MAINTENANCE'){toast('Solo MAINTENANCE','err');return;}
+  var data=window._misDanos||{};
+  var r=(data.reportes||[]).find(function(x){return x.id===reporteId;});
+  if(!r){toast('Reporte no encontrado, recargá','err');return;}
+  var ubi=(r.ubicacionTipo==='zona_comun')?r.ubicacionId:('Hab '+r.ubicacionId);
+  document.getElementById('maTitulo').textContent='✓ '+ubi;
+  document.getElementById('maDesc').textContent=r.descripcion||'';
+  var priEl=document.getElementById('maPrioridad');
+  priEl.textContent=(r.prioridad||'normal').toUpperCase();
+  priEl.style.color=r.prioridad==='urgente'?'#ef4444':r.prioridad==='baja'?'#22c55e':'#f59e0b';
+  document.getElementById('maFoto').value='';
+  document.getElementById('maNota').value='';
+  window._maReporteId = reporteId;
+  openM('mMarcarArreglo');
+}
+
+function doMarcarArreglo(){
+  var reporteId = window._maReporteId;
+  if(!reporteId){toast('Sin reporte seleccionado','err');return;}
+  var nota = (document.getElementById('maNota').value||'').trim();
+  if(nota.length<3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
+  var fotoFile = document.getElementById('maFoto') && document.getElementById('maFoto').files[0];
+
+  function enviarRpc(fotoUrl){
+    rpc('marcarArreglo',{
+      userRole: sess.userRole,
+      userName: sess.userName,
+      reporteId: reporteId,
+      nota: nota,
+      fotoArregloUrl: fotoUrl||''
+    }, function(){
+      toast('✓ Arreglo enviado para verificación','ok');
+      closeM('mMarcarArreglo');
+      window._maReporteId = null;
+      loadMisDanos();
+    }, function(e){
+      toast(e.message||String(e),'err');
+    });
+  }
+
+  if(fotoFile){
+    toast('Subiendo foto...','ok');
+    var ext = (fotoFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+    var fileName = 'mantenimiento/arreglos/arreglo_'+Date.now()+'.'+(ext||'jpg');
+    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+      method:'PUT',
+      headers:{
+        'apikey':SUPA_KEY,
+        'Authorization':'Bearer '+SUPA_KEY,
+        'x-upsert':'true',
+        'Content-Type': fotoFile.type || 'image/jpeg'
+      },
+      body: fotoFile
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+      return r.json();
+    }).then(function(){
+      var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+      enviarRpc(url);
+    }).catch(function(e){
+      toast('Error subiendo foto: '+(e.message||String(e)),'err');
+    });
+  } else {
+    enviarRpc('');
+  }
 }
 
 // ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
