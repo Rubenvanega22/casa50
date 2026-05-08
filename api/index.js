@@ -311,7 +311,34 @@ async function apiBootstrap(req, res) {
 
 async function apiGetRooms(req, res) {
   const { data: rooms } = await supabase.from('rooms').select('*').order('floor').order('room_id');
-  return ok(res, { rooms: (rooms || []).map(mapRoom) });
+
+  // Cargar danos activos por habitacion (Fase 3 mantenimiento)
+  // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
+  const estadosBombillito = ['NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
+  const { data: danos } = await supabase.from('room_issues')
+    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by')
+    .eq('anulada', false)
+    .eq('ubicacion_tipo', 'habitacion')
+    .in('estado', estadosBombillito);
+  const danosMap = {};
+  (danos || []).forEach(function(d){
+    danosMap[d.ubicacion_id] = {
+      id: d.id,
+      prioridad: d.prioridad,
+      estado: d.estado,
+      descripcion: d.description || '',
+      reportadoMs: Number(d.reportado_ms || 0),
+      reportadoPor: d.created_by || ''
+    };
+  });
+
+  const mapped = (rooms || []).map(function(r){
+    const m = mapRoom(r);
+    m.danoActivo = danosMap[r.room_id] || null;
+    return m;
+  });
+
+  return ok(res, { rooms: mapped });
 }
 
 // ==================== LOGIN ====================
