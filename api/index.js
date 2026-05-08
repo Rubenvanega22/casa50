@@ -375,8 +375,8 @@ async function apiLogin(p, res) {
   const userName = String(p.userName || '').trim();
   const userRole = String(p.userRole || '').toUpperCase();
   const forceEntry = p.forceEntry === true || p.forceEntry === 'true'; // Admin fuerza entrada
-  if (!userName) return err(res, 'Nombre requerido');
   if (!userRole) return err(res, 'Rol requerido');
+  if (!userName && userRole !== 'MAINTENANCE') return err(res, 'Nombre requerido');
 
   const tenMinsAgo = now - 10 * 60 * 1000;
   const { data: fails } = await supabase.from('login_failures')
@@ -471,21 +471,21 @@ async function apiLogin(p, res) {
   }
 
   if (userRole === 'MAINTENANCE') {
-    const { data: pinRow } = await supabase.from('maintenance_pins').select('pin, active').eq('user_name', userName).single();
+    // Login solo por PIN. Ignoramos lo que envia el frontend en userName
+    // y usamos el user_name canonico de maintenance_pins en sesion + logs
+    const userPin = String(p.userPin || '').trim();
+    if (!userPin) return err(res, 'PIN requerido.');
+    const { data: pinRows } = await supabase.from('maintenance_pins').select('user_name, active').eq('pin', userPin).limit(1);
+    const pinRow = (pinRows && pinRows.length) ? pinRows[0] : null;
     if (!pinRow) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'MAINTENANCE', ip: '' });
-      return err(res, 'Mantenedor no autorizado. Contacte al administrador.');
-    }
-    if (pinRow.active === false) {
-      return err(res, 'Mantenedor inactivo.');
-    }
-    if (String(p.userPin || '') !== String(pinRow.pin || '')) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'MAINTENANCE', ip: '' });
+      await supabase.from('login_failures').insert({ ts_ms: now, user_name: 'maintenance', user_role: 'MAINTENANCE', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
+    if (pinRow.active === false) return err(res, 'Mantenedor inactivo.');
+    const canonicalName = pinRow.user_name;
     // Sin verificacion de turno (mantenedor no tiene turnos)
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: userName, action: 'LOGIN' });
-    return ok(res, { session: { userName, userRole: 'MAINTENANCE', shiftId: shift, businessDay: bDay, serverNowMs: now } });
+    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: canonicalName, action: 'LOGIN' });
+    return ok(res, { session: { userName: canonicalName, userRole: 'MAINTENANCE', shiftId: shift, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'MAID') {

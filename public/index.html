@@ -742,7 +742,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="nw" class="h"><label id="nlbl">Tu Nombre</label><input type="text" id="lnm" placeholder="Nombre completo" autocomplete="off" oninput="chkBtn()"></div>
 <div id="nwRec" class="h"><label>Tu Nombre</label><select id="lnmRec" onchange="selRecName()" style="margin-bottom:6px"><option value="">-- Selecciona tu nombre --</option></select></div>
 <div id="nwShift" class="h"><label>Tu Turno</label><select id="lShift" style="margin-bottom:6px"><option value="SHIFT_1">T1 (6am - 2pm)</option><option value="SHIFT_2">T2 (2pm - 9pm)</option><option value="SHIFT_3">T3 (9pm - 6am)</option><option value="SHIFT_1_12">1T12 (6am - 6pm)</option><option value="SHIFT_2_12">2T12 (6pm - 6am)</option></select></div>
-<div id="uw" class="h"><label>PIN Personal</label><input type="password" id="upin" placeholder="PIN (si tienes)" maxlength="10"></div>
+<div id="uw" class="h"><label>PIN Personal</label><input type="password" id="upin" placeholder="PIN (si tienes)" maxlength="10" oninput="chkBtn()"></div>
 <div id="aw" class="h"><label>PIN Administrador</label><input type="password" id="apin" placeholder="PIN Admin" maxlength="10"></div>
 <button class="btn full ba" id="lbtn" onclick="entrar()" disabled style="margin-top:10px">Ingresar</button>
 <div class="si" id="sinfo"></div>
@@ -1059,12 +1059,20 @@ window.onload=function(){
   updSI();
 };
 
-function chkBtn(){document.getElementById('lbtn').disabled=!(document.getElementById('lrol').value&&(document.getElementById('lnm').value||'').trim());}
+function chkBtn(){
+  var rol=document.getElementById('lrol').value;
+  var nm=(document.getElementById('lnm').value||'').trim();
+  var pin=(document.getElementById('upin').value||'').trim();
+  var ok;
+  if(rol==='MAINTENANCE') ok = !!pin;
+  else ok = !!(rol && nm);
+  document.getElementById('lbtn').disabled = !ok;
+}
 function updSI(){var sh=(BS.shifts||[]).find(function(s){return s.id===BS.currentShiftId;});document.getElementById('sinfo').textContent=sh?sh.label:'';}
 
 function onRol(){
   var r=document.getElementById('lrol').value;
-  tog('nw',!!r&&r!=='RECEPTION');
+  tog('nw',!!r&&r!=='RECEPTION'&&r!=='MAINTENANCE');
   tog('nwRec',r==='RECEPTION');
   tog('nwShift',r==='RECEPTION');
   tog('uw',r==='RECEPTION'||r==='MAINTENANCE');
@@ -1104,7 +1112,7 @@ function entrar(){
   var ap=(document.getElementById('apin').value||'').trim();
   var up=(document.getElementById('upin').value||'').trim();
   tog('lerr',false);
-  if(!nm){showLE('Ingresa tu nombre.');return;}
+  if(!nm && rol!=='MAINTENANCE'){showLE('Ingresa tu nombre.');return;}
   var btn=document.getElementById('lbtn');btn.disabled=true;btn.textContent='Verificando...';
   var fe=window._forceEntry===true;window._forceEntry=false;
   var shiftSel=document.getElementById('lShift');
