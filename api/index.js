@@ -215,6 +215,8 @@ module.exports = async function handler(req, res) {
       // Modulo de mantenimiento (nuevo flujo con estados)
       case 'getReportesActivos':return await apiGetReportesActivos(payload, res);
       case 'crearReporteMant':  return await apiCrearReporteMant(payload, res);
+      case 'getMisDanos':       return await apiGetMisDanos(payload, res);
+      case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -466,6 +468,24 @@ async function apiLogin(p, res) {
     const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now, fromMs } });
+  }
+
+  if (userRole === 'MAINTENANCE') {
+    const { data: pinRow } = await supabase.from('maintenance_pins').select('pin, active').eq('user_name', userName).single();
+    if (!pinRow) {
+      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'MAINTENANCE', ip: '' });
+      return err(res, 'Mantenedor no autorizado. Contacte al administrador.');
+    }
+    if (pinRow.active === false) {
+      return err(res, 'Mantenedor inactivo.');
+    }
+    if (String(p.userPin || '') !== String(pinRow.pin || '')) {
+      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'MAINTENANCE', ip: '' });
+      return err(res, 'PIN incorrecto.');
+    }
+    // Sin verificacion de turno (mantenedor no tiene turnos)
+    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: userName, action: 'LOGIN' });
+    return ok(res, { session: { userName, userRole: 'MAINTENANCE', shiftId: shift, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'MAID') {
@@ -2492,6 +2512,93 @@ async function apiCrearReporteMant(p, res) {
     ubicacionTipo: ubicacionTipo,
     ubicacionId: ubicacionId
   });
+}
+
+// ==================== MANTENEDOR (Fase 4) ====================
+async function apiGetMisDanos(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE') return err(res, 'Solo MAINTENANCE');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  // Danos activos para el mantenedor
+  const { data: activos } = await supabase.from('room_issues')
+    .select('*')
+    .eq('anulada', false)
+    .in('estado', ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'])
+    .order('reportado_ms', { ascending: false });
+
+  // "Termine hoy": reportes que el mantenedor marco como ESPERA_VERIFICACION o VERIFICADO hoy
+  const today = businessDay(Date.now());
+  const inicioHoy = new Date(today + 'T00:00:00').getTime();
+  const finHoy = inicioHoy + 86400000;
+  const { data: terminados } = await supabase.from('room_issues')
+    .select('id, estado')
+    .eq('anulada', false)
+    .eq('arreglado_por', userName)
+    .gte('arreglado_ms', inicioHoy)
+    .lt('arreglado_ms', finHoy);
+
+  const reportes = (activos || []).map(function(r){
+    return {
+      id: r.id,
+      ubicacionTipo: r.ubicacion_tipo || 'habitacion',
+      ubicacionId: r.ubicacion_id || r.room_id || '',
+      descripcion: r.description || '',
+      prioridad: r.prioridad || 'normal',
+      estado: r.estado,
+      reportadoPor: r.created_by || '',
+      reportadoMs: Number(r.reportado_ms || 0),
+      fotoDanoUrl: r.foto_dano_url || null,
+      motivoRechazo: r.motivo_rechazo || null,
+      comentarioRecepcion: r.comentario_recepcion || null
+    };
+  });
+
+  const contadores = {
+    urgentes: reportes.filter(function(r){return r.prioridad === 'urgente';}).length,
+    normales: reportes.filter(function(r){return r.prioridad === 'normal';}).length,
+    bajas: reportes.filter(function(r){return r.prioridad === 'baja';}).length,
+    terminadosHoy: (terminados || []).length
+  };
+
+  return ok(res, { contadores, reportes });
+}
+
+async function apiMarcarArreglo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE') return err(res, 'Solo MAINTENANCE');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const nota = String(p.nota || '').trim();
+  if(nota.length < 3) return err(res, 'Nota minima 3 caracteres (obligatoria)');
+
+  const fotoUrl = String(p.fotoArregloUrl || '').trim() || null;
+
+  // Buscar el reporte y validar estado
+  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
+    return err(res, 'Reporte no esta activo (estado: '+reporte.estado+')');
+  }
+
+  // Marcar como arreglado, listo para verificar
+  const now = Date.now();
+  await supabase.from('room_issues').update({
+    estado: 'ESPERA_VERIFICACION',
+    arreglado_por: userName,
+    arreglado_ms: now,
+    arreglo_nota: nota,
+    foto_arreglo_url: fotoUrl,
+    motivo_rechazo: null  // si era un rechazo previo, lo limpiamos
+  }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, estado: 'ESPERA_VERIFICACION', arregladoMs: now });
 }
 
 // ==================== PROYECCION ====================
