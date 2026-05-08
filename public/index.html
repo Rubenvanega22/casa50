@@ -736,6 +736,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="">-- Selecciona --</option>
 <option value="RECEPTION">Recepcion</option>
 <option value="MAID">Camarera</option>
+<option value="MAINTENANCE">Mantenedor</option>
 <option value="ADMIN">Administrador</option>
 </select>
 <div id="nw" class="h"><label id="nlbl">Tu Nombre</label><input type="text" id="lnm" placeholder="Nombre completo" autocomplete="off" oninput="chkBtn()"></div>
@@ -921,6 +922,11 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="notesCont"></div>
 </div>
+<!-- MIS DAÑOS (mantenedor — Fase 4) -->
+<div class="pnl" id="pnl-misdanos">
+<div id="misDanosCont" style="font-size:13px;color:#9ca3af;padding:10px">Cargando...</div>
+</div>
+
 <!-- CUADRE ADMIN -->
 <div class="pnl" id="pnl-cuadre-admin">
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -1061,9 +1067,9 @@ function onRol(){
   tog('nw',!!r&&r!=='RECEPTION');
   tog('nwRec',r==='RECEPTION');
   tog('nwShift',r==='RECEPTION');
-  tog('uw',r==='RECEPTION');
+  tog('uw',r==='RECEPTION'||r==='MAINTENANCE');
   tog('aw',r==='ADMIN'&&adminTap);
-  document.getElementById('nlbl').textContent=r==='MAID'?'Nombre de Camarera':'Tu Nombre';
+  document.getElementById('nlbl').textContent=r==='MAID'?'Nombre de Camarera':r==='MAINTENANCE'?'Nombre de Mantenedor':'Tu Nombre';
   document.getElementById('lbtn').disabled=!r;
   if(r==='RECEPTION')loadRecepPins();
   updSI();
@@ -1138,7 +1144,7 @@ function startApp(){
   document.getElementById('husr').textContent=sess.userName;
   buildTabs();
 actualizarBtnCaja();
-  sw(sess.userRole==='MAID'?'maid':'rooms');
+  sw(sess.userRole==='MAID'?'maid':sess.userRole==='MAINTENANCE'?'misdanos':'rooms');
   if(rooms.length)renderRooms();
   startPoll();startClock();
   if(sess.userRole==='ADMIN'){
@@ -1171,11 +1177,12 @@ function actualizarBtnCaja(){
 function buildTabs(){
   var bar=document.getElementById('tabBar');bar.innerHTML='';
   var r=sess.userRole,tabs=[];
-  if(r!=='MAID')tabs.push({id:'rooms',l:'Habitaciones'});
+  if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
+  if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños'});
  if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'},{id:'productos',l:'Productos'});
 if(r==='MAID')tabs.push({id:'listado',l:'Listado'},{id:'sched',l:'Calendario'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'gastosmes',l:'Gastos Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'},{id:'productos',l:'Productos'});tabs.push({id:'notes',l:'Reportes'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'gastosmes',l:'Gastos Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'},{id:'productos',l:'Productos'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Reportes'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';b.textContent=t.l;b.dataset.tab=t.id;
@@ -1189,6 +1196,7 @@ function sw(id){
   var p=document.getElementById('pnl-'+id);if(p)p.classList.add('on');
   var b=document.querySelector('[data-tab="'+id+'"]');if(b)b.classList.add('on');
   if(id==='notes')loadNotes();
+  if(id==='misdanos')loadMisDanos();
   if(id==='maids')loadMP();
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
@@ -5143,6 +5151,15 @@ function deleteIssue(id,rid){
     );
   });
 }
+// ---- MANTENEDOR: pantalla "Mis Daños" (Fase 4 G2 placeholder) ----
+function loadMisDanos(){
+  var el=document.getElementById('misDanosCont');
+  if(!el)return;
+  if(!sess||sess.userRole!=='MAINTENANCE'){el.innerHTML='<div style="color:#ef4444">Acceso solo MAINTENANCE</div>';return;}
+  el.innerHTML='<div style="padding:20px;text-align:center"><div style="font-size:18px;margin-bottom:8px">Hola Don '+esc(sess.userName)+' 👋</div><div style="color:#9ca3af">Cargando tus daños... (placeholder G2 — vista completa en G3)</div></div>';
+  // En G3 reemplazo este placeholder por: llamada a getMisDanos + render con cards/secciones por prioridad
+}
+
 // ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
 function openReportarDano(){
   if(!sess || (sess.userRole!=='ADMIN' && sess.userRole!=='RECEPTION')){
