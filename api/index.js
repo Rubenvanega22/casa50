@@ -318,7 +318,7 @@ async function apiGetRooms(req, res) {
   // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
   const estadosBombillito = ['NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
   const { data: danos } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by')
+    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url')
     .eq('anulada', false)
     .eq('ubicacion_tipo', 'habitacion')
     .in('estado', estadosBombillito);
@@ -330,7 +330,11 @@ async function apiGetRooms(req, res) {
       estado: d.estado,
       descripcion: d.description || '',
       reportadoMs: Number(d.reportado_ms || 0),
-      reportadoPor: d.created_by || ''
+      reportadoPor: d.created_by || '',
+      arregladoPor: d.arreglado_por || '',
+      arregladoMs: Number(d.arreglado_ms || 0),
+      arregloNota: d.arreglo_nota || '',
+      fotoArregloUrl: d.foto_arreglo_url || null
     };
   });
 
