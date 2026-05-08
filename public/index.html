@@ -690,6 +690,31 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="mFallasInfo" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
 <div id="mFallasOpts"></div>
 <button class="btn br full" style="margin-top:10px" onclick="saveFallas()">Registrar Fallas</button></div></div>
+
+<!-- MODAL: Reportar daño (Mantenimiento - Fase 2.2) -->
+<div class="ov" id="mReportarDano"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">🔧 Reportar daño</div>
+    <button class="mc" onclick="closeM('mReportarDano')">✕</button>
+  </div>
+  <label>Habitación</label>
+  <select id="rdRoom"><option value="">-- Selecciona --</option></select>
+  <label style="margin-top:8px">Descripción del daño</label>
+  <textarea id="rdDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Prioridad</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdPri" value="urgente"> 🔴 Urgente</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdPri" value="normal" checked> 🟡 Normal</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdPri" value="baja"> 🟢 Baja</label>
+  </div>
+  <label>Foto (opcional)</label>
+  <input type="file" id="rdFoto" accept="image/*">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mReportarDano')">Cancelar</button>
+    <button class="btn ba" style="flex:2" onclick="doReportarDano()">Enviar a Mantenimiento</button>
+  </div>
+</div></div>
+
 <!-- LOGIN -->
 <div id="ls">
 <div class="card">
@@ -903,6 +928,15 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <!-- MANTENIMIENTO (admin) -->
 <div class="pnl" id="pnl-maint">
+
+<!-- NUEVO Fase 2.2: Reportar daño + lista de daños activos -->
+<div style="margin-bottom:14px">
+  <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700;margin-bottom:10px" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
+  <div class="sec" style="margin-top:6px">⚠️ Daños activos ahora</div>
+  <div id="danosActivosCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+</div>
+<hr style="border-color:#2e2e3a;margin:12px 0">
+
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
 <input type="date" id="maintFrom" style="width:auto;margin:0">
 <input type="date" id="maintTo" style="width:auto;margin:0">
@@ -1150,7 +1184,7 @@ function sw(id){
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
- if(id==='maint'){loadMaintMonth();if(roomIssuesOpen)loadRoomIssuesGrid();}
+ if(id==='maint'){loadMaintMonth();loadDanosActivos();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
@@ -5072,6 +5106,138 @@ function deleteIssue(id,rid){
     );
   });
 }
+// ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
+function openReportarDano(){
+  if(!sess || (sess.userRole!=='ADMIN' && sess.userRole!=='RECEPTION')){
+    toast('Solo ADMIN o Recepcion','err');
+    return;
+  }
+  var sel = document.getElementById('rdRoom');
+  if(!sel) return;
+  var ordRooms = (rooms||[]).slice().sort(function(a,b){
+    return String(a.roomId).localeCompare(String(b.roomId), 'es', {numeric:true});
+  });
+  var h = '<option value="">-- Selecciona --</option>';
+  ordRooms.forEach(function(r){
+    h += '<option value="'+esc(r.roomId)+'">Hab '+esc(r.roomId)+' — '+esc(r.category||'')+'</option>';
+  });
+  sel.innerHTML = h;
+  sel.value = '';
+  var desc = document.getElementById('rdDesc'); if(desc) desc.value = '';
+  var foto = document.getElementById('rdFoto'); if(foto) foto.value = '';
+  var radios = document.querySelectorAll('input[name="rdPri"]');
+  radios.forEach(function(rd){ rd.checked = (rd.value === 'normal'); });
+  openM('mReportarDano');
+}
+
+function doReportarDano(){
+  if(!sess) return;
+  var roomId = (document.getElementById('rdRoom')||{}).value || '';
+  if(!roomId.trim()){ toast('Elegí una habitación.','err'); return; }
+  var desc = ((document.getElementById('rdDesc')||{}).value || '').trim();
+  if(desc.length < 3){ toast('La descripción debe tener mínimo 3 caracteres.','err'); return; }
+  var priEl = document.querySelector('input[name="rdPri"]:checked');
+  var prioridad = priEl ? priEl.value : 'normal';
+
+  var fotoFile = document.getElementById('rdFoto') && document.getElementById('rdFoto').files[0];
+
+  function enviarRpc(fotoUrl){
+    rpc('crearReporteMant',{
+      userRole: sess.userRole,
+      userName: sess.userName,
+      ubicacionTipo: 'habitacion',
+      ubicacionId: roomId,
+      descripcion: desc,
+      prioridad: prioridad,
+      fotoDanoUrl: fotoUrl || ''
+    },function(){
+      toast('Reporte enviado a Mantenimiento.','ok');
+      closeM('mReportarDano');
+      loadDanosActivos();
+    },function(e){
+      toast(e.message || String(e),'err');
+    });
+  }
+
+  if(fotoFile){
+    toast('Subiendo foto...','ok');
+    var ext = (fotoFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+    var fileName = 'mantenimiento/danos/dano_'+Date.now()+'.'+(ext||'jpg');
+    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+      method:'PUT',
+      headers:{
+        'apikey':SUPA_KEY,
+        'Authorization':'Bearer '+SUPA_KEY,
+        'x-upsert':'true',
+        'Content-Type': fotoFile.type || 'image/jpeg'
+      },
+      body: fotoFile
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error('HTTP '+r.status+': '+t); });
+      return r.json();
+    }).then(function(){
+      var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+      enviarRpc(url);
+    }).catch(function(e){
+      toast('Error subiendo foto: '+(e.message||String(e)),'err');
+    });
+  } else {
+    enviarRpc('');
+  }
+}
+
+function loadDanosActivos(){
+  var cont = document.getElementById('danosActivosCont');
+  if(!cont) return;
+  if(!sess){ cont.innerHTML = '<div style="color:#9ca3af">Sesión no iniciada.</div>'; return; }
+
+  rpc('getReportesActivos',{
+    userRole: sess.userRole,
+    userName: sess.userName
+  },function(d){
+    var reportes = (d && d.reportes) || [];
+    if(!reportes.length){
+      cont.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:8px">No hay daños activos.</div>';
+      return;
+    }
+    var bullets = {urgente:'🔴', normal:'🟡', baja:'🟢'};
+    var badgeBg = {urgente:'rgba(239,68,68,.15)', normal:'rgba(245,158,11,.15)', baja:'rgba(34,197,94,.15)'};
+    var badgeColor = {urgente:'#ef4444', normal:'#f59e0b', baja:'#22c55e'};
+
+    function fmtHace(ms){
+      if(!ms) return '';
+      var diff = Date.now() - Number(ms);
+      var min = Math.round(diff/60000);
+      if(min < 1) return 'recién';
+      if(min < 60) return 'hace '+min+' min';
+      var h = Math.round(min/60);
+      if(h < 24) return 'hace '+h+' h';
+      var d = Math.round(h/24);
+      return 'hace '+d+' día'+(d===1?'':'s');
+    }
+
+    var h = '';
+    reportes.forEach(function(r){
+      var pri = r.prioridad || 'normal';
+      var bullet = bullets[pri] || '⚪';
+      var bg = badgeBg[pri] || '#22222c';
+      var col = badgeColor[pri] || '#9ca3af';
+      var ubi = (r.ubicacionTipo === 'zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
+      var hace = fmtHace(r.reportadoMs);
+      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2e2e3a">';
+      h += '<div style="flex:1">';
+      h += '<div style="color:#e5e7eb"><span style="font-size:14px">'+bullet+'</span> <b>'+esc(ubi)+'</b> — '+esc(r.descripcion||'')+'</div>';
+      h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">Reportado por '+esc(r.reportadoPor||'?')+(hace?' • '+hace:'')+'</div>';
+      h += '</div>';
+      h += '<span style="background:'+bg+';color:'+col+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;margin-left:8px;white-space:nowrap">'+pri+'</span>';
+      h += '</div>';
+    });
+    cont.innerHTML = h;
+  },function(e){
+    cont.innerHTML = '<div style="color:#ef4444">Error: '+esc(e.message||String(e))+'</div>';
+  });
+}
+
 // ---- MANTENIMIENTO (admin) ----
 function loadMaintMonth(){
   var now=new Date();
