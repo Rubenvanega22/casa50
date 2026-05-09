@@ -706,8 +706,23 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
     <div class="mt">🔧 Reportar daño</div>
     <button class="mc" onclick="closeM('mReportarDano')">✕</button>
   </div>
-  <label>Habitación</label>
-  <select id="rdRoom"><option value="">-- Selecciona --</option></select>
+  <label>Tipo de ubicación</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdTipo" value="habitacion" checked onchange="rdToggleTipo()"> 🏨 Habitación</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdTipo" value="zona_comun" onchange="rdToggleTipo()"> 🌐 Zona común</label>
+  </div>
+  <div id="rdRoomWrap">
+    <label>Habitación</label>
+    <select id="rdRoom"><option value="">-- Selecciona --</option></select>
+  </div>
+  <div id="rdZonaWrap" style="display:none">
+    <label>Zona común</label>
+    <select id="rdZona" onchange="rdToggleOtra()"><option value="">-- Selecciona --</option></select>
+    <div id="rdZonaOtraWrap" style="display:none;margin-top:6px">
+      <label>Especificá cuál</label>
+      <input type="text" id="rdZonaOtra" placeholder="Ej: Terraza" maxlength="50">
+    </div>
+  </div>
   <label style="margin-top:8px">Descripción del daño</label>
   <textarea id="rdDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Prioridad</label>
@@ -937,6 +952,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 
 <!-- NOTAS -->
 <div class="pnl" id="pnl-notes">
+<!-- Botón Reportar daño directo (ADMIN/RECEPTION — Fase 6) -->
+<div id="btnRepDanoNotesWrap" style="display:none;margin-bottom:10px">
+  <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
+</div>
 <div style="margin-bottom:8px">
 <textarea id="noteIn" placeholder="Escribe un reporte..." rows="2"></textarea>
 <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
@@ -1054,6 +1073,10 @@ var MP={
   "Suite Multiple":{h3:135000,h6:270000,h8:195000,h12:235000,extraHour:35000,extraPerson:30000,included:4},
   "Suite Disco":   {h3:180000,h6:360000,h8:260000,h12:315000,extraHour:35000,extraPerson:30000,included:4}
 };
+// ---- ZONAS COMUNES (Fase 6) ----
+// "Otra" dispara un input de texto libre en el modal de reportar daño
+var ZONAS_COMUNES=['Recepción','Pasillo piso 2','Pasillo piso 3','Pasillo piso 4','Bar','Cocina','Lavandería','Estacionamiento','Baño público','Bodega','Otra'];
+
 // ---- UTILS ----
 var API_URL=window.location.origin+'/api/index.js';
 function rpc(fn,p,ok,er){
@@ -1216,6 +1239,9 @@ function actualizarBtnCaja(){
   if(!btn||!sess)return;
   var r=sess.userRole;
   btn.style.display=(r==='RECEPTION'||r==='ADMIN')?'':'none';
+  // Botón "+ Reportar daño" en Reportes (Fase 6) — solo ADMIN/RECEPTION
+  var btnRD=document.getElementById('btnRepDanoNotesWrap');
+  if(btnRD) btnRD.style.display=(r==='RECEPTION'||r==='ADMIN')?'':'none';
 }
 function buildTabs(){
   var bar=document.getElementById('tabBar');bar.innerHTML='';
@@ -5429,28 +5455,83 @@ function openReportarDano(){
     toast('Solo ADMIN o Recepcion','err');
     return;
   }
+  // Reset radios al estado por defecto: Habitación seleccionada
+  var radiosTipo = document.querySelectorAll('input[name="rdTipo"]');
+  radiosTipo.forEach(function(rd){ rd.checked = (rd.value === 'habitacion'); });
+
+  // Llenar dropdown habitaciones
   var sel = document.getElementById('rdRoom');
-  if(!sel) return;
-  var ordRooms = (rooms||[]).slice().sort(function(a,b){
-    return String(a.roomId).localeCompare(String(b.roomId), 'es', {numeric:true});
-  });
-  var h = '<option value="">-- Selecciona --</option>';
-  ordRooms.forEach(function(r){
-    h += '<option value="'+esc(r.roomId)+'">Hab '+esc(r.roomId)+' — '+esc(r.category||'')+'</option>';
-  });
-  sel.innerHTML = h;
-  sel.value = '';
+  if(sel){
+    var ordRooms = (rooms||[]).slice().sort(function(a,b){
+      return String(a.roomId).localeCompare(String(b.roomId), 'es', {numeric:true});
+    });
+    var h = '<option value="">-- Selecciona --</option>';
+    ordRooms.forEach(function(r){
+      h += '<option value="'+esc(r.roomId)+'">Hab '+esc(r.roomId)+' — '+esc(r.category||'')+'</option>';
+    });
+    sel.innerHTML = h;
+    sel.value = '';
+  }
+
+  // Llenar dropdown zonas comunes (Fase 6)
+  var selZ = document.getElementById('rdZona');
+  if(selZ){
+    var hz = '<option value="">-- Selecciona --</option>';
+    ZONAS_COMUNES.forEach(function(z){
+      hz += '<option value="'+esc(z)+'">'+esc(z)+'</option>';
+    });
+    selZ.innerHTML = hz;
+    selZ.value = '';
+  }
+  var otra = document.getElementById('rdZonaOtra'); if(otra) otra.value='';
+
+  // Mostrar/ocultar segun tipo
+  rdToggleTipo();
+
+  // Limpiar otros campos
   var desc = document.getElementById('rdDesc'); if(desc) desc.value = '';
   var foto = document.getElementById('rdFoto'); if(foto) foto.value = '';
-  var radios = document.querySelectorAll('input[name="rdPri"]');
-  radios.forEach(function(rd){ rd.checked = (rd.value === 'normal'); });
+  var radiosPri = document.querySelectorAll('input[name="rdPri"]');
+  radiosPri.forEach(function(rd){ rd.checked = (rd.value === 'normal'); });
   openM('mReportarDano');
+}
+
+function rdToggleTipo(){
+  var tipo = (document.querySelector('input[name="rdTipo"]:checked')||{}).value || 'habitacion';
+  var roomWrap = document.getElementById('rdRoomWrap');
+  var zonaWrap = document.getElementById('rdZonaWrap');
+  var otraWrap = document.getElementById('rdZonaOtraWrap');
+  if(roomWrap) roomWrap.style.display = (tipo==='habitacion') ? '' : 'none';
+  if(zonaWrap) zonaWrap.style.display = (tipo==='zona_comun') ? '' : 'none';
+  if(tipo==='habitacion' && otraWrap) otraWrap.style.display='none';
+}
+
+function rdToggleOtra(){
+  var v = (document.getElementById('rdZona')||{}).value || '';
+  var otraWrap = document.getElementById('rdZonaOtraWrap');
+  if(otraWrap) otraWrap.style.display = (v==='Otra') ? '' : 'none';
 }
 
 function doReportarDano(){
   if(!sess) return;
-  var roomId = (document.getElementById('rdRoom')||{}).value || '';
-  if(!roomId.trim()){ toast('Elegí una habitación.','err'); return; }
+  // Tipo de ubicación: Habitación o Zona común
+  var tipo = (document.querySelector('input[name="rdTipo"]:checked')||{}).value || 'habitacion';
+  var ubicacionId = '';
+  if(tipo === 'habitacion'){
+    ubicacionId = (document.getElementById('rdRoom')||{}).value || '';
+    if(!ubicacionId.trim()){ toast('Elegí una habitación.','err'); return; }
+  } else {
+    var zona = (document.getElementById('rdZona')||{}).value || '';
+    if(!zona.trim()){ toast('Elegí una zona común.','err'); return; }
+    if(zona === 'Otra'){
+      var otraVal = ((document.getElementById('rdZonaOtra')||{}).value || '').trim();
+      if(otraVal.length < 3){ toast('Especificá la zona (mín 3 caracteres).','err'); return; }
+      ubicacionId = otraVal;
+    } else {
+      ubicacionId = zona;
+    }
+  }
+
   var desc = ((document.getElementById('rdDesc')||{}).value || '').trim();
   if(desc.length < 3){ toast('La descripción debe tener mínimo 3 caracteres.','err'); return; }
   var priEl = document.querySelector('input[name="rdPri"]:checked');
@@ -5462,15 +5543,21 @@ function doReportarDano(){
     rpc('crearReporteMant',{
       userRole: sess.userRole,
       userName: sess.userName,
-      ubicacionTipo: 'habitacion',
-      ubicacionId: roomId,
+      ubicacionTipo: tipo,
+      ubicacionId: ubicacionId,
       descripcion: desc,
       prioridad: prioridad,
       fotoDanoUrl: fotoUrl || ''
     },function(){
       toast('Reporte enviado a Mantenimiento.','ok');
       closeM('mReportarDano');
-      loadDanosActivos();
+      // Refresh: si es habitacion, recargar rooms para que el bombillito aparezca
+      if(tipo==='habitacion'){
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[]; if(sess.userRole!=='MAID') renderRooms();}});
+      }
+      // Refresh lista en pestana Mantenimiento si esta abierta
+      var maintTab=document.getElementById('pnl-maint');
+      if(maintTab&&maintTab.classList.contains('on'))loadDanosActivos();
     },function(e){
       toast(e.message || String(e),'err');
     });
