@@ -217,6 +217,8 @@ module.exports = async function handler(req, res) {
       case 'crearReporteMant':  return await apiCrearReporteMant(payload, res);
       case 'getMisDanos':       return await apiGetMisDanos(payload, res);
       case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
+      case 'verificarArreglo':  return await apiVerificarArreglo(payload, res);
+      case 'rechazarArreglo':   return await apiRechazarArreglo(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -2603,6 +2605,68 @@ async function apiMarcarArreglo(p, res) {
   }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, estado: 'ESPERA_VERIFICACION', arregladoMs: now });
+}
+
+// ==================== VERIFICACION (Fase 5) ====================
+async function apiVerificarArreglo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(reporte.estado !== 'ESPERA_VERIFICACION') {
+    return err(res, 'Reporte no esta esperando verificacion (estado: '+reporte.estado+')');
+  }
+
+  const now = Date.now();
+  const todayDate = new Date().toISOString().split('T')[0];
+  await supabase.from('room_issues').update({
+    estado: 'VERIFICADO',
+    verificado_por: userName,
+    verificado_ms: now,
+    // compat con ranking de habitaciones mas danadas que usa resolved
+    resolved: true,
+    resolved_at: todayDate,
+    resolved_by: userName
+  }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, estado: 'VERIFICADO', verificadoMs: now });
+}
+
+async function apiRechazarArreglo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const motivo = String(p.motivo || '').trim();
+  if(motivo.length < 3) return err(res, 'Motivo de rechazo minimo 3 caracteres');
+
+  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(reporte.estado !== 'ESPERA_VERIFICACION') {
+    return err(res, 'Reporte no esta esperando verificacion (estado: '+reporte.estado+')');
+  }
+
+  // Vuelve a estado activo para el mantenedor.
+  // arreglado_por / arreglado_ms / arreglo_nota / foto_arreglo_url se mantienen
+  // como historial del intento previo. apiMarcarArreglo los sobreescribe en el proximo intento.
+  await supabase.from('room_issues').update({
+    estado: 'RECHAZADO_VERIFICACION',
+    motivo_rechazo: motivo
+  }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, estado: 'RECHAZADO_VERIFICACION' });
 }
 
 // ==================== PROYECCION ====================
