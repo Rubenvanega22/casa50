@@ -744,6 +744,21 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Rechazar arreglo (ADMIN/RECEPTION — Fase 5) -->
+<div class="ov" id="mRechazarArreglo"><div class="modal" style="max-width:480px">
+  <div class="mh">
+    <div class="mt">✗ Rechazar arreglo</div>
+    <button class="mc" onclick="closeM('mRechazarArreglo')">✕</button>
+  </div>
+  <div style="font-size:12px;color:#9ca3af;margin-bottom:10px">El reporte vuelve al mantenedor con el motivo que escribas.</div>
+  <label>Motivo del rechazo (obligatorio)</label>
+  <textarea id="rrMotivo" rows="3" placeholder="Por qué no está bien (mín 3 caracteres)"></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mRechazarArreglo')">Cancelar</button>
+    <button class="btn br" style="flex:2" onclick="doRechazarArreglo()">Confirmar rechazo</button>
+  </div>
+</div></div>
+
 <!-- LOGIN -->
 <div id="ls">
 <div class="card">
@@ -1574,6 +1589,13 @@ function buildRoomB(r){
       if(d.arregloNota) h+='<div style="font-size:13px;color:#e5e7eb;margin-bottom:'+(d.fotoArregloUrl?'8':'0')+'px">'+esc(d.arregloNota)+'</div>';
       if(d.fotoArregloUrl) h+='<img src="'+d.fotoArregloUrl+'" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid #2e2e3a;display:block" alt="Foto del arreglo">';
       h+='</div>';
+      // Botones Verificar / Rechazar (Fase 5) — solo ADMIN/RECEPTION
+      if(isR||isA){
+        h+='<div style="display:flex;gap:6px;margin-bottom:12px">';
+        h+='<button class="btn br" style="flex:1" onclick="openRechazarArreglo('+d.id+')">✗ Rechazar</button>';
+        h+='<button class="btn bg" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doVerificarArreglo('+d.id+')">✓ Solucionado</button>';
+        h+='</div>';
+      }
     }
   }
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>'+(eff==='OC'&&isR&&(r.payMethod||'EFECTIVO')==='EFECTIVO'?'<button class="btn bg xs" style="margin-right:30px" onclick="doHoraGratis()">🎁 +1h</button>':'')+'</div>';
@@ -5356,6 +5378,49 @@ function doMarcarArreglo(){
   } else {
     enviarRpc('');
   }
+}
+
+// ---- VERIFICACION (Fase 5): ADMIN/RECEPTION confirma o rechaza arreglo ----
+function doVerificarArreglo(reporteId){
+  if(!sess||(sess.userRole!=='ADMIN'&&sess.userRole!=='RECEPTION')){toast('Solo ADMIN o Recepcion','err');return;}
+  conf('¿Confirmar que el arreglo está OK?',function(){
+    rpc('verificarArreglo',{userRole:sess.userRole, userName:sess.userName, reporteId:reporteId},
+      function(){
+        toast('✓ Arreglo verificado.','ok');
+        closeM('mRoom');
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+        var maintTab=document.getElementById('pnl-maint');
+        if(maintTab&&maintTab.classList.contains('on'))loadDanosActivos();
+      },
+      function(e){toast(e.message||String(e),'err');}
+    );
+  });
+}
+
+function openRechazarArreglo(reporteId){
+  if(!sess||(sess.userRole!=='ADMIN'&&sess.userRole!=='RECEPTION')){toast('Solo ADMIN o Recepcion','err');return;}
+  window._rrReporteId = reporteId;
+  document.getElementById('rrMotivo').value='';
+  openM('mRechazarArreglo');
+}
+
+function doRechazarArreglo(){
+  var reporteId = window._rrReporteId;
+  if(!reporteId){toast('Sin reporte seleccionado','err');return;}
+  var motivo=(document.getElementById('rrMotivo').value||'').trim();
+  if(motivo.length<3){toast('El motivo debe tener mínimo 3 caracteres','err');return;}
+  rpc('rechazarArreglo',{userRole:sess.userRole, userName:sess.userName, reporteId:reporteId, motivo:motivo},
+    function(){
+      toast('Arreglo rechazado — vuelve al mantenedor.','ok');
+      closeM('mRechazarArreglo');
+      closeM('mRoom');
+      window._rrReporteId = null;
+      rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+      var maintTab=document.getElementById('pnl-maint');
+      if(maintTab&&maintTab.classList.contains('on'))loadDanosActivos();
+    },
+    function(e){toast(e.message||String(e),'err');}
+  );
 }
 
 // ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
