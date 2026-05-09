@@ -189,6 +189,7 @@ module.exports = async function handler(req, res) {
       case 'changeAdminPin':    return await apiChangeAdminPin(payload, res);
       case 'roomHistory':       return await apiRoomHistory(payload, res);
       case 'markNoteSeen':      return await apiMarkNoteSeen(payload, res);
+      case 'markNotePasado':    return await apiMarkNotePasado(payload, res);
       case 'getAllNotes':        return await apiGetAllNotes(payload, res);
       case 'getNoteHistory':    return await apiGetNoteHistory(payload, res);
       case 'reviewNote':        return await apiReviewNote(payload, res);
@@ -1211,7 +1212,7 @@ async function apiAddNote(p, res) {
 async function apiGetNotes(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const { data } = await supabase.from('shift_notes').select('*')
-    .eq('business_day', bDay).eq('is_deleted', false)
+    .eq('business_day', bDay).eq('is_deleted', false).eq('pasado_a_mantenimiento', false)
     .order('ts_ms', { ascending: false }).limit(100);
   return ok(res, { notes: (data || []).map(r => ({
     id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id,
@@ -1232,6 +1233,21 @@ async function apiMarkNoteSeen(p, res) {
   if (!seenBy.includes(userRole)) seenBy.push(userRole);
   await supabase.from('shift_notes').update({ seen_by: JSON.stringify(seenBy) }).eq('id', noteId);
   return ok(res, { noteId, seenBy });
+}
+
+async function apiMarkNotePasado(p, res) {
+  // Marca un reporte de shift_notes como "ya pasado a mantenimiento"
+  // para que no aparezca mas en la lista de Reportes (Fase 6)
+  const userRole = String(p.userRole || '').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const noteId = Number(p.noteId || 0);
+  if(!noteId) return err(res, 'noteId requerido');
+  const { data: note } = await supabase.from('shift_notes').select('id, is_deleted, pasado_a_mantenimiento').eq('id', noteId).single();
+  if(!note) return err(res, 'Nota no encontrada');
+  if(note.is_deleted) return err(res, 'Nota ya borrada');
+  if(note.pasado_a_mantenimiento) return err(res, 'Nota ya estaba pasada a mantenimiento');
+  await supabase.from('shift_notes').update({ pasado_a_mantenimiento: true }).eq('id', noteId);
+  return ok(res, { noteId });
 }
 
 async function apiDeleteNote(p, res) {
