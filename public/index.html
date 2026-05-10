@@ -791,6 +791,45 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Asignar tarea (ADMIN — Fase 4.5) -->
+<div class="ov" id="mAsigTarea"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">+ 📋 Asignar tarea</div>
+    <button class="mc" onclick="closeM('mAsigTarea')">✕</button>
+  </div>
+  <label>Descripción de la tarea</label>
+  <textarea id="atDesc" rows="3" placeholder="Qué tiene que hacer (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Prioridad</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="atPri" value="urgente"> 🔴 Urgente</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="atPri" value="normal" checked> 🟡 Normal</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="atPri" value="baja"> 🟢 Baja</label>
+  </div>
+  <label>Fecha objetivo (opcional)</label>
+  <input type="date" id="atFecha">
+  <label style="margin-top:8px">Asignado a</label>
+  <input type="text" id="atAsignado" value="Geovanny" placeholder="Nombre del mantenedor">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mAsigTarea')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doAsigTarea()">✓ Asignar</button>
+  </div>
+</div></div>
+
+<!-- MODAL: Anular tarea (ADMIN — Fase 4.5) -->
+<div class="ov" id="mAnularTarea"><div class="modal" style="max-width:480px">
+  <div class="mh">
+    <div class="mt">✕ Anular tarea</div>
+    <button class="mc" onclick="closeM('mAnularTarea')">✕</button>
+  </div>
+  <div id="anTareaInfo" style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:#9ca3af"></div>
+  <label>Motivo de anulación (obligatorio)</label>
+  <textarea id="anMotivo" rows="3" placeholder="Por qué se anula (mín 3 caracteres)"></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mAnularTarea')">Cancelar</button>
+    <button class="btn br" style="flex:2" onclick="doAnularTarea()">Confirmar anulación</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Rechazar arreglo (ADMIN/RECEPTION — Fase 5) -->
 <div class="ov" id="mRechazarArreglo"><div class="modal" style="max-width:480px">
   <div class="mh">
@@ -1030,11 +1069,16 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <!-- MANTENIMIENTO (admin) -->
 <div class="pnl" id="pnl-maint">
 
-<!-- NUEVO Fase 2.2: Reportar daño + lista de daños activos -->
+<!-- NUEVO Fase 2.2 + 4.5: Reportar daño + Asignar tarea + listas -->
 <div style="margin-bottom:14px">
-  <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700;margin-bottom:10px" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
+  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+    <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
+    <button class="btn ba" style="background:#3b82f6;color:#fff;font-weight:700" onclick="openAsigTarea()">+ 📋 Asignar tarea</button>
+  </div>
   <div class="sec" style="margin-top:6px">⚠️ Daños activos ahora</div>
   <div id="danosActivosCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+  <div class="sec" style="margin-top:14px">📋 Tareas asignadas a mantenedor</div>
+  <div id="tareasMantCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
 </div>
 <hr style="border-color:#2e2e3a;margin:12px 0">
 
@@ -1302,7 +1346,7 @@ function sw(id){
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
- if(id==='maint'){loadMaintMonth();loadDanosActivos();if(roomIssuesOpen)loadRoomIssuesGrid();}
+ if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
@@ -5592,6 +5636,119 @@ function doPasarAMant(){
         loadNotes();
       });
   },function(e){toast(e.message||String(e),'err');});
+}
+
+// ---- TAREAS MANTENEDOR (Fase 4.5): ADMIN asigna y anula, lista activas ----
+var _atTareaIdAnular = null;
+
+function openAsigTarea(){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  document.getElementById('atDesc').value='';
+  var radios = document.querySelectorAll('input[name="atPri"]');
+  radios.forEach(function(rd){rd.checked = (rd.value==='normal');});
+  var fechaEl = document.getElementById('atFecha');
+  if(fechaEl){
+    fechaEl.value = '';
+    fechaEl.min = new Date().toISOString().split('T')[0];
+  }
+  document.getElementById('atAsignado').value = 'Geovanny';
+  openM('mAsigTarea');
+}
+
+function doAsigTarea(){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var desc = (document.getElementById('atDesc').value||'').trim();
+  if(desc.length<3){toast('La descripción debe tener mínimo 3 caracteres','err');return;}
+  var priEl = document.querySelector('input[name="atPri"]:checked');
+  var prioridad = priEl ? priEl.value : 'normal';
+  var fecha = (document.getElementById('atFecha').value||'').trim();
+  var asignado = (document.getElementById('atAsignado').value||'').trim();
+  if(!asignado){toast('Asignado a requerido','err');return;}
+  rpc('crearTareaMant',{
+    userRole:sess.userRole, userName:sess.userName,
+    descripcion:desc, prioridad:prioridad, asignadoA:asignado, fechaObjetivo:fecha
+  }, function(){
+    toast('✓ Tarea asignada a '+asignado,'ok');
+    closeM('mAsigTarea');
+    loadTareasAdmin();
+  }, function(e){toast(e.message||String(e),'err');});
+}
+
+function loadTareasAdmin(){
+  var cont = document.getElementById('tareasMantCont');
+  if(!cont) return;
+  if(!sess){cont.innerHTML='<div style="color:#9ca3af">Sesión no iniciada.</div>';return;}
+  rpc('getTareasMant', {userRole:sess.userRole, userName:sess.userName, listAll:true}, function(d){
+    var pendientes = (d && d.pendientes) || [];
+    if(!pendientes.length){
+      cont.innerHTML='<div style="color:#9ca3af;text-align:center;padding:8px">No hay tareas asignadas pendientes.</div>';
+      return;
+    }
+    var bullets = {urgente:'🔴', normal:'🟡', baja:'🟢'};
+    var badgeBg = {urgente:'rgba(239,68,68,.15)', normal:'rgba(245,158,11,.15)', baja:'rgba(34,197,94,.15)'};
+    var badgeColor = {urgente:'#ef4444', normal:'#f59e0b', baja:'#22c55e'};
+    function fmtFecha(f){
+      if(!f) return 'Sin fecha';
+      var hoy = new Date().toISOString().split('T')[0];
+      if(f === hoy) return 'Vence HOY';
+      var d1 = new Date(f+'T00:00:00');
+      var d0 = new Date(hoy+'T00:00:00');
+      var diffDays = Math.round((d1-d0)/86400000);
+      if(diffDays < 0) return 'Vencida ('+(-diffDays)+'d)';
+      if(diffDays === 1) return 'Vence mañana';
+      return 'Vence en '+diffDays+'d';
+    }
+    var h = '';
+    pendientes.forEach(function(t){
+      var pri = t.prioridad || 'normal';
+      var bullet = bullets[pri] || '⚪';
+      var bg = badgeBg[pri] || '#22222c';
+      var col = badgeColor[pri] || '#9ca3af';
+      h += '<div style="padding:8px 0;border-bottom:1px solid #2e2e3a">';
+      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between">';
+      h += '<div style="flex:1">';
+      h += '<div style="color:#e5e7eb"><span style="font-size:14px">'+bullet+'</span> <b>'+esc(t.descripcion||'')+'</b></div>';
+      h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">Asignado a '+esc(t.asignadoA||'?')+' • '+esc(fmtFecha(t.fechaObjetivo))+'</div>';
+      h += '</div>';
+      h += '<span style="background:'+bg+';color:'+col+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;margin-left:8px;white-space:nowrap">'+pri+'</span>';
+      h += '</div>';
+      h += '<div style="display:flex;gap:6px;margin-top:6px">';
+      // Pasamos id + descripcion escapada para JS literal (escape backslash + simple-quote)
+      var descEsc = (t.descripcion||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      h += '<button class="btn br xs" style="flex:1" onclick="openAnularTarea('+t.id+',\''+esc(descEsc)+'\')">✕ Anular</button>';
+      h += '</div>';
+      h += '</div>';
+    });
+    cont.innerHTML = h;
+  }, function(e){
+    cont.innerHTML='<div style="color:#ef4444">Error: '+esc(e.message||String(e))+'</div>';
+  });
+}
+
+function openAnularTarea(tareaId, descripcion){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  _atTareaIdAnular = tareaId;
+  var info = document.getElementById('anTareaInfo');
+  if(info){
+    info.innerHTML = '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Tarea a anular</div><div style="color:#e5e7eb">'+esc(descripcion||'')+'</div>';
+  }
+  document.getElementById('anMotivo').value='';
+  openM('mAnularTarea');
+}
+
+function doAnularTarea(){
+  if(!_atTareaIdAnular){toast('Sin tarea seleccionada','err');return;}
+  var motivo = (document.getElementById('anMotivo').value||'').trim();
+  if(motivo.length<3){toast('Motivo mínimo 3 caracteres','err');return;}
+  rpc('anularTareaMant', {
+    userRole:sess.userRole, userName:sess.userName,
+    tareaId:_atTareaIdAnular, motivo:motivo
+  }, function(){
+    toast('Tarea anulada.','ok');
+    closeM('mAnularTarea');
+    _atTareaIdAnular = null;
+    loadTareasAdmin();
+  }, function(e){toast(e.message||String(e),'err');});
 }
 
 // ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
