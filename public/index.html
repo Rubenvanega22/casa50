@@ -830,6 +830,44 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Aprobar solicitud Geovanny (ADMIN) -->
+<div class="ov" id="mAprobarSolicitud"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">✓ Aprobar solicitud</div>
+    <button class="mc" onclick="closeM('mAprobarSolicitud')">✕</button>
+  </div>
+  <div id="asInfo" style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px"></div>
+  <div id="asPrioridadWrap">
+    <label>Prioridad asignada (solo daño)</label>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="asPri" value="urgente"> 🔴 Urgente</label>
+      <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="asPri" value="normal" checked> 🟡 Normal</label>
+      <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="asPri" value="baja"> 🟢 Baja</label>
+    </div>
+  </div>
+  <label>Comentario (opcional)</label>
+  <textarea id="asComentario" rows="2" placeholder="Notas para Geovanny..."></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mAprobarSolicitud')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doAprobarSolicitud()">✓ Confirmar aprobación</button>
+  </div>
+</div></div>
+
+<!-- MODAL: Rechazar solicitud Geovanny (ADMIN) -->
+<div class="ov" id="mRechazarSolicitud"><div class="modal" style="max-width:480px">
+  <div class="mh">
+    <div class="mt">✗ Rechazar solicitud</div>
+    <button class="mc" onclick="closeM('mRechazarSolicitud')">✕</button>
+  </div>
+  <div id="rsInfo" style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px"></div>
+  <label>Motivo del rechazo (obligatorio)</label>
+  <textarea id="rsMotivo" rows="3" placeholder="Por qué se rechaza (mín 3 caracteres)"></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mRechazarSolicitud')">Cancelar</button>
+    <button class="btn br" style="flex:2" onclick="doRechazarSolicitud()">Confirmar rechazo</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Marcar tarea hecha (MAINTENANCE — Fase 4.5 G3) -->
 <div class="ov" id="mCompTarea"><div class="modal" style="max-width:520px">
   <div class="mh">
@@ -1182,7 +1220,9 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
     <button class="btn ba" style="background:#3b82f6;color:#fff;font-weight:700" onclick="openAsigTarea()">+ 📋 Asignar tarea</button>
     <button class="btn ba" style="background:#a855f7;color:#fff;font-weight:700" onclick="openHistorialMant()">📚 Historial</button>
   </div>
-  <div class="sec" style="margin-top:6px">⚠️ Daños activos ahora</div>
+  <div class="sec" style="margin-top:6px;color:#f97316">📝 Solicitudes pendientes</div>
+  <div id="solicitudesAdmCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+  <div class="sec" style="margin-top:14px">⚠️ Daños activos ahora</div>
   <div id="danosActivosCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
   <div class="sec" style="margin-top:14px">📋 Tareas asignadas a mantenedor</div>
   <div id="tareasMantCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
@@ -1454,7 +1494,7 @@ function sw(id){
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
- if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();loadResumenMantHoy();if(roomIssuesOpen)loadRoomIssuesGrid();}
+ if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();loadResumenMantHoy();loadSolicitudesAdmin();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
@@ -6220,6 +6260,150 @@ function doAnularTarea(){
     closeM('mAnularTarea');
     _atTareaIdAnular = null;
     loadTareasAdmin();
+  }, function(e){toast(e.message||String(e),'err');});
+}
+
+// ---- SOLICITUDES ADM: listar pendientes, aprobar, rechazar ----
+function loadSolicitudesAdmin(){
+  var cont = document.getElementById('solicitudesAdmCont');
+  if(!cont) return;
+  if(!sess){cont.innerHTML='<div style="color:#9ca3af">Sesión no iniciada.</div>';return;}
+  rpc('getSolicitudesMant', {userRole:sess.userRole, userName:sess.userName, soloPendientes:true}, function(d){
+    window._solicitudesAdmin = d.solicitudes || [];
+    renderSolicitudesAdmin(d);
+  }, function(e){cont.innerHTML='<div style="color:#ef4444">Error: '+esc(e.message||String(e))+'</div>';});
+}
+
+function renderSolicitudesAdmin(d){
+  var cont = document.getElementById('solicitudesAdmCont');
+  if(!cont) return;
+  var solicitudes = (d && d.solicitudes) || [];
+  if(!solicitudes.length){
+    cont.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:8px">No hay solicitudes pendientes.</div>';
+    return;
+  }
+  function fmtHace(ms){
+    if(!ms) return '';
+    var diff = Date.now() - Number(ms);
+    var min = Math.round(diff/60000);
+    if(min<1) return 'recién';
+    if(min<60) return 'hace '+min+' min';
+    var hh = Math.round(min/60);
+    if(hh<24) return 'hace '+hh+' h';
+    var dd = Math.round(hh/24);
+    return 'hace '+dd+' día'+(dd===1?'':'s');
+  }
+  var h = '';
+  solicitudes.forEach(function(s){
+    var icono = s.tipoSolicitud === 'dano' ? '🔧' : '🔓';
+    var lbl = s.tipoSolicitud === 'dano' ? 'Daño' : 'Permiso';
+    var ubi = '';
+    if(s.tipoSolicitud === 'dano' && s.ubicacionId){
+      ubi = s.ubicacionTipo === 'zona_comun' ? s.ubicacionId : ('Hab '+s.ubicacionId);
+    }
+    var hace = fmtHace(s.solicitadoMs);
+    h += '<div style="padding:10px;border-bottom:1px solid #2e2e3a">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">';
+    h += '<div style="font-size:13px;color:#e5e7eb"><span style="font-size:14px">'+icono+'</span> <b>'+lbl+'</b>';
+    if(ubi) h += ' · '+esc(ubi);
+    h += '</div>';
+    h += '<span style="background:rgba(245,158,11,.15);color:#f59e0b;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;white-space:nowrap">PENDIENTE</span>';
+    h += '</div>';
+    h += '<div style="font-size:12px;color:#e5e7eb;margin-bottom:4px">'+esc(s.descripcion||'')+'</div>';
+    h += '<div style="font-size:10px;color:#9ca3af;margin-bottom:'+(s.fotoUrl?'8':'10')+'px">Solicitado por '+esc(s.solicitadoPor||'?')+(hace?' • '+hace:'')+'</div>';
+    if(s.fotoUrl){
+      h += '<div style="margin-bottom:10px"><img src="'+s.fotoUrl+'" style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid #2e2e3a;cursor:pointer" onclick="window.open(\''+s.fotoUrl+'\',\'_blank\')"></div>';
+    }
+    h += '<div style="display:flex;gap:6px">';
+    h += '<button class="btn br xs" style="flex:1" onclick="openRechazarSolicitud('+s.id+')">✗ Rechazar</button>';
+    h += '<button class="btn bg xs" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="openAprobarSolicitud('+s.id+')">✓ Aprobar</button>';
+    h += '</div>';
+    h += '</div>';
+  });
+  cont.innerHTML = h;
+}
+
+function openAprobarSolicitud(id){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var s = (window._solicitudesAdmin || []).find(function(x){return x.id===id;});
+  if(!s){toast('Solicitud no encontrada (recargá)','err');return;}
+  window._asSolicitud = s;
+  var info = document.getElementById('asInfo');
+  if(info){
+    var icono = s.tipoSolicitud === 'dano' ? '🔧' : '🔓';
+    var lbl = s.tipoSolicitud === 'dano' ? 'Daño' : 'Permiso';
+    var ubi = '';
+    if(s.tipoSolicitud === 'dano' && s.ubicacionId){
+      ubi = s.ubicacionTipo === 'zona_comun' ? s.ubicacionId : ('Hab '+s.ubicacionId);
+    }
+    var hi = '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Solicitud #'+s.id+'</div>';
+    hi += '<div style="font-size:13px;color:#e5e7eb">'+icono+' <b>'+lbl+'</b>'+(ubi?' · '+esc(ubi):'')+'</div>';
+    hi += '<div style="font-size:12px;color:#e5e7eb;margin-top:4px">'+esc(s.descripcion||'')+'</div>';
+    hi += '<div style="font-size:10px;color:#9ca3af;margin-top:4px">Solicitado por '+esc(s.solicitadoPor||'?')+'</div>';
+    info.innerHTML = hi;
+  }
+  document.getElementById('asPrioridadWrap').style.display = (s.tipoSolicitud==='dano') ? '' : 'none';
+  var radiosPri = document.querySelectorAll('input[name="asPri"]');
+  radiosPri.forEach(function(rd){ rd.checked = (rd.value === 'normal'); });
+  document.getElementById('asComentario').value = '';
+  openM('mAprobarSolicitud');
+}
+
+function doAprobarSolicitud(){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var s = window._asSolicitud;
+  if(!s){toast('Sin solicitud seleccionada','err');return;}
+  var payload = {userRole:sess.userRole, userName:sess.userName, solicitudId:s.id};
+  if(s.tipoSolicitud === 'dano'){
+    var priEl = document.querySelector('input[name="asPri"]:checked');
+    if(!priEl){toast('Seleccioná una prioridad','err');return;}
+    payload.prioridad = priEl.value;
+  }
+  var com = (document.getElementById('asComentario').value||'').trim();
+  if(com) payload.comentario = com;
+  rpc('aprobarSolicitudMant', payload, function(){
+    toast('✓ Solicitud aprobada','ok');
+    closeM('mAprobarSolicitud');
+    window._asSolicitud = null;
+    // Refresh inmediato (resuelve desync detectado en G1)
+    loadSolicitudesAdmin();
+    loadDanosActivos();
+    loadResumenMantHoy();
+  }, function(e){toast(e.message||String(e),'err');});
+}
+
+function openRechazarSolicitud(id){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var s = (window._solicitudesAdmin || []).find(function(x){return x.id===id;});
+  if(!s){toast('Solicitud no encontrada (recargá)','err');return;}
+  window._rsSolicitud = s;
+  var info = document.getElementById('rsInfo');
+  if(info){
+    var icono = s.tipoSolicitud === 'dano' ? '🔧' : '🔓';
+    var lbl = s.tipoSolicitud === 'dano' ? 'Daño' : 'Permiso';
+    var hi = '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;margin-bottom:4px">Solicitud #'+s.id+'</div>';
+    hi += '<div style="font-size:13px;color:#e5e7eb">'+icono+' <b>'+lbl+'</b></div>';
+    hi += '<div style="font-size:12px;color:#e5e7eb;margin-top:4px">'+esc(s.descripcion||'')+'</div>';
+    info.innerHTML = hi;
+  }
+  document.getElementById('rsMotivo').value = '';
+  openM('mRechazarSolicitud');
+}
+
+function doRechazarSolicitud(){
+  if(!sess || sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var s = window._rsSolicitud;
+  if(!s){toast('Sin solicitud seleccionada','err');return;}
+  var motivo = (document.getElementById('rsMotivo').value||'').trim();
+  if(motivo.length<3){toast('Motivo mín 3 caracteres','err');return;}
+  rpc('rechazarSolicitudMant', {
+    userRole: sess.userRole, userName: sess.userName,
+    solicitudId: s.id, motivo: motivo
+  }, function(){
+    toast('Solicitud rechazada','ok');
+    closeM('mRechazarSolicitud');
+    window._rsSolicitud = null;
+    loadSolicitudesAdmin();
   }, function(e){toast(e.message||String(e),'err');});
 }
 
