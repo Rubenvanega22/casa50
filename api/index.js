@@ -220,6 +220,10 @@ module.exports = async function handler(req, res) {
       case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
       case 'verificarArreglo':  return await apiVerificarArreglo(payload, res);
       case 'rechazarArreglo':   return await apiRechazarArreglo(payload, res);
+      case 'crearTareaMant':    return await apiCrearTareaMant(payload, res);
+      case 'getTareasMant':     return await apiGetTareasMant(payload, res);
+      case 'completarTareaMant':return await apiCompletarTareaMant(payload, res);
+      case 'anularTareaMant':   return await apiAnularTareaMant(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -2683,6 +2687,167 @@ async function apiRechazarArreglo(p, res) {
   }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, estado: 'RECHAZADO_VERIFICACION' });
+}
+
+// ==================== TAREAS MANTENEDOR (Fase 4.5) ====================
+// Tabla mantenimiento_tareas: tareas planificadas asignadas al mantenedor
+// (separadas de los danos reactivos en room_issues).
+// Estados: pendiente -> hecha (al completar). ADMIN puede anular -> anulada.
+
+async function apiCrearTareaMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const descripcion = String(p.descripcion||'').trim();
+  if(descripcion.length < 3) return err(res, 'Descripcion minima 3 caracteres');
+
+  const prioridad = String(p.prioridad||'').toLowerCase().trim();
+  if(!['urgente','normal','baja'].includes(prioridad)) return err(res, 'Prioridad requerida (urgente, normal o baja)');
+
+  const asignadoA = String(p.asignadoA||'').trim();
+  if(!asignadoA) return err(res, 'Asignado_a requerido');
+
+  // fecha_objetivo opcional. Si viene, debe ser YYYY-MM-DD y >= today.
+  const fechaInput = String(p.fechaObjetivo||'').trim();
+  let fechaObjetivo = null;
+  if(fechaInput){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaInput)) return err(res, 'fecha_objetivo formato invalido (YYYY-MM-DD)');
+    const today = new Date().toISOString().split('T')[0];
+    if(fechaInput < today) return err(res, 'fecha_objetivo no puede ser pasada');
+    fechaObjetivo = fechaInput;
+  }
+
+  const now = Date.now();
+  const { data: inserted, error } = await supabase.from('mantenimiento_tareas').insert({
+    descripcion: descripcion,
+    prioridad: prioridad,
+    asignado_a: asignadoA,
+    fecha_objetivo: fechaObjetivo,
+    estado: 'pendiente',
+    creado_por: userName,
+    creado_por_rol: 'ADMIN',
+    creado_ms: now
+  }).select().single();
+
+  if(error) return err(res, 'Error al crear tarea: '+error.message);
+  return ok(res, { id: inserted.id, estado: 'pendiente' });
+}
+
+async function apiGetTareasMant(p, res) {
+  // MAINTENANCE ve sus propias tareas. ADMIN puede listar todas pasando listAll=true.
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['MAINTENANCE','ADMIN'].includes(userRole)) return err(res, 'Sin permiso');
+  const userName = String(p.userName||'').trim();
+
+  let query = supabase.from('mantenimiento_tareas').select('*');
+  if(userRole === 'MAINTENANCE'){
+    if(!userName) return err(res, 'Usuario requerido');
+    query = query.eq('asignado_a', userName);
+  } else if(p.listAll !== true && userName){
+    // ADMIN sin listAll explicito -> filtra por nombre tambien
+    query = query.eq('asignado_a', userName);
+  }
+  query = query.in('estado', ['pendiente','hecha']);
+  query = query.order('estado', {ascending: true})
+               .order('fecha_objetivo', {ascending: true, nullsFirst: false})
+               .order('creado_ms', {ascending: false});
+
+  const { data, error } = await query;
+  if(error) return err(res, 'Error consultando tareas: '+error.message);
+
+  const today = new Date().toISOString().split('T')[0];
+  const inicioHoy = new Date(today+'T00:00:00').getTime();
+  const finHoy = inicioHoy + 86400000;
+
+  const tareas = (data||[]).map(function(t){
+    return {
+      id: t.id,
+      descripcion: t.descripcion || '',
+      prioridad: t.prioridad,
+      asignadoA: t.asignado_a || '',
+      fechaObjetivo: t.fecha_objetivo || null,
+      estado: t.estado,
+      creadoPor: t.creado_por || '',
+      creadoMs: Number(t.creado_ms || 0),
+      completadoPor: t.completado_por || null,
+      completadoMs: Number(t.completado_ms || 0),
+      completadoNota: t.completado_nota || null,
+      fotoCompletadoUrl: t.foto_completado_url || null
+    };
+  });
+
+  const pendientes = tareas.filter(function(t){return t.estado==='pendiente';});
+  const hechasHoy = tareas.filter(function(t){return t.estado==='hecha' && t.completadoMs>=inicioHoy && t.completadoMs<finHoy;});
+
+  return ok(res, {
+    pendientes: pendientes,
+    hechasHoy: hechasHoy,
+    contadores: {
+      pendientes: pendientes.length,
+      urgentesPendientes: pendientes.filter(function(t){return t.prioridad==='urgente';}).length,
+      hechasHoy: hechasHoy.length
+    }
+  });
+}
+
+async function apiCompletarTareaMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE') return err(res, 'Solo MAINTENANCE');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const tareaId = Number(p.tareaId || 0);
+  if(!tareaId) return err(res, 'tareaId requerido');
+
+  const nota = String(p.nota || '').trim();
+  if(nota.length < 3) return err(res, 'Nota minima 3 caracteres (obligatoria)');
+
+  const fotoUrl = String(p.fotoCompletadoUrl || '').trim() || null;
+
+  const { data: tarea } = await supabase.from('mantenimiento_tareas').select('*').eq('id', tareaId).single();
+  if(!tarea) return err(res, 'Tarea no existe');
+  if(tarea.estado !== 'pendiente') return err(res, 'Tarea no esta pendiente (estado: '+tarea.estado+')');
+  if(tarea.asignado_a !== userName) return err(res, 'Esta tarea no esta asignada a vos');
+
+  const now = Date.now();
+  await supabase.from('mantenimiento_tareas').update({
+    estado: 'hecha',
+    completado_por: userName,
+    completado_ms: now,
+    completado_nota: nota,
+    foto_completado_url: fotoUrl
+  }).eq('id', tareaId);
+
+  return ok(res, { id: tareaId, estado: 'hecha', completadoMs: now });
+}
+
+async function apiAnularTareaMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const tareaId = Number(p.tareaId || 0);
+  if(!tareaId) return err(res, 'tareaId requerido');
+
+  const motivo = String(p.motivo || '').trim();
+  if(motivo.length < 3) return err(res, 'Motivo de anulacion minimo 3 caracteres');
+
+  const { data: tarea } = await supabase.from('mantenimiento_tareas').select('estado').eq('id', tareaId).single();
+  if(!tarea) return err(res, 'Tarea no existe');
+  if(tarea.estado === 'anulada') return err(res, 'Tarea ya estaba anulada');
+
+  const now = Date.now();
+  await supabase.from('mantenimiento_tareas').update({
+    estado: 'anulada',
+    anulada_por: userName,
+    anulada_ms: now,
+    motivo_anulacion: motivo
+  }).eq('id', tareaId);
+
+  return ok(res, { id: tareaId, estado: 'anulada' });
 }
 
 // ==================== PROYECCION ====================
