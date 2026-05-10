@@ -7590,24 +7590,26 @@ function renderInfoMes(d){
   // PANEL IZQUIERDA - Habitaciones más dañadas
   h+='<div style="background:#0a0a14;border:0.5px solid #2e2e3a;border-radius:10px;padding:14px">';
   h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:4px">🔧 Habitaciones más dañadas</div>';
-  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Mes en curso · # reportes · costo</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Mes en curso · # reportes</div>';
   if(!habsDanadas.length){
     h+='<div style="background:rgba(34,197,94,.06);border:0.5px solid rgba(34,197,94,.2);border-radius:8px;padding:14px;text-align:center;font-size:12px;color:#86efac">✓ Sin reportes de daños este mes</div>';
   } else {
+    var maxCount = habsDanadas[0].count || 1;
     habsDanadas.slice(0,5).forEach(function(r,i){
-      var bg=i===0?'rgba(239,68,68,.08)':'transparent';
-      var roomColor=i===0?'#ef4444':'#e5e7eb';
-      var countColor=i===0?'#ef4444':'#e5e7eb';
-      h+='<div style="display:flex;align-items:center;gap:8px;padding:8px;background:'+bg+';border-radius:6px;margin-bottom:4px">';
-      h+='<div style="font-size:13px;font-weight:700;color:'+roomColor+';min-width:42px">'+esc(String(r.roomId))+'</div>';
-      h+='<div style="flex:1;min-width:0">';
-      h+='<div style="font-size:11px;color:#9ca3af">';
-      h+=r.totalCosto>0?(fmt(r.totalCosto)+' en reparaciones'):'sin costos registrados';
+      var pct = Math.round((r.count / maxCount) * 100);
+      var barColor;
+      if(pct > 50) barColor = '#ef4444';      // rojo
+      else if(pct > 25) barColor = '#f59e0b'; // amarillo
+      else barColor = '#22c55e';              // verde
+      var bgRow = i===0 ? 'rgba(239,68,68,.08)' : 'transparent';
+      var roomColor = i===0 ? '#ef4444' : '#e5e7eb';
+      h+='<div style="padding:8px;background:'+bgRow+';border-radius:6px;margin-bottom:4px">';
+      h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+      h+='<div style="font-size:13px;font-weight:700;color:'+roomColor+'">Hab '+esc(String(r.roomId))+'</div>';
+      h+='<div style="font-size:11px;color:#9ca3af"><b style="color:'+barColor+'">'+r.count+'</b> '+(r.count===1?'reporte':'reportes')+'</div>';
       h+='</div>';
-      h+='</div>';
-      h+='<div style="text-align:right">';
-      h+='<div style="font-size:13px;font-weight:700;color:'+countColor+'">'+r.count+'</div>';
-      h+='<div style="font-size:9px;color:#9ca3af">'+(r.count===1?'reporte':'reportes')+'</div>';
+      h+='<div style="background:#22222c;border-radius:4px;height:8px;overflow:hidden">';
+      h+='<div style="background:'+barColor+';height:100%;width:'+pct+'%;border-radius:4px"></div>';
       h+='</div>';
       h+='</div>';
     });
