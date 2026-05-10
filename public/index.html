@@ -851,6 +851,37 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Historial Mantenimiento (ADMIN/RECEPTION — Fase 7.1) -->
+<div class="ov" id="mHistorialMant"><div class="modal" style="max-width:760px;max-height:92vh;overflow-y:auto">
+  <div class="mh">
+    <div class="mt">📚 Historial de Mantenimiento</div>
+    <button class="mc" onclick="closeM('mHistorialMant')">✕</button>
+  </div>
+  <div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+      <div><label style="font-size:10px;color:#9ca3af">Desde</label><input type="date" id="hmDesde"></div>
+      <div><label style="font-size:10px;color:#9ca3af">Hasta</label><input type="date" id="hmHasta"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px">
+      <div><label style="font-size:10px;color:#9ca3af">Tipo</label><select id="hmTipo"><option value="todos">Todos</option><option value="danos">Solo daños</option><option value="tareas">Solo tareas</option></select></div>
+      <div><label style="font-size:10px;color:#9ca3af">Mantenedor</label><input type="text" id="hmMantenedor" placeholder="Ej: Geovanny"></div>
+      <div><label style="font-size:10px;color:#9ca3af">Ubicación</label><input type="text" id="hmUbicacion" placeholder="Ej: 401, Bar"></div>
+    </div>
+    <button class="btn ba" style="width:100%;margin-top:6px" onclick="loadHistorialMant()">🔄 Buscar</button>
+  </div>
+  <div id="hmResumen" style="font-size:11px;color:#9ca3af;margin-bottom:8px;text-align:center"></div>
+  <div id="hmLista" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:8px;font-size:12px;color:#9ca3af">Cargando...</div>
+</div></div>
+
+<!-- MODAL: Detalle item historial (Fase 7.1) -->
+<div class="ov" id="mHistDetalle"><div class="modal" style="max-width:680px;max-height:92vh;overflow-y:auto">
+  <div class="mh">
+    <div class="mt" id="hdTitulo">📚 Detalle</div>
+    <button class="mc" onclick="closeM('mHistDetalle')">✕</button>
+  </div>
+  <div id="hdBody" style="font-size:13px"></div>
+</div></div>
+
 <!-- MODAL: Rechazar arreglo (ADMIN/RECEPTION — Fase 5) -->
 <div class="ov" id="mRechazarArreglo"><div class="modal" style="max-width:480px">
   <div class="mh">
@@ -1095,6 +1126,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
     <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
     <button class="btn ba" style="background:#3b82f6;color:#fff;font-weight:700" onclick="openAsigTarea()">+ 📋 Asignar tarea</button>
+    <button class="btn ba" style="background:#a855f7;color:#fff;font-weight:700" onclick="openHistorialMant()">📚 Historial</button>
   </div>
   <div class="sec" style="margin-top:6px">⚠️ Daños activos ahora</div>
   <div id="danosActivosCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
@@ -5899,6 +5931,173 @@ function doAnularTarea(){
     _atTareaIdAnular = null;
     loadTareasAdmin();
   }, function(e){toast(e.message||String(e),'err');});
+}
+
+// ---- HISTORIAL MANTENIMIENTO (Fase 7.1): ADMIN/RECEPTION ven daños verificados + tareas hechas ----
+function openHistorialMant(){
+  if(!sess || (sess.userRole!=='ADMIN' && sess.userRole!=='RECEPTION')){
+    toast('Solo ADMIN o Recepcion','err');
+    return;
+  }
+  var hoy = new Date().toISOString().split('T')[0];
+  var hace30 = new Date(Date.now()-30*86400000).toISOString().split('T')[0];
+  document.getElementById('hmDesde').value = hace30;
+  document.getElementById('hmHasta').value = hoy;
+  document.getElementById('hmTipo').value = 'todos';
+  document.getElementById('hmMantenedor').value = '';
+  document.getElementById('hmUbicacion').value = '';
+  document.getElementById('hmResumen').textContent = '';
+  document.getElementById('hmLista').innerHTML = '<div style="text-align:center;padding:20px">Cargando...</div>';
+  openM('mHistorialMant');
+  loadHistorialMant();
+}
+
+function loadHistorialMant(){
+  var desde = document.getElementById('hmDesde').value;
+  var hasta = document.getElementById('hmHasta').value;
+  var tipo = document.getElementById('hmTipo').value;
+  var mantenedor = (document.getElementById('hmMantenedor').value||'').trim();
+  var ubicacion = (document.getElementById('hmUbicacion').value||'').trim();
+  var lista = document.getElementById('hmLista');
+  if(lista) lista.innerHTML = '<div style="text-align:center;padding:20px">Cargando...</div>';
+  rpc('getHistorialMant', {
+    userRole: sess.userRole, userName: sess.userName,
+    desde: desde, hasta: hasta, tipo: tipo,
+    mantenedor: mantenedor, ubicacion: ubicacion
+  }, function(d){
+    window._histItems = d.items || [];
+    renderHistorialMant(d);
+  }, function(e){
+    if(lista) lista.innerHTML = '<div style="color:#ef4444;padding:16px">Error: '+esc(e.message||String(e))+'</div>';
+  });
+}
+
+function renderHistorialMant(d){
+  var lista = document.getElementById('hmLista');
+  var resumen = document.getElementById('hmResumen');
+  if(!lista) return;
+  var items = d.items || [];
+  var c = d.contadores || {};
+  if(resumen){
+    resumen.textContent = (c.total||0)+' items · '+(c.danos||0)+' daños · '+(c.tareas||0)+' tareas';
+  }
+  if(!items.length){
+    lista.innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af">Sin resultados con esos filtros.</div>';
+    return;
+  }
+  function fmtFechaCorta(ms){
+    if(!ms) return '';
+    var dd = new Date(Number(ms));
+    return dd.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})+' '+dd.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  }
+  var bullets = {urgente:'🔴', normal:'🟡', baja:'🟢'};
+  var h = '';
+  items.forEach(function(it){
+    var pri = it.prioridad || 'normal';
+    var bullet = bullets[pri] || '⚪';
+    var icono = it.tipo === 'dano' ? '🔧' : '📋';
+    var titulo = it.tipo === 'dano'
+      ? (it.ubicacionTipo === 'zona_comun' ? it.ubicacionId : 'Hab '+it.ubicacionId)
+      : it.descripcion;
+    var subtitulo = it.tipo === 'dano' ? it.descripcion : ('Tarea — '+(it.fechaObjetivo||'sin fecha'));
+    var quien = it.tipo === 'dano' ? it.arregladoPor : it.completadoPor;
+    h += '<div style="padding:10px;border-bottom:1px solid #2e2e3a;cursor:pointer" onclick="openHistDetalle(\''+it.tipo+'\','+it.id+')">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+    h += '<div style="flex:1">';
+    h += '<div style="color:#e5e7eb;font-size:13px">'+icono+' '+bullet+' <b>'+esc(titulo)+'</b></div>';
+    h += '<div style="font-size:11px;color:#9ca3af;margin-top:2px">'+esc(subtitulo)+'</div>';
+    h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">Por '+esc(quien||'?')+' · '+fmtFechaCorta(it.sortMs)+'</div>';
+    h += '</div>';
+    h += '<div style="color:#9ca3af;font-size:14px">▶</div>';
+    h += '</div>';
+    h += '</div>';
+  });
+  lista.innerHTML = h;
+}
+
+function openHistDetalle(tipo, id){
+  var items = window._histItems || [];
+  var it = items.find(function(x){return x.tipo===tipo && x.id===id;});
+  if(!it){toast('Item no encontrado','err');return;}
+  function fmtFecha(ms){
+    if(!ms) return 'Sin fecha';
+    var dd = new Date(Number(ms));
+    return dd.toLocaleDateString('es-CO')+' '+dd.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  }
+  function fmtDuracion(ms){
+    if(!ms || ms<=0) return '—';
+    var min = Math.round(ms/60000);
+    if(min<60) return min+' min';
+    var hh = Math.floor(min/60);
+    var m = min%60;
+    return hh+'h'+(m>0?' '+m+'min':'');
+  }
+  var bullets = {urgente:'🔴', normal:'🟡', baja:'🟢'};
+  var pri = it.prioridad || 'normal';
+  var bullet = bullets[pri] || '⚪';
+  var titulo, body = '';
+  if(tipo === 'dano'){
+    var ubi = it.ubicacionTipo === 'zona_comun' ? it.ubicacionId : 'Hab '+it.ubicacionId;
+    titulo = '🔧 '+ubi+' — '+pri.toUpperCase();
+    body += '<div style="padding:6px 0;font-size:14px;color:#e5e7eb">'+bullet+' <b>'+esc(it.descripcion||'')+'</b></div>';
+    body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0">';
+    body += '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Antes</div>';
+    if(it.fotoDanoUrl){
+      body += '<img src="'+it.fotoDanoUrl+'" style="width:100%;max-height:240px;border-radius:6px;border:1px solid #2e2e3a;cursor:pointer" onclick="window.open(\''+it.fotoDanoUrl+'\',\'_blank\')">';
+    } else {
+      body += '<div style="background:#22222c;border-radius:6px;padding:30px 8px;text-align:center;color:#9ca3af;font-size:11px">Sin foto del daño</div>';
+    }
+    body += '</div><div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Después</div>';
+    if(it.fotoArregloUrl){
+      body += '<img src="'+it.fotoArregloUrl+'" style="width:100%;max-height:240px;border-radius:6px;border:1px solid #2e2e3a;cursor:pointer" onclick="window.open(\''+it.fotoArregloUrl+'\',\'_blank\')">';
+    } else {
+      body += '<div style="background:#22222c;border-radius:6px;padding:30px 8px;text-align:center;color:#9ca3af;font-size:11px">Sin foto del arreglo</div>';
+    }
+    body += '</div></div>';
+    body += '<div style="background:#22222c;border-radius:8px;padding:10px;font-size:12px">';
+    body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+    body += '<div><span style="color:#9ca3af">Reportado por:</span> <b>'+esc(it.reportadoPor||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha reporte:</span> '+fmtFecha(it.reportadoMs)+'</div>';
+    body += '<div><span style="color:#9ca3af">Aprobado por:</span> <b>'+esc(it.aprobadoPor||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha aprobación:</span> '+fmtFecha(it.aprobadoMs)+'</div>';
+    body += '<div><span style="color:#9ca3af">Arreglado por:</span> <b>'+esc(it.arregladoPor||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha arreglo:</span> '+fmtFecha(it.arregladoMs)+'</div>';
+    body += '<div><span style="color:#9ca3af">Verificado por:</span> <b>'+esc(it.verificadoPor||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha verificación:</span> '+fmtFecha(it.verificadoMs)+'</div>';
+    body += '<div><span style="color:#9ca3af">Tiempo trabajo:</span> <b>'+fmtDuracion(it.tiempoTrabajoMs)+'</b></div>';
+    body += '</div>';
+    if(it.arregloNota){
+      body += '<div style="margin-top:8px;border-top:1px solid #2e2e3a;padding-top:8px"><div style="color:#9ca3af;font-size:10px;text-transform:uppercase;margin-bottom:4px">Nota del arreglo</div><div style="color:#e5e7eb">'+esc(it.arregloNota)+'</div></div>';
+    }
+    body += '</div>';
+  } else {
+    titulo = '📋 '+(it.descripcion||'').slice(0,40)+' — '+pri.toUpperCase();
+    body += '<div style="padding:6px 0;font-size:14px;color:#e5e7eb">'+bullet+' <b>'+esc(it.descripcion||'')+'</b></div>';
+    body += '<div style="margin:10px 0">';
+    body += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Foto del trabajo</div>';
+    if(it.fotoCompletadoUrl){
+      body += '<img src="'+it.fotoCompletadoUrl+'" style="max-width:100%;max-height:300px;border-radius:6px;border:1px solid #2e2e3a;cursor:pointer" onclick="window.open(\''+it.fotoCompletadoUrl+'\',\'_blank\')">';
+    } else {
+      body += '<div style="background:#22222c;border-radius:6px;padding:30px 8px;text-align:center;color:#9ca3af;font-size:11px">Sin foto del trabajo</div>';
+    }
+    body += '</div>';
+    body += '<div style="background:#22222c;border-radius:8px;padding:10px;font-size:12px">';
+    body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+    body += '<div><span style="color:#9ca3af">Asignado a:</span> <b>'+esc(it.asignadoA||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha objetivo:</span> '+(it.fechaObjetivo||'Sin fecha')+'</div>';
+    body += '<div><span style="color:#9ca3af">Creado por:</span> <b>'+esc(it.creadoPor||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha creación:</span> '+fmtFecha(it.creadoMs)+'</div>';
+    body += '<div><span style="color:#9ca3af">Completado por:</span> <b>'+esc(it.completadoPor||'?')+'</b></div>';
+    body += '<div><span style="color:#9ca3af">Fecha completado:</span> '+fmtFecha(it.completadoMs)+'</div>';
+    body += '</div>';
+    if(it.completadoNota){
+      body += '<div style="margin-top:8px;border-top:1px solid #2e2e3a;padding-top:8px"><div style="color:#9ca3af;font-size:10px;text-transform:uppercase;margin-bottom:4px">Nota del trabajo</div><div style="color:#e5e7eb">'+esc(it.completadoNota)+'</div></div>';
+    }
+    body += '</div>';
+  }
+  document.getElementById('hdTitulo').textContent = titulo;
+  document.getElementById('hdBody').innerHTML = body;
+  openM('mHistDetalle');
 }
 
 // ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
