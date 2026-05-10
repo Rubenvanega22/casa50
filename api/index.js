@@ -226,6 +226,10 @@ module.exports = async function handler(req, res) {
       case 'anularTareaMant':   return await apiAnularTareaMant(payload, res);
       case 'getHistorialMant':  return await apiGetHistorialMant(payload, res);
       case 'getResumenMantHoy': return await apiGetResumenMantHoy(payload, res);
+      case 'crearSolicitudMant':  return await apiCrearSolicitudMant(payload, res);
+      case 'getSolicitudesMant':  return await apiGetSolicitudesMant(payload, res);
+      case 'aprobarSolicitudMant':return await apiAprobarSolicitudMant(payload, res);
+      case 'rechazarSolicitudMant':return await apiRechazarSolicitudMant(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -3005,6 +3009,211 @@ async function apiGetResumenMantHoy(p, res) {
     pendientesMant: pendientesMant,
     hechosHoy: (verifHoyData||[]).length + (tareasHoyData||[]).length
   });
+}
+
+// ==================== SOLICITUDES GEOVANNY → ADM ====================
+// Don Geovanny puede solicitar 2 cosas: reportar un dano (que ADM aprueba con
+// prioridad y se convierte en room_issues) o pedir permiso (ADM aprueba/rechaza).
+
+async function apiCrearSolicitudMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE') return err(res, 'Solo MAINTENANCE');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const tipo = String(p.tipoSolicitud||'').toLowerCase().trim();
+  if(!['dano','permiso'].includes(tipo)) return err(res, 'tipoSolicitud invalido (dano o permiso)');
+
+  const descripcion = String(p.descripcion||'').trim();
+  if(descripcion.length < 3) return err(res, 'Descripcion minima 3 caracteres');
+
+  // Solo daños llevan ubicacion
+  let ubicacionTipo = null;
+  let ubicacionId = null;
+  if(tipo === 'dano'){
+    ubicacionTipo = String(p.ubicacionTipo||'').toLowerCase().trim();
+    if(!['habitacion','zona_comun'].includes(ubicacionTipo)) return err(res, 'ubicacionTipo invalido para tipo=dano');
+    ubicacionId = String(p.ubicacionId||'').trim();
+    if(!ubicacionId) return err(res, 'ubicacionId requerido para tipo=dano');
+  }
+
+  const fotoUrl = String(p.fotoUrl||'').trim() || null;
+  const now = Date.now();
+
+  const { data: inserted, error } = await supabase.from('mantenimiento_solicitudes').insert({
+    tipo_solicitud: tipo,
+    ubicacion_tipo: ubicacionTipo,
+    ubicacion_id: ubicacionId,
+    descripcion: descripcion,
+    foto_url: fotoUrl,
+    estado: 'pendiente',
+    solicitado_por: userName,
+    solicitado_ms: now
+  }).select().single();
+
+  if(error) return err(res, 'Error al crear solicitud: '+error.message);
+  return ok(res, { id: inserted.id, estado: 'pendiente' });
+}
+
+async function apiGetSolicitudesMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['MAINTENANCE','ADMIN'].includes(userRole)) return err(res, 'Sin permiso');
+  const userName = String(p.userName||'').trim();
+
+  let query = supabase.from('mantenimiento_solicitudes').select('*');
+
+  if(userRole === 'MAINTENANCE'){
+    if(!userName) return err(res, 'Usuario requerido');
+    query = query.eq('solicitado_por', userName)
+                 .order('solicitado_ms', {ascending: false})
+                 .limit(30);
+  } else {
+    // ADMIN: por default ve pendientes + ultimas 20 resueltas
+    if(p.soloPendientes === true){
+      query = query.eq('estado', 'pendiente')
+                   .order('solicitado_ms', {ascending: false});
+    } else {
+      query = query.order('solicitado_ms', {ascending: false}).limit(50);
+    }
+  }
+
+  const { data, error } = await query;
+  if(error) return err(res, 'Error consultando solicitudes: '+error.message);
+
+  const solicitudes = (data||[]).map(function(s){
+    return {
+      id: s.id,
+      tipoSolicitud: s.tipo_solicitud,
+      ubicacionTipo: s.ubicacion_tipo,
+      ubicacionId: s.ubicacion_id,
+      descripcion: s.descripcion || '',
+      fotoUrl: s.foto_url || null,
+      estado: s.estado,
+      solicitadoPor: s.solicitado_por || '',
+      solicitadoMs: Number(s.solicitado_ms || 0),
+      resueltoPor: s.resuelto_por || null,
+      resueltoMs: Number(s.resuelto_ms || 0),
+      motivoRechazo: s.motivo_rechazo || null,
+      comentarioAdm: s.comentario_adm || null,
+      prioridadAsignada: s.prioridad_asignada || null,
+      roomIssueId: s.room_issue_id || null
+    };
+  });
+
+  const contadores = {
+    pendientes: solicitudes.filter(function(s){return s.estado==='pendiente';}).length,
+    aprobadas: solicitudes.filter(function(s){return s.estado==='aprobada';}).length,
+    rechazadas: solicitudes.filter(function(s){return s.estado==='rechazada';}).length
+  };
+
+  return ok(res, { solicitudes: solicitudes, contadores: contadores });
+}
+
+async function apiAprobarSolicitudMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const solicitudId = Number(p.solicitudId || 0);
+  if(!solicitudId) return err(res, 'solicitudId requerido');
+
+  const { data: sol } = await supabase.from('mantenimiento_solicitudes').select('*').eq('id', solicitudId).single();
+  if(!sol) return err(res, 'Solicitud no existe');
+  if(sol.estado !== 'pendiente') return err(res, 'Solicitud no esta pendiente (estado: '+sol.estado+')');
+
+  const now = Date.now();
+  const comentario = String(p.comentario||'').trim() || null;
+
+  if(sol.tipo_solicitud === 'dano'){
+    // Aprobar daño: crear room_issues con prioridad asignada por ADM
+    const prioridad = String(p.prioridad||'').toLowerCase().trim();
+    if(!['urgente','normal','baja'].includes(prioridad)) return err(res, 'Prioridad requerida (urgente/normal/baja)');
+
+    // 1 reporte activo por ubicacion (regla del modulo)
+    const estadosActivos = ['PENDIENTE_RECEPCION','NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
+    const { data: existentes } = await supabase.from('room_issues')
+      .select('id, estado')
+      .eq('anulada', false)
+      .eq('ubicacion_tipo', sol.ubicacion_tipo)
+      .eq('ubicacion_id', sol.ubicacion_id)
+      .in('estado', estadosActivos);
+    if(existentes && existentes.length > 0){
+      return err(res, 'Ya hay un daño activo en esa ubicacion (estado: '+existentes[0].estado+')');
+    }
+
+    const bDay = businessDay(now);
+    const shift = currentShiftId(now);
+
+    const { data: insertedDano, error: errDano } = await supabase.from('room_issues').insert({
+      room_id: (sol.ubicacion_tipo === 'habitacion') ? sol.ubicacion_id : '',
+      type: 'dano',
+      description: sol.descripcion,
+      resolved: false,
+      created_by: sol.solicitado_por,
+      estado: 'NOTA_ACTIVA',
+      prioridad: prioridad,
+      reportado_por_rol: 'MAINTENANCE',
+      reportado_ms: Number(sol.solicitado_ms || now),
+      business_day: bDay,
+      shift_id: shift,
+      foto_dano_url: sol.foto_url,
+      ubicacion_tipo: sol.ubicacion_tipo,
+      ubicacion_id: sol.ubicacion_id,
+      aprobado_por: userName,
+      aprobado_ms: now,
+      anulada: false,
+      editada: false
+    }).select().single();
+    if(errDano) return err(res, 'Error creando daño: '+errDano.message);
+
+    await supabase.from('mantenimiento_solicitudes').update({
+      estado: 'aprobada',
+      resuelto_por: userName,
+      resuelto_ms: now,
+      prioridad_asignada: prioridad,
+      room_issue_id: insertedDano.id,
+      comentario_adm: comentario
+    }).eq('id', solicitudId);
+
+    return ok(res, { id: solicitudId, estado: 'aprobada', roomIssueId: insertedDano.id });
+  } else {
+    // Aprobar permiso: solo update solicitud
+    await supabase.from('mantenimiento_solicitudes').update({
+      estado: 'aprobada',
+      resuelto_por: userName,
+      resuelto_ms: now,
+      comentario_adm: comentario
+    }).eq('id', solicitudId);
+    return ok(res, { id: solicitudId, estado: 'aprobada' });
+  }
+}
+
+async function apiRechazarSolicitudMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const solicitudId = Number(p.solicitudId || 0);
+  if(!solicitudId) return err(res, 'solicitudId requerido');
+
+  const motivo = String(p.motivo || '').trim();
+  if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
+
+  const { data: sol } = await supabase.from('mantenimiento_solicitudes').select('estado').eq('id', solicitudId).single();
+  if(!sol) return err(res, 'Solicitud no existe');
+  if(sol.estado !== 'pendiente') return err(res, 'Solicitud no esta pendiente (estado: '+sol.estado+')');
+
+  const now = Date.now();
+  await supabase.from('mantenimiento_solicitudes').update({
+    estado: 'rechazada',
+    resuelto_por: userName,
+    resuelto_ms: now,
+    motivo_rechazo: motivo
+  }).eq('id', solicitudId);
+
+  return ok(res, { id: solicitudId, estado: 'rechazada' });
 }
 
 // ==================== PROYECCION ====================
