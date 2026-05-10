@@ -830,6 +830,27 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Marcar tarea hecha (MAINTENANCE — Fase 4.5 G3) -->
+<div class="ov" id="mCompTarea"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt" id="ctTitulo">✓ Marcar tarea hecha</div>
+    <button class="mc" onclick="closeM('mCompTarea')">✕</button>
+  </div>
+  <div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">
+    <div style="color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Tarea <span id="ctPrioridad" style="font-weight:700">NORMAL</span></div>
+    <div id="ctDesc" style="color:#e5e7eb;margin-bottom:4px"></div>
+    <div id="ctFecha" style="font-size:10px;color:#9ca3af"></div>
+  </div>
+  <label>Nota del trabajo (obligatoria)</label>
+  <textarea id="ctNota" rows="3" placeholder="Qué hiciste, materiales usados, etc. (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Foto del trabajo (opcional)</label>
+  <input type="file" id="ctFoto" accept="image/*" capture="environment">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mCompTarea')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doCompTarea()">✓ Confirmar</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Rechazar arreglo (ADMIN/RECEPTION — Fase 5) -->
 <div class="ov" id="mRechazarArreglo"><div class="modal" style="max-width:480px">
   <div class="mh">
@@ -5328,20 +5349,41 @@ function loadMisDanos(){
   if(!el)return;
   if(!sess||sess.userRole!=='MAINTENANCE'){el.innerHTML='<div style="color:#ef4444">Acceso solo MAINTENANCE</div>';return;}
   el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af">Cargando...</div>';
+  // Fase 4.5 G3: 2 RPCs en paralelo (danos + tareas)
+  var resultDanos = null, resultTareas = null;
+  function maybeRender(){
+    if(resultDanos !== null && resultTareas !== null){
+      window._misDanos = resultDanos;
+      window._misTareas = resultTareas;
+      renderMisDanos(resultDanos, resultTareas);
+    }
+  }
   rpc('getMisDanos',{userRole:sess.userRole, userName:sess.userName}, function(d){
-    window._misDanos = d;
-    renderMisDanos(d);
+    resultDanos = d || {contadores:{}, reportes:[]};
+    maybeRender();
   }, function(e){
-    el.innerHTML='<div style="color:#ef4444;padding:16px">Error: '+esc(e.message||String(e))+'</div>';
+    resultDanos = {contadores:{}, reportes:[], _err: e.message||String(e)};
+    maybeRender();
+  });
+  rpc('getTareasMant',{userRole:sess.userRole, userName:sess.userName}, function(d){
+    resultTareas = d || {contadores:{}, pendientes:[]};
+    maybeRender();
+  }, function(e){
+    resultTareas = {contadores:{}, pendientes:[], _err: e.message||String(e)};
+    maybeRender();
   });
 }
 
-function renderMisDanos(d){
+function renderMisDanos(d, dTareas){
   var el=document.getElementById('misDanosCont');
   if(!el)return;
   var c=d.contadores||{urgentes:0,normales:0,bajas:0,terminadosHoy:0};
+  var cT=(dTareas&&dTareas.contadores)||{pendientes:0,urgentesPendientes:0,hechasHoy:0};
   var reportes=d.reportes||[];
+  var tareasPend=(dTareas&&dTareas.pendientes)||[];
   var totalActivos=reportes.length;
+  var totalTareas=tareasPend.length;
+  var hechosHoyCombinado=(c.terminadosHoy||0)+(cT.hechasHoy||0);
 
   function fmtHace(ms){
     if(!ms)return '';
@@ -5355,10 +5397,24 @@ function renderMisDanos(d){
     return 'hace '+dd+' día'+(dd===1?'':'s');
   }
 
+  function fmtFechaTarea(f){
+    if(!f) return 'Sin fecha';
+    var hoy = new Date().toISOString().split('T')[0];
+    if(f === hoy) return 'Vence HOY';
+    var d1 = new Date(f+'T00:00:00');
+    var d0 = new Date(hoy+'T00:00:00');
+    var diffDays = Math.round((d1-d0)/86400000);
+    if(diffDays < 0) return 'Vencida ('+(-diffDays)+'d)';
+    if(diffDays === 1) return 'Vence mañana';
+    return 'Vence en '+diffDays+'d';
+  }
+
   var h='';
   // Saludo
   h+='<div style="padding:14px 12px 8px"><div style="font-size:18px;font-weight:700;color:#e5e7eb">Hola Don '+esc(sess.userName)+' 👋</div>';
-  h+='<div style="font-size:13px;color:#9ca3af;margin-top:2px">Tenés '+totalActivos+' daño'+(totalActivos===1?'':'s')+' activo'+(totalActivos===1?'':'s')+'</div></div>';
+  var subtxt='Tenés '+totalActivos+' daño'+(totalActivos===1?'':'s')+' activo'+(totalActivos===1?'':'s');
+  subtxt+=' · '+totalTareas+' tarea'+(totalTareas===1?'':'s')+' pendiente'+(totalTareas===1?'':'s');
+  h+='<div style="font-size:13px;color:#9ca3af;margin-top:2px">'+subtxt+'</div></div>';
 
   // 2 cards
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px">';
@@ -5367,49 +5423,68 @@ function renderMisDanos(d){
   h+='<div style="font-size:10px;color:#fca5a5;text-transform:uppercase;letter-spacing:.5px">Urgentes</div>';
   h+='</div>';
   h+='<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:14px;text-align:center">';
-  h+='<div style="font-size:28px;font-weight:900;color:#22c55e">'+c.terminadosHoy+'</div>';
+  h+='<div style="font-size:28px;font-weight:900;color:#22c55e">'+hechosHoyCombinado+'</div>';
   h+='<div style="font-size:10px;color:#86efac;text-transform:uppercase;letter-spacing:.5px">Hechos hoy</div>';
   h+='</div>';
   h+='</div>';
 
-  if(!totalActivos){
-    h+='<div style="padding:30px 16px;text-align:center;color:#9ca3af">No tenés daños asignados.</div>';
+  if(!totalActivos && !totalTareas){
+    h+='<div style="padding:30px 16px;text-align:center;color:#9ca3af">No tenés trabajos asignados.</div>';
     el.innerHTML=h;
     return;
   }
 
-  // Agrupar por prioridad
-  var grupos={urgente:[],normal:[],baja:[]};
-  reportes.forEach(function(r){
-    var k=r.prioridad==='urgente'?'urgente':r.prioridad==='baja'?'baja':'normal';
-    grupos[k].push(r);
-  });
+  // Agrupar por prioridad (DAÑOS) — solo si hay
+  if(totalActivos > 0){
+    var grupos={urgente:[],normal:[],baja:[]};
+    reportes.forEach(function(r){
+      var k=r.prioridad==='urgente'?'urgente':r.prioridad==='baja'?'baja':'normal';
+      grupos[k].push(r);
+    });
 
-  var labels={urgente:{title:'🔴 URGENTES',color:'#ef4444'},normal:{title:'🟡 NORMALES',color:'#f59e0b'},baja:{title:'🟢 BAJAS',color:'#22c55e'}};
-  ['urgente','normal','baja'].forEach(function(k){
-    var arr=grupos[k];
-    if(!arr.length)return;
-    var lbl=labels[k];
-    h+='<div style="padding:8px 12px 4px;font-size:11px;font-weight:700;color:'+lbl.color+';text-transform:uppercase;letter-spacing:1px">'+lbl.title+' ('+arr.length+')</div>';
-    arr.forEach(function(r){
-      var ubi=(r.ubicacionTipo==='zona_comun')?r.ubicacionId:('Hab '+r.ubicacionId);
-      var hace=fmtHace(r.reportadoMs);
-      var rechazo=(r.estado==='RECHAZADO_VERIFICACION');
-      h+='<div style="margin:6px 12px;background:#18181f;border:1px solid '+(rechazo?'#ef4444':lbl.color)+';border-left:4px solid '+lbl.color+';border-radius:8px;padding:12px">';
-      if(rechazo){
-        h+='<div style="background:rgba(239,68,68,.15);color:#ef4444;font-size:10px;font-weight:700;padding:4px 8px;border-radius:4px;display:inline-block;margin-bottom:6px">⚠ ARREGLO RECHAZADO — RETOMAR</div>';
-        if(r.motivoRechazo) h+='<div style="font-size:11px;color:#fca5a5;margin-bottom:6px">Motivo: '+esc(r.motivoRechazo)+'</div>';
-      }
-      h+='<div style="font-size:14px;font-weight:700;color:#e5e7eb;margin-bottom:2px">'+esc(ubi)+'</div>';
-      h+='<div style="font-size:13px;color:#e5e7eb;margin-bottom:6px">'+esc(r.descripcion||'')+'</div>';
-      h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:'+(r.fotoDanoUrl?'8':'10')+'px">Reportado por '+esc(r.reportadoPor||'?')+(hace?' • '+hace:'')+'</div>';
-      if(r.fotoDanoUrl){
-        h+='<div style="margin-bottom:10px"><img src="'+r.fotoDanoUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #2e2e3a" alt="Foto del daño"></div>';
-      }
-      h+='<button class="btn bg" style="width:100%;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openMarcarArreglo('+r.id+')">✓ Marqué hecho</button>';
+    var labels={urgente:{title:'🔴 URGENTES',color:'#ef4444'},normal:{title:'🟡 NORMALES',color:'#f59e0b'},baja:{title:'🟢 BAJAS',color:'#22c55e'}};
+    ['urgente','normal','baja'].forEach(function(k){
+      var arr=grupos[k];
+      if(!arr.length)return;
+      var lbl=labels[k];
+      h+='<div style="padding:8px 12px 4px;font-size:11px;font-weight:700;color:'+lbl.color+';text-transform:uppercase;letter-spacing:1px">'+lbl.title+' ('+arr.length+')</div>';
+      arr.forEach(function(r){
+        var ubi=(r.ubicacionTipo==='zona_comun')?r.ubicacionId:('Hab '+r.ubicacionId);
+        var hace=fmtHace(r.reportadoMs);
+        var rechazo=(r.estado==='RECHAZADO_VERIFICACION');
+        h+='<div style="margin:6px 12px;background:#18181f;border:1px solid '+(rechazo?'#ef4444':lbl.color)+';border-left:4px solid '+lbl.color+';border-radius:8px;padding:12px">';
+        if(rechazo){
+          h+='<div style="background:rgba(239,68,68,.15);color:#ef4444;font-size:10px;font-weight:700;padding:4px 8px;border-radius:4px;display:inline-block;margin-bottom:6px">⚠ ARREGLO RECHAZADO — RETOMAR</div>';
+          if(r.motivoRechazo) h+='<div style="font-size:11px;color:#fca5a5;margin-bottom:6px">Motivo: '+esc(r.motivoRechazo)+'</div>';
+        }
+        h+='<div style="font-size:14px;font-weight:700;color:#e5e7eb;margin-bottom:2px">'+esc(ubi)+'</div>';
+        h+='<div style="font-size:13px;color:#e5e7eb;margin-bottom:6px">'+esc(r.descripcion||'')+'</div>';
+        h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:'+(r.fotoDanoUrl?'8':'10')+'px">Reportado por '+esc(r.reportadoPor||'?')+(hace?' • '+hace:'')+'</div>';
+        if(r.fotoDanoUrl){
+          h+='<div style="margin-bottom:10px"><img src="'+r.fotoDanoUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #2e2e3a" alt="Foto del daño"></div>';
+        }
+        h+='<button class="btn bg" style="width:100%;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openMarcarArreglo('+r.id+')">✓ Marqué hecho</button>';
+        h+='</div>';
+      });
+    });
+  }
+
+  // SECCIÓN TAREAS ASIGNADAS (Fase 4.5 G3)
+  if(totalTareas > 0){
+    h+='<div style="padding:14px 12px 4px;font-size:11px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:1px">📋 TAREAS ASIGNADAS ('+totalTareas+')</div>';
+    var bullets={urgente:'🔴',normal:'🟡',baja:'🟢'};
+    var colores={urgente:'#ef4444',normal:'#f59e0b',baja:'#22c55e'};
+    tareasPend.forEach(function(t){
+      var pri=t.prioridad||'normal';
+      var bullet=bullets[pri]||'⚪';
+      var col=colores[pri]||'#9ca3af';
+      h+='<div style="margin:6px 12px;background:#18181f;border:1px solid #2e2e3a;border-left:4px solid '+col+';border-radius:8px;padding:12px">';
+      h+='<div style="font-size:14px;font-weight:700;color:#e5e7eb;margin-bottom:4px">'+bullet+' '+esc(t.descripcion||'')+'</div>';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:10px">'+esc(fmtFechaTarea(t.fechaObjetivo))+'</div>';
+      h+='<button class="btn bg" style="width:100%;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openCompTarea('+t.id+')">✓ Marqué hecha</button>';
       h+='</div>';
     });
-  });
+  }
 
   el.innerHTML=h;
 }
@@ -5467,6 +5542,81 @@ function doMarcarArreglo(){
           'x-upsert':'true',
           'Content-Type': 'image/jpeg'
         },
+        body: blob
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+        return r.json();
+      }).then(function(){
+        var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        enviarRpc(url);
+      }).catch(function(e){
+        toast('Error subiendo foto: '+(e.message||String(e)),'err');
+      });
+    }, function(err){
+      toast('Error procesando foto: '+(err.message||String(err)),'err');
+    });
+  } else {
+    enviarRpc('');
+  }
+}
+
+// ---- COMPLETAR TAREA (Fase 4.5 G3): MAINTENANCE marca tarea como hecha ----
+function openCompTarea(tareaId){
+  if(!sess||sess.userRole!=='MAINTENANCE'){toast('Solo MAINTENANCE','err');return;}
+  var data=window._misTareas||{};
+  var t=(data.pendientes||[]).find(function(x){return x.id===tareaId;});
+  if(!t){toast('Tarea no encontrada, recargá','err');return;}
+  document.getElementById('ctTitulo').textContent='✓ '+(t.descripcion||'').slice(0,40);
+  document.getElementById('ctDesc').textContent=t.descripcion||'';
+  var pri=(t.prioridad||'normal').toUpperCase();
+  var priCol=t.prioridad==='urgente'?'#ef4444':t.prioridad==='baja'?'#22c55e':'#f59e0b';
+  var priEl=document.getElementById('ctPrioridad');
+  priEl.textContent=pri;
+  priEl.style.color=priCol;
+  function fmtF(f){
+    if(!f) return 'Sin fecha';
+    var hoy = new Date().toISOString().split('T')[0];
+    if(f === hoy) return 'Vence HOY';
+    var d1 = new Date(f+'T00:00:00');
+    var d0 = new Date(hoy+'T00:00:00');
+    var diffDays = Math.round((d1-d0)/86400000);
+    if(diffDays < 0) return 'Vencida ('+(-diffDays)+'d)';
+    if(diffDays === 1) return 'Vence mañana';
+    return 'Vence en '+diffDays+'d';
+  }
+  document.getElementById('ctFecha').textContent=fmtF(t.fechaObjetivo);
+  document.getElementById('ctNota').value='';
+  document.getElementById('ctFoto').value='';
+  window._ctTareaId = tareaId;
+  openM('mCompTarea');
+}
+
+function doCompTarea(){
+  var tareaId = window._ctTareaId;
+  if(!tareaId){toast('Sin tarea seleccionada','err');return;}
+  var nota=(document.getElementById('ctNota').value||'').trim();
+  if(nota.length<3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
+  var fotoFile = document.getElementById('ctFoto') && document.getElementById('ctFoto').files[0];
+
+  function enviarRpc(fotoUrl){
+    rpc('completarTareaMant',{
+      userRole: sess.userRole, userName: sess.userName,
+      tareaId: tareaId, nota: nota, fotoCompletadoUrl: fotoUrl||''
+    }, function(){
+      toast('✓ Tarea marcada como hecha','ok');
+      closeM('mCompTarea');
+      window._ctTareaId = null;
+      loadMisDanos();
+    }, function(e){toast(e.message||String(e),'err');});
+  }
+
+  if(fotoFile){
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName='mantenimiento/tareas/tarea_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':'image/jpeg'},
         body: blob
       }).then(function(r){
         if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
