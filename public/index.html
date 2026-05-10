@@ -1362,6 +1362,7 @@ actualizarBtnCaja();
   sw(sess.userRole==='MAID'?'maid':sess.userRole==='MAINTENANCE'?'misdanos':'rooms');
   if(rooms.length)renderRooms();
   startPoll();startClock();
+  if(sess.userRole === 'MAINTENANCE') startMisDanosPoll();
   if(sess.userRole==='ADMIN'){
     var mDayEl=document.getElementById('mDay');if(mDayEl)mDayEl.value=sess.businessDay||'';
     var mdDayEl=document.getElementById('mdDay');if(mdDayEl)mdDayEl.value=sess.businessDay||'';
@@ -1435,7 +1436,7 @@ function sw(id){
 }
 
 function salir(){
-  clearInterval(pT);clearInterval(cT);clearInterval(aT);clearSess();sess=null;
+  clearInterval(pT);clearInterval(cT);clearInterval(aT);stopMisDanosPoll();clearSess();sess=null;
   document.getElementById('lrol').value='';document.getElementById('lnm').value='';
   document.getElementById('apin').value='';document.getElementById('upin').value='';
   ['nw','uw','aw','lerr'].forEach(function(i){tog(i,false);});
@@ -5685,6 +5686,53 @@ function doCompTarea(){
   } else {
     enviarRpc('');
   }
+}
+
+// ---- AUTO-REFRESH MIS DAÑOS (Fase 8): polling cada 60s para Geovanny ----
+function startMisDanosPoll(){
+  if(window._misDanosPoll) return; // evita duplicados
+  window._misDanosPoll = setInterval(pollMisDanosTick, 60000);
+}
+
+function stopMisDanosPoll(){
+  if(window._misDanosPoll){
+    clearInterval(window._misDanosPoll);
+    window._misDanosPoll = null;
+  }
+}
+
+function pollMisDanosTick(){
+  if(!sess || sess.userRole !== 'MAINTENANCE') return;
+  // Snapshot IDs anteriores para detectar nuevos
+  var prevDanos = ((window._misDanos||{}).reportes || []).map(function(r){return r.id;});
+  var prevTareas = ((window._misTareas||{}).pendientes || []).map(function(t){return t.id;});
+  // Re-fetch en paralelo
+  var resultDanos = null, resultTareas = null;
+  function maybeRender(){
+    if(resultDanos !== null && resultTareas !== null){
+      var nowDanos = (resultDanos.reportes||[]).map(function(r){return r.id;});
+      var nowTareas = (resultTareas.pendientes||[]).map(function(t){return t.id;});
+      var nuevosDanos = nowDanos.filter(function(id){return prevDanos.indexOf(id)<0;});
+      var nuevosTareas = nowTareas.filter(function(id){return prevTareas.indexOf(id)<0;});
+      window._misDanos = resultDanos;
+      window._misTareas = resultTareas;
+      renderMisDanos(resultDanos, resultTareas);
+      if(nuevosDanos.length > 0){
+        toast('🔧 '+nuevosDanos.length+' nuevo'+(nuevosDanos.length===1?'':'s')+' daño'+(nuevosDanos.length===1?'':'s')+' asignado'+(nuevosDanos.length===1?'':'s'),'ok');
+      }
+      if(nuevosTareas.length > 0){
+        toast('📋 '+nuevosTareas.length+' nueva'+(nuevosTareas.length===1?'':'s')+' tarea'+(nuevosTareas.length===1?'':'s')+' asignada'+(nuevosTareas.length===1?'':'s'),'ok');
+      }
+    }
+  }
+  rpc('getMisDanos',{userRole:sess.userRole, userName:sess.userName},
+    function(d){resultDanos = d || {contadores:{}, reportes:[]}; maybeRender();},
+    function(){resultDanos = window._misDanos || {contadores:{}, reportes:[]}; maybeRender();}
+  );
+  rpc('getTareasMant',{userRole:sess.userRole, userName:sess.userName},
+    function(d){resultTareas = d || {contadores:{}, pendientes:[]}; maybeRender();},
+    function(){resultTareas = window._misTareas || {contadores:{}, pendientes:[]}; maybeRender();}
+  );
 }
 
 // ---- VERIFICACION (Fase 5): ADMIN/RECEPTION confirma o rechaza arreglo ----
