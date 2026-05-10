@@ -851,6 +851,40 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Nueva solicitud Geovanny → ADM -->
+<div class="ov" id="mNuevaSolicitud"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">📝 Hacer solicitud a ADM</div>
+    <button class="mc" onclick="closeM('mNuevaSolicitud')">✕</button>
+  </div>
+  <label>Tipo de solicitud</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:8px;font-size:12px;text-align:center"><input type="radio" name="nsTipo" value="dano" checked onchange="nsToggleTipo()"> 🔧 Reportar daño</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:8px;font-size:12px;text-align:center"><input type="radio" name="nsTipo" value="permiso" onchange="nsToggleTipo()"> 🔓 Pedir permiso</label>
+  </div>
+  <div id="nsUbicWrap">
+    <label>Tipo de ubicación</label>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="nsUbicTipo" value="habitacion" checked onchange="nsToggleUbic()"> 🏨 Habitación</label>
+      <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="nsUbicTipo" value="zona_comun" onchange="nsToggleUbic()"> 🌐 Zona común</label>
+    </div>
+    <div id="nsRoomWrap"><label>Habitación</label><select id="nsRoom"><option value="">-- Selecciona --</option></select></div>
+    <div id="nsZonaWrap" style="display:none">
+      <label>Zona común</label>
+      <select id="nsZona" onchange="nsToggleOtra()"><option value="">-- Selecciona --</option></select>
+      <div id="nsZonaOtraWrap" style="display:none;margin-top:6px"><label>Especificá cuál</label><input type="text" id="nsZonaOtra" placeholder="Ej: Terraza" maxlength="50"></div>
+    </div>
+  </div>
+  <label style="margin-top:8px">Descripción</label>
+  <textarea id="nsDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Foto (opcional)</label>
+  <input type="file" id="nsFoto" accept="image/*" capture="environment">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mNuevaSolicitud')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#f97316;color:#fff;font-weight:700" onclick="doNuevaSolicitud()">✓ Enviar a ADM</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Historial Mantenimiento (ADMIN/RECEPTION — Fase 7.1) -->
 <div class="ov" id="mHistorialMant"><div class="modal" style="max-width:760px;max-height:92vh;overflow-y:auto">
   <div class="mh">
@@ -5402,13 +5436,14 @@ function loadMisDanos(){
   if(!el)return;
   if(!sess||sess.userRole!=='MAINTENANCE'){el.innerHTML='<div style="color:#ef4444">Acceso solo MAINTENANCE</div>';return;}
   el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af">Cargando...</div>';
-  // Fase 4.5 G3: 2 RPCs en paralelo (danos + tareas)
-  var resultDanos = null, resultTareas = null;
+  // 3 RPCs en paralelo (danos + tareas + solicitudes)
+  var resultDanos = null, resultTareas = null, resultSolicitudes = null;
   function maybeRender(){
-    if(resultDanos !== null && resultTareas !== null){
+    if(resultDanos !== null && resultTareas !== null && resultSolicitudes !== null){
       window._misDanos = resultDanos;
       window._misTareas = resultTareas;
-      renderMisDanos(resultDanos, resultTareas);
+      window._misSolicitudes = resultSolicitudes;
+      renderMisDanos(resultDanos, resultTareas, resultSolicitudes);
     }
   }
   rpc('getMisDanos',{userRole:sess.userRole, userName:sess.userName}, function(d){
@@ -5425,17 +5460,26 @@ function loadMisDanos(){
     resultTareas = {contadores:{}, pendientes:[], _err: e.message||String(e)};
     maybeRender();
   });
+  rpc('getSolicitudesMant',{userRole:sess.userRole, userName:sess.userName}, function(d){
+    resultSolicitudes = d || {contadores:{}, solicitudes:[]};
+    maybeRender();
+  }, function(e){
+    resultSolicitudes = {contadores:{}, solicitudes:[], _err: e.message||String(e)};
+    maybeRender();
+  });
 }
 
-function renderMisDanos(d, dTareas){
+function renderMisDanos(d, dTareas, dSolicitudes){
   var el=document.getElementById('misDanosCont');
   if(!el)return;
   var c=d.contadores||{urgentes:0,normales:0,bajas:0,terminadosHoy:0};
   var cT=(dTareas&&dTareas.contadores)||{pendientes:0,urgentesPendientes:0,hechasHoy:0};
+  var solicitudes=(dSolicitudes&&dSolicitudes.solicitudes)||[];
   var reportes=d.reportes||[];
   var tareasPend=(dTareas&&dTareas.pendientes)||[];
   var totalActivos=reportes.length;
   var totalTareas=tareasPend.length;
+  var totalSolicitudes=solicitudes.length;
   var hechosHoyCombinado=(c.terminadosHoy||0)+(cT.hechasHoy||0);
 
   function fmtHace(ms){
@@ -5481,7 +5525,10 @@ function renderMisDanos(d, dTareas){
   h+='</div>';
   h+='</div>';
 
-  if(!totalActivos && !totalTareas){
+  // Botón "Hacer solicitud a ADM" — siempre visible
+  h+='<div style="padding:0 12px 12px"><button class="btn ba" style="width:100%;background:#f97316;color:#fff;font-weight:700;padding:12px" onclick="openNuevaSolicitud()">+ 📝 Hacer solicitud a ADM</button></div>';
+
+  if(!totalActivos && !totalTareas && !totalSolicitudes){
     h+='<div style="padding:30px 16px;text-align:center;color:#9ca3af">No tenés trabajos asignados.</div>';
     el.innerHTML=h;
     return;
@@ -5535,6 +5582,35 @@ function renderMisDanos(d, dTareas){
       h+='<div style="font-size:14px;font-weight:700;color:#e5e7eb;margin-bottom:4px">'+bullet+' '+esc(t.descripcion||'')+'</div>';
       h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:10px">'+esc(fmtFechaTarea(t.fechaObjetivo))+'</div>';
       h+='<button class="btn bg" style="width:100%;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openCompTarea('+t.id+')">✓ Marqué hecha</button>';
+      h+='</div>';
+    });
+  }
+
+  // SECCIÓN MIS SOLICITUDES — Geovanny ve sus solicitudes a ADM
+  if(totalSolicitudes > 0){
+    h+='<div style="padding:14px 12px 4px;font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:1px">📝 MIS SOLICITUDES ('+totalSolicitudes+')</div>';
+    var estadoLabels={pendiente:{txt:'PENDIENTE',col:'#f59e0b',bg:'rgba(245,158,11,.15)'},aprobada:{txt:'APROBADA ✓',col:'#22c55e',bg:'rgba(34,197,94,.15)'},rechazada:{txt:'RECHAZADA ✗',col:'#ef4444',bg:'rgba(239,68,68,.15)'},anulada:{txt:'ANULADA',col:'#9ca3af',bg:'rgba(156,163,175,.15)'}};
+    solicitudes.slice(0,10).forEach(function(s){
+      var icono=s.tipoSolicitud==='dano'?'🔧':'🔓';
+      var lbl=s.tipoSolicitud==='dano'?'Daño':'Permiso';
+      var info=estadoLabels[s.estado]||estadoLabels.pendiente;
+      h+='<div style="margin:6px 12px;background:#18181f;border:1px solid #2e2e3a;border-left:4px solid '+info.col+';border-radius:8px;padding:12px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">';
+      h+='<div style="font-size:13px;color:#e5e7eb"><span style="font-size:14px">'+icono+'</span> <b>'+lbl+'</b>';
+      if(s.tipoSolicitud==='dano' && s.ubicacionId){
+        var ubi=s.ubicacionTipo==='zona_comun'?s.ubicacionId:('Hab '+s.ubicacionId);
+        h+=' · '+esc(ubi);
+      }
+      h+='</div>';
+      h+='<span style="background:'+info.bg+';color:'+info.col+';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;white-space:nowrap">'+info.txt+'</span>';
+      h+='</div>';
+      h+='<div style="font-size:12px;color:#e5e7eb;margin-bottom:4px">'+esc(s.descripcion||'')+'</div>';
+      if(s.estado==='rechazada' && s.motivoRechazo){
+        h+='<div style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.08);padding:4px 8px;border-radius:4px;margin-top:4px">Motivo: '+esc(s.motivoRechazo)+'</div>';
+      }
+      if(s.estado==='aprobada' && s.tipoSolicitud==='dano' && s.prioridadAsignada){
+        h+='<div style="font-size:10px;color:#86efac;margin-top:4px">Prioridad asignada: '+esc(s.prioridadAsignada)+'</div>';
+      }
       h+='</div>';
     });
   }
@@ -5688,6 +5764,118 @@ function doCompTarea(){
   }
 }
 
+// ---- SOLICITUDES Geovanny → ADM ----
+function openNuevaSolicitud(){
+  if(!sess || sess.userRole !== 'MAINTENANCE'){toast('Solo MAINTENANCE','err');return;}
+  // Reset radios tipo
+  var radiosTipo = document.querySelectorAll('input[name="nsTipo"]');
+  radiosTipo.forEach(function(rd){ rd.checked = (rd.value === 'dano'); });
+  // Reset radios ubicacion
+  var radiosUbic = document.querySelectorAll('input[name="nsUbicTipo"]');
+  radiosUbic.forEach(function(rd){ rd.checked = (rd.value === 'habitacion'); });
+  // Llenar dropdown habs
+  var selR = document.getElementById('nsRoom');
+  if(selR){
+    var ord = (rooms||[]).slice().sort(function(a,b){return String(a.roomId).localeCompare(String(b.roomId),'es',{numeric:true});});
+    var hr = '<option value="">-- Selecciona --</option>';
+    ord.forEach(function(r){hr += '<option value="'+esc(r.roomId)+'">Hab '+esc(r.roomId)+' — '+esc(r.category||'')+'</option>';});
+    selR.innerHTML = hr; selR.value = '';
+  }
+  // Llenar dropdown zonas
+  var selZ = document.getElementById('nsZona');
+  if(selZ){
+    var hz = '<option value="">-- Selecciona --</option>';
+    ZONAS_COMUNES.forEach(function(z){hz += '<option value="'+esc(z)+'">'+esc(z)+'</option>';});
+    selZ.innerHTML = hz; selZ.value = '';
+  }
+  document.getElementById('nsZonaOtra').value='';
+  document.getElementById('nsDesc').value='';
+  document.getElementById('nsFoto').value='';
+  nsToggleTipo();
+  openM('mNuevaSolicitud');
+}
+
+function nsToggleTipo(){
+  var tipo = (document.querySelector('input[name="nsTipo"]:checked')||{}).value || 'dano';
+  document.getElementById('nsUbicWrap').style.display = (tipo==='dano') ? '' : 'none';
+}
+
+function nsToggleUbic(){
+  var ubic = (document.querySelector('input[name="nsUbicTipo"]:checked')||{}).value || 'habitacion';
+  document.getElementById('nsRoomWrap').style.display = (ubic==='habitacion') ? '' : 'none';
+  document.getElementById('nsZonaWrap').style.display = (ubic==='zona_comun') ? '' : 'none';
+  if(ubic==='habitacion') document.getElementById('nsZonaOtraWrap').style.display='none';
+}
+
+function nsToggleOtra(){
+  var v = (document.getElementById('nsZona')||{}).value || '';
+  document.getElementById('nsZonaOtraWrap').style.display = (v==='Otra') ? '' : 'none';
+}
+
+function doNuevaSolicitud(){
+  if(!sess || sess.userRole !== 'MAINTENANCE'){toast('Solo MAINTENANCE','err');return;}
+  var tipo = (document.querySelector('input[name="nsTipo"]:checked')||{}).value || 'dano';
+  var desc = (document.getElementById('nsDesc').value||'').trim();
+  if(desc.length<3){toast('La descripción debe tener mín 3 caracteres','err');return;}
+  // Ubicación solo si tipo='dano'
+  var ubicacionTipo = null, ubicacionId = null;
+  if(tipo === 'dano'){
+    ubicacionTipo = (document.querySelector('input[name="nsUbicTipo"]:checked')||{}).value || 'habitacion';
+    if(ubicacionTipo === 'habitacion'){
+      ubicacionId = (document.getElementById('nsRoom')||{}).value || '';
+      if(!ubicacionId.trim()){toast('Elegí una habitación','err');return;}
+    } else {
+      var zona = (document.getElementById('nsZona')||{}).value || '';
+      if(!zona.trim()){toast('Elegí una zona común','err');return;}
+      if(zona === 'Otra'){
+        var otraVal = (document.getElementById('nsZonaOtra').value||'').trim();
+        if(otraVal.length<3){toast('Especificá la zona (mín 3 caracteres)','err');return;}
+        ubicacionId = otraVal;
+      } else {
+        ubicacionId = zona;
+      }
+    }
+  }
+  var fotoFile = document.getElementById('nsFoto') && document.getElementById('nsFoto').files[0];
+
+  function enviarRpc(fotoUrl){
+    var payload = {
+      userRole: sess.userRole, userName: sess.userName,
+      tipoSolicitud: tipo, descripcion: desc,
+      fotoUrl: fotoUrl || ''
+    };
+    if(tipo === 'dano'){
+      payload.ubicacionTipo = ubicacionTipo;
+      payload.ubicacionId = ubicacionId;
+    }
+    rpc('crearSolicitudMant', payload, function(){
+      toast('✓ Solicitud enviada a ADM','ok');
+      closeM('mNuevaSolicitud');
+      loadMisDanos();
+    }, function(e){toast(e.message||String(e),'err');});
+  }
+
+  if(fotoFile){
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName = 'mantenimiento/solicitudes/sol_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':'image/jpeg'},
+        body: blob
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+        return r.json();
+      }).then(function(){
+        var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        enviarRpc(url);
+      }).catch(function(e){toast('Error subiendo foto: '+(e.message||String(e)),'err');});
+    }, function(err){toast('Error procesando foto: '+(err.message||String(err)),'err');});
+  } else {
+    enviarRpc('');
+  }
+}
+
 // ---- AUTO-REFRESH MIS DAÑOS (Fase 8): polling cada 60s para Geovanny ----
 function startMisDanosPoll(){
   if(window._misDanosPoll) return; // evita duplicados
@@ -5706,22 +5894,41 @@ function pollMisDanosTick(){
   // Snapshot IDs anteriores para detectar nuevos
   var prevDanos = ((window._misDanos||{}).reportes || []).map(function(r){return r.id;});
   var prevTareas = ((window._misTareas||{}).pendientes || []).map(function(t){return t.id;});
-  // Re-fetch en paralelo
-  var resultDanos = null, resultTareas = null;
+  // Snapshot estados de solicitudes propias para detectar resoluciones
+  var prevSolicitudesMap = {};
+  ((window._misSolicitudes||{}).solicitudes || []).forEach(function(s){prevSolicitudesMap[s.id] = s.estado;});
+  // Re-fetch en paralelo (3 RPCs)
+  var resultDanos = null, resultTareas = null, resultSolicitudes = null;
   function maybeRender(){
-    if(resultDanos !== null && resultTareas !== null){
+    if(resultDanos !== null && resultTareas !== null && resultSolicitudes !== null){
       var nowDanos = (resultDanos.reportes||[]).map(function(r){return r.id;});
       var nowTareas = (resultTareas.pendientes||[]).map(function(t){return t.id;});
       var nuevosDanos = nowDanos.filter(function(id){return prevDanos.indexOf(id)<0;});
       var nuevosTareas = nowTareas.filter(function(id){return prevTareas.indexOf(id)<0;});
+      // Detectar solicitudes resueltas (pasaron de pendiente a aprobada/rechazada)
+      var solAprobadas = [], solRechazadas = [];
+      (resultSolicitudes.solicitudes || []).forEach(function(s){
+        var prev = prevSolicitudesMap[s.id];
+        if(prev === 'pendiente'){
+          if(s.estado === 'aprobada') solAprobadas.push(s);
+          else if(s.estado === 'rechazada') solRechazadas.push(s);
+        }
+      });
       window._misDanos = resultDanos;
       window._misTareas = resultTareas;
-      renderMisDanos(resultDanos, resultTareas);
+      window._misSolicitudes = resultSolicitudes;
+      renderMisDanos(resultDanos, resultTareas, resultSolicitudes);
       if(nuevosDanos.length > 0){
         toast('🔧 '+nuevosDanos.length+' nuevo'+(nuevosDanos.length===1?'':'s')+' daño'+(nuevosDanos.length===1?'':'s')+' asignado'+(nuevosDanos.length===1?'':'s'),'ok');
       }
       if(nuevosTareas.length > 0){
         toast('📋 '+nuevosTareas.length+' nueva'+(nuevosTareas.length===1?'':'s')+' tarea'+(nuevosTareas.length===1?'':'s')+' asignada'+(nuevosTareas.length===1?'':'s'),'ok');
+      }
+      if(solAprobadas.length > 0){
+        toast('✅ '+solAprobadas.length+' solicitud'+(solAprobadas.length===1?'':'es')+' aprobada'+(solAprobadas.length===1?'':'s'),'ok');
+      }
+      if(solRechazadas.length > 0){
+        toast('❌ '+solRechazadas.length+' solicitud'+(solRechazadas.length===1?'':'es')+' rechazada'+(solRechazadas.length===1?'':'s'),'err');
       }
     }
   }
@@ -5732,6 +5939,10 @@ function pollMisDanosTick(){
   rpc('getTareasMant',{userRole:sess.userRole, userName:sess.userName},
     function(d){resultTareas = d || {contadores:{}, pendientes:[]}; maybeRender();},
     function(){resultTareas = window._misTareas || {contadores:{}, pendientes:[]}; maybeRender();}
+  );
+  rpc('getSolicitudesMant',{userRole:sess.userRole, userName:sess.userName},
+    function(d){resultSolicitudes = d || {contadores:{}, solicitudes:[]}; maybeRender();},
+    function(){resultSolicitudes = window._misSolicitudes || {contadores:{}, solicitudes:[]}; maybeRender();}
   );
 }
 
