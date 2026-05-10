@@ -759,6 +759,38 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Pasar a Mantenimiento (ADMIN/RECEPTION — Fase 6) -->
+<div class="ov" id="mPasarAMant"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">🔧 Pasar a Mantenimiento</div>
+    <button class="mc" onclick="closeM('mPasarAMant')">✕</button>
+  </div>
+  <div id="paOriginalNota" style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:#9ca3af"></div>
+  <label>Tipo de ubicación</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="paTipo" value="habitacion" checked onchange="paToggleTipo()"> 🏨 Habitación</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="paTipo" value="zona_comun" onchange="paToggleTipo()"> 🌐 Zona común</label>
+  </div>
+  <div id="paRoomWrap"><label>Habitación</label><select id="paRoom"><option value="">-- Selecciona --</option></select></div>
+  <div id="paZonaWrap" style="display:none">
+    <label>Zona común</label>
+    <select id="paZona" onchange="paToggleOtra()"><option value="">-- Selecciona --</option></select>
+    <div id="paZonaOtraWrap" style="display:none;margin-top:6px"><label>Especificá cuál</label><input type="text" id="paZonaOtra" placeholder="Ej: Terraza" maxlength="50"></div>
+  </div>
+  <label style="margin-top:8px">Prioridad</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="paPri" value="urgente"> 🔴 Urgente</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="paPri" value="normal" checked> 🟡 Normal</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="paPri" value="baja"> 🟢 Baja</label>
+  </div>
+  <label>Descripción (editable)</label>
+  <textarea id="paDesc" rows="3" placeholder="Descripción del daño"></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mPasarAMant')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doPasarAMant()">✓ Confirmar</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Rechazar arreglo (ADMIN/RECEPTION — Fase 5) -->
 <div class="ov" id="mRechazarArreglo"><div class="modal" style="max-width:480px">
   <div class="mh">
@@ -5449,6 +5481,116 @@ function doRechazarArreglo(){
   );
 }
 
+// ---- PASAR A MANTENIMIENTO (Fase 6): convierte una nota de Reportes en daño ----
+var _paNote = null;
+
+function openPasarAMant(noteId){
+  if(!sess || (sess.userRole!=='ADMIN' && sess.userRole!=='RECEPTION')){
+    toast('Solo ADMIN o Recepcion','err');
+    return;
+  }
+  rpc('getShiftNotes',{businessDay:sess.businessDay},function(data){
+    var note = (data.notes||[]).find(function(n){return n.id===noteId;});
+    if(!note){toast('Nota no encontrada (recargá Reportes)','err');return;}
+    _paNote = note;
+    var orig = document.getElementById('paOriginalNota');
+    if(orig){
+      var hOrig = '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Reporte original</div>';
+      hOrig += '<div style="color:#e5e7eb">'+esc(note.note||'')+'</div>';
+      hOrig += '<div style="font-size:10px;color:#9ca3af;margin-top:4px">Por '+esc(note.userName||'?')+'</div>';
+      orig.innerHTML = hOrig;
+    }
+    var radiosTipo = document.querySelectorAll('input[name="paTipo"]');
+    radiosTipo.forEach(function(rd){ rd.checked = (rd.value === 'habitacion'); });
+    var selR = document.getElementById('paRoom');
+    if(selR){
+      var ord = (rooms||[]).slice().sort(function(a,b){return String(a.roomId).localeCompare(String(b.roomId),'es',{numeric:true});});
+      var hr = '<option value="">-- Selecciona --</option>';
+      ord.forEach(function(r){hr += '<option value="'+esc(r.roomId)+'">Hab '+esc(r.roomId)+' — '+esc(r.category||'')+'</option>';});
+      selR.innerHTML = hr; selR.value = '';
+    }
+    var selZ = document.getElementById('paZona');
+    if(selZ){
+      var hz = '<option value="">-- Selecciona --</option>';
+      ZONAS_COMUNES.forEach(function(z){hz += '<option value="'+esc(z)+'">'+esc(z)+'</option>';});
+      selZ.innerHTML = hz; selZ.value = '';
+    }
+    var otra = document.getElementById('paZonaOtra'); if(otra) otra.value='';
+    paToggleTipo();
+    var radiosPri = document.querySelectorAll('input[name="paPri"]');
+    radiosPri.forEach(function(rd){ rd.checked = (rd.value === 'normal'); });
+    var desc = document.getElementById('paDesc');
+    if(desc) desc.value = note.note || '';
+    openM('mPasarAMant');
+  },function(e){toast(e.message||String(e),'err');});
+}
+
+function paToggleTipo(){
+  var tipo = (document.querySelector('input[name="paTipo"]:checked')||{}).value || 'habitacion';
+  var roomWrap = document.getElementById('paRoomWrap');
+  var zonaWrap = document.getElementById('paZonaWrap');
+  var otraWrap = document.getElementById('paZonaOtraWrap');
+  if(roomWrap) roomWrap.style.display = (tipo==='habitacion') ? '' : 'none';
+  if(zonaWrap) zonaWrap.style.display = (tipo==='zona_comun') ? '' : 'none';
+  if(tipo==='habitacion' && otraWrap) otraWrap.style.display='none';
+}
+
+function paToggleOtra(){
+  var v = (document.getElementById('paZona')||{}).value || '';
+  var otraWrap = document.getElementById('paZonaOtraWrap');
+  if(otraWrap) otraWrap.style.display = (v==='Otra') ? '' : 'none';
+}
+
+function doPasarAMant(){
+  if(!_paNote){toast('Sin nota seleccionada','err');return;}
+  var tipo = (document.querySelector('input[name="paTipo"]:checked')||{}).value || 'habitacion';
+  var ubicacionId = '';
+  if(tipo === 'habitacion'){
+    ubicacionId = (document.getElementById('paRoom')||{}).value || '';
+    if(!ubicacionId.trim()){toast('Elegí una habitación.','err');return;}
+  } else {
+    var zona = (document.getElementById('paZona')||{}).value || '';
+    if(!zona.trim()){toast('Elegí una zona común.','err');return;}
+    if(zona === 'Otra'){
+      var otraVal = ((document.getElementById('paZonaOtra')||{}).value || '').trim();
+      if(otraVal.length < 3){toast('Especificá la zona (mín 3 caracteres).','err');return;}
+      ubicacionId = otraVal;
+    } else {
+      ubicacionId = zona;
+    }
+  }
+  var desc = ((document.getElementById('paDesc')||{}).value || '').trim();
+  if(desc.length < 3){toast('La descripción debe tener mínimo 3 caracteres.','err');return;}
+  var priEl = document.querySelector('input[name="paPri"]:checked');
+  var prioridad = priEl ? priEl.value : 'normal';
+  rpc('crearReporteMant',{
+    userRole: sess.userRole,
+    userName: sess.userName,
+    ubicacionTipo: tipo,
+    ubicacionId: ubicacionId,
+    descripcion: desc,
+    prioridad: prioridad,
+    fotoDanoUrl: _paNote.photoUrl || ''
+  },function(){
+    rpc('markNotePasado',{userRole:sess.userRole, userName:sess.userName, noteId:_paNote.id},
+      function(){
+        toast('✓ Pasado a Mantenimiento','ok');
+        closeM('mPasarAMant');
+        _paNote = null;
+        loadNotes();
+        var maintTab = document.getElementById('pnl-maint');
+        if(maintTab && maintTab.classList.contains('on')) loadDanosActivos();
+        if(tipo==='habitacion') rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[]; if(sess.userRole!=='MAID') renderRooms();}});
+      },
+      function(e){
+        toast('Daño creado pero no pude marcar la nota: '+(e.message||String(e)),'err');
+        closeM('mPasarAMant');
+        _paNote = null;
+        loadNotes();
+      });
+  },function(e){toast(e.message||String(e),'err');});
+}
+
 // ---- MANTENIMIENTO: Reportar daño + lista de activos (Fase 2.2) ----
 function openReportarDano(){
   if(!sess || (sess.userRole!=='ADMIN' && sess.userRole!=='RECEPTION')){
@@ -5614,28 +5756,57 @@ function loadDanosActivos(){
       var min = Math.round(diff/60000);
       if(min < 1) return 'recién';
       if(min < 60) return 'hace '+min+' min';
-      var h = Math.round(min/60);
-      if(h < 24) return 'hace '+h+' h';
-      var d = Math.round(h/24);
-      return 'hace '+d+' día'+(d===1?'':'s');
+      var hh = Math.round(min/60);
+      if(hh < 24) return 'hace '+hh+' h';
+      var dd = Math.round(hh/24);
+      return 'hace '+dd+' día'+(dd===1?'':'s');
     }
 
-    var h = '';
-    reportes.forEach(function(r){
+    function renderItem(r){
       var pri = r.prioridad || 'normal';
       var bullet = bullets[pri] || '⚪';
       var bg = badgeBg[pri] || '#22222c';
       var col = badgeColor[pri] || '#9ca3af';
       var ubi = (r.ubicacionTipo === 'zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
       var hace = fmtHace(r.reportadoMs);
-      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2e2e3a">';
-      h += '<div style="flex:1">';
-      h += '<div style="color:#e5e7eb"><span style="font-size:14px">'+bullet+'</span> <b>'+esc(ubi)+'</b> — '+esc(r.descripcion||'')+'</div>';
-      h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">Reportado por '+esc(r.reportadoPor||'?')+(hace?' • '+hace:'')+'</div>';
-      h += '</div>';
-      h += '<span style="background:'+bg+';color:'+col+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;margin-left:8px;white-space:nowrap">'+pri+'</span>';
-      h += '</div>';
-    });
+      var enVerif = (r.estado === 'ESPERA_VERIFICACION');
+      var hi = '<div style="padding:8px 0;border-bottom:1px solid #2e2e3a">';
+      hi += '<div style="display:flex;align-items:flex-start;justify-content:space-between">';
+      hi += '<div style="flex:1">';
+      hi += '<div style="color:#e5e7eb"><span style="font-size:14px">'+bullet+'</span> <b>'+esc(ubi)+'</b> — '+esc(r.descripcion||'')+'</div>';
+      hi += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">Reportado por '+esc(r.reportadoPor||'?')+(hace?' • '+hace:'')+'</div>';
+      if(enVerif){
+        hi += '<div style="font-size:10px;color:#22c55e;font-weight:700;margin-top:2px">✓ Listo para verificar';
+        if(r.arregloNota) hi += ' — <span style="color:#9ca3af;font-weight:400">'+esc(r.arregloNota)+'</span>';
+        hi += '</div>';
+      }
+      hi += '</div>';
+      hi += '<span style="background:'+bg+';color:'+col+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;margin-left:8px;white-space:nowrap">'+pri+'</span>';
+      hi += '</div>';
+      // Botones inline para verificar/rechazar — reusan funciones de Fase 5
+      if(enVerif && (sess.userRole==='ADMIN' || sess.userRole==='RECEPTION')){
+        hi += '<div style="display:flex;gap:6px;margin-top:6px">';
+        hi += '<button class="btn br xs" style="flex:1" onclick="openRechazarArreglo('+r.id+')">✗ Rechazar</button>';
+        hi += '<button class="btn bg xs" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doVerificarArreglo('+r.id+')">✓ Solucionado</button>';
+        hi += '</div>';
+      }
+      hi += '</div>';
+      return hi;
+    }
+
+    // Separar habs vs zonas comunes (Fase 6)
+    var habs = reportes.filter(function(r){return r.ubicacionTipo!=='zona_comun';});
+    var zonas = reportes.filter(function(r){return r.ubicacionTipo==='zona_comun';});
+
+    var h = '';
+    if(habs.length){
+      h += '<div style="font-size:10px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🚨 Daños activos ahora ('+habs.length+')</div>';
+      habs.forEach(function(r){h += renderItem(r);});
+    }
+    if(zonas.length){
+      h += '<div style="font-size:10px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:1px;margin:'+(habs.length?'12':'0')+'px 0 4px">🌐 Daños en zonas comunes ('+zonas.length+')</div>';
+      zonas.forEach(function(r){h += renderItem(r);});
+    }
     cont.innerHTML = h;
   },function(e){
     cont.innerHTML = '<div style="color:#ef4444">Error: '+esc(e.message||String(e))+'</div>';
@@ -8500,6 +8671,7 @@ function loadNotes(){
       h+='<div>'+esc(n.note)+'</div>';
       h+='<div style="display:flex;gap:4px;flex-shrink:0">';
       if(!seen)h+='<button class="btn bk xs" onclick="markSeen('+n.id+',this)">✓ Ver</button>';
+      if(sess.userRole==='ADMIN'||sess.userRole==='RECEPTION')h+='<button class="btn ba xs" style="background:#f97316;color:#fff" onclick="openPasarAMant('+n.id+')">🔧 Pasar a Mant.</button>';
       if(sess.userRole==='ADMIN'&&n.photoUrl)h+='<button class="btn bg xs" onclick="reviewedNote('+n.id+',\''+esc(n.photoUrl)+'\',this)">&#x2705; Revisada</button>';
       if(sess.userRole==='ADMIN')h+='<button class="btn br xs" onclick="deleteNote('+n.id+',this)">✕</button>';
       h+='</div></div>';
