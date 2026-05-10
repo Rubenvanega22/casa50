@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>Casa 50</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#0f0f13;color:#e5e7eb;font-size:14px}
@@ -45,6 +46,7 @@ select option{background:#22222c}
 .tabs{display:flex;background:#18181f;border-bottom:1px solid #2e2e3a;padding:0 10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tab{padding:9px 11px;border:none;background:transparent;color:#9ca3af;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
 .tab.on{color:#7c5cfc;border-bottom-color:#7c5cfc}
+.tab .ti{font-size:14px;vertical-align:-1px;margin-right:3px}
 .cnt{padding:12px}
 .pnl{display:none}.pnl.on{display:block}
 .sec{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px}
@@ -1470,15 +1472,17 @@ function actualizarBtnCaja(){
 function buildTabs(){
   var bar=document.getElementById('tabBar');bar.innerHTML='';
   var r=sess.userRole,tabs=[];
-  if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones'});
-  if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos'});
-  if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños'});
- if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas'},{id:'extra',l:'P.Extra'},{id:'loans',l:'Gastos'},{id:'cuadre',l:'Cuadre'},{id:'sched',l:'Calendario'},{id:'productos',l:'Productos'});
-if(r==='MAID')tabs.push({id:'listado',l:'Listado'},{id:'sched',l:'Calendario'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Metricas'},{id:'month',l:'Mes'},{id:'gastosmes',l:'Gastos Mes'},{id:'maids',l:'Camareras'},{id:'staff',l:'Personal'},{id:'sched',l:'Calendario'},{id:'cuadre-admin',l:'Cuadre'},{id:'maint',l:'Mantenimiento'},{id:'proyeccion',l:'Proyección'},{id:'productos',l:'Productos'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Reportes'});
-  if(r==='ADMIN')tabs.push({id:'config',l:'Config'});
+  if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones',i:'ti-bed'});
+  if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos',i:'ti-broom'});
+  if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños',i:'ti-tool'});
+ if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-receipt'},{id:'cuadre',l:'Cierre de caja',i:'ti-cash'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'productos',l:'Inventario',i:'ti-package'});
+if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-calendar'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-month'},{id:'gastosmes',l:'Gastos',i:'ti-receipt'},{id:'maids',l:'Limpieza',i:'ti-broom'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-cash'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-package'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
+  if(r==='ADMIN')tabs.push({id:'config',l:'Configuración',i:'ti-settings'});
   tabs.forEach(function(t){
-    var b=document.createElement('button');b.className='tab';b.textContent=t.l;b.dataset.tab=t.id;
+    var b=document.createElement('button');b.className='tab';
+    b.innerHTML=(t.i?'<i class="ti '+t.i+'"></i> ':'')+esc(t.l);
+    b.dataset.tab=t.id;
     b.onclick=function(){sw(t.id);};bar.appendChild(b);
   });
 }
@@ -9763,9 +9767,10 @@ function updNoteBadge(notes){
   if(!sess)return;
   var tab=document.querySelector('[data-tab="notes"]');
   if(!tab)return;
-  if(!notes){tab.textContent='Notas';return;}
+  var base='<i class="ti ti-file-text"></i> Informes';
+  if(!notes){tab.innerHTML=base;return;}
   var unseen=notes.filter(function(n){return (n.seenBy||[]).indexOf(sess.userRole)<0;}).length;
-  tab.textContent='Notas'+(unseen>0?' ('+unseen+')':'');
+  tab.innerHTML=base+(unseen>0?' ('+unseen+')':'');
   tab.style.color=unseen>0?'#ef4444':'';
 }
  function loadCfg(){
