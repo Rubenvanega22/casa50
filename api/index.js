@@ -225,6 +225,7 @@ module.exports = async function handler(req, res) {
       case 'completarTareaMant':return await apiCompletarTareaMant(payload, res);
       case 'anularTareaMant':   return await apiAnularTareaMant(payload, res);
       case 'getHistorialMant':  return await apiGetHistorialMant(payload, res);
+      case 'getResumenMantHoy': return await apiGetResumenMantHoy(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -2954,6 +2955,55 @@ async function apiGetHistorialMant(p, res) {
     items: items,
     contadores: { total: items.length, danos: danosCount, tareas: tareasCount },
     rango: { desde, hasta }
+  });
+}
+
+// Resumen del día para los 4 cards de Mantenimiento ADM (Fase 7.2)
+async function apiGetResumenMantHoy(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+
+  const today = businessDay(Date.now());
+  const inicioHoyMs = new Date(today+'T00:00:00').getTime();
+  const finHoyMs = inicioHoyMs + 86400000;
+
+  // 1) Nuevos hoy: danos creados hoy (cualquier estado, sin anulados)
+  const { data: nuevosData } = await supabase.from('room_issues')
+    .select('id')
+    .eq('anulada', false)
+    .eq('business_day', today);
+
+  // 2) Activos: no verificados ni anulados
+  const { data: activosData } = await supabase.from('room_issues')
+    .select('estado')
+    .eq('anulada', false)
+    .in('estado', ['PENDIENTE_RECEPCION','NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION']);
+
+  // 3) Verificados hoy
+  const { data: verifHoyData } = await supabase.from('room_issues')
+    .select('id')
+    .eq('anulada', false)
+    .eq('estado', 'VERIFICADO')
+    .gte('verificado_ms', inicioHoyMs)
+    .lt('verificado_ms', finHoyMs);
+
+  // 4) Tareas completadas hoy
+  const { data: tareasHoyData } = await supabase.from('mantenimiento_tareas')
+    .select('id')
+    .eq('estado', 'hecha')
+    .gte('completado_ms', inicioHoyMs)
+    .lt('completado_ms', finHoyMs);
+
+  const activosArr = activosData || [];
+  const pendientesMant = activosArr.filter(function(r){
+    return r.estado==='NOTA_ACTIVA' || r.estado==='RECHAZADO_VERIFICACION';
+  }).length;
+
+  return ok(res, {
+    nuevosHoy: (nuevosData||[]).length,
+    activos: activosArr.length,
+    pendientesMant: pendientesMant,
+    hechosHoy: (verifHoyData||[]).length + (tareasHoyData||[]).length
   });
 }
 

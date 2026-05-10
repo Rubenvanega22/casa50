@@ -1121,6 +1121,26 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <!-- MANTENIMIENTO (admin) -->
 <div class="pnl" id="pnl-maint">
 
+<!-- 4 cards resumen del día (Fase 7.2) -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+  <div style="background:#18181f;border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:12px;text-align:center">
+    <div id="rmNuevosHoy" style="font-size:24px;font-weight:900;color:#60a5fa">0</div>
+    <div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">Nuevos hoy</div>
+  </div>
+  <div style="background:#18181f;border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px;text-align:center">
+    <div id="rmActivos" style="font-size:24px;font-weight:900;color:#f59e0b">0</div>
+    <div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">Activos</div>
+  </div>
+  <div style="background:#18181f;border:1px solid rgba(239,68,68,.4);border-radius:10px;padding:12px;text-align:center">
+    <div id="rmPendientesMant" style="font-size:24px;font-weight:900;color:#ef4444">0</div>
+    <div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">Pend. mantenedor</div>
+  </div>
+  <div style="background:#18181f;border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:12px;text-align:center">
+    <div id="rmHechosHoy" style="font-size:24px;font-weight:900;color:#22c55e">0</div>
+    <div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">Hechos hoy</div>
+  </div>
+</div>
+
 <!-- NUEVO Fase 2.2 + 4.5: Reportar daño + Asignar tarea + listas -->
 <div style="margin-bottom:14px">
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
@@ -1399,7 +1419,7 @@ function sw(id){
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
- if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();if(roomIssuesOpen)loadRoomIssuesGrid();}
+ if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();loadResumenMantHoy();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
@@ -5854,6 +5874,17 @@ function doAsigTarea(){
     closeM('mAsigTarea');
     loadTareasAdmin();
   }, function(e){toast(e.message||String(e),'err');});
+}
+
+// Resumen del día para 4 cards de Mantenimiento ADM (Fase 7.2)
+function loadResumenMantHoy(){
+  if(!sess) return;
+  rpc('getResumenMantHoy', {userRole:sess.userRole, userName:sess.userName}, function(d){
+    var nh = document.getElementById('rmNuevosHoy'); if(nh) nh.textContent = d.nuevosHoy || 0;
+    var ac = document.getElementById('rmActivos'); if(ac) ac.textContent = d.activos || 0;
+    var pm = document.getElementById('rmPendientesMant'); if(pm) pm.textContent = d.pendientesMant || 0;
+    var hh = document.getElementById('rmHechosHoy'); if(hh) hh.textContent = d.hechosHoy || 0;
+  });
 }
 
 function loadTareasAdmin(){
