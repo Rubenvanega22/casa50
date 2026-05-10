@@ -224,6 +224,7 @@ module.exports = async function handler(req, res) {
       case 'getTareasMant':     return await apiGetTareasMant(payload, res);
       case 'completarTareaMant':return await apiCompletarTareaMant(payload, res);
       case 'anularTareaMant':   return await apiAnularTareaMant(payload, res);
+      case 'getHistorialMant':  return await apiGetHistorialMant(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -2848,6 +2849,112 @@ async function apiAnularTareaMant(p, res) {
   }).eq('id', tareaId);
 
   return ok(res, { id: tareaId, estado: 'anulada' });
+}
+
+// ==================== HISTORIAL MANTENIMIENTO (Fase 7.1) ====================
+// ADMIN/RECEPTION ven el historial unificado de:
+//   - Daños VERIFICADOS (room_issues con estado='VERIFICADO')
+//   - Tareas COMPLETADAS (mantenimiento_tareas con estado='hecha')
+// Con filtros por rango de fecha, tipo, mantenedor y ubicacion.
+async function apiGetHistorialMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+
+  // Rango de fechas (default: ultimos 30 dias)
+  const hoy = new Date().toISOString().split('T')[0];
+  const hace30 = new Date(Date.now() - 30*86400000).toISOString().split('T')[0];
+  const desde = String(p.desde || hace30);
+  const hasta = String(p.hasta || hoy);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)){
+    return err(res, 'Fechas formato YYYY-MM-DD');
+  }
+  const desdeMs = new Date(desde+'T00:00:00').getTime();
+  const hastaMs = new Date(hasta+'T00:00:00').getTime() + 86400000; // fin del dia
+
+  const tipo = String(p.tipo||'todos').toLowerCase();
+  if(!['todos','danos','tareas'].includes(tipo)) return err(res, 'tipo invalido');
+
+  const mantenedorFilter = String(p.mantenedor||'').trim();  // filtro opcional
+  const ubicacionFilter = String(p.ubicacion||'').trim();    // filtro opcional (text-match)
+
+  const items = [];
+
+  // 1) DAÑOS VERIFICADOS
+  if(tipo === 'todos' || tipo === 'danos'){
+    let q1 = supabase.from('room_issues').select('*')
+      .eq('anulada', false)
+      .eq('estado', 'VERIFICADO')
+      .gte('verificado_ms', desdeMs)
+      .lt('verificado_ms', hastaMs);
+    if(mantenedorFilter) q1 = q1.eq('arreglado_por', mantenedorFilter);
+    if(ubicacionFilter) q1 = q1.ilike('ubicacion_id', '%'+ubicacionFilter+'%');
+    const { data: danos } = await q1.order('verificado_ms', {ascending: false});
+    (danos||[]).forEach(function(r){
+      const tiempoTrabajoMs = (r.arreglado_ms && r.aprobado_ms) ? Number(r.arreglado_ms - r.aprobado_ms) : 0;
+      items.push({
+        tipo: 'dano',
+        id: r.id,
+        ubicacionTipo: r.ubicacion_tipo || 'habitacion',
+        ubicacionId: r.ubicacion_id || r.room_id || '',
+        descripcion: r.description || '',
+        prioridad: r.prioridad,
+        reportadoPor: r.created_by || '',
+        reportadoMs: Number(r.reportado_ms || 0),
+        aprobadoPor: r.aprobado_por || null,
+        aprobadoMs: Number(r.aprobado_ms || 0),
+        arregladoPor: r.arreglado_por || '',
+        arregladoMs: Number(r.arreglado_ms || 0),
+        arregloNota: r.arreglo_nota || '',
+        fotoDanoUrl: r.foto_dano_url || null,
+        fotoArregloUrl: r.foto_arreglo_url || null,
+        verificadoPor: r.verificado_por || '',
+        verificadoMs: Number(r.verificado_ms || 0),
+        // ms para ordenar el array combinado
+        sortMs: Number(r.verificado_ms || 0),
+        tiempoTrabajoMs: tiempoTrabajoMs
+      });
+    });
+  }
+
+  // 2) TAREAS COMPLETADAS
+  if(tipo === 'todos' || tipo === 'tareas'){
+    let q2 = supabase.from('mantenimiento_tareas').select('*')
+      .eq('estado', 'hecha')
+      .gte('completado_ms', desdeMs)
+      .lt('completado_ms', hastaMs);
+    if(mantenedorFilter) q2 = q2.eq('completado_por', mantenedorFilter);
+    if(ubicacionFilter) q2 = q2.ilike('descripcion', '%'+ubicacionFilter+'%');
+    const { data: tareas } = await q2.order('completado_ms', {ascending: false});
+    (tareas||[]).forEach(function(t){
+      items.push({
+        tipo: 'tarea',
+        id: t.id,
+        descripcion: t.descripcion || '',
+        prioridad: t.prioridad,
+        asignadoA: t.asignado_a || '',
+        fechaObjetivo: t.fecha_objetivo || null,
+        creadoPor: t.creado_por || '',
+        creadoMs: Number(t.creado_ms || 0),
+        completadoPor: t.completado_por || '',
+        completadoMs: Number(t.completado_ms || 0),
+        completadoNota: t.completado_nota || '',
+        fotoCompletadoUrl: t.foto_completado_url || null,
+        sortMs: Number(t.completado_ms || 0)
+      });
+    });
+  }
+
+  // Ordenar combinado por sortMs descendente (lo mas reciente primero)
+  items.sort(function(a, b){ return b.sortMs - a.sortMs; });
+
+  const danosCount = items.filter(function(x){return x.tipo==='dano';}).length;
+  const tareasCount = items.filter(function(x){return x.tipo==='tarea';}).length;
+
+  return ok(res, {
+    items: items,
+    contadores: { total: items.length, danos: danosCount, tareas: tareasCount },
+    rango: { desde, hasta }
+  });
 }
 
 // ==================== PROYECCION ====================
