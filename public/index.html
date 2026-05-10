@@ -5412,26 +5412,29 @@ function doMarcarArreglo(){
   }
 
   if(fotoFile){
-    toast('Subiendo foto...','ok');
-    var ext = (fotoFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
-    var fileName = 'mantenimiento/arreglos/arreglo_'+Date.now()+'.'+(ext||'jpg');
-    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
-      method:'PUT',
-      headers:{
-        'apikey':SUPA_KEY,
-        'Authorization':'Bearer '+SUPA_KEY,
-        'x-upsert':'true',
-        'Content-Type': fotoFile.type || 'image/jpeg'
-      },
-      body: fotoFile
-    }).then(function(r){
-      if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
-      return r.json();
-    }).then(function(){
-      var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
-      enviarRpc(url);
-    }).catch(function(e){
-      toast('Error subiendo foto: '+(e.message||String(e)),'err');
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName = 'mantenimiento/arreglos/arreglo_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{
+          'apikey':SUPA_KEY,
+          'Authorization':'Bearer '+SUPA_KEY,
+          'x-upsert':'true',
+          'Content-Type': 'image/jpeg'
+        },
+        body: blob
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+        return r.json();
+      }).then(function(){
+        var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        enviarRpc(url);
+      }).catch(function(e){
+        toast('Error subiendo foto: '+(e.message||String(e)),'err');
+      });
+    }, function(err){
+      toast('Error procesando foto: '+(err.message||String(err)),'err');
     });
   } else {
     enviarRpc('');
@@ -5706,26 +5709,29 @@ function doReportarDano(){
   }
 
   if(fotoFile){
-    toast('Subiendo foto...','ok');
-    var ext = (fotoFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
-    var fileName = 'mantenimiento/danos/dano_'+Date.now()+'.'+(ext||'jpg');
-    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
-      method:'PUT',
-      headers:{
-        'apikey':SUPA_KEY,
-        'Authorization':'Bearer '+SUPA_KEY,
-        'x-upsert':'true',
-        'Content-Type': fotoFile.type || 'image/jpeg'
-      },
-      body: fotoFile
-    }).then(function(r){
-      if(!r.ok) return r.text().then(function(t){ throw new Error('HTTP '+r.status+': '+t); });
-      return r.json();
-    }).then(function(){
-      var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
-      enviarRpc(url);
-    }).catch(function(e){
-      toast('Error subiendo foto: '+(e.message||String(e)),'err');
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName = 'mantenimiento/danos/dano_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{
+          'apikey':SUPA_KEY,
+          'Authorization':'Bearer '+SUPA_KEY,
+          'x-upsert':'true',
+          'Content-Type': 'image/jpeg'
+        },
+        body: blob
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){ throw new Error('HTTP '+r.status+': '+t); });
+        return r.json();
+      }).then(function(){
+        var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        enviarRpc(url);
+      }).catch(function(e){
+        toast('Error subiendo foto: '+(e.message||String(e)),'err');
+      });
+    }, function(err){
+      toast('Error procesando foto: '+(err.message||String(err)),'err');
     });
   } else {
     enviarRpc('');
@@ -8609,28 +8615,61 @@ function renderMo(data,ym){
 // ---- NOTAS ----
 var SUPA_URL='https://fojffyncxrrxevavshod.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvamZmeW5jeHJyeGV2YXZzaG9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzQ1MDQsImV4cCI6MjA4NzQ1MDUwNH0.dNBs_7iJOtNUfTwSsEwL-snON9OoOudf6T9Bjxc80hI';
+// Comprime imagen client-side antes de subir a Storage (Fase 6 — fix bug PC)
+// Redimensiona a max 1920px de ancho y exporta JPEG calidad 0.85.
+// Convierte cualquier formato (PNG, HEIC, WebP) a JPEG. Reduce ~10x el peso
+// tipico de fotos de PC, lo que evita 400 por tamano del bucket o mime types.
+function compressImage(file, onDone, onErr){
+  if(!file || !file.type || file.type.indexOf('image/')!==0){
+    if(onErr) onErr(new Error('No es una imagen'));
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = new Image();
+    img.onload = function(){
+      var maxW = 1920;
+      var w = img.width, h = img.height;
+      if(w > maxW){ h = Math.round(h * (maxW / w)); w = maxW; }
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob){
+        if(!blob){ if(onErr) onErr(new Error('toBlob fallo')); return; }
+        onDone(blob);
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function(){ if(onErr) onErr(new Error('No se pudo cargar la imagen')); };
+    img.src = e.target.result;
+  };
+  reader.onerror = function(){ if(onErr) onErr(new Error('No se pudo leer el archivo')); };
+  reader.readAsDataURL(file);
+}
+
 function sendNote(){
   var t=(document.getElementById('noteIn')||{}).value||'';
   var target=(document.getElementById('noteTarget')||{}).value||'ALL';
   if(!t.trim()){toast('Escribe algo.','err');return;}
   var fotoFile=document.getElementById('notePhoto')&&document.getElementById('notePhoto').files[0];
   if(fotoFile){
-    toast('Subiendo foto...','ok');
-    var ext=(fotoFile.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
-    var fileName='note_'+Date.now()+'.'+(ext||'jpg');
-    var formData=new FormData();
-    formData.append('',fotoFile,fileName);
-    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
-      method:'PUT',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':fotoFile.type||'image/jpeg'},
-      body:fotoFile
-   }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});return r.json();}).then(function(resp){
-      var photoUrl=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
-      rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoUrl:photoUrl},
-        function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
-        function(e){toast(e.message||String(e),'err');}
-      );
-    }).catch(function(e){toast('Catch: '+(e.message||String(e)),'err');});
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName='note_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':'image/jpeg'},
+        body:blob
+     }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});return r.json();}).then(function(resp){
+        var photoUrl=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoUrl:photoUrl},
+          function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
+          function(e){toast(e.message||String(e),'err');}
+        );
+      }).catch(function(e){toast('Error subiendo foto: '+(e.message||String(e)),'err');});
+    }, function(err){
+      toast('Error procesando foto: '+(err.message||String(err)),'err');
+    });
   } else {
     rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole},
       function(){document.getElementById('noteIn').value='';toast('Nota enviada.','ok');loadNotes();updNoteBadge();},
