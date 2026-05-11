@@ -774,7 +774,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>¿Qué encontraste? ¿Qué hiciste?</label>
   <textarea id="rvMotivo" rows="3" placeholder="Ej: Falta un repuesto, vuelvo el lunes. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="rvFoto" accept="image/*">
+  <input type="file" id="rvFoto" accept="image/*" capture="environment">
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mNuevaRevision')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#3b82f6;color:#fff;font-weight:700" onclick="doRevisar()">📝 Guardar revisión</button>
