@@ -229,6 +229,7 @@ module.exports = async function handler(req, res) {
       case 'getResumenMantHoy': return await apiGetResumenMantHoy(payload, res);
       case 'crearSolicitudMant':  return await apiCrearSolicitudMant(payload, res);
       case 'getSolicitudesMant':  return await apiGetSolicitudesMant(payload, res);
+      case 'getHistorialSolicitudesGeo': return await apiGetHistorialSolicitudesGeo(payload, res);
       case 'aprobarSolicitudMant':return await apiAprobarSolicitudMant(payload, res);
       case 'rechazarSolicitudMant':return await apiRechazarSolicitudMant(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
@@ -3183,7 +3184,13 @@ async function apiGetSolicitudesMant(p, res) {
 
   if(userRole === 'MAINTENANCE'){
     if(!userName) return err(res, 'Usuario requerido');
+    // Auto-archivado: pendientes (todas) + resueltas hoy. Las resueltas de
+    // ayer o antes desaparecen de la pantalla principal pero siguen accesibles
+    // vía apiGetHistorialSolicitudesGeo (botón "Ver historial completo").
+    const today = businessDay(Date.now());
+    const inicioHoyMs = new Date(today+'T00:00:00').getTime();
     query = query.eq('solicitado_por', userName)
+                 .or('estado.eq.pendiente,resuelto_ms.gte.'+inicioHoyMs)
                  .order('solicitado_ms', {ascending: false})
                  .limit(30);
   } else {
@@ -3226,6 +3233,45 @@ async function apiGetSolicitudesMant(p, res) {
   };
 
   return ok(res, { solicitudes: solicitudes, contadores: contadores });
+}
+
+// Historial completo de solicitudes de Geovanny (sin filtro de fecha).
+// Solo lo consume el modal "Ver historial completo" desde su pantalla.
+async function apiGetHistorialSolicitudesGeo(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE') return err(res, 'Solo MAINTENANCE');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const { data, error } = await supabase.from('mantenimiento_solicitudes')
+    .select('*')
+    .eq('solicitado_por', userName)
+    .order('solicitado_ms', {ascending: false})
+    .limit(200);
+
+  if(error) return err(res, 'Error consultando historial: '+error.message);
+
+  const solicitudes = (data||[]).map(function(s){
+    return {
+      id: s.id,
+      tipoSolicitud: s.tipo_solicitud,
+      ubicacionTipo: s.ubicacion_tipo,
+      ubicacionId: s.ubicacion_id,
+      descripcion: s.descripcion || '',
+      fotoUrl: s.foto_url || null,
+      estado: s.estado,
+      solicitadoPor: s.solicitado_por || '',
+      solicitadoMs: Number(s.solicitado_ms || 0),
+      resueltoPor: s.resuelto_por || null,
+      resueltoMs: Number(s.resuelto_ms || 0),
+      motivoRechazo: s.motivo_rechazo || null,
+      comentarioAdm: s.comentario_adm || null,
+      prioridadAsignada: s.prioridad_asignada || null,
+      roomIssueId: s.room_issue_id || null
+    };
+  });
+
+  return ok(res, { solicitudes: solicitudes });
 }
 
 async function apiAprobarSolicitudMant(p, res) {
