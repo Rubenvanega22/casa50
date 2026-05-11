@@ -659,6 +659,26 @@ async function apiCheckOut(p, res) {
       .eq('type', 'SALE')
       .eq('check_in_ms', checkInMs);
   }
+
+  // Auto-bloqueo (G3): si la habitación que recién hizo checkout tiene un daño
+  // urgente activo, bloquearla. La habitación ya está en estado DIRTY a esta altura,
+  // así que el helper bloqueará sin problema (no rechaza por OCCUPIED). Cualquier
+  // error acá se loggea pero NO se propaga — el checkout no debe fallar por esto.
+  try {
+    const { data: urgentes } = await supabase.from('room_issues')
+      .select('id, description')
+      .eq('anulada', false)
+      .eq('ubicacion_tipo', 'habitacion')
+      .eq('ubicacion_id', roomId)
+      .eq('prioridad', 'urgente')
+      .in('estado', ['NOTA_ACTIVA','RECHAZADO_VERIFICACION','ESPERA_VERIFICACION']);
+    if(urgentes && urgentes.length > 0){
+      await bloquearPorDanoUrgenteSiCorresponde(roomId, urgentes[0].description, userName);
+    }
+  } catch (e) {
+    console.error('apiCheckOut hook auto-bloqueo (no bloqueante):', e);
+  }
+
   return ok(res, { roomId, checkoutMs: now });
 }
 
@@ -2380,6 +2400,61 @@ async function apiDeleteRoomIssue(p, res) {
 
 // ==================== MANTENIMIENTO (Modulo nuevo) ====================
 // Reusa la tabla room_issues con campos extendidos.
+// ==================== AUTO-BLOQUEO POR DAÑO URGENTE (G3) ====================
+// Bloquea automaticamente una habitacion cuando se reporta/aprueba un daño urgente
+// o cuando se hace checkout estando pendiente un daño urgente.
+// - Si la habitacion esta OCUPADA, no se bloquea (espera al checkout).
+// - Si ya estaba bloqueada por otro motivo, se concatena al disabled_reason previo.
+// - El desbloqueo es SIEMPRE manual (no se auto-desbloquea al verificar el daño).
+// Toda la logica esta envuelta en try/catch — un fallo aca nunca debe romper el caller.
+async function bloquearPorDanoUrgenteSiCorresponde(roomId, descDano, userName) {
+  try {
+    if(!roomId) return { blocked: false, reason: 'sin roomId' };
+    const room = await getRoom(roomId);
+    if(!room) return { blocked: false, reason: 'habitacion no existe' };
+    if(room.state === 'OCCUPIED') return { blocked: false, reason: 'ocupada, espera checkout' };
+
+    const now = Date.now();
+    const bDay = businessDay(now);
+    const shift = currentShiftId(now);
+
+    const descCorta = String(descDano || 'sin descripción').slice(0, 100);
+    const motivoNuevo = 'Daño urgente: ' + descCorta;
+    let motivoFinal = motivoNuevo;
+
+    if(room.disabled){
+      const prev = String(room.disabled_reason || '').trim();
+      if(prev && !prev.includes('Daño urgente')) {
+        motivoFinal = prev + ' · ' + motivoNuevo;
+      } else if(prev) {
+        // Ya tiene marca de daño urgente — no duplicamos
+        motivoFinal = prev;
+      }
+    }
+
+    await supabase.from('rooms').update({
+      disabled: true,
+      disabled_date_ms: Number(room.disabled_date_ms || 0) || now,
+      disabled_reason: motivoFinal,
+      updated_at: new Date().toISOString()
+    }).eq('room_id', roomId);
+
+    // Registro en historial de mantenimiento (mismo formato que apiSetDisabled)
+    await supabase.from('maintenance').insert({
+      ts_ms: now, business_day: bDay, shift_id: shift,
+      user_role: 'AUTO', user_name: userName || 'sistema',
+      room_id: roomId, type: 'DISABLE',
+      text: motivoNuevo,
+      repair_desc: '', repair_cost: 0
+    });
+
+    return { blocked: true, alreadyDisabled: !!room.disabled, reason: motivoFinal };
+  } catch (e) {
+    console.error('bloquearPorDanoUrgenteSiCorresponde error:', e);
+    return { blocked: false, reason: 'error: '+(e.message||String(e)) };
+  }
+}
+
 // Estados activos: PENDIENTE_RECEPCION, NOTA_ACTIVA, ESPERA_VERIFICACION, RECHAZADO_VERIFICACION
 // Estados terminales: VERIFICADO, RECHAZADO_REC
 // Filtra siempre anulada=false en lecturas.
@@ -2539,6 +2614,11 @@ async function apiCrearReporteMant(p, res) {
   }).select().single();
 
   if(error) return err(res,'Error al crear reporte: '+error.message);
+
+  // Auto-bloqueo (G3): daño urgente en habitación recién aprobado directamente
+  if(estadoInicial === 'NOTA_ACTIVA' && prioridadFinal === 'urgente' && ubicacionTipo === 'habitacion'){
+    await bloquearPorDanoUrgenteSiCorresponde(ubicacionId, descripcion, userName);
+  }
 
   return ok(res, {
     id: inserted.id,
@@ -3205,6 +3285,11 @@ async function apiAprobarSolicitudMant(p, res) {
       editada: false
     }).select().single();
     if(errDano) return err(res, 'Error creando daño: '+errDano.message);
+
+    // Auto-bloqueo (G3): daño urgente en habitación recién aprobado desde solicitud
+    if(prioridad === 'urgente' && sol.ubicacion_tipo === 'habitacion'){
+      await bloquearPorDanoUrgenteSiCorresponde(sol.ubicacion_id, sol.descripcion, userName);
+    }
 
     await supabase.from('mantenimiento_solicitudes').update({
       estado: 'aprobada',
