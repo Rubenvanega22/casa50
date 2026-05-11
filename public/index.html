@@ -793,6 +793,18 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Historial completo de solicitudes (Geovanny consulta lo que el feed principal auto-archivó) -->
+<div class="ov" id="mHistorialSolicitudesGeo"><div class="modal" style="max-width:560px">
+  <div class="mh">
+    <div class="mt">📜 Historial de solicitudes</div>
+    <button class="mc" onclick="closeM('mHistorialSolicitudesGeo')">✕</button>
+  </div>
+  <div id="hsLista" style="max-height:65vh;overflow-y:auto"></div>
+  <div style="margin-top:12px">
+    <button class="btn bk" style="width:100%" onclick="closeM('mHistorialSolicitudesGeo')">Cerrar</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Pasar a Mantenimiento (ADMIN/RECEPTION — Fase 6) -->
 <div class="ov" id="mPasarAMant"><div class="modal" style="max-width:520px">
   <div class="mh">
@@ -5747,6 +5759,11 @@ function renderMisDanos(d, dTareas, dSolicitudes){
     });
   }
 
+  // Botón "Ver historial completo" — siempre visible para Geovanny aunque
+  // hoy no haya solicitudes vivas. Permite consultar las que el backend
+  // auto-archivó (resueltas en días anteriores).
+  h+='<div style="padding:8px 12px 12px"><button class="btn bk" style="width:100%;font-size:12px;background:#22222c;color:#93c5fd;border:1px solid #2e2e3a" onclick="openHistorialSolicitudesGeo()">📜 Ver historial completo</button></div>';
+
   el.innerHTML=h;
 }
 
@@ -6033,6 +6050,52 @@ function doCompTarea(){
 }
 
 // ---- SOLICITUDES Geovanny → ADM ----
+function openHistorialSolicitudesGeo(){
+  if(!sess || sess.userRole !== 'MAINTENANCE'){toast('Solo MAINTENANCE','err');return;}
+  var el = document.getElementById('hsLista');
+  if(!el){toast('Modal no encontrado','err');return;}
+  el.innerHTML = '<div style="padding:30px;text-align:center;color:#9ca3af">Cargando...</div>';
+  openM('mHistorialSolicitudesGeo');
+
+  rpc('getHistorialSolicitudesGeo', {userRole: sess.userRole, userName: sess.userName}, function(d){
+    var sols = (d && d.solicitudes) || [];
+    if(!sols.length){
+      el.innerHTML = '<div style="padding:30px;text-align:center;color:#9ca3af">No tenés solicitudes registradas.</div>';
+      return;
+    }
+    var estadoLabels = {pendiente:{txt:'PENDIENTE',col:'#f59e0b',bg:'rgba(245,158,11,.15)'},aprobada:{txt:'APROBADA ✓',col:'#22c55e',bg:'rgba(34,197,94,.15)'},rechazada:{txt:'RECHAZADA ✗',col:'#ef4444',bg:'rgba(239,68,68,.15)'},anulada:{txt:'ANULADA',col:'#9ca3af',bg:'rgba(156,163,175,.15)'}};
+    var h = '';
+    sols.forEach(function(s){
+      var icono = s.tipoSolicitud==='dano' ? '🔧' : '🔓';
+      var lbl = s.tipoSolicitud==='dano' ? 'Daño' : 'Permiso';
+      var info = estadoLabels[s.estado] || estadoLabels.pendiente;
+      var fechaSol = s.solicitadoMs ? new Date(s.solicitadoMs).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
+      h += '<div style="margin:6px 0;background:#18181f;border:1px solid #2e2e3a;border-left:4px solid '+info.col+';border-radius:8px;padding:10px">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;gap:8px">';
+      h += '<div style="font-size:13px;color:#e5e7eb;flex:1"><span style="font-size:14px">'+icono+'</span> <b>'+lbl+'</b>';
+      if(s.tipoSolicitud==='dano' && s.ubicacionId){
+        var ubi = s.ubicacionTipo==='zona_comun' ? s.ubicacionId : ('Hab '+s.ubicacionId);
+        h += ' · '+esc(ubi);
+      }
+      h += '</div>';
+      h += '<span style="background:'+info.bg+';color:'+info.col+';font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;white-space:nowrap">'+info.txt+'</span>';
+      h += '</div>';
+      h += '<div style="font-size:12px;color:#e5e7eb;margin-bottom:4px">'+esc(s.descripcion||'')+'</div>';
+      if(fechaSol) h += '<div style="font-size:10px;color:#9ca3af">'+esc(fechaSol)+'</div>';
+      if(s.estado==='rechazada' && s.motivoRechazo){
+        h += '<div style="font-size:10px;color:#fca5a5;background:rgba(239,68,68,.08);padding:4px 8px;border-radius:4px;margin-top:4px">Motivo: '+esc(s.motivoRechazo)+'</div>';
+      }
+      if(s.estado==='aprobada' && s.tipoSolicitud==='dano' && s.prioridadAsignada){
+        h += '<div style="font-size:10px;color:#86efac;margin-top:4px">Prioridad asignada: '+esc(s.prioridadAsignada)+'</div>';
+      }
+      h += '</div>';
+    });
+    el.innerHTML = h;
+  }, function(e){
+    el.innerHTML = '<div style="color:#ef4444;padding:20px">Error: '+esc(e.message||String(e))+'</div>';
+  });
+}
+
 function openNuevaSolicitud(){
   if(!sess || sess.userRole !== 'MAINTENANCE'){toast('Solo MAINTENANCE','err');return;}
   // Reset radios tipo
