@@ -220,6 +220,7 @@ module.exports = async function handler(req, res) {
       case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
       case 'verificarArreglo':  return await apiVerificarArreglo(payload, res);
       case 'rechazarArreglo':   return await apiRechazarArreglo(payload, res);
+      case 'marcarRevision':    return await apiMarcarRevision(payload, res);
       case 'crearTareaMant':    return await apiCrearTareaMant(payload, res);
       case 'getTareasMant':     return await apiGetTareasMant(payload, res);
       case 'completarTareaMant':return await apiCompletarTareaMant(payload, res);
@@ -331,7 +332,7 @@ async function apiGetRooms(req, res) {
   // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
   const estadosBombillito = ['NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
   const { data: danos } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url')
+    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url, revisiones')
     .eq('anulada', false)
     .eq('ubicacion_tipo', 'habitacion')
     .in('estado', estadosBombillito);
@@ -347,7 +348,8 @@ async function apiGetRooms(req, res) {
       arregladoPor: d.arreglado_por || '',
       arregladoMs: Number(d.arreglado_ms || 0),
       arregloNota: d.arreglo_nota || '',
-      fotoArregloUrl: d.foto_arreglo_url || null
+      fotoArregloUrl: d.foto_arreglo_url || null,
+      revisiones: Array.isArray(d.revisiones) ? d.revisiones : []
     };
   });
 
@@ -2437,7 +2439,8 @@ async function apiGetReportesActivos(p, res) {
       fotoArregloUrl: r.foto_arreglo_url || null,
       verificadoPor: r.verificado_por || null,
       verificadoMs: Number(r.verificado_ms || 0),
-      motivoRechazo: r.motivo_rechazo || null
+      motivoRechazo: r.motivo_rechazo || null,
+      revisiones: Array.isArray(r.revisiones) ? r.revisiones : []
     }))
   });
 }
@@ -2583,7 +2586,8 @@ async function apiGetMisDanos(p, res) {
       reportadoMs: Number(r.reportado_ms || 0),
       fotoDanoUrl: r.foto_dano_url || null,
       motivoRechazo: r.motivo_rechazo || null,
-      comentarioRecepcion: r.comentario_recepcion || null
+      comentarioRecepcion: r.comentario_recepcion || null,
+      revisiones: Array.isArray(r.revisiones) ? r.revisiones : []
     };
   });
 
@@ -2693,6 +2697,40 @@ async function apiRechazarArreglo(p, res) {
   }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, estado: 'RECHAZADO_VERIFICACION' });
+}
+
+// ==================== REVISION (G1) ====================
+// Geovanny / ADM / Recep registran una visita/revision al dano sin cerrarlo.
+// El estado y la prioridad NO cambian; solo se acumula al array revisiones.
+async function apiMarcarRevision(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['MAINTENANCE','ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Sin permiso');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const motivo = String(p.motivo || '').trim();
+  if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
+
+  const fotoUrl = String(p.fotoUrl || '').trim() || null;
+
+  const { data: reporte } = await supabase.from('room_issues')
+    .select('id, estado, anulada, revisiones').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
+    return err(res, 'Reporte no esta activo (estado: '+reporte.estado+')');
+  }
+
+  const prev = Array.isArray(reporte.revisiones) ? reporte.revisiones : [];
+  const nueva = { ts: Date.now(), por: userName, rol: userRole, motivo: motivo, fotoUrl: fotoUrl };
+  const nuevas = prev.concat([nueva]);
+
+  await supabase.from('room_issues').update({ revisiones: nuevas }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, revisiones: nuevas });
 }
 
 // ==================== TAREAS MANTENEDOR (Fase 4.5) ====================
@@ -2914,6 +2952,7 @@ async function apiGetHistorialMant(p, res) {
         fotoArregloUrl: r.foto_arreglo_url || null,
         verificadoPor: r.verificado_por || '',
         verificadoMs: Number(r.verificado_ms || 0),
+        revisiones: Array.isArray(r.revisiones) ? r.revisiones : [],
         // ms para ordenar el array combinado
         sortMs: Number(r.verificado_ms || 0),
         tiempoTrabajoMs: tiempoTrabajoMs
