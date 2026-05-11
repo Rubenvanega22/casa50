@@ -761,6 +761,38 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Registrar revisión (G1) — Geovanny/ADM/Recep dejan constancia sin cerrar el daño -->
+<div class="ov" id="mNuevaRevision"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">📝 Registrar revisión</div>
+    <button class="mc" onclick="closeM('mNuevaRevision')">✕</button>
+  </div>
+  <div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">
+    <div style="color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Daño</div>
+    <div id="rvDesc" style="color:#e5e7eb"></div>
+  </div>
+  <label>¿Qué encontraste? ¿Qué hiciste?</label>
+  <textarea id="rvMotivo" rows="3" placeholder="Ej: Falta un repuesto, vuelvo el lunes. (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Foto (opcional)</label>
+  <input type="file" id="rvFoto" accept="image/*">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mNuevaRevision')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#3b82f6;color:#fff;font-weight:700" onclick="doRevisar()">📝 Guardar revisión</button>
+  </div>
+</div></div>
+
+<!-- MODAL: Ver revisiones registradas (G1) — lista cronológica de revisiones del daño -->
+<div class="ov" id="mVerRevisiones"><div class="modal" style="max-width:560px">
+  <div class="mh">
+    <div class="mt">📝 Revisiones registradas</div>
+    <button class="mc" onclick="closeM('mVerRevisiones')">✕</button>
+  </div>
+  <div id="vrLista" style="max-height:60vh;overflow-y:auto"></div>
+  <div style="margin-top:12px">
+    <button class="btn bk" style="width:100%" onclick="closeM('mVerRevisiones')">Cerrar</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Pasar a Mantenimiento (ADMIN/RECEPTION — Fase 6) -->
 <div class="ov" id="mPasarAMant"><div class="modal" style="max-width:520px">
   <div class="mh">
@@ -1833,6 +1865,14 @@ function buildRoomB(r){
       h+='<div style="font-size:10px;color:#ef4444">⚠ Arreglo rechazado — vuelve al mantenedor</div>';
     }
     h+='<div style="font-size:10px;color:#9ca3af;margin-top:4px">Reportado por '+esc(d.reportadoPor||'?')+'</div>';
+    // Indicador de revisiones (G1)
+    var revsDA = Array.isArray(d.revisiones) ? d.revisiones : [];
+    if(revsDA.length){
+      h+='<div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:6px;padding:5px 8px">';
+      h+='<span style="font-size:10px;color:#93c5fd;font-weight:700">📝 '+revsDA.length+' revisión'+(revsDA.length===1?'':'es')+' registrada'+(revsDA.length===1?'':'s')+'</span>';
+      h+='<button class="btn bk xs" onclick="openVerRevisiones('+d.id+')">Ver</button>';
+      h+='</div>';
+    }
     h+='</div>';
     // Bloque "ARREGLO POR" — solo si el reporte está esperando verificación (Fase 4 cleanup)
     if(d.estado==='ESPERA_VERIFICACION'){
@@ -5643,7 +5683,19 @@ function renderMisDanos(d, dTareas, dSolicitudes){
         if(r.fotoDanoUrl){
           h+='<div style="margin-bottom:10px"><img src="'+r.fotoDanoUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #2e2e3a" alt="Foto del daño"></div>';
         }
-        h+='<button class="btn bg" style="width:100%;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openMarcarArreglo('+r.id+')">✓ Marqué hecho</button>';
+        // Indicador de revisiones (G1)
+        var revsCard = Array.isArray(r.revisiones) ? r.revisiones : [];
+        if(revsCard.length){
+          h+='<div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:6px;padding:6px 10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">';
+          h+='<div style="font-size:11px;color:#93c5fd;font-weight:700">📝 '+revsCard.length+' revisión'+(revsCard.length===1?'':'es')+' registrada'+(revsCard.length===1?'':'s')+'</div>';
+          h+='<button class="btn bk xs" onclick="openVerRevisiones('+r.id+')">Ver</button>';
+          h+='</div>';
+        }
+        // 2 botones: hecho (verde grande) + revisado (azul chico)
+        h+='<div style="display:flex;gap:6px">';
+        h+='<button class="btn bg" style="flex:2;background:#22c55e;color:#fff;font-weight:700;padding:10px" onclick="openMarcarArreglo('+r.id+')">✓ Marqué hecho</button>';
+        h+='<button class="btn ba" style="flex:1;background:#3b82f6;color:#fff;font-weight:700;padding:10px" onclick="openRevisar('+r.id+')">📝 Revisado</button>';
+        h+='</div>';
         h+='</div>';
       });
     });
@@ -5767,6 +5819,142 @@ function doMarcarArreglo(){
   } else {
     enviarRpc('');
   }
+}
+
+// ---- REVISION (G1): registrar una visita/revisión sin cerrar el daño ----
+function findReporteCualquiera(id){
+  // Busca un reporte en los 3 caches conocidos: misDanos, danosActivos, curRoom.danoActivo
+  var nid = Number(id);
+  if(window._misDanos && Array.isArray(window._misDanos.reportes)){
+    var r1 = window._misDanos.reportes.find(function(x){return Number(x.id)===nid;});
+    if(r1) return r1;
+  }
+  if(Array.isArray(window._danosActivosCache)){
+    var r2 = window._danosActivosCache.find(function(x){return Number(x.id)===nid;});
+    if(r2) return r2;
+  }
+  if(window.curRoom && curRoom.danoActivo && Number(curRoom.danoActivo.id)===nid){
+    return curRoom.danoActivo;
+  }
+  return null;
+}
+
+function openRevisar(reporteId){
+  if(!sess){toast('Sesión expirada','err');return;}
+  var r = findReporteCualquiera(reporteId);
+  if(!r){toast('Reporte no encontrado, recargá','err');return;}
+  var ubi = (r.ubicacionTipo==='zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
+  document.getElementById('rvDesc').textContent = ubi + ' — ' + (r.descripcion||'');
+  document.getElementById('rvMotivo').value = '';
+  document.getElementById('rvFoto').value = '';
+  window._rvReporteId = reporteId;
+  openM('mNuevaRevision');
+}
+
+function doRevisar(){
+  var reporteId = window._rvReporteId;
+  if(!reporteId){toast('Sin reporte seleccionado','err');return;}
+  var motivo = (document.getElementById('rvMotivo').value||'').trim();
+  if(motivo.length < 3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
+  var fotoFile = document.getElementById('rvFoto') && document.getElementById('rvFoto').files[0];
+
+  function send(fotoUrl){
+    rpc('marcarRevision',{
+      userRole: sess.userRole,
+      userName: sess.userName,
+      reporteId: reporteId,
+      motivo: motivo,
+      fotoUrl: fotoUrl || ''
+    }, function(){
+      toast('✓ Revisión registrada','ok');
+      closeM('mNuevaRevision');
+      window._rvReporteId = null;
+      if(sess.userRole === 'MAINTENANCE'){
+        loadMisDanos();
+      } else if(typeof loadDanosActivos === 'function' && document.getElementById('danosActivosCont')){
+        loadDanosActivos();
+      }
+    }, function(e){
+      toast(e.message||String(e),'err');
+    });
+  }
+
+  if(fotoFile){
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName = 'mantenimiento/revisiones/rev_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{
+          'apikey':SUPA_KEY,
+          'Authorization':'Bearer '+SUPA_KEY,
+          'x-upsert':'true',
+          'Content-Type': 'image/jpeg'
+        },
+        body: blob
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+        return r.json();
+      }).then(function(){
+        var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        send(url);
+      }).catch(function(e){
+        toast('Error subiendo foto: '+(e.message||String(e)),'err');
+      });
+    }, function(err){
+      toast('Error procesando foto: '+(err.message||String(err)),'err');
+    });
+  } else {
+    send('');
+  }
+}
+
+function openVerRevisiones(reporteId){
+  var r = findReporteCualquiera(reporteId);
+  if(!r){toast('Reporte no encontrado, recargá','err');return;}
+  var revs = Array.isArray(r.revisiones) ? r.revisiones : [];
+  var ubi = (r.ubicacionTipo==='zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
+  var h = '';
+  h += '<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">';
+  h += '<div style="color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Daño</div>';
+  h += '<div style="color:#e5e7eb">'+esc(ubi)+' — '+esc(r.descripcion||'')+'</div>';
+  h += '</div>';
+  if(!revs.length){
+    h += '<div style="text-align:center;color:#9ca3af;padding:20px">Sin revisiones registradas.</div>';
+  } else {
+    // Más reciente arriba
+    var ord = revs.slice().sort(function(a,b){return Number(b.ts||0)-Number(a.ts||0);});
+    ord.forEach(function(rv){
+      var ts = Number(rv.ts||0);
+      var hace = '';
+      if(ts){
+        var diff = Date.now()-ts;
+        var min = Math.round(diff/60000);
+        if(min<1) hace='recién';
+        else if(min<60) hace='hace '+min+' min';
+        else if(min<1440) hace='hace '+Math.round(min/60)+' h';
+        else { var dd=Math.round(min/1440); hace='hace '+dd+' día'+(dd===1?'':'s'); }
+      }
+      var fechaAbs = ts ? new Date(ts).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
+      var rolLbl = '';
+      var rol = (rv.rol||'').toUpperCase();
+      if(rol==='MAINTENANCE') rolLbl = ' · Mantenedor';
+      else if(rol==='ADMIN') rolLbl = ' · Admin';
+      else if(rol==='RECEPTION') rolLbl = ' · Recepción';
+      h += '<div style="background:#18181f;border:1px solid #2e2e3a;border-left:4px solid #3b82f6;border-radius:8px;padding:10px;margin-bottom:8px">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;gap:8px">';
+      h += '<div style="font-size:11px;font-weight:700;color:#93c5fd">'+esc(rv.por||'?')+esc(rolLbl)+'</div>';
+      h += '<div style="font-size:10px;color:#9ca3af;text-align:right;white-space:nowrap">'+esc(hace)+(fechaAbs?'<br>'+esc(fechaAbs):'')+'</div>';
+      h += '</div>';
+      h += '<div style="font-size:13px;color:#e5e7eb;margin-bottom:'+(rv.fotoUrl?'8':'0')+'px">'+esc(rv.motivo||'')+'</div>';
+      if(rv.fotoUrl){
+        h += '<a href="'+rv.fotoUrl+'" target="_blank"><img src="'+rv.fotoUrl+'" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid #2e2e3a;display:block" alt="Foto revisión"></a>';
+      }
+      h += '</div>';
+    });
+  }
+  document.getElementById('vrLista').innerHTML = h;
+  openM('mVerRevisiones');
 }
 
 // ---- COMPLETAR TAREA (Fase 4.5 G3): MAINTENANCE marca tarea como hecha ----
@@ -6809,6 +6997,14 @@ function loadDanosActivos(){
       hi += '</div>';
       hi += '<span style="background:'+bg+';color:'+col+';font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;margin-left:8px;white-space:nowrap">'+pri+'</span>';
       hi += '</div>';
+      // Indicador de revisiones (G1)
+      var revsR = Array.isArray(r.revisiones) ? r.revisiones : [];
+      if(revsR.length){
+        hi += '<div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:6px;padding:4px 8px">';
+        hi += '<span style="font-size:10px;color:#93c5fd;font-weight:700">📝 '+revsR.length+' revisión'+(revsR.length===1?'':'es')+'</span>';
+        hi += '<button class="btn bk xs" style="font-size:10px;padding:2px 8px" onclick="openVerRevisiones('+r.id+')">Ver</button>';
+        hi += '</div>';
+      }
       // Botones inline para verificar/rechazar — reusan funciones de Fase 5
       if(enVerif && (sess.userRole==='ADMIN' || sess.userRole==='RECEPTION')){
         hi += '<div style="display:flex;gap:6px;margin-top:6px">';
@@ -6833,6 +7029,7 @@ function loadDanosActivos(){
       h += '<div style="font-size:10px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:1px;margin:'+(habs.length?'12':'0')+'px 0 4px">🌐 Daños en zonas comunes ('+zonas.length+')</div>';
       zonas.forEach(function(r){h += renderItem(r);});
     }
+    window._danosActivosCache = reportes; // G1: para que openVerRevisiones pueda buscar el array
     cont.innerHTML = h;
   },function(e){
     cont.innerHTML = '<div style="color:#ef4444">Error: '+esc(e.message||String(e))+'</div>';
