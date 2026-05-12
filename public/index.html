@@ -1616,7 +1616,7 @@ function checkAutoHora(){
     var key='autoHora_'+r.roomId+'_'+r.dueMs;
     if(sessionStorage.getItem(key))return; // ya se cobró
    sessionStorage.setItem(key,'1');
-    rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO',note:'AUTO'},
+    rpc('extendTime',{roomId:r.roomId,userName:sess.userName,userRole:sess.userRole,extraHrs:1,payMethod:'EFECTIVO',note:'AUTO',sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){toast('⏰ Hab '+r.roomId+' — Hora extra automática cobrada: '+fmt(res.extraCost),'ok');loadCuadre();},
       function(e){toast('Error hora auto Hab '+r.roomId+': '+(e.message||''),'err');}
     );
@@ -2198,7 +2198,7 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   }
  
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
-   rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
+   rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){
   toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
  _ciProds.forEach(function(p){p.pm=selPay||p.pm;});
@@ -2207,7 +2207,7 @@ var prodsCI=[..._ciProds];_ciProds=[];
   function saveNext(i){
     if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
     var p=prodsCI[i];
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:checkInMs},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
       function(){saveNext(i+1);},function(){saveNext(i+1);});
   }
   saveNext(0);
@@ -2220,7 +2220,7 @@ var prodsCI=[..._ciProds];_ciProds=[];
  function doHoraGratis(){
   if(!curRoom)return;
   conf('Agregar 1 hora gratis a Hab '+curRoom.roomId+'?',function(){
-    rpc('horaGratis',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole},
+    rpc('horaGratis',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){toast('✓ +1 hora gratis agregada','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -2282,7 +2282,7 @@ function confirmRoomChange(){
   var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
   if(!toRoomId){toast('Selecciona una habitación.','err');return;}
   conf('Cambiar Hab '+curRoom.roomId+' → Hab '+toRoomId+'?',function(){
-    rpc('roomChange',{fromRoomId:curRoom.roomId,toRoomId:toRoomId,durationHrs:rcDur,payMethod:rcPm,userName:sess.userName,userRole:sess.userRole},
+    rpc('roomChange',{fromRoomId:curRoom.roomId,toRoomId:toRoomId,durationHrs:rcDur,payMethod:rcPm,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){
         var msg='Cambio realizado.';
         if(res.diff>0)msg+=' Cobrar: '+fmt(res.diff);
@@ -2317,7 +2317,7 @@ function selEditPm(pm){
 }
 function confirmEditPayMethod(){
   if(!curRoom)return;
-  rpc('updatePayMethod',{roomId:curRoom.roomId,payMethod:editPayMethod,checkInMs:curRoom.checkInMs||0,userName:sess.userName,userRole:sess.userRole},
+  rpc('updatePayMethod',{roomId:curRoom.roomId,payMethod:editPayMethod,checkInMs:curRoom.checkInMs||0,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
     function(){toast('Método de pago actualizado.','ok');closeM('mEditPay');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
     function(e){toast(e.message||String(e),'err');}
   );
@@ -2414,7 +2414,7 @@ function confirmAddPerson(){
         return;
       }
       pending--;
-      rpc('addExtraPerson',{roomId:curRoom.roomId,payMethod:addPersonPay,userName:sess.userName,userRole:sess.userRole},
+      rpc('addExtraPerson',{roomId:curRoom.roomId,payMethod:addPersonPay,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
         function(){next();},
         function(e){errors++;toast(e.message||String(e),'err');next();}
       );
@@ -2505,7 +2505,7 @@ function confirmarAnularVenta(){
 function doCheckOut(){
   if(!curRoom)return;
   var obs=(document.getElementById('coObs')||{}).value||'';
-  rpc('checkOut',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkoutObs:obs,force:true},
+  rpc('checkOut',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkoutObs:obs,force:true},
     function(){toast('Salida registrada.','ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
     function(e){toast(e.message||String(e),'err');}
   );
@@ -2515,7 +2515,7 @@ function doExt(){
   var hrs=Number((document.getElementById('extHrs')||{}).value||1);
   var cfg=MP[curRoom.category]||MP['Junior'];
   conf('Extender '+hrs+'h por '+fmt(hrs*cfg.extraHour)+'?',function(){
-   rpc('extendTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,extraHrs:hrs,payMethod:selExtPayMode},
+   rpc('extendTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,extraHrs:hrs,payMethod:selExtPayMode},
       function(res){toast('Extendida +'+hrs+'h — '+fmt(res.extraCost),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -2525,7 +2525,7 @@ function doRenew(){
   if(!curRoom)return;
   var cfg=MP[curRoom.category]||MP['Junior'],price=calcP(selRenewDur,cfg);
   conf('Renovar '+selRenewDur+'h por '+fmt(price)+'?',function(){
-    rpc('renewTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,durationHrs:selRenewDur,payMethod:selRewPayMode},
+    rpc('renewTime',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,durationHrs:selRenewDur,payMethod:selRewPayMode},
       function(res){toast('Renovado +'+selRenewDur+'h — '+fmt(res.renewPrice),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -2612,7 +2612,7 @@ function doRef(){
   if(amt<=0){toast('Monto invalido.','err');return;}
   if(reason.trim().length<3){toast('Motivo obligatorio.','err');return;}
  conf('Devolucion de '+fmt(amt)+' — '+reason+'?',function(){
-    rpc('refund',{roomId:curRoom.roomId,amount:amt,refundReason:reason,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId},
+    rpc('refund',{roomId:curRoom.roomId,amount:amt,refundReason:reason,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(){toast('Devolucion registrada.','ok');closeM('mRoom');},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -2621,7 +2621,7 @@ function doRef(){
 function doTaxi(){
   var rid=curRoom?curRoom.roomId:'';
   conf('¿Registrar taxi $3.000 para Hab '+rid+'?',function(){
-    rpc('taxi',{userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,roomId:rid},
+    rpc('taxi',{userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,roomId:rid},
       function(){toast('Taxi $3.000 registrado.','ok');closeM('mRoom');if(sess.userRole==='RECEPTION')loadCuadre();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -3025,7 +3025,7 @@ function saveLoan(){
   var note=(document.getElementById('lnNote').value||'').trim();
   if(!nm){toast('Ingresa el nombre.','err');return;}
   if(amt<=0){toast('Monto inválido.','err');return;}
-  rpc('addLoan',{borrowerName:nm,amount:amt,note:note,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,businessDay:sess.businessDay},
+  rpc('addLoan',{borrowerName:nm,amount:amt,note:note,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,businessDay:sess.businessDay,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
     function(){toast('Gasto registrado.','ok');closeM('mLoan');loadLoans();loadCuadre();document.getElementById('lnName').value='';document.getElementById('lnAmt').value='';document.getElementById('lnNote').value='';},
     function(e){toast(e.message||String(e),'err');}
   );
@@ -3077,7 +3077,7 @@ function saveExtra(){
       function(e){toast(e.message||String(e),'err');}
     );
   } else {
-    rpc('registerExtraStaff',{personName:n,area:a,userRole:sess.userRole,userName:sess.userName,shiftId:sh||sess.shiftId||BS.currentShiftId,businessDay:sess.businessDay,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours},
+    rpc('registerExtraStaff',{personName:n,area:a,userRole:sess.userRole,userName:sess.userName,shiftId:sh||sess.shiftId||BS.currentShiftId,businessDay:sess.businessDay,sessionShiftId:sh||sess.shiftId||BS.currentShiftId,sessionBusinessDay:sess.businessDay,entryMs:entryMs,scheduledExitMs:exitMs,workHours:exHours},
       function(){toast(n+' registrado. Sale a las '+new Date(exitMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+'.','ok');closeM('mExtra');loadExtra();document.getElementById('exName').value='';document.getElementById('exEditId').value='';},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -3099,7 +3099,7 @@ function saveExCo(){
   var exitMs=Date.now();
   if(exitTime){var parts=exitTime.split(':');var d=new Date();d.setHours(Number(parts[0]),Number(parts[1]),0,0);exitMs=d.getTime();}
   conf('Pagar '+fmt(p)+' a '+exCoName+'?',function(){
-    rpc('checkoutExtraStaff',{personName:exCoName,payment:p,exitMs:exitMs,paidBy:sess.userName,userRole:sess.userRole,userName:sess.userName,shiftId:sess.shiftId},
+    rpc('checkoutExtraStaff',{personName:exCoName,payment:p,exitMs:exitMs,paidBy:sess.userName,userRole:sess.userRole,userName:sess.userName,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(){toast(exCoName+' — Pago: '+fmt(p),'ok');closeM('mExCo');loadExtra();loadCuadre();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -10267,7 +10267,7 @@ function abrirModalSacar(room){
 }
 
 function doSacarHabitacion(roomId){
-  rpc('checkOut',{roomId:roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkoutObs:'Salida por tarjeta RFID',force:true},
+  rpc('checkOut',{roomId:roomId,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkoutObs:'Salida por tarjeta RFID',force:true},
     function(){
       toast('✓ Habitación '+roomId+' salió — ahora SUCIA','ok');
       closeM('mSacar');
@@ -10403,7 +10403,7 @@ function confirmarVentaProd(productId,precio){
   if(!roomId){toast('Selecciona una habitación.','err');return;}
   var room=rooms.find(function(r){return r.roomId===roomId;});
   conf('Vender '+vpCant+' × '+fmt(precio)+' a Hab '+roomId+'?',function(){
-    rpc('addRoomProduct',{roomId:roomId,productId:productId,cantidad:vpCant,payMethod:vpPm,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:room?room.checkInMs:0},
+    rpc('addRoomProduct',{roomId:roomId,productId:productId,cantidad:vpCant,payMethod:vpPm,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:room?room.checkInMs:0},
       function(res){toast('✓ Producto vendido — '+fmt(res.total),'ok');closeM('mVentaProd');loadProductos();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -11350,7 +11350,7 @@ function confirmarRoomProd(){
       return;
     }
     var p=carrito[i];i++;
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:curRoom.checkInMs||0},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:curRoom.checkInMs||0},
       function(){next();},function(e){toast(e.message||String(e),'err');next();}
     );
   }
@@ -11362,7 +11362,7 @@ function confirmarRoomProdCortesia(){
   if(!prod||!curRoom)return;
   var cant=window._roomProdCant||1;
   conf('¿Registrar '+cant+' '+prod.nombre+' como cortesía?',function(){
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:curRoom.checkInMs||0},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:curRoom.checkInMs||0},
       function(){
         toast('✓ Cortesía registrada.','ok');
         window._roomProdPendiente=null;
@@ -11511,7 +11511,7 @@ function confirmarIngresoBodega(){
   if(!productId){toast('Selecciona un producto.','err');return;}
   if(cantidad<=0){toast('Ingresa la cantidad.','err');return;}
   conf('¿Registrar '+cantidad+' unidades en bodega?',function(){
-    rpc('ingresoBodega',{productId:productId,cantidad:cantidad,nota:nota,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId},
+    rpc('ingresoBodega',{productId:productId,cantidad:cantidad,nota:nota,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){toast('✓ '+cantidad+' unidades en bodega. Total bodega: '+res.nuevoBodega,'ok');closeM('mIngresoBodega');loadProductos();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -12099,6 +12099,8 @@ function confirmarDevolucionBodega(){
       cantidad:cant,
       nota:nota.trim(),
       shiftId:sess.shiftId,
+      sessionShiftId:sess.shiftId,
+      sessionBusinessDay:sess.businessDay,
       userName:sess.userName,
       userRole:sess.userRole
     },function(){
@@ -12149,7 +12151,7 @@ function confirmarTrasladoRec(){
   if(!productId){toast('Selecciona un producto.','err');return;}
   if(cantidad<=0){toast('Ingresa la cantidad.','err');return;}
   conf('¿Bajar '+cantidad+' unidades a Recepción?',function(){
-    rpc('trasladoRecepcion',{productId:productId,cantidad:cantidad,nota:nota,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId},
+    rpc('trasladoRecepcion',{productId:productId,cantidad:cantidad,nota:nota,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){toast('✓ '+cantidad+' unidades bajadas. Recepción: '+res.nuevoRecepcion,'ok');closeM('mTrasladoRec');loadProductos();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -12195,7 +12197,7 @@ function confirmarCortesia(){
   var destinatario=(document.getElementById('cortesiaDestinatario')||{}).value||'';
   if(!destinatario.trim()){toast('Escribe a quién se le da la cortesía.','err');return;}
   conf('¿Dar '+cant+' '+prod.nombre+' a '+destinatario+'?',function(){
-    rpc('addRoomProduct',{roomId:'CORTESIA',productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,cortesiaDestinatario:destinatario.trim(),userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,checkInMs:0},
+    rpc('addRoomProduct',{roomId:'CORTESIA',productId:prod.id,cantidad:cant,payMethod:'EFECTIVO',isCortesia:true,cortesiaDestinatario:destinatario.trim(),userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:0},
       function(){toast('✓ Cortesía registrada — '+cant+' '+prod.nombre+' → '+destinatario,'ok');closeM('mCortesia');loadProductos();},
       function(e){toast(e.message||String(e),'err');}
     );
