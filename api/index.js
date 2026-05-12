@@ -1622,8 +1622,14 @@ async function apiMonthMetrics(p, res) {
       s.ef_hab -= t;  // Resta porque salio efectivo de caja
       return;  // No procesar como venta normal
     }
-    if(r.type==='SALE'){
+    // Conteo de habs: solo checkIn original (SALE con check_in_ms===ts_ms) o RENEWAL.
+    // Excluye ajustes que reusan type='SALE': +persona, hora extra manual, diff de cambio de hab.
+    const isRoomSale = (r.type==='SALE' && Number(r.check_in_ms||0) === Number(r.ts_ms||0))
+                    || r.type==='RENEWAL';
+    if(isRoomSale){
       d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
+    }
+    if(r.type==='SALE'){
       const base=t-epv;
       if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
       else if(pm==='NEQUI'){s.nq_hab+=base;s.nq_padd+=epv;}
