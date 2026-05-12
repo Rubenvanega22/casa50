@@ -1406,6 +1406,19 @@ function chkBtn(){
 }
 function updSI(){var sh=(BS.shifts||[]).find(function(s){return s.id===BS.currentShiftId;});document.getElementById('sinfo').textContent=sh?sh.label:'';}
 
+// Helper para mostrar el label del turno respetando 1T12 / 2T12 (BUG 1).
+// Usa sess.shiftIdRaw que viene del backend con el valor crudo del dropdown.
+// No se usa en lugares donde se muestran turnos ajenos al de la sesión
+// (panel admin loadCuadreAdmin, impresión imprimirTurno) — esos siguen
+// con etiquetas T1/T2/T3 tradicionales porque shift_log no preserva _12.
+function getShiftLabel(){
+  if(!sess) return '';
+  if(sess.shiftIdRaw === 'SHIFT_1_12') return '1T12 (6am-6pm)';
+  if(sess.shiftIdRaw === 'SHIFT_2_12') return '2T12 (6pm-6am)';
+  var map = {SHIFT_1:'Turno 1 (6am-2pm)', SHIFT_2:'Turno 2 (2pm-9pm)', SHIFT_3:'Turno 3 (9pm-6am)'};
+  return map[sess.shiftId] || sess.shiftId || '';
+}
+
 function onRol(){
   var r=document.getElementById('lrol').value;
   tog('nw',!!r&&r!=='RECEPTION'&&r!=='MAINTENANCE');
@@ -1483,8 +1496,7 @@ function startApp(){
   turnoVencidoMostrado=false;
   document.getElementById('ls').style.display='none';
   document.getElementById('app').style.display='block';
-  var sn={SHIFT_1:'T1 6a-2p',SHIFT_2:'T2 2p-9p',SHIFT_3:'T3 9p-6a'};
-  document.getElementById('hsh').innerHTML='<b>'+(sn[sess.shiftId]||sess.shiftId)+'</b>';
+  document.getElementById('hsh').innerHTML='<b>'+getShiftLabel()+'</b>';
   document.getElementById('husr').textContent=sess.userName;
   buildTabs();
 actualizarBtnCaja();
@@ -4169,7 +4181,7 @@ sl.forEach(function(s){
     h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:12px;margin-bottom:14px">';
     h+='<div style="font-size:18px;font-weight:900;color:#a78bfa">CASA 50 — SPA MOTEL</div>';
     h+='<div style="font-size:12px;color:#9ca3af;margin-top:4px">Fecha: <b style="color:#e5e7eb">'+sess.businessDay+'</b></div>';
-    h+='<div style="font-size:12px;color:#9ca3af">Turno: <b style="color:#e5e7eb">'+(sn[sess.shiftId]||sess.shiftId)+'</b></div>';
+    h+='<div style="font-size:12px;color:#9ca3af">Turno: <b style="color:#e5e7eb">'+getShiftLabel()+'</b></div>';
     h+='<div style="font-size:12px;color:#9ca3af">Recepcionista: <b style="color:#e5e7eb">'+sess.userName+'</b></div>';
     h+='</div>';
     h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:12px;margin-bottom:10px">';
@@ -4542,7 +4554,7 @@ function printC(){
   h+=lineSingle();
   // Datos basicos
   h+=rowLR('Fecha:', esc(d.businessDay));
-  h+=rowLR('Turno:', esc(sn[d.shiftId]||d.shiftId));
+  h+=rowLR('Turno:', esc(getShiftLabel()));
   h+=rowLR('Recep:', esc(d.userName));
   h+=lineDouble();
 

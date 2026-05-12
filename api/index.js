@@ -367,7 +367,11 @@ async function apiGetRooms(req, res) {
 async function apiLogin(p, res) {
   const now = Date.now();
   let bDay = businessDay(now);
-  let shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  // shiftRaw preserva el valor crudo del dropdown (puede ser SHIFT_1_12 o
+  // SHIFT_2_12). Se devuelve en sess.shiftIdRaw para que el frontend pueda
+  // mostrar el label correcto del turno 12h, ya que 'shift' queda normalizado.
+  const shiftRaw = String(p.shiftId||'').trim() || currentShiftId(now);
+  let shift = shiftRaw;
   shift = normalizeShiftId(shift);
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shift)) shift=currentShiftId(now);
 
@@ -433,7 +437,7 @@ async function apiLogin(p, res) {
       return err(res, 'PIN de administrador incorrecto.');
     }
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: userName, action: 'LOGIN' });
-    return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, businessDay: bDay, serverNowMs: now } });
+    return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'RECEPTION') {
@@ -505,7 +509,7 @@ async function apiLogin(p, res) {
  await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
-    return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, businessDay: bDay, serverNowMs: now, fromMs } });
+    return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now, fromMs } });
   }
 
   if (userRole === 'MAINTENANCE') {
@@ -523,12 +527,12 @@ async function apiLogin(p, res) {
     const canonicalName = pinRow.user_name;
     // Sin verificacion de turno (mantenedor no tiene turnos)
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: canonicalName, action: 'LOGIN' });
-    return ok(res, { session: { userName: canonicalName, userRole: 'MAINTENANCE', shiftId: shift, businessDay: bDay, serverNowMs: now } });
+    return ok(res, { session: { userName: canonicalName, userRole: 'MAINTENANCE', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'MAID') {
     await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAID', user_name: userName, action: 'LOGIN' });
-    return ok(res, { session: { userName, userRole: 'MAID', shiftId: shift, businessDay: bDay, serverNowMs: now } });
+    return ok(res, { session: { userName, userRole: 'MAID', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   return err(res, 'Rol desconocido');
