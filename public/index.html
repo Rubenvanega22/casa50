@@ -1696,6 +1696,16 @@ var turnoAlertaMostrada=false,turnoVencidoMostrado=false;
 try{turnoAlertaMostrada=sessionStorage.getItem('turnoAlerta')==='1';turnoVencidoMostrado=sessionStorage.getItem('turnoVencido')==='1';}catch(e){}
 function checkTurnoAlert(){
   if(!sess||sess.userRole!=='RECEPTION')return;
+  // BUG 3: si recep ya envió cuadre y cerró su turno, no mostrar más el aviso.
+  // sess.cierreHecho lo setea loadCuadre cuando detecta m.shiftClose en metrics.
+  // sessionStorage lo persiste entre recargas/reentradas a la misma sesión-turno.
+  if(sess.cierreHecho) return;
+  try {
+    if(sessionStorage.getItem('cierreHecho_'+sess.shiftId+'_'+sess.businessDay) === '1'){
+      sess.cierreHecho = true;
+      return;
+    }
+  } catch(e){}
   var now=Date.now();
   var turnoFin={SHIFT_1:14,SHIFT_2:21,SHIFT_3:6};
   var turnoNombre={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-9pm)',SHIFT_3:'Turno 3 (9pm-6am)'};
@@ -4149,6 +4159,20 @@ function loadCuadre(){
     new Promise(function(res){rpc('getExtraStaff',{businessDay:sess.businessDay},res,function(){res({extraStaff:[]});});})
   ]).then(function(results){
     var m=results[0]||{},loansData=results[1]||{},extraData=results[2]||{};
+
+    // BUG 3: si el backend devolvió shiftClose, el turno ya está cerrado →
+    // setear flag para que checkTurnoAlert no muestre el aviso de "cerrar turno".
+    // Si no hay shiftClose, asegurar que la flag quede en false (por si quedó
+    // colgada de un turno anterior en la misma sesión).
+    if(sess){
+      if(m.shiftClose){
+        sess.cierreHecho = true;
+        try { sessionStorage.setItem('cierreHecho_'+sess.shiftId+'_'+sess.businessDay, '1'); } catch(e){}
+      } else {
+        sess.cierreHecho = false;
+        try { sessionStorage.removeItem('cierreHecho_'+sess.shiftId+'_'+sess.businessDay); } catch(e){}
+      }
+    }
 
     var t=m.totals||{};
     var fromMs=Number(sess.fromMs||0);
