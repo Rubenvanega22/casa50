@@ -53,7 +53,7 @@ function currentShiftId(ms) {
 
 function normalizeShiftId(shiftId) {
   if (shiftId === 'SHIFT_1_12') return 'SHIFT_1';
-  if (shiftId === 'SHIFT_2_12') return 'SHIFT_2';
+  if (shiftId === 'SHIFT_2_12') return 'SHIFT_3';   // 2T12 (6pm-6am) cubre el horario nocturno del SHIFT_3 (no SHIFT_2)
   return shiftId || 'SHIFT_1';
 }
 
@@ -392,6 +392,24 @@ async function apiLogin(p, res) {
     }
   }
 
+  // FIX SHIFT_1 MADRUGADA (simétrico al FIX T3): si recep elige T1 explícito
+  // antes de las 6am (puede ser T1 normal o 1T12 normalizado a SHIFT_1) y el
+  // T3 previo cerró también en madrugada, este SHIFT_1 pertenece al día
+  // calendario actual, no al business_day "ayer" que devuelve businessDay(now).
+  if(shift==='SHIFT_1'){
+    const nowHour = new Date(now + (-5*3600000)).getUTCHours();
+    if(nowHour >= 0 && nowHour < 6){
+      const{data:logoutT3b}=await supabase.from('shift_log').select('id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+      if(logoutT3b && logoutT3b.length){
+        const logoutHourB = new Date(Number(logoutT3b[0].ts_ms) + (-5*3600000)).getUTCHours();
+        if(logoutHourB >= 0 && logoutHourB < 6){
+          const tomorrow = new Date(now + 24 * 3600 * 1000);
+          bDay = tomorrow.toISOString().slice(0,10);
+        }
+      }
+    }
+  }
+
   const userName = String(p.userName || '').trim();
   const userRole = String(p.userRole || '').toUpperCase();
   const forceEntry = p.forceEntry === true || p.forceEntry === 'true'; // Admin fuerza entrada
@@ -537,8 +555,8 @@ async function openCashDrawer() {
 
 async function apiCheckIn(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const durationHrs = Number(p.durationHrs || 0);
@@ -617,8 +635,8 @@ async function apiCheckIn(p, res) {
 // ==================== CHECK-OUT ====================
 async function apiCheckOut(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const obs = String(p.checkoutObs || p.obs || '').trim();
@@ -686,8 +704,8 @@ async function apiCheckOut(p, res) {
 // ==================== EXTENDER TIEMPO ====================
 async function apiExtendTime(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const extraHrs = Number(p.extraHrs || 0);
@@ -725,8 +743,8 @@ async function apiHoraGratis(p, res) {
     .select('id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
     .gte('check_in_ms', checkInMs).limit(1);
   if(existing && existing.length) return err(res, 'Ya se obsequio la hora gratis para esta habitacion');
-  const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const newDueMs = Number(room.due_ms || now) + 3600000;
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
@@ -737,8 +755,8 @@ async function apiHoraGratis(p, res) {
 // ==================== RENOVAR TIEMPO ====================
 async function apiRenewTime(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const durationHrs = Number(p.durationHrs || 0);
@@ -1006,8 +1024,8 @@ async function apiSetDisabled(p, res) {
 // ITEM 9: Devolucion - descuenta solo el monto indicado
 async function apiRefund(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const roomId = String(p.roomId || '').trim();
   const amount = Math.max(1, Number(p.amount || 0));
@@ -1029,8 +1047,8 @@ async function apiRefund(p, res) {
 
 async function apiTaxi(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
   const { data } = await supabase.from('taxi_expenses').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
@@ -1083,8 +1101,8 @@ async function apiListTaxisTurno(p, res) {
 // ==================== PRESTAMOS ====================
 async function apiAddLoan(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId || '').trim() || currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const borrowerName = String(p.borrowerName || '').trim();
   const amount = Number(p.amount || 0);
   if (!borrowerName) return err(res, 'Nombre requerido');
@@ -1102,8 +1120,8 @@ async function apiGetLoans(p, res) {
 // ==================== PERSONAL EXTRA ====================
 async function apiRegisterExtra(p, res) {
   const now = Date.now();
-  const bDay = String(p.businessDay || businessDay(now));
-  const shift = String(p.shiftId || currentShiftId(now));
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const personName = String(p.personName || '').trim();
   const area = String(p.area || 'Servicios').trim();
   const entryMs = Number(p.entryMs || now);
@@ -1902,7 +1920,9 @@ async function apiRoomHistory(p, res) {
 
 // ==================== BAR / GASTOS ====================
 async function apiAddBarSale(p, res) {
-  const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
+  const now=Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
   const cash=Number(p.amountCash||0),card=Number(p.amountCard||0),nequi=Number(p.amountNequi||0);
@@ -1921,7 +1941,9 @@ async function apiGetBarSales(p, res) {
   return ok(res,{sales:list,totals});
 }
 async function apiAddGeneralExpense(p, res) {
-  const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
+  const now=Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userRole=String(p.userRole||'').toUpperCase();
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
   const desc=String(p.description||'').trim(),amount=Number(p.amount||0);
@@ -2195,7 +2217,9 @@ async function apiAgregarPersonaManual(p, res) {
   return ok(res,{roomId,cantidad,totalCost,businessDay:businessDayParam,shiftId});
 }
 async function apiAddExtraPerson(p, res) {
-  const now=Date.now(),bDay=businessDay(now),shift=currentShiftId(now);
+  const now=Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName=String(p.userName||'').trim(),roomId=String(p.roomId||'').trim();
   const payMethod=String(p.payMethod||'EFECTIVO').toUpperCase();
   const room=await getRoom(roomId);
@@ -2213,8 +2237,8 @@ async function apiAddExtraPerson(p, res) {
 // ITEM 8: Cambio de habitacion - transfiere venta original a nueva habitacion
 async function apiRoomChange(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const fromRoomId = String(p.fromRoomId || '').trim();
   const toRoomId = String(p.toRoomId || '').trim();
@@ -2319,8 +2343,8 @@ async function apiUpdatePayMethod(p, res) {
   if(!room)return err(res,'Habitacion no existe');
   if(room.state!=='OCCUPIED')return err(res,'Solo se puede cambiar en habitacion ocupada');
   const now=Date.now();
-  const bDay=businessDay(now);
-  const shift=currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const checkInMs=Number(room.check_in_ms||0);
   await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
   await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
@@ -3639,8 +3663,8 @@ async function apiGetRoomProducts(p, res) {
 
 async function apiAddRoomProduct(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const roomId = String(p.roomId||'').trim();
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||1);
@@ -3719,8 +3743,8 @@ async function apiDeleteRoomProduct(p, res) {
 
 async function apiSaveCortesia(p, res) {
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.sessionShiftId||'').trim() || currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||1);
   const userName = String(p.userName||'').trim();
@@ -3832,8 +3856,8 @@ async function apiIngresoBodega(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||0);
   const nota = String(p.nota||'').trim();
@@ -3856,8 +3880,8 @@ async function apiDevolverABodega(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||0);
   const nota = String(p.nota||'').trim();
@@ -3881,8 +3905,8 @@ async function apiTrasladoRecepcion(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
   if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
   const now = Date.now();
-  const bDay = businessDay(now);
-  const shift = String(p.shiftId||'').trim()||currentShiftId(now);
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const productId = Number(p.productId||0);
   const cantidad = Number(p.cantidad||0);
   const nota = String(p.nota||'').trim();
