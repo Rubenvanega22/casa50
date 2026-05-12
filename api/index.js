@@ -371,6 +371,21 @@ async function apiLogin(p, res) {
   // SHIFT_2_12). Se devuelve en sess.shiftIdRaw para que el frontend pueda
   // mostrar el label correcto del turno 12h, ya que 'shift' queda normalizado.
   const shiftRaw = String(p.shiftId||'').trim() || currentShiftId(now);
+
+  // BUG 2: en domingo operativo (business_day cae en domingo), RECEPTION solo
+  // puede entrar como 1T12 o 2T12. Bloqueamos T1/T2/T3 puros para evitar que
+  // operaciones del 2T12 se mezclen con un SHIFT_2 fantasma. Validación va
+  // ANTES de normalizeShiftId — usamos shiftRaw (no shift) y evaluamos DOW del
+  // business_day en vez del día calendario, así un login a las 4am del lunes
+  // (business_day=domingo todavía) también se bloquea correctamente.
+  const userRoleCheck = String(p.userRole||'').toUpperCase();
+  if(userRoleCheck === 'RECEPTION' && ['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shiftRaw)){
+    const dowBDay = new Date(bDay+'T12:00:00Z').getUTCDay();
+    if(dowBDay === 0){
+      return err(res, 'Domingo: recepción solo puede entrar como 1T12 o 2T12. Elegí uno de esos.');
+    }
+  }
+
   let shift = shiftRaw;
   shift = normalizeShiftId(shift);
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(shift)) shift=currentShiftId(now);

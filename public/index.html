@@ -1428,8 +1428,26 @@ function onRol(){
   tog('aw',r==='ADMIN'&&adminTap);
   document.getElementById('nlbl').textContent=r==='MAID'?'Nombre de Camarera':r==='MAINTENANCE'?'Nombre de Mantenedor':'Tu Nombre';
   document.getElementById('lbtn').disabled=!r;
-  if(r==='RECEPTION')loadRecepPins();
+  if(r==='RECEPTION'){ loadRecepPins(); filtrarShiftDomingo(); }
   updSI();
+}
+
+// BUG 2: filtra el dropdown lShift según el business_day actual.
+// Domingo → solo 1T12 / 2T12 visibles. Resto de días → solo T1/T2/T3.
+// Defensa de UX; la regla de verdad la aplica apiLogin en backend.
+function filtrarShiftDomingo(){
+  var sel=document.getElementById('lShift');
+  if(!sel) return;
+  var bDay=(typeof BS!=='undefined' && BS && BS.businessDay) ? BS.businessDay : '';
+  var esDomingo = bDay
+    ? new Date(bDay+'T12:00:00Z').getUTCDay()===0
+    : new Date().getDay()===0;
+  var ocultar=esDomingo?['SHIFT_1','SHIFT_2','SHIFT_3']:['SHIFT_1_12','SHIFT_2_12'];
+  var primero=esDomingo?'SHIFT_1_12':'SHIFT_1';
+  Array.prototype.slice.call(sel.options).forEach(function(opt){
+    opt.style.display=ocultar.indexOf(opt.value)>=0?'none':'';
+  });
+  if(ocultar.indexOf(sel.value)>=0) sel.value=primero;
 }
 function loadRecepPins(){
   rpc('getReceptionPins',{userRole:'ADMIN'},function(data){
