@@ -741,6 +741,44 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Reportar daño (Camarera — Commit C). Versión simplificada del de
+     ADM/RECEP: sin prioridad (la asigna recep al aprobar), foto con cámara
+     directa porque la camarera está en el sitio. -->
+<div class="ov" id="mReportarDanoMaid"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">🔧 Reportar daño</div>
+    <button class="mc" onclick="closeM('mReportarDanoMaid')">✕</button>
+  </div>
+  <label>¿Dónde está el daño?</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdmTipo" value="habitacion" checked onchange="rdmToggleTipo()"> 🏨 Habitación</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="rdmTipo" value="zona_comun" onchange="rdmToggleTipo()"> 🌐 Zona común</label>
+  </div>
+  <div id="rdmRoomWrap">
+    <label>Habitación</label>
+    <select id="rdmRoom"><option value="">-- Selecciona --</option></select>
+  </div>
+  <div id="rdmZonaWrap" style="display:none">
+    <label>Zona común</label>
+    <select id="rdmZona" onchange="rdmToggleOtra()"><option value="">-- Selecciona --</option></select>
+    <div id="rdmZonaOtraWrap" style="display:none;margin-top:6px">
+      <label>Especificá cuál</label>
+      <input type="text" id="rdmZonaOtra" placeholder="Ej: Terraza" maxlength="50">
+    </div>
+  </div>
+  <label style="margin-top:8px">Descripción del daño</label>
+  <textarea id="rdmDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
+  <label style="margin-top:8px">Foto (opcional)</label>
+  <input type="file" id="rdmFoto" accept="image/*" capture="environment">
+  <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:8px;margin-top:10px;font-size:11px;color:#93c5fd">
+    ℹ Tu reporte se envía a Recepción para revisión. Ellos asignan prioridad y lo pasan a Mantenimiento.
+  </div>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mReportarDanoMaid')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#f97316;color:#fff;font-weight:700" onclick="doReportarDanoMaid()">📤 Enviar reporte</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Marcar arreglo (Mantenedor — Fase 4 G3) -->
 <div class="ov" id="mMarcarArreglo"><div class="modal" style="max-width:520px">
   <div class="mh">
@@ -1206,6 +1244,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="btnRepDanoNotesWrap" style="display:none;margin-bottom:10px">
   <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
 </div>
+<!-- Botón Reportar daño Camarera (Commit C) — naranja, solo visible para MAID -->
+<div id="btnRepDanoMaidWrap" style="display:none;margin-bottom:10px;text-align:right">
+  <button class="btn ba" style="background:#f97316;color:#fff;font-weight:700" onclick="openReportarDanoMaid()">🔧 Reportar daño</button>
+</div>
 <div style="margin-bottom:8px">
 <textarea id="noteIn" placeholder="Escribe un reporte..." rows="2"></textarea>
 <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
@@ -1551,6 +1593,9 @@ function actualizarBtnCaja(){
   // Botón "+ Reportar daño" en Reportes (Fase 6) — solo ADMIN/RECEPTION
   var btnRD=document.getElementById('btnRepDanoNotesWrap');
   if(btnRD) btnRD.style.display=(r==='RECEPTION'||r==='ADMIN')?'':'none';
+  // Botón "Reportar daño" naranja para camarera (Commit C) — solo MAID
+  var btnRDMaid=document.getElementById('btnRepDanoMaidWrap');
+  if(btnRDMaid) btnRDMaid.style.display=(r==='MAID')?'':'none';
 }
 function buildTabs(){
   var bar=document.getElementById('tabBar');bar.innerHTML='';
@@ -7052,6 +7097,120 @@ function rdToggleOtra(){
   if(otraWrap) otraWrap.style.display = (v==='Otra') ? '' : 'none';
 }
 
+// ---- REPORTAR DAÑO CAMARERA (Commit C) ----
+// Versión simplificada para MAID. Sin selector de prioridad (la pone Recep
+// al aprobar). Foto opcional con cámara directa porque la camarera está
+// físicamente en el sitio.
+function openReportarDanoMaid(){
+  if(!sess || sess.userRole !== 'MAID'){ toast('Solo camareras','err'); return; }
+  var radios = document.querySelectorAll('input[name="rdmTipo"]');
+  radios.forEach(function(rd){ rd.checked = (rd.value === 'habitacion'); });
+  var selR = document.getElementById('rdmRoom');
+  if(selR){
+    var ord = (rooms||[]).slice().sort(function(a,b){return String(a.roomId).localeCompare(String(b.roomId),'es',{numeric:true});});
+    var hr = '<option value="">-- Selecciona --</option>';
+    ord.forEach(function(r){ hr += '<option value="'+esc(r.roomId)+'">Hab '+esc(r.roomId)+' — '+esc(r.category||'')+'</option>'; });
+    selR.innerHTML = hr; selR.value = '';
+  }
+  var selZ = document.getElementById('rdmZona');
+  if(selZ){
+    var hz = '<option value="">-- Selecciona --</option>';
+    ZONAS_COMUNES.forEach(function(z){ hz += '<option value="'+esc(z)+'">'+esc(z)+'</option>'; });
+    selZ.innerHTML = hz; selZ.value = '';
+  }
+  var otra = document.getElementById('rdmZonaOtra'); if(otra) otra.value = '';
+  var desc = document.getElementById('rdmDesc'); if(desc) desc.value = '';
+  var foto = document.getElementById('rdmFoto'); if(foto) foto.value = '';
+  rdmToggleTipo();
+  openM('mReportarDanoMaid');
+}
+
+function rdmToggleTipo(){
+  var tipo = (document.querySelector('input[name="rdmTipo"]:checked')||{}).value || 'habitacion';
+  var roomWrap = document.getElementById('rdmRoomWrap');
+  var zonaWrap = document.getElementById('rdmZonaWrap');
+  var otraWrap = document.getElementById('rdmZonaOtraWrap');
+  if(roomWrap) roomWrap.style.display = (tipo==='habitacion') ? '' : 'none';
+  if(zonaWrap) zonaWrap.style.display = (tipo==='zona_comun') ? '' : 'none';
+  if(tipo==='habitacion' && otraWrap) otraWrap.style.display='none';
+}
+
+function rdmToggleOtra(){
+  var v = (document.getElementById('rdmZona')||{}).value || '';
+  var otraWrap = document.getElementById('rdmZonaOtraWrap');
+  if(otraWrap) otraWrap.style.display = (v==='Otra') ? '' : 'none';
+}
+
+function doReportarDanoMaid(){
+  if(!sess || sess.userRole !== 'MAID') return;
+  var tipo = (document.querySelector('input[name="rdmTipo"]:checked')||{}).value || 'habitacion';
+  var ubicacionId = '';
+  if(tipo === 'habitacion'){
+    ubicacionId = (document.getElementById('rdmRoom')||{}).value || '';
+    if(!ubicacionId.trim()){ toast('Elegí una habitación.','err'); return; }
+  } else {
+    var zona = (document.getElementById('rdmZona')||{}).value || '';
+    if(!zona.trim()){ toast('Elegí una zona común.','err'); return; }
+    if(zona === 'Otra'){
+      var otraVal = ((document.getElementById('rdmZonaOtra')||{}).value || '').trim();
+      if(otraVal.length < 3){ toast('Especificá la zona (mín 3 caracteres).','err'); return; }
+      ubicacionId = otraVal;
+    } else {
+      ubicacionId = zona;
+    }
+  }
+  var desc = ((document.getElementById('rdmDesc')||{}).value || '').trim();
+  if(desc.length < 3){ toast('La descripción debe tener mínimo 3 caracteres.','err'); return; }
+  var fotoFile = document.getElementById('rdmFoto') && document.getElementById('rdmFoto').files[0];
+
+  function enviarRpc(fotoUrl){
+    rpc('crearReporteMant',{
+      userRole: 'MAID',
+      userName: sess.userName,
+      ubicacionTipo: tipo,
+      ubicacionId: ubicacionId,
+      descripcion: desc,
+      fotoDanoUrl: fotoUrl || ''
+      // Sin prioridad: el backend setea null para MAID, Recep la asigna al aprobar.
+    }, function(){
+      toast('✓ Reporte enviado a Recepción','ok');
+      closeM('mReportarDanoMaid');
+      loadNotes();
+    }, function(e){
+      toast(e.message || String(e),'err');
+    });
+  }
+
+  if(fotoFile){
+    toast('Procesando foto...','ok');
+    compressImage(fotoFile, function(blob){
+      var fileName = 'mantenimiento/danos/dano_'+Date.now()+'.jpg';
+      fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+        method:'PUT',
+        headers:{
+          'apikey':SUPA_KEY,
+          'Authorization':'Bearer '+SUPA_KEY,
+          'x-upsert':'true',
+          'Content-Type': 'image/jpeg'
+        },
+        body: blob
+      }).then(function(r){
+        if(!r.ok) return r.text().then(function(t){ throw new Error('HTTP '+r.status+': '+t); });
+        return r.json();
+      }).then(function(){
+        var url = SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+        enviarRpc(url);
+      }).catch(function(e){
+        toast('Error subiendo foto: '+(e.message||String(e)),'err');
+      });
+    }, function(err){
+      toast('Error procesando foto: '+(err.message||String(err)),'err');
+    });
+  } else {
+    enviarRpc('');
+  }
+}
+
 function doReportarDano(){
   if(!sess) return;
   // Tipo de ubicación: Habitación o Zona común
@@ -10262,6 +10421,43 @@ function restoreReplyState(state){
   });
 }
 
+// Render de la sección "Mis daños reportados" para MAID (Commit C).
+// Solo activos — el filtro del backend ya excluye VERIFICADO.
+function renderMisDanosReportadosMaid(reportes){
+  if(!reportes || !reportes.length) return '';
+  // Mapping estado → label + color del borde + label del badge
+  var ESTADOS = {
+    'PENDIENTE_RECEPCION':    { label:'⏳ En revisión',                       color:'#f59e0b', badge:'EN REVISIÓN' },
+    'NOTA_ACTIVA':            { label:'✓ Aprobado, en cola',                  color:'#3b82f6', badge:'APROBADO' },
+    'ESPERA_VERIFICACION':    { label:'🔍 Esperando verificación',            color:'#06b6d4', badge:'POR VERIFICAR' },
+    'RECHAZADO_VERIFICACION': { label:'⚠ Rechazado, volviendo al mantenedor', color:'#f97316', badge:'REABIERTO' }
+  };
+  var h = '<div style="margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h += '<span style="font-size:14px;font-weight:700;color:#f97316">🔧 Mis daños reportados</span>';
+  h += '<span style="background:#f97316;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">'+reportes.length+'</span>';
+  h += '</div>';
+  reportes.forEach(function(r){
+    var info = ESTADOS[r.estado] || { label:r.estado, color:'#9ca3af', badge:r.estado };
+    var ubi = (r.ubicacionTipo === 'zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
+    var hora = r.reportadoMs ? new Date(Number(r.reportadoMs)).toLocaleString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    h += '<div style="background:#22222c;border-left:3px solid '+info.color+';border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
+    h += '<div style="font-size:13px;font-weight:700;color:#e5e7eb">'+esc(ubi)+'</div>';
+    h += '<span style="background:'+info.color+';color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">'+esc(info.badge)+'</span>';
+    h += '</div>';
+    h += '<div style="font-size:13px;color:#e5e7eb;margin-bottom:4px">'+esc(r.descripcion||'')+'</div>';
+    if(r.fotoDanoUrl){
+      h += '<img src="'+esc(r.fotoDanoUrl)+'" style="max-width:100%;max-height:160px;border-radius:6px;margin-bottom:4px;cursor:pointer;display:block" onclick="window.open(\''+esc(r.fotoDanoUrl)+'\',\'_blank\')">';
+    }
+    h += '<div style="font-size:11px;color:'+info.color+';font-weight:700;margin-bottom:2px">'+esc(info.label)+'</div>';
+    h += '<div style="font-size:10px;color:#9ca3af">'+esc(hora)+'</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
 function loadNotes(){
   if(!sess)return;
   var day=(document.getElementById('notesDay')||{}).value||sess.businessDay;
@@ -10269,13 +10465,29 @@ function loadNotes(){
   // usuario está escribiendo (el polling de startPoll dispara loadNotes
   // cada 10s y destruye el DOM).
   var preservedReplies = preserveReplyState();
-  rpc('getShiftNotes',{businessDay:day},function(data){
+
+  // Para MAID también pedimos sus daños reportados en paralelo (Commit C).
+  var pNotas = new Promise(function(res){
+    rpc('getShiftNotes',{businessDay:day}, function(d){ res(d||{notes:[]}); }, function(){ res({notes:[]}); });
+  });
+  var pDanos = (sess.userRole === 'MAID')
+    ? new Promise(function(res){
+        rpc('getReportesActivos',{userRole:sess.userRole, userName:sess.userName},
+          function(d){ res(d||{reportes:[]}); },
+          function(){ res({reportes:[]}); });
+      })
+    : Promise.resolve({reportes:[]});
+
+  Promise.all([pNotas, pDanos]).then(function(r){
+    var data = r[0], danosData = r[1];
     var c=document.getElementById('notesCont');
     var notes=(data.notes||[]).filter(function(n){
       var tg=n.target||'ALL';
       return tg==='ALL'||tg===sess.userRole;
     });
-    if(!notes.length){
+    var misDanos = (danosData.reportes||[]);
+
+    if(!notes.length && !misDanos.length){
       c.innerHTML='<p style="color:#9ca3af;text-align:center;padding:20px;font-size:13px">Sin notas hoy.</p>';
       updNoteBadge([]);
       return;
@@ -10284,10 +10496,11 @@ function loadNotes(){
     var h = '';
 
     if(sess.userRole === 'MAID'){
-      // Vista camarera: dos secciones (recibidas / propias)
+      // Vista camarera: 3 secciones (recibidas / mis daños / mis mensajes)
       var recibidas = notes.filter(function(n){ return n.userName !== sess.userName; });
       var propias = notes.filter(function(n){ return n.userName === sess.userName; });
       h += renderNoteSection('📨', 'Mensajes recibidos', '#3b82f6', recibidas);
+      h += renderMisDanosReportadosMaid(misDanos);
       h += renderNoteSection('💬', 'Mis mensajes enviados', '#22c55e', propias);
     } else {
       // Vista ADMIN/RECEPTION: una sección — Mensajes del equipo, con Pasar a Mant.
