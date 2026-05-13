@@ -10220,9 +10220,55 @@ function renderNoteSection(emoji, titulo, color, items, renderOpts){
   return h;
 }
 
+// Antes de un re-render del feed (polling cada 10s o refresh manual),
+// capturar el estado de cualquier caja de respuesta abierta: si está
+// visible, qué texto tiene, y si el textarea tenía foco. Devuelve un
+// objeto { noteId: {text, focused} } para pasarle a restoreReplyState
+// después del innerHTML.
+function preserveReplyState(){
+  var state = {};
+  var boxes = document.querySelectorAll('[id^="replyBox-"]');
+  for(var i=0; i<boxes.length; i++){
+    var box = boxes[i];
+    if(box.style.display !== 'none'){
+      var noteId = box.id.replace('replyBox-','');
+      var ta = document.getElementById('replyText-'+noteId);
+      state[noteId] = {
+        text: ta ? ta.value : '',
+        focused: (document.activeElement === ta)
+      };
+    }
+  }
+  return state;
+}
+
+// Después del innerHTML del feed, restaurar las cajas que estaban abiertas:
+// mostrarlas, devolverles el texto, y restaurar foco si lo tenían (con
+// cursor al final). Silenciosamente ignora notas que ya no existen.
+function restoreReplyState(state){
+  if(!state) return;
+  Object.keys(state).forEach(function(noteId){
+    var box = document.getElementById('replyBox-'+noteId);
+    if(!box) return;
+    box.style.display = 'block';
+    var ta = document.getElementById('replyText-'+noteId);
+    if(!ta) return;
+    ta.value = state[noteId].text;
+    if(state[noteId].focused){
+      ta.focus();
+      var len = ta.value.length;
+      try { ta.setSelectionRange(len, len); } catch(e){}
+    }
+  });
+}
+
 function loadNotes(){
   if(!sess)return;
   var day=(document.getElementById('notesDay')||{}).value||sess.businessDay;
+  // Capturar cajas abiertas antes del re-render para no perder lo que el
+  // usuario está escribiendo (el polling de startPoll dispara loadNotes
+  // cada 10s y destruye el DOM).
+  var preservedReplies = preserveReplyState();
   rpc('getShiftNotes',{businessDay:day},function(data){
     var c=document.getElementById('notesCont');
     var notes=(data.notes||[]).filter(function(n){
@@ -10249,6 +10295,7 @@ function loadNotes(){
     }
 
     c.innerHTML = h;
+    restoreReplyState(preservedReplies);
     updNoteBadge(notes);
   });
 }
@@ -10256,6 +10303,10 @@ function loadNotes(){
 function loadAllNotes(){
   if(!sess)return;
   var c=document.getElementById('notesCont');
+  // Capturar cajas abiertas antes del placeholder "Cargando..." (el
+  // innerHTML del placeholder ya destruye las cajas, así que primero
+  // capturamos).
+  var preservedReplies = preserveReplyState();
   c.innerHTML='<p style="color:#9ca3af">Cargando historial...</p>';
   rpc('getAllNotes',{limit:100},function(data){
     var notes=(data.notes||[]).filter(function(n){
@@ -10278,6 +10329,7 @@ function loadAllNotes(){
       byDay[day].forEach(function(n){ h += renderNoteCard(n, {allowPasarAMant: allowPasarAMant}); });
     });
     c.innerHTML = h;
+    restoreReplyState(preservedReplies);
   });
 }
 
