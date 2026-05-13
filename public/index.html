@@ -5237,6 +5237,23 @@ function ncalQuitarExtra(){
 function getWS(d){var day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1),mon=new Date(d.setDate(diff));return mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');}
 // ---- PROYECCION (admin) ----
 var proyData={tareas:[],meses:[]},proyAnio=new Date().getFullYear(),proyAreaOpen={},proyEditTarea=null;
+
+// Helper centralizado: tareas vivas (pendiente + pausado) separadas en
+// "mesActual" y "atrasadas" (meses anteriores del mismo año). Cross-año
+// NO arrastra — cada año arranca limpio. Usado por el modal alerta, el
+// banner del header y el banner rojo de Indicadores.
+function tareasActivasParaAlerta(){
+  var mesHoy = new Date().getMonth()+1;
+  var ESTADOS_ACTIVOS = ['pendiente','pausado'];
+  var all = (proyData.tareas||[]).filter(function(t){
+    return ESTADOS_ACTIVOS.indexOf(t.estado) >= 0;
+  });
+  return {
+    mesActual: all.filter(function(t){return t.mes === mesHoy;}),
+    atrasadas: all.filter(function(t){return t.mes < mesHoy && t.mes >= 1;}),
+    mesHoyNum: mesHoy
+  };
+}
 var PROY_AREAS=['Infraestructura','Habitaciones','Lenceria','Pasillos','Lavanderia','Recepcion','Camaras','Marketing','Personal','Sistemas'];
 var MESES_N=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -5257,9 +5274,9 @@ function renderProyeccion(){
   var pendientes=tareas.filter(function(t){return t.estado==='pendiente';}).length;
   var pct=total>0?Math.round((realizadas/total)*100):0;
 
-  // Alerta tareas del mes actual pendientes
-  var mesHoy=new Date().getMonth()+1;
-  var pendientesEsteMes=tareas.filter(function(t){return t.mes===mesHoy&&t.estado==='pendiente';});
+  // Alerta tareas del mes actual pendientes (las atrasadas ya están visibles
+  // en los acordeones expandibles de cada área más abajo).
+  var pendientesEsteMes = tareasActivasParaAlerta().mesActual;
   var h='';
   if(pendientesEsteMes.length){
     h+='<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;animation:pulse 1s infinite">';
@@ -5377,25 +5394,55 @@ function renderProyeccion(){
   document.getElementById('proyCont').innerHTML=h;
 }
  function openAlertaProy(){
-  var mesHoy=new Date().getMonth()+1;
-  var pendientes=(proyData.tareas||[]).filter(function(t){return t.mes===mesHoy&&t.estado==='pendiente';});
+  var r = tareasActivasParaAlerta();
+  var mesHoy = r.mesHoyNum;
   var h='<div class="mh"><div class="mt">⚠️ Tareas pendientes '+MESES_N[mesHoy-1]+'</div><button class="mc" onclick="closeM(\'mAlertaProy\')">✕</button></div>';
-  if(!pendientes.length){h+='<p style="color:#9ca3af">Sin tareas pendientes este mes.</p>';}
-  else{
-    pendientes.forEach(function(t){
-      var prCol={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'}[t.prioridad]||'#9ca3af';
-      h+='<div style="background:#22222c;border-left:3px solid #ef4444;border-radius:0 7px 7px 0;padding:9px 10px;margin-bottom:6px">';
-      h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
-      h+='<div style="flex:1"><div style="font-weight:700;font-size:12px">'+esc(t.nombre)+'</div>';
-      if(t.descripcion)h+='<div style="font-size:11px;color:#9ca3af">'+esc(t.descripcion)+'</div>';
-      h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+esc(t.area)+' — <span style="color:'+prCol+'">'+t.prioridad+'</span>'+(t.responsable?' — 👤 '+esc(t.responsable):'')+'</div>';
-      h+='</div>';
-      h+='<div style="display:flex;gap:4px">';
-      h+='<button class="btn by xs" onclick="quickEstado('+t.id+',\'en_proceso\');closeM(\'mAlertaProy\')">▶</button>';
-      h+='<button class="btn bg xs" onclick="quickEstado('+t.id+',\'realizado\');closeM(\'mAlertaProy\')">✓</button>';
-      h+='</div></div></div>';
-    });
+
+  function renderTarea(t, borderColor){
+    var prCol={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'}[t.prioridad]||'#9ca3af';
+    var estLabel = (t.estado||'').replace('_',' ');
+    var html='<div style="background:#22222c;border-left:3px solid '+borderColor+';border-radius:0 7px 7px 0;padding:9px 10px;margin-bottom:6px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
+    html+='<div style="flex:1"><div style="font-weight:700;font-size:12px">'+esc(t.nombre)+'</div>';
+    if(t.descripcion)html+='<div style="font-size:11px;color:#9ca3af">'+esc(t.descripcion)+'</div>';
+    html+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+esc(t.area)+' — <span style="color:'+prCol+'">'+t.prioridad+'</span> — '+estLabel+(t.responsable?' — 👤 '+esc(t.responsable):'')+'</div>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:4px">';
+    html+='<button class="btn by xs" onclick="quickEstado('+t.id+',\'en_proceso\');closeM(\'mAlertaProy\')">▶</button>';
+    html+='<button class="btn bg xs" onclick="quickEstado('+t.id+',\'realizado\');closeM(\'mAlertaProy\')">✓</button>';
+    html+='</div></div></div>';
+    return html;
   }
+
+  if(!r.mesActual.length && !r.atrasadas.length){
+    h+='<p style="color:#9ca3af">Sin tareas pendientes este mes.</p>';
+  } else {
+    // Sección ámbar — atrasadas del mes anterior (solo si hay)
+    if(r.atrasadas.length){
+      h+='<div style="background:rgba(232,156,95,.08);border:1px solid rgba(232,156,95,.3);border-radius:8px;padding:10px;margin-bottom:10px">';
+      h+='<div style="font-size:12px;font-weight:700;color:#E89C5F;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">⏳ Mes anterior — sin terminar</div>';
+      // Más reciente primero (mes mayor)
+      r.atrasadas.slice().sort(function(a,b){return b.mes-a.mes;}).forEach(function(t){
+        var item = renderTarea(t, '#E89C5F');
+        // Agregar badge con el nombre del mes
+        var badge = '<span style="display:inline-block;background:#3A2A1F;color:#E89C5F;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">'+esc(MESES_N[t.mes-1])+'</span>';
+        // Insertar el badge al inicio del nombre de la tarea
+        item = item.replace('<div style="font-weight:700;font-size:12px">', '<div style="font-weight:700;font-size:12px">'+badge);
+        h+=item;
+      });
+      h+='</div>';
+    }
+    // Sección verde — programadas para este mes (solo si hay)
+    if(r.mesActual.length){
+      h+='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:10px;margin-bottom:10px">';
+      h+='<div style="font-size:12px;font-weight:700;color:#22c55e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📌 Programadas para '+esc(MESES_N[mesHoy-1])+'</div>';
+      r.mesActual.forEach(function(t){
+        h+=renderTarea(t, '#22c55e');
+      });
+      h+='</div>';
+    }
+  }
+
   h+='<button class="btn ba full" style="margin-top:10px" onclick="closeM(\'mAlertaProy\');sw(\'proyeccion\')">Ver todas las tareas</button>';
   var modal=document.getElementById('mAlertaProy');
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mAlertaProy';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mAlertaProyB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mAlertaProy');});document.body.appendChild(div);}
@@ -5405,12 +5452,13 @@ function renderProyeccion(){
 function updProyAlerta(){
   var el=document.getElementById('proyAlerta');
   if(!el)return;
-  var mesHoy=new Date().getMonth()+1;
-  var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  var pendientes=(proyData.tareas||[]).filter(function(t){return t.mes===mesHoy&&t.estado==='pendiente';});
-  if(pendientes.length){
+  var r = tareasActivasParaAlerta();
+  var total = r.mesActual.length + r.atrasadas.length;
+  if(total){
     el.style.display='block';
-    el.textContent='⚠️ '+pendientes.length+' tarea(s) pendientes '+meses[mesHoy-1];
+    var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    var atrasadasTxt = r.atrasadas.length ? ' (+'+r.atrasadas.length+' atrasadas)' : '';
+    el.textContent='⚠️ '+r.mesActual.length+' tarea(s) pendientes '+meses[r.mesHoyNum-1]+atrasadasTxt;
   } else {
     el.style.display='none';
   }
