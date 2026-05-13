@@ -10228,6 +10228,7 @@ function renderNoteSection(emoji, titulo, color, items, renderOpts){
 function preserveReplyState(){
   var state = {};
   var boxes = document.querySelectorAll('[id^="replyBox-"]');
+  var totalBoxes = boxes.length;
   for(var i=0; i<boxes.length; i++){
     var box = boxes[i];
     if(box.style.display !== 'none'){
@@ -10239,6 +10240,7 @@ function preserveReplyState(){
       };
     }
   }
+  console.log('[reportes-debug] preserve: total boxes en DOM=', totalBoxes, '· abiertas capturadas=', Object.keys(state).length, '· state=', JSON.parse(JSON.stringify(state)));
   return state;
 }
 
@@ -10246,20 +10248,25 @@ function preserveReplyState(){
 // mostrarlas, devolverles el texto, y restaurar foco si lo tenían (con
 // cursor al final). Silenciosamente ignora notas que ya no existen.
 function restoreReplyState(state){
-  if(!state) return;
-  Object.keys(state).forEach(function(noteId){
+  if(!state){ console.log('[reportes-debug] restore: state vacío/null, nada que hacer'); return; }
+  var keys = Object.keys(state);
+  if(!keys.length){ console.log('[reportes-debug] restore: state sin cajas (0 keys)'); return; }
+  var restored = 0, missingBox = 0, missingTa = 0;
+  keys.forEach(function(noteId){
     var box = document.getElementById('replyBox-'+noteId);
-    if(!box) return;
+    if(!box){ missingBox++; console.log('[reportes-debug] restore: NO encontré replyBox-'+noteId+' tras innerHTML'); return; }
     box.style.display = 'block';
     var ta = document.getElementById('replyText-'+noteId);
-    if(!ta) return;
+    if(!ta){ missingTa++; console.log('[reportes-debug] restore: NO encontré replyText-'+noteId); return; }
     ta.value = state[noteId].text;
     if(state[noteId].focused){
       ta.focus();
       var len = ta.value.length;
       try { ta.setSelectionRange(len, len); } catch(e){}
     }
+    restored++;
   });
+  console.log('[reportes-debug] restore: pedidas=', keys.length, '· restauradas=', restored, '· boxes faltantes=', missingBox, '· textareas faltantes=', missingTa);
 }
 
 function loadNotes(){
