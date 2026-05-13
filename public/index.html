@@ -5240,17 +5240,21 @@ var proyData={tareas:[],meses:[]},proyAnio=new Date().getFullYear(),proyAreaOpen
 
 // Helper centralizado: tareas vivas (pendiente + pausado) separadas en
 // "mesActual" y "atrasadas" (meses anteriores del mismo año). Cross-año
-// NO arrastra — cada año arranca limpio. Usado por el modal alerta, el
-// banner del header y el banner rojo de Indicadores.
+// NO arrastra — cada año arranca limpio. "enProceso" trae todas las
+// tareas con estado en_proceso sin filtrar por mes/año (siempre visibles
+// hasta que cambien de estado). Usado por modal alerta + banner header
+// + banner rojo de Indicadores.
 function tareasActivasParaAlerta(){
   var mesHoy = new Date().getMonth()+1;
   var ESTADOS_ACTIVOS = ['pendiente','pausado'];
-  var all = (proyData.tareas||[]).filter(function(t){
+  var todas = proyData.tareas||[];
+  var activas = todas.filter(function(t){
     return ESTADOS_ACTIVOS.indexOf(t.estado) >= 0;
   });
   return {
-    mesActual: all.filter(function(t){return t.mes === mesHoy;}),
-    atrasadas: all.filter(function(t){return t.mes < mesHoy && t.mes >= 1;}),
+    mesActual: activas.filter(function(t){return t.mes === mesHoy;}),
+    atrasadas: activas.filter(function(t){return t.mes < mesHoy && t.mes >= 1;}),
+    enProceso: todas.filter(function(t){return t.estado === 'en_proceso';}),
     mesHoyNum: mesHoy
   };
 }
@@ -5414,7 +5418,7 @@ function renderProyeccion(){
     return html;
   }
 
-  if(!r.mesActual.length && !r.atrasadas.length){
+  if(!r.mesActual.length && !r.atrasadas.length && !r.enProceso.length){
     h+='<p style="color:#9ca3af">Sin tareas pendientes este mes.</p>';
   } else {
     // Sección ámbar — atrasadas del mes anterior (solo si hay)
@@ -5428,6 +5432,24 @@ function renderProyeccion(){
         var badge = '<span style="display:inline-block;background:#3A2A1F;color:#E89C5F;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">'+esc(MESES_N[t.mes-1])+'</span>';
         // Insertar el badge al inicio del nombre de la tarea
         item = item.replace('<div style="font-weight:700;font-size:12px">', '<div style="font-weight:700;font-size:12px">'+badge);
+        h+=item;
+      });
+      h+='</div>';
+    }
+    // Sección azul — En proceso ahora (cualquier mes, cualquier año)
+    if(r.enProceso.length){
+      h+='<div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.4);border-radius:8px;padding:10px;margin-bottom:10px">';
+      h+='<div style="font-size:12px;font-weight:700;color:#60A5FA;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🔄 En proceso ahora</div>';
+      r.enProceso.forEach(function(t){
+        var item = renderTarea(t, '#60A5FA');
+        // Las en proceso solo necesitan el botón ✓ (marcar realizada)
+        // Quitar el botón ▶ (iniciar) porque ya están iniciadas.
+        item = item.replace(/<button class="btn by xs"[^>]*>▶<\/button>/, '');
+        // Si la tarea es de otro mes, agregar badge del mes para contexto.
+        if(t.mes !== r.mesHoyNum){
+          var badge = '<span style="display:inline-block;background:#1E3A5F;color:#60A5FA;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">'+esc(MESES_N[t.mes-1])+'</span>';
+          item = item.replace('<div style="font-weight:700;font-size:12px">', '<div style="font-weight:700;font-size:12px">'+badge);
+        }
         h+=item;
       });
       h+='</div>';
