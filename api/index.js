@@ -190,6 +190,7 @@ module.exports = async function handler(req, res) {
       case 'roomHistory':       return await apiRoomHistory(payload, res);
       case 'markNoteSeen':      return await apiMarkNoteSeen(payload, res);
       case 'markNotePasado':    return await apiMarkNotePasado(payload, res);
+      case 'addNoteReply':      return await apiAddNoteReply(payload, res);
       case 'getAllNotes':        return await apiGetAllNotes(payload, res);
       case 'getNoteHistory':    return await apiGetNoteHistory(payload, res);
       case 'reviewNote':        return await apiReviewNote(payload, res);
@@ -220,6 +221,7 @@ module.exports = async function handler(req, res) {
       case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
       case 'verificarArreglo':  return await apiVerificarArreglo(payload, res);
       case 'rechazarArreglo':   return await apiRechazarArreglo(payload, res);
+      case 'resolverDanoZonaComun': return await apiResolverDanoZonaComun(payload, res);
       case 'marcarRevision':    return await apiMarcarRevision(payload, res);
       case 'crearTareaMant':    return await apiCrearTareaMant(payload, res);
       case 'getTareasMant':     return await apiGetTareasMant(payload, res);
@@ -1279,6 +1281,36 @@ async function apiAddNote(p, res) {
   return ok(res, {});
 }
 
+// Rediseño Reportes: agrega una respuesta a una nota existente.
+// Las respuestas se acumulan en la columna JSONB `respuestas` de shift_notes.
+// Cada respuesta: { ts, por (userName), rol (userRole), texto, fotoUrl? }.
+async function apiAddNoteReply(p, res) {
+  const userRole = String(p.userRole || '').toUpperCase();
+  if(!['ADMIN','RECEPTION','MAID','MAINTENANCE'].includes(userRole)) return err(res, 'Sin permiso');
+  const userName = String(p.userName || '').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const noteId = Number(p.noteId || 0);
+  if(!noteId) return err(res, 'noteId requerido');
+
+  const texto = String(p.texto || '').trim();
+  if(texto.length < 1) return err(res, 'Texto requerido');
+
+  const fotoUrl = String(p.fotoUrl || '').trim() || null;
+
+  const { data: note } = await supabase.from('shift_notes')
+    .select('id, is_deleted, respuestas').eq('id', noteId).single();
+  if(!note) return err(res, 'Nota no encontrada');
+  if(note.is_deleted) return err(res, 'Nota borrada');
+
+  const prev = Array.isArray(note.respuestas) ? note.respuestas : [];
+  const nueva = { ts: Date.now(), por: userName, rol: userRole, texto: texto, fotoUrl: fotoUrl };
+  const nuevas = prev.concat([nueva]);
+
+  await supabase.from('shift_notes').update({ respuestas: nuevas }).eq('id', noteId);
+  return ok(res, { noteId: noteId, respuestas: nuevas });
+}
+
 async function apiGetNotes(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const { data } = await supabase.from('shift_notes').select('*')
@@ -1288,7 +1320,8 @@ async function apiGetNotes(p, res) {
     id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id,
     userRole: r.user_role, userName: r.user_name, note: r.note,
     target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
-    businessDay: r.business_day, photoUrl: r.photo_url || null
+    businessDay: r.business_day, photoUrl: r.photo_url || null,
+    respuestas: Array.isArray(r.respuestas) ? r.respuestas : []
   })) });
 }
 
@@ -1338,7 +1371,8 @@ async function apiGetAllNotes(p, res) {
     id: r.id, tsMs: Number(r.ts_ms), shiftId: r.shift_id,
     userRole: r.user_role, userName: r.user_name, note: r.note,
     target: r.target || 'ALL', seenBy: JSON.parse(r.seen_by || '[]'),
-    businessDay: r.business_day
+    businessDay: r.business_day,
+    respuestas: Array.isArray(r.respuestas) ? r.respuestas : []
   })) });
 }
 
@@ -2827,6 +2861,46 @@ async function apiRechazarArreglo(p, res) {
   }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, estado: 'RECHAZADO_VERIFICACION' });
+}
+
+// Rediseño Reportes: ADMIN/RECEPTION cierra un daño de zona común sin
+// pasar por mantenimiento (bombillito quemado, basura, etc — cosas que
+// la propia recep resuelve en el momento). Solo aplica a zonas comunes.
+// Para habitaciones se mantiene el flujo completo con mantenedor.
+async function apiResolverDanoZonaComun(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(reporte.ubicacion_tipo !== 'zona_comun') return err(res, 'Solo aplica a zonas comunes. Las habitaciones requieren flujo de mantenedor.');
+  if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
+    return err(res, 'Reporte no esta activo (estado: '+reporte.estado+')');
+  }
+
+  const now = Date.now();
+  const todayDate = new Date().toISOString().split('T')[0];
+  await supabase.from('room_issues').update({
+    estado: 'VERIFICADO',
+    verificado_por: userName,
+    verificado_ms: now,
+    // Si no pasó por mantenedor, dejamos rastro: arreglado_por también es recep,
+    // para que el historial muestre quién resolvió.
+    arreglado_por: reporte.arreglado_por || userName,
+    arreglado_ms: reporte.arreglado_ms || now,
+    arreglo_nota: reporte.arreglo_nota || 'Resuelto directo por '+userRole.toLowerCase(),
+    resolved: true,
+    resolved_at: todayDate,
+    resolved_by: userName
+  }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, estado: 'VERIFICADO', verificadoMs: now });
 }
 
 // ==================== REVISION (G1) ====================
