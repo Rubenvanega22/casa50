@@ -773,7 +773,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label style="margin-top:8px">Descripción del daño</label>
   <textarea id="rdmDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="rdmFoto" accept="image/*">
+  <div style="display:flex;gap:6px">
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">📷 Tomar foto<input type="file" id="rdmFotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('rdmFotoCam','rdmFotoGal')"></label>
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">🖼️ Galería<input type="file" id="rdmFotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('rdmFotoGal','rdmFotoCam')"></label>
+  </div>
   <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:8px;margin-top:10px;font-size:11px;color:#93c5fd">
     ℹ Tu reporte se envía a Recepción para revisión. Ellos asignan prioridad y lo pasan a Mantenimiento.
   </div>
@@ -796,7 +799,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>Nota del trabajo (obligatoria)</label>
   <textarea id="maNota" rows="3" placeholder="Qué arreglaste, materiales usados, etc. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto del arreglo (opcional)</label>
-  <input type="file" id="maFoto" accept="image/*">
+  <div style="display:flex;gap:6px">
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">📷 Tomar foto<input type="file" id="maFotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('maFotoCam','maFotoGal')"></label>
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">🖼️ Galería<input type="file" id="maFotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('maFotoGal','maFotoCam')"></label>
+  </div>
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mMarcarArreglo')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doMarcarArreglo()">✓ Confirmar arreglo</button>
@@ -816,7 +822,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>¿Qué encontraste? ¿Qué hiciste?</label>
   <textarea id="rvMotivo" rows="3" placeholder="Ej: Falta un repuesto, vuelvo el lunes. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="rvFoto" accept="image/*">
+  <div style="display:flex;gap:6px">
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">📷 Tomar foto<input type="file" id="rvFotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('rvFotoCam','rvFotoGal')"></label>
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">🖼️ Galería<input type="file" id="rvFotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('rvFotoGal','rvFotoCam')"></label>
+  </div>
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mNuevaRevision')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#3b82f6;color:#fff;font-weight:700" onclick="doRevisar()">📝 Guardar revisión</button>
@@ -970,7 +979,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>Nota del trabajo (obligatoria)</label>
   <textarea id="ctNota" rows="3" placeholder="Qué hiciste, materiales usados, etc. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto del trabajo (opcional)</label>
-  <input type="file" id="ctFoto" accept="image/*">
+  <div style="display:flex;gap:6px">
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">📷 Tomar foto<input type="file" id="ctFotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('ctFotoCam','ctFotoGal')"></label>
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">🖼️ Galería<input type="file" id="ctFotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('ctFotoGal','ctFotoCam')"></label>
+  </div>
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mCompTarea')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doCompTarea()">✓ Confirmar</button>
@@ -1004,7 +1016,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label style="margin-top:8px">Descripción</label>
   <textarea id="nsDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="nsFoto" accept="image/*">
+  <div style="display:flex;gap:6px">
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">📷 Tomar foto<input type="file" id="nsFotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('nsFotoCam','nsFotoGal')"></label>
+    <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">🖼️ Galería<input type="file" id="nsFotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('nsFotoGal','nsFotoCam')"></label>
+  </div>
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mNuevaSolicitud')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#f97316;color:#fff;font-weight:700" onclick="doNuevaSolicitud()">✓ Enviar a ADM</button>
@@ -1261,7 +1276,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="RECEPTION">Solo Recepcion</option>
 </select>
 <button class="btn ba sm" onclick="sendNote()">Enviar Reporte</button>
-<label class="btn bk sm" style="cursor:pointer">📷 Foto <input type="file" id="notePhoto" accept="image/*" style="display:none" onchange="selNoteFoto()"></label>
+<label class="btn bk sm" style="cursor:pointer">📷 Tomar foto<input type="file" id="notePhotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('notePhotoCam','notePhotoGal');selNoteFoto()"></label>
+<label class="btn bk sm" style="cursor:pointer">🖼️ Galería<input type="file" id="notePhotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('notePhotoGal','notePhotoCam');selNoteFoto()"></label>
 </div>
 <div id="notePhotoPreview"></div>
 </div>
@@ -1413,6 +1429,30 @@ function fmt(n){return '$'+Number(n||0).toLocaleString('es-CO');}
 function fT(ms){if(!ms||Number(ms)===0)return '--';return new Date(Number(ms)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});}
 function fDur(ms){var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h+'h '+String(m).padStart(2,'0')+'m';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ===== HELPERS FOTO (2 botones: Cámara + Galería) =====
+// Cada input de foto en la app tiene 2 botones paralelos: uno con
+// capture="environment" (cámara directa) y otro sin capture (galería).
+// Estos 3 helpers unifican el uso. Pasarles los IDs de los 2 inputs.
+function getFotoFile(idCam, idGal){
+  var cam = document.getElementById(idCam);
+  var gal = document.getElementById(idGal);
+  if(cam && cam.files && cam.files[0]) return cam.files[0];
+  if(gal && gal.files && gal.files[0]) return gal.files[0];
+  return null;
+}
+function resetFoto(idCam, idGal){
+  var cam = document.getElementById(idCam);
+  var gal = document.getElementById(idGal);
+  if(cam) cam.value = '';
+  if(gal) gal.value = '';
+}
+function onFotoCambio(activeId, inactiveId){
+  // Cuando el usuario elige foto en uno, limpiamos el otro para que
+  // solo quede una foto activa.
+  var inactive = document.getElementById(inactiveId);
+  if(inactive) inactive.value = '';
+}
 function tog(id,show){var e=document.getElementById(id);if(e){if(show)e.classList.remove('h');else e.classList.add('h');}}
 function toast(msg,type){var e=document.getElementById('toast');e.textContent=msg;e.className='toast show '+(type||'');clearTimeout(e._t);e._t=setTimeout(function(){e.className='toast';},4000);}
 function openM(id){document.getElementById(id).classList.add('op');}
@@ -5951,7 +5991,7 @@ function openMarcarArreglo(reporteId){
   var priEl=document.getElementById('maPrioridad');
   priEl.textContent=(r.prioridad||'normal').toUpperCase();
   priEl.style.color=r.prioridad==='urgente'?'#ef4444':r.prioridad==='baja'?'#22c55e':'#f59e0b';
-  document.getElementById('maFoto').value='';
+  resetFoto('maFotoCam','maFotoGal');
   document.getElementById('maNota').value='';
   window._maReporteId = reporteId;
   openM('mMarcarArreglo');
@@ -5962,7 +6002,7 @@ function doMarcarArreglo(){
   if(!reporteId){toast('Sin reporte seleccionado','err');return;}
   var nota = (document.getElementById('maNota').value||'').trim();
   if(nota.length<3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
-  var fotoFile = document.getElementById('maFoto') && document.getElementById('maFoto').files[0];
+  var fotoFile = getFotoFile('maFotoCam','maFotoGal');
 
   function enviarRpc(fotoUrl){
     rpc('marcarArreglo',{
@@ -6036,7 +6076,7 @@ function openRevisar(reporteId){
   var ubi = (r.ubicacionTipo==='zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
   document.getElementById('rvDesc').textContent = ubi + ' — ' + (r.descripcion||'');
   document.getElementById('rvMotivo').value = '';
-  document.getElementById('rvFoto').value = '';
+  resetFoto('rvFotoCam','rvFotoGal');
   window._rvReporteId = reporteId;
   openM('mNuevaRevision');
 }
@@ -6046,7 +6086,7 @@ function doRevisar(){
   if(!reporteId){toast('Sin reporte seleccionado','err');return;}
   var motivo = (document.getElementById('rvMotivo').value||'').trim();
   if(motivo.length < 3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
-  var fotoFile = document.getElementById('rvFoto') && document.getElementById('rvFoto').files[0];
+  var fotoFile = getFotoFile('rvFotoCam','rvFotoGal');
 
   function send(fotoUrl){
     rpc('marcarRevision',{
@@ -6173,7 +6213,7 @@ function openCompTarea(tareaId){
   }
   document.getElementById('ctFecha').textContent=fmtF(t.fechaObjetivo);
   document.getElementById('ctNota').value='';
-  document.getElementById('ctFoto').value='';
+  resetFoto('ctFotoCam','ctFotoGal');
   window._ctTareaId = tareaId;
   openM('mCompTarea');
 }
@@ -6183,7 +6223,7 @@ function doCompTarea(){
   if(!tareaId){toast('Sin tarea seleccionada','err');return;}
   var nota=(document.getElementById('ctNota').value||'').trim();
   if(nota.length<3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
-  var fotoFile = document.getElementById('ctFoto') && document.getElementById('ctFoto').files[0];
+  var fotoFile = getFotoFile('ctFotoCam','ctFotoGal');
 
   function enviarRpc(fotoUrl){
     rpc('completarTareaMant',{
@@ -6294,7 +6334,7 @@ function openNuevaSolicitud(){
   }
   document.getElementById('nsZonaOtra').value='';
   document.getElementById('nsDesc').value='';
-  document.getElementById('nsFoto').value='';
+  resetFoto('nsFotoCam','nsFotoGal');
   nsToggleTipo();
   openM('mNuevaSolicitud');
 }
@@ -6340,7 +6380,7 @@ function doNuevaSolicitud(){
       }
     }
   }
-  var fotoFile = document.getElementById('nsFoto') && document.getElementById('nsFoto').files[0];
+  var fotoFile = getFotoFile('nsFotoCam','nsFotoGal');
 
   function enviarRpc(fotoUrl){
     var payload = {
@@ -7124,7 +7164,7 @@ function openReportarDanoMaid(){
   }
   var otra = document.getElementById('rdmZonaOtra'); if(otra) otra.value = '';
   var desc = document.getElementById('rdmDesc'); if(desc) desc.value = '';
-  var foto = document.getElementById('rdmFoto'); if(foto) foto.value = '';
+  resetFoto('rdmFotoCam','rdmFotoGal');
   rdmToggleTipo();
   openM('mReportarDanoMaid');
 }
@@ -7165,7 +7205,7 @@ function doReportarDanoMaid(){
   }
   var desc = ((document.getElementById('rdmDesc')||{}).value || '').trim();
   if(desc.length < 3){ toast('La descripción debe tener mínimo 3 caracteres.','err'); return; }
-  var fotoFile = document.getElementById('rdmFoto') && document.getElementById('rdmFoto').files[0];
+  var fotoFile = getFotoFile('rdmFotoCam','rdmFotoGal');
 
   function enviarRpc(fotoUrl){
     rpc('crearReporteMant',{
@@ -10220,7 +10260,7 @@ function sendNote(){
   var t=(document.getElementById('noteIn')||{}).value||'';
   var target=(document.getElementById('noteTarget')||{}).value||'ALL';
   if(!t.trim()){toast('Escribe algo.','err');return;}
-  var fotoFile=document.getElementById('notePhoto')&&document.getElementById('notePhoto').files[0];
+  var fotoFile=getFotoFile('notePhotoCam','notePhotoGal');
   if(fotoFile){
     toast('Procesando foto...','ok');
     compressImage(fotoFile, function(blob){
@@ -10232,7 +10272,7 @@ function sendNote(){
      }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});return r.json();}).then(function(resp){
         var photoUrl=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
         rpc('addShiftNote',{note:t.trim(),target:target,userName:sess.userName,userRole:sess.userRole,photoUrl:photoUrl},
-          function(){document.getElementById('noteIn').value='';document.getElementById('notePhoto').value='';document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
+          function(){document.getElementById('noteIn').value='';resetFoto('notePhotoCam','notePhotoGal');document.getElementById('notePhotoPreview').innerHTML='';toast('Reporte con foto enviado.','ok');loadNotes();updNoteBadge();},
           function(e){toast(e.message||String(e),'err');}
         );
       }).catch(function(e){toast('Error subiendo foto: '+(e.message||String(e)),'err');});
@@ -10247,7 +10287,7 @@ function sendNote(){
   }
 }
 function selNoteFoto(){
-  var f=document.getElementById('notePhoto').files[0];
+  var f=getFotoFile('notePhotoCam','notePhotoGal');
   if(!f)return;
   var reader=new FileReader();
   reader.onload=function(e){
