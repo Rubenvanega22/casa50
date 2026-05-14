@@ -10421,6 +10421,87 @@ function restoreReplyState(state){
   });
 }
 
+// Render de la sección "🔴 Daños zonas comunes — activos" para ADMIN/RECEP
+// (Commit D). Recibe TODOS los reportes activos y filtra zona_comun acá.
+// El botón "Marcar arreglado" solo aparece para los estados que el endpoint
+// apiResolverDanoZonaComun acepta (NOTA_ACTIVA / RECHAZADO_VERIFICACION).
+function renderZonasComunesActivas(reportes){
+  if(!reportes || !reportes.length) return '';
+  var zonas = reportes.filter(function(r){ return r.ubicacionTipo === 'zona_comun'; });
+  if(!zonas.length) return '';
+  var ESTADOS = {
+    'PENDIENTE_RECEPCION':    { label:'⏳ Esperando aprobación',     color:'#f59e0b' },
+    'NOTA_ACTIVA':            { label:'🛠 Pendiente arreglo',         color:'#f97316' },
+    'ESPERA_VERIFICACION':    { label:'🔍 Esperando verificación',    color:'#06b6d4' },
+    'RECHAZADO_VERIFICACION': { label:'⚠ Reabierto',                  color:'#f97316' }
+  };
+  var ESTADOS_CON_BOTON = ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'];
+  var h = '<div style="margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h += '<span style="font-size:14px;font-weight:700;color:#ef4444">🔴 Daños zonas comunes — activos</span>';
+  h += '<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">'+zonas.length+'</span>';
+  h += '</div>';
+  zonas.forEach(function(r){
+    var info = ESTADOS[r.estado] || { label:r.estado, color:'#9ca3af' };
+    var ubi = r.ubicacionId || '?';
+    var hora = r.reportadoMs ? new Date(Number(r.reportadoMs)).toLocaleString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    var esMio = (r.reportadoPor === sess.userName);
+    var puedeResolver = ESTADOS_CON_BOTON.indexOf(r.estado) >= 0;
+    h += '<div style="background:#22222c;border-left:3px solid '+info.color+';border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+    h += '<span style="font-size:13px;font-weight:700;color:#e5e7eb">'+esc(ubi)+'</span>';
+    if(esMio) h += '<span style="background:#7c5cfc;color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">REPORTADO POR MÍ</span>';
+    h += '<span style="background:'+info.color+';color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">'+esc(info.label)+'</span>';
+    h += '</div>';
+    h += '<div style="display:flex;gap:4px;flex-shrink:0">';
+    if(puedeResolver) h += '<button class="btn bg xs" style="background:#22c55e;color:#fff;font-weight:700" onclick="doResolverZonaComun('+r.id+',\''+esc(ubi).replace(/'/g,"\\'")+'\')">✓ Marcar arreglado</button>';
+    h += '</div></div>';
+    h += '<div style="font-size:13px;color:#e5e7eb;margin-bottom:6px">'+esc(r.descripcion||'')+'</div>';
+    if(r.fotoDanoUrl){
+      h += '<img src="'+esc(r.fotoDanoUrl)+'" style="max-width:100%;max-height:180px;border-radius:6px;margin-bottom:4px;cursor:pointer;display:block" onclick="window.open(\''+esc(r.fotoDanoUrl)+'\',\'_blank\')">';
+    }
+    h += '<div style="font-size:11px;color:#9ca3af">Reportado por <b>'+esc(r.reportadoPor||'?')+'</b> · '+esc(hora)+'</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// Render de la sección "✅ Zonas comunes resueltas hoy" — lectura solamente.
+// Recibe items de apiGetHistorialMant ya filtrados a hoy + tipo=danos.
+function renderZonasComunesResueltas(items){
+  if(!items || !items.length) return '';
+  var zonas = items.filter(function(it){ return it.tipo === 'dano' && it.ubicacionTipo === 'zona_comun'; });
+  if(!zonas.length) return '';
+  var h = '<div style="margin-bottom:16px;opacity:.85">';
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+  h += '<span style="font-size:14px;font-weight:700;color:#22c55e">✅ Zonas comunes resueltas hoy</span>';
+  h += '<span style="background:#22c55e;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">'+zonas.length+'</span>';
+  h += '</div>';
+  zonas.forEach(function(it){
+    var ubi = it.ubicacionId || '?';
+    var horaReso = it.verificadoMs ? new Date(Number(it.verificadoMs)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
+    h += '<div style="background:#1a1f1a;border-left:3px solid #22c55e;border-radius:0 6px 6px 0;padding:8px 10px;margin-bottom:6px">';
+    h += '<div style="font-size:12px;color:#e5e7eb"><b>'+esc(ubi)+'</b> · '+esc(it.descripcion||'')+'</div>';
+    h += '<div style="font-size:10px;color:#9ca3af;margin-top:3px">Reportado por '+esc(it.reportadoPor||'?')+' · Resuelto por <b>'+esc(it.verificadoPor||it.arregladoPor||'?')+'</b> · '+esc(horaReso)+'</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// Handler: ADM/RECEP marca una zona común como arreglada sin pasar por
+// mantenedor (Commit A + D).
+function doResolverZonaComun(reporteId, ubicacionLabel){
+  if(!sess || !['ADMIN','RECEPTION'].includes(sess.userRole)){ toast('Solo ADM/Recep','err'); return; }
+  conf('¿Marcar arreglado el daño de '+ubicacionLabel+'?', function(){
+    rpc('resolverDanoZonaComun', { reporteId: reporteId, userName: sess.userName, userRole: sess.userRole },
+      function(){ toast('✓ Marcado como resuelto','ok'); loadNotes(); },
+      function(e){ toast(e.message || String(e),'err'); });
+  });
+}
+
 // Render de la sección "Mis daños reportados" para MAID (Commit C).
 // Solo activos — el filtro del backend ya excluye VERIFICADO.
 function renderMisDanosReportadosMaid(reportes){
@@ -10466,28 +10547,52 @@ function loadNotes(){
   // cada 10s y destruye el DOM).
   var preservedReplies = preserveReplyState();
 
-  // Para MAID también pedimos sus daños reportados en paralelo (Commit C).
+  // Carga paralela según rol:
+  // - Todos: notas (getShiftNotes)
+  // - MAID: sus daños activos
+  // - ADMIN/RECEPTION: todos los activos + resueltos de hoy (para zonas comunes)
   var pNotas = new Promise(function(res){
     rpc('getShiftNotes',{businessDay:day}, function(d){ res(d||{notes:[]}); }, function(){ res({notes:[]}); });
   });
-  var pDanos = (sess.userRole === 'MAID')
+  var pDanos;
+  if(sess.userRole === 'MAID'){
+    pDanos = new Promise(function(res){
+      rpc('getReportesActivos',{userRole:sess.userRole, userName:sess.userName},
+        function(d){ res(d||{reportes:[]}); },
+        function(){ res({reportes:[]}); });
+    });
+  } else if(sess.userRole === 'ADMIN' || sess.userRole === 'RECEPTION'){
+    pDanos = new Promise(function(res){
+      rpc('getReportesActivos',{userRole:sess.userRole, userName:sess.userName},
+        function(d){ res(d||{reportes:[]}); },
+        function(){ res({reportes:[]}); });
+    });
+  } else {
+    pDanos = Promise.resolve({reportes:[]});
+  }
+  // Resueltos hoy de zonas comunes — solo ADM/RECEP (apiGetHistorialMant
+  // exige esos roles).
+  var pHistorial = (sess.userRole === 'ADMIN' || sess.userRole === 'RECEPTION')
     ? new Promise(function(res){
-        rpc('getReportesActivos',{userRole:sess.userRole, userName:sess.userName},
-          function(d){ res(d||{reportes:[]}); },
-          function(){ res({reportes:[]}); });
+        rpc('getHistorialMant',{userRole:sess.userRole, userName:sess.userName, desde:day, hasta:day, tipo:'danos'},
+          function(d){ res(d||{items:[]}); },
+          function(){ res({items:[]}); });
       })
-    : Promise.resolve({reportes:[]});
+    : Promise.resolve({items:[]});
 
-  Promise.all([pNotas, pDanos]).then(function(r){
-    var data = r[0], danosData = r[1];
+  Promise.all([pNotas, pDanos, pHistorial]).then(function(r){
+    var data = r[0], danosData = r[1], histData = r[2];
     var c=document.getElementById('notesCont');
     var notes=(data.notes||[]).filter(function(n){
       var tg=n.target||'ALL';
       return tg==='ALL'||tg===sess.userRole;
     });
-    var misDanos = (danosData.reportes||[]);
+    var reportesActivos = (danosData.reportes||[]);
+    var historialItems = (histData.items||[]);
+    var hayZonasActivas = reportesActivos.some(function(x){ return x.ubicacionTipo === 'zona_comun'; });
+    var hayZonasResueltas = historialItems.some(function(it){ return it.tipo === 'dano' && it.ubicacionTipo === 'zona_comun'; });
 
-    if(!notes.length && !misDanos.length){
+    if(!notes.length && !reportesActivos.length && !hayZonasResueltas){
       c.innerHTML='<p style="color:#9ca3af;text-align:center;padding:20px;font-size:13px">Sin notas hoy.</p>';
       updNoteBadge([]);
       return;
@@ -10500,10 +10605,12 @@ function loadNotes(){
       var recibidas = notes.filter(function(n){ return n.userName !== sess.userName; });
       var propias = notes.filter(function(n){ return n.userName === sess.userName; });
       h += renderNoteSection('📨', 'Mensajes recibidos', '#3b82f6', recibidas);
-      h += renderMisDanosReportadosMaid(misDanos);
+      h += renderMisDanosReportadosMaid(reportesActivos);
       h += renderNoteSection('💬', 'Mis mensajes enviados', '#22c55e', propias);
     } else {
-      // Vista ADMIN/RECEPTION: una sección — Mensajes del equipo, con Pasar a Mant.
+      // Vista ADMIN/RECEPTION: zonas comunes (activas + resueltas hoy) + mensajes del equipo
+      h += renderZonasComunesActivas(reportesActivos);
+      h += renderZonasComunesResueltas(historialItems);
       h += renderNoteSection('📨', 'Mensajes del equipo', '#a78bfa', notes, {allowPasarAMant: true});
     }
 
