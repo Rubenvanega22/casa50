@@ -773,7 +773,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label style="margin-top:8px">Descripción del daño</label>
   <textarea id="rdmDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="rdmFoto" accept="image/*" capture="environment">
+  <input type="file" id="rdmFoto" accept="image/*">
   <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:8px;margin-top:10px;font-size:11px;color:#93c5fd">
     ℹ Tu reporte se envía a Recepción para revisión. Ellos asignan prioridad y lo pasan a Mantenimiento.
   </div>
@@ -796,7 +796,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>Nota del trabajo (obligatoria)</label>
   <textarea id="maNota" rows="3" placeholder="Qué arreglaste, materiales usados, etc. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto del arreglo (opcional)</label>
-  <input type="file" id="maFoto" accept="image/*" capture="environment">
+  <input type="file" id="maFoto" accept="image/*">
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mMarcarArreglo')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doMarcarArreglo()">✓ Confirmar arreglo</button>
@@ -816,7 +816,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>¿Qué encontraste? ¿Qué hiciste?</label>
   <textarea id="rvMotivo" rows="3" placeholder="Ej: Falta un repuesto, vuelvo el lunes. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="rvFoto" accept="image/*" capture="environment">
+  <input type="file" id="rvFoto" accept="image/*">
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mNuevaRevision')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#3b82f6;color:#fff;font-weight:700" onclick="doRevisar()">📝 Guardar revisión</button>
@@ -970,7 +970,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label>Nota del trabajo (obligatoria)</label>
   <textarea id="ctNota" rows="3" placeholder="Qué hiciste, materiales usados, etc. (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto del trabajo (opcional)</label>
-  <input type="file" id="ctFoto" accept="image/*" capture="environment">
+  <input type="file" id="ctFoto" accept="image/*">
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mCompTarea')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doCompTarea()">✓ Confirmar</button>
@@ -1004,7 +1004,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   <label style="margin-top:8px">Descripción</label>
   <textarea id="nsDesc" rows="3" placeholder="Describe brevemente (mín 3 caracteres)"></textarea>
   <label style="margin-top:8px">Foto (opcional)</label>
-  <input type="file" id="nsFoto" accept="image/*" capture="environment">
+  <input type="file" id="nsFoto" accept="image/*">
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mNuevaSolicitud')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#f97316;color:#fff;font-weight:700" onclick="doNuevaSolicitud()">✓ Enviar a ADM</button>
@@ -1261,7 +1261,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <option value="RECEPTION">Solo Recepcion</option>
 </select>
 <button class="btn ba sm" onclick="sendNote()">Enviar Reporte</button>
-<label class="btn bk sm" style="cursor:pointer">📷 Foto <input type="file" id="notePhoto" accept="image/*" capture="environment" style="display:none" onchange="selNoteFoto()"></label>
+<label class="btn bk sm" style="cursor:pointer">📷 Foto <input type="file" id="notePhoto" accept="image/*" style="display:none" onchange="selNoteFoto()"></label>
 </div>
 <div id="notePhotoPreview"></div>
 </div>
