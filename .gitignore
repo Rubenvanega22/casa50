@@ -1,0 +1,7 @@
+# Dependencias instaladas localmente (ej: sharp para generar íconos PWA).
+# El proyecto no tiene package.json — sharp se instala ad-hoc con
+# --no-save y queda en node_modules/. Vercel no usa estas dependencias.
+node_modules/
+
+# Build artifacts de Claude Code
+.claude/
