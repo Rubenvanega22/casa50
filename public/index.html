@@ -1461,9 +1461,34 @@ function conf(msg,cb){document.getElementById('mConfB').textContent=msg;confCb=c
 document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this)closeM(this.id);});});
 
 // ---- SESION ----
-function saveSess(s){try{sessionStorage.setItem('c50s',JSON.stringify(s));}catch(e){}}
-function loadSess(){try{var s=sessionStorage.getItem('c50s');return s?JSON.parse(s):null;}catch(e){return null;}}
-function clearSess(){try{sessionStorage.removeItem('c50s');}catch(e){}}
+// Recep usa sessionStorage (se borra al cerrar tab) porque su sess.shiftId
+// se usa para contabilizar ventas por turno; persistirla por días entre
+// turnos rompería el cuadre. El resto de roles (ADM/MAID/MAINTENANCE)
+// usan localStorage y persisten hasta apretar Salir.
+function saveSess(s){
+  try{
+    var json=JSON.stringify(s);
+    if(s && s.userRole==='RECEPTION'){
+      sessionStorage.setItem('c50s',json);
+      localStorage.removeItem('c50s');
+    } else {
+      localStorage.setItem('c50s',json);
+      sessionStorage.removeItem('c50s');
+    }
+  }catch(e){}
+}
+function loadSess(){
+  try{
+    var s=localStorage.getItem('c50s')||sessionStorage.getItem('c50s');
+    return s?JSON.parse(s):null;
+  }catch(e){return null;}
+}
+function clearSess(){
+  try{
+    localStorage.removeItem('c50s');
+    sessionStorage.removeItem('c50s');
+  }catch(e){}
+}
 
 // ---- INICIO ----
 window.onload=function(){
