@@ -5149,6 +5149,8 @@ function ncalRender(){
           else{cls='ncal-'+(info.turno==='T1'?'t1':info.turno==='T2'?'t2':'t3');lbl=info.turno+(area!=='Recepcion'&&info.entrada?' '+info.entrada.substring(0,5):'');}
           html+='<span class="'+cls+'">'+lbl+'</span>';
           if(esDes){if(cob)html+='<span class="ncal-ext">+'+esc(cob.nombre.split(' ')[0])+'</span>';else html+='<span class="ncal-sc">!</span>';}
+          var extraReemplaza=(window.ncalExtras||[]).find(function(ex){return ex.fecha===fecha&&ex.area===area&&ex.fijo===persona;});
+          if(extraReemplaza){html+='<span class="ncal-ext">'+esc(extraReemplaza.nombre.split(' ')[0])+'</span>';}
         }
         html+='</div></td>';
       }
