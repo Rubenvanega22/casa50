@@ -2229,7 +2229,7 @@ async function apiGetHabitacionesTurno(p, res) {
       habitacionesMap[r.room_id] = { roomId: r.room_id, category: r.category, countExtensiones: 0, countPersonasAdicionales: 0 };
     }
     if(r.type === 'EXTENSION') habitacionesMap[r.room_id].countExtensiones++;
-    if(r.type === 'SALE' && Number(r.duration_hrs||0)===0 && Number(r.base_price||0)===0 && Number(r.extra_people_value||0)>0){
+    if(r.type === 'SALE' && Number(r.extra_people_value||0)>0){
       habitacionesMap[r.room_id].countPersonasAdicionales++;
     }
   });
