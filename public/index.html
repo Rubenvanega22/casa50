@@ -3203,8 +3203,12 @@ function saveLoan(){
 }
 // ---- PERSONAL EXTRA ----
 function deleteExtra(id,nombre){
-  conf('¿Eliminar a '+nombre+' del personal extra?',function(){
-    rpc('deleteExtra',{id:id,userRole:sess.userRole},
+  var motivo=prompt('Motivo para eliminar a '+nombre+' del personal extra (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  conf('¿Eliminar a '+nombre+' del personal extra? Se reflejará en el cuadre.',function(){
+    rpc('deleteExtra',{id:id,motivo:motivo,userName:sess.userName,userRole:sess.userRole},
       function(){toast('Eliminado.','ok');loadExtra();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -5295,8 +5299,12 @@ function ncalEditarExtra(id,fecha,area){
   },100);
 }
 function ncalBorrarExtra(id){
-  conf('¿Borrar este extra?',function(){
-    rpc('deleteExtra',{id:id,userRole:sess.userRole},
+  var motivo=prompt('Motivo para borrar este extra (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  conf('¿Borrar este extra del calendario?',function(){
+    rpc('deleteExtra',{id:id,motivo:motivo,userName:sess.userName,userRole:sess.userRole},
       function(){toast('Extra borrado.','ok');closeM('mExtrasCal');loadSched();},
       function(e){toast(e.message||String(e),'err');}
     );
@@ -5463,8 +5471,12 @@ function ncalQuitarExtra(){
     return e.fecha===ncalEditando.fecha&&e.area===ncalEditando.area&&e.fijo===ncalEditando.persona;
   });
   if(ex){
+    var motivo=prompt('Motivo para quitar a '+ncalEditando.persona+' del '+ncalEditando.fecha+' (mínimo 5 caracteres):');
+    if(motivo===null)return;
+    motivo=String(motivo||'').trim();
+    if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
     conf('¿Quitar el extra asignado a '+ncalEditando.persona+' el '+ncalEditando.fecha+'?',function(){
-      rpc('deleteExtra',{id:ex.id,userRole:sess.userRole},
+      rpc('deleteExtra',{id:ex.id,motivo:motivo,userName:sess.userName,userRole:sess.userRole},
         function(){toast('Extra eliminado.','ok');closeM('mCalDia');loadSched();},
         function(e){toast(e.message||String(e),'err');}
       );
