@@ -1596,8 +1596,6 @@ function entrar(){
   var shiftSel=document.getElementById('lShift');
   var shiftId=shiftSel?shiftSel.value:'';
 
-  if(shiftId==='SHIFT_1_12')shiftId='SHIFT_1';
-  if(shiftId==='SHIFT_2_12')shiftId='SHIFT_3';
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
     if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
