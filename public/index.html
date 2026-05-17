@@ -5132,7 +5132,7 @@ function ncalRender(){
         var esDes=info&&(info.tipo==='descanso'||info.tipo==='vacaciones');
         var esDom=dow2===0;
         var esHoy2=hoy.getFullYear()===ncalAnio&&hoy.getMonth()===ncalMes&&hoy.getDate()===dia;
-        if(info){if(info.tipo==='descanso'||info.tipo==='vacaciones')st.d++;else{st.t++;if(info.turno==='T3'||(info.tipo==='12h'&&info.turno12==='pm'))st.n++;}}
+        if(info){if(info.tipo==='descanso'||info.tipo==='vacaciones')st.d++;else if(esDom&&area==='Recepcion'&&info.tipo==='normal'&&(info.turno==='T1'||info.turno==='T3'))st.d++;else{st.t++;if(info.turno==='T3'||(info.tipo==='12h'&&info.turno12==='pm'))st.n++;}}
         var tdBorder=esDom?'border-top:2px solid rgba(245,158,11,.3);':'';
         if(esDes&&!cob)tdBorder='border-top:2px solid rgba(249,115,22,.5);';
         // Verificar si hay un extra que cubre a este fijo en este día
@@ -5147,6 +5147,11 @@ function ncalRender(){
           else if(info.tipo==='vacaciones'){cls='ncal-vac';lbl='VAC';}
           else if(info.tipo==='12h'){cls='ncal-man';lbl=info.turno12==='am'?'12H↑':'12H↓';}
           else{cls='ncal-'+(info.turno==='T1'?'t1':info.turno==='T2'?'t2':'t3');lbl=info.turno+(area!=='Recepcion'&&info.entrada?' '+info.entrada.substring(0,5):'');}
+          // Domingo Recepción: T2 → 1T12 (cubre día). T1/T3 → DC. 2T12 lo cubre un extra.
+          if(esDom && area==='Recepcion' && info.tipo==='normal'){
+            if(info.turno==='T2'){cls='ncal-man';lbl='1T12';}
+            else{cls='ncal-dc';lbl='DC';}
+          }
           html+='<span class="'+cls+'">'+lbl+'</span>';
           if(esDes){if(cob)html+='<span class="ncal-ext">+'+esc(cob.nombre.split(' ')[0])+'</span>';else html+='<span class="ncal-sc">!</span>';}
           var extraReemplaza=(window.ncalExtras||[]).find(function(ex){return ex.fecha===fecha&&ex.area===area&&ex.fijo===persona;});
