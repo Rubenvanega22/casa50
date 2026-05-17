@@ -4154,17 +4154,31 @@ function pmaLoadPersonas(){
       cont.innerHTML='<p style="color:#9ca3af;font-size:11px">Esta habitación no tiene personas adicionales registradas en este turno.</p>';
       return;
     }
+    window.pmaPersonasCache = {};
     var h='';
     personas.forEach(function(r){
+      window.pmaPersonasCache[r.id] = r;
       var fecha=new Date(Number(r.ts_ms||0));
       var hh=String(fecha.getHours()).padStart(2,'0')+':'+String(fecha.getMinutes()).padStart(2,'0');
       var anulada=r.anulada?true:false;
+      var editada=r.editada?true:false;
+      var esCheckIn=r.esCheckIn===true;
       var styleRow=anulada?'opacity:0.5;text-decoration:line-through':'';
-      var btnAnular=anulada?'<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>':'<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="pmaAnularPersona('+r.id+')">🗑️ Anular</button>';
+      var badgeCheckIn=esCheckIn?'<span style="background:rgba(59,130,246,.15);color:#3b82f6;padding:2px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px">📌 EN CHECK-IN</span>':'';
+      var badgeEditada=editada?'<span style="background:rgba(167,139,250,.15);color:#a78bfa;padding:2px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px">✏️ EDITADA</span>':'';
+      var monto = esCheckIn ? Number(r.extra_people_value||0) : Number(r.total||0);
+      var btnAccion;
+      if(anulada){
+        btnAccion='<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 6px;border-radius:4px;font-size:10px">ANULADA</span>';
+      } else if(esCheckIn){
+        btnAccion='<button class="btn sm" style="background:rgba(167,139,250,.15);color:#a78bfa;border:0.5px solid #a78bfa;padding:3px 6px;font-size:10px" onclick="pmaAbrirEditar('+r.id+')">✏️ Editar</button>';
+      } else {
+        btnAccion='<button class="btn sm" style="background:rgba(239,68,68,.15);color:#ef4444;border:0.5px solid #ef4444;padding:3px 6px;font-size:10px" onclick="pmaAnularPersona('+r.id+')">🗑️ Anular</button>';
+      }
       h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:4px;padding:6px 8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'+styleRow+'">';
-      h+='<div><div style="font-size:11px">'+(r.extra_people||1)+' persona(s) · '+hh+' · '+(r.pay_method||'?')+'</div>';
+      h+='<div><div style="font-size:11px">'+(r.extra_people||1)+' persona(s) · '+hh+' · '+(r.pay_method||'?')+badgeCheckIn+badgeEditada+'</div>';
       h+='<div style="font-size:10px;color:#9ca3af">Cobrada por: '+(r.user_name||'?')+'</div></div>';
-      h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#22c55e;font-size:12px">'+fmt(Number(r.total||0))+'</b>'+btnAnular+'</div>';
+      h+='<div style="display:flex;align-items:center;gap:8px"><b style="color:#22c55e;font-size:12px">'+fmt(monto)+'</b>'+btnAccion+'</div>';
       h+='</div>';
     });
     cont.innerHTML=h;
@@ -4183,6 +4197,113 @@ function pmaAnularPersona(saleId){
       userRole:sess.userRole
     },function(){
       toast('✓ Persona adicional anulada','ok');
+      pmaLoadPersonas();
+      if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
+    },function(e){toast('Error: '+(e.message||'?'),'err');});
+  });
+}
+function pmaAbrirEditar(saleId){
+  if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN puede editar','err');return;}
+  var r=window.pmaPersonasCache&&window.pmaPersonasCache[saleId];
+  if(!r){toast('Datos no encontrados, recargá el listado','err');return;}
+  if(r.anulada){toast('Esta venta está anulada','err');return;}
+  if(!r.esCheckIn){toast('Esta fila no es de check-in (usá Anular)','err');return;}
+  var sel=document.getElementById('apmRoom');
+  var cat=sel&&sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].getAttribute('data-cat'):'';
+  var cfg=(typeof MP!=='undefined'&&MP[cat])?MP[cat]:null;
+  var valorPorPersona=cfg?Number(cfg.extraPerson||0):0;
+  if(valorPorPersona<=0){toast('No se pudo determinar el valor por persona','err');return;}
+  var modal=document.getElementById('mEditarPersonas');
+  if(!modal){
+    var div=document.createElement('div');
+    div.className='ov';
+    div.id='mEditarPersonas';
+    div.innerHTML='<div class="modal" style="max-width:460px;max-height:90vh;overflow-y:auto"><div id="mEditarPersonasB"></div></div>';
+    div.addEventListener('click',function(e){if(e.target===div)closeM('mEditarPersonas');});
+    document.body.appendChild(div);
+  }
+  window._pmaEditarCtx={
+    saleId:saleId,
+    personasOriginales:Number(r.extra_people||0),
+    valorPorPersona:valorPorPersona,
+    extraPeopleValueOriginal:Number(r.extra_people_value||0),
+    totalOriginal:Number(r.total||0),
+    payMethod:String(r.pay_method||'EFECTIVO'),
+    roomId:String(r.room_id||(sel?sel.value:''))
+  };
+  var h='<div class="mh"><div class="mt">✏️ Editar personas adicionales</div><button class="mc" onclick="closeM(\'mEditarPersonas\')">✕</button></div>';
+  h+='<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:6px;padding:8px;margin-bottom:12px;font-size:11px;color:#93c5fd">💡 Reducí la cantidad de personas adicionales cobradas en el check-in. La venta de habitación queda intacta — solo se ajusta el cobro extra.</div>';
+  h+='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:6px;padding:10px;margin-bottom:12px">';
+  h+='<div style="font-size:11px;color:#9ca3af">Habitación <b style="color:#e5e7eb">'+esc(window._pmaEditarCtx.roomId)+'</b></div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Método de pago: <b style="color:#e5e7eb">'+esc(window._pmaEditarCtx.payMethod)+'</b></div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Cantidad actual: <b style="color:#e5e7eb">'+window._pmaEditarCtx.personasOriginales+' persona(s)</b></div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Valor por persona: <b style="color:#e5e7eb">'+fmt(valorPorPersona)+'</b></div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Cobrado por personas: <b style="color:#22c55e">'+fmt(window._pmaEditarCtx.extraPeopleValueOriginal)+'</b></div>';
+  h+='<div style="font-size:11px;color:#9ca3af">Total de la venta: <b style="color:#22c55e">'+fmt(window._pmaEditarCtx.totalOriginal)+'</b></div>';
+  h+='</div>';
+  h+='<label style="font-size:11px;color:#9ca3af">Nueva cantidad (0 a '+window._pmaEditarCtx.personasOriginales+')</label>';
+  h+='<input type="number" id="pmaEdNuevaCant" min="0" max="'+window._pmaEditarCtx.personasOriginales+'" value="'+window._pmaEditarCtx.personasOriginales+'" oninput="pmaEdRecalc()" style="margin-bottom:10px">';
+  h+='<div id="pmaEdResumen" style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px;color:#86efac">Sin cambios todavía.</div>';
+  h+='<label style="font-size:11px;color:#fcd34d">Motivo (obligatorio, mínimo 5 caracteres)</label>';
+  h+='<textarea id="pmaEdMotivo" rows="2" placeholder="Ej: cliente reportó que cobramos 1 persona de más" style="margin-bottom:10px"></textarea>';
+  h+='<div style="display:flex;gap:6px">';
+  h+='<button class="btn" style="flex:1;background:#2e2e3a;color:#e5e7eb" onclick="closeM(\'mEditarPersonas\')">Cancelar</button>';
+  h+='<button class="btn ba" style="flex:1" onclick="pmaGuardarEdicion()">Guardar</button>';
+  h+='</div>';
+  document.getElementById('mEditarPersonasB').innerHTML=h;
+  openM('mEditarPersonas');
+  pmaEdRecalc();
+}
+function pmaEdRecalc(){
+  var ctx=window._pmaEditarCtx;
+  if(!ctx)return;
+  var el=document.getElementById('pmaEdNuevaCant');
+  if(!el)return;
+  var nueva=Number(el.value);
+  var resumen=document.getElementById('pmaEdResumen');
+  if(!resumen)return;
+  if(!Number.isFinite(nueva)||nueva<0){
+    resumen.innerHTML='<span style="color:#ef4444">⚠️ Cantidad inválida</span>';
+    return;
+  }
+  if(nueva>ctx.personasOriginales){
+    resumen.innerHTML='<span style="color:#ef4444">⚠️ Solo se puede REDUCIR, no aumentar</span>';
+    return;
+  }
+  if(nueva===ctx.personasOriginales){
+    resumen.innerHTML='Sin cambios todavía.';
+    return;
+  }
+  var extraValueNuevo=ctx.valorPorPersona*nueva;
+  var diferencia=ctx.extraPeopleValueOriginal-extraValueNuevo;
+  var totalNuevo=ctx.totalOriginal-diferencia;
+  var personasReducidas=ctx.personasOriginales-nueva;
+  resumen.innerHTML=
+    '<div>Personas: <b>'+ctx.personasOriginales+'</b> → <b style="color:#fff">'+nueva+'</b> (-'+personasReducidas+')</div>'+
+    '<div>Cobro extra: <b>'+fmt(ctx.extraPeopleValueOriginal)+'</b> → <b style="color:#fff">'+fmt(extraValueNuevo)+'</b></div>'+
+    '<div>Total venta: <b>'+fmt(ctx.totalOriginal)+'</b> → <b style="color:#fff">'+fmt(totalNuevo)+'</b></div>'+
+    '<div style="margin-top:4px;font-weight:700;color:#ef4444">Diferencia a descontar: -'+fmt(diferencia)+'</div>';
+}
+function pmaGuardarEdicion(){
+  var ctx=window._pmaEditarCtx;
+  if(!ctx){toast('Contexto perdido, reabrí el modal','err');return;}
+  var nueva=Number((document.getElementById('pmaEdNuevaCant')||{}).value);
+  var motivo=((document.getElementById('pmaEdMotivo')||{}).value||'').trim();
+  if(!Number.isFinite(nueva)||nueva<0){toast('Cantidad inválida','err');return;}
+  if(nueva>ctx.personasOriginales){toast('No se puede aumentar','err');return;}
+  if(nueva===ctx.personasOriginales){toast('Sin cambios','err');return;}
+  if(!motivo||motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  var diferencia=ctx.extraPeopleValueOriginal-(ctx.valorPorPersona*nueva);
+  conf('¿Confirmar reducción a '+nueva+' persona(s)? Se descontará '+fmt(diferencia)+' del total.',function(){
+    rpc('editarPersonasCheckIn',{
+      saleId:ctx.saleId,
+      nuevaCantidad:nueva,
+      motivo:motivo,
+      userName:sess.userName,
+      userRole:sess.userRole
+    },function(res){
+      toast('✓ Editado: '+ctx.personasOriginales+' → '+nueva+' persona(s)','ok');
+      closeM('mEditarPersonas');
       pmaLoadPersonas();
       if(typeof loadCuadreAdmin==='function')loadCuadreAdmin();
     },function(e){toast('Error: '+(e.message||'?'),'err');});

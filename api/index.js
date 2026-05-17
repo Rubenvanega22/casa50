@@ -262,6 +262,7 @@ module.exports = async function handler(req, res) {
       case 'getExtrasHabitacion':    return await apiGetExtrasHabitacion(payload, res);
       case 'agregarHoraExtraManual': return await apiAgregarHoraExtraManual(payload, res);
       case 'getPersonasHabitacion':  return await apiGetPersonasHabitacion(payload, res);
+      case 'editarPersonasCheckIn':  return await apiEditarPersonasCheckIn(payload, res);
       case 'getRoomProducts':    return await apiGetRoomProducts(payload, res)
       case 'addRoomProduct':     return await apiAddRoomProduct(payload, res);
       case 'editRoomProduct':    return await apiEditRoomProduct(payload, res);
@@ -2101,17 +2102,19 @@ async function apiGetPersonasHabitacion(p, res) {
   if(!roomId) return err(res,'roomId requerido');
   const { data, error } = await supabase
     .from('sales')
-    .select('id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price')
+    .select('id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price, editada, editada_por, editada_ms, motivo_edicion')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
     .in('type', ['SALE', 'ANULADA'])
-    .eq('duration_hrs', 0)
-    .eq('base_price', 0)
     .gt('extra_people_value', 0)
     .order('ts_ms', { ascending: true });
   if(error) return err(res, error.message);
-  return ok(res, { personas: data || [] });
+  const personas = (data||[]).map(r => ({
+    ...r,
+    esCheckIn: Number(r.duration_hrs||0) > 0 || Number(r.base_price||0) > 0
+  }));
+  return ok(res, { personas });
 }
 async function apiAgregarHoraExtraManual(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
@@ -2268,6 +2271,108 @@ async function apiAgregarPersonaManual(p, res) {
     note:'[MANUAL] '+motivo
   });
   return ok(res,{roomId,cantidad,totalCost,businessDay:businessDayParam,shiftId});
+}
+async function apiEditarPersonasCheckIn(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN') return err(res,'Solo ADMIN puede editar personas adicionales');
+  const saleId = Number(p.saleId||0);
+  const nuevaCantidad = Number(p.nuevaCantidad);
+  const motivo = String(p.motivo||'').trim();
+  const userName = String(p.userName||'').trim();
+  if(!saleId) return err(res,'saleId requerido');
+  if(!Number.isFinite(nuevaCantidad) || nuevaCantidad < 0) return err(res,'Cantidad inválida (debe ser >= 0)');
+  if(!motivo || motivo.length < 5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
+  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
+  if(errSale) return err(res, errSale.message);
+  if(!sale) return err(res,'Venta no encontrada');
+  if(sale.anulada) return err(res,'Esta venta está anulada, no se puede editar');
+  if(String(sale.room_id) === '304') return err(res,'Habitación 304 (cortesía) no admite ajuste de personas');
+  if(String(sale.pay_method_2||'') === 'MIXTO_EF_TJ_NQ') return err(res,'Venta con devolución cruzada, no se puede editar');
+  const personasOriginales = Number(sale.extra_people||0);
+  if(personasOriginales <= 0) return err(res,'Esta venta no tiene personas adicionales');
+  if(nuevaCantidad > personasOriginales) return err(res,'Solo se puede REDUCIR la cantidad, no aumentar');
+  if(nuevaCantidad === personasOriginales) return err(res,'La cantidad no cambia, nada que actualizar');
+  const esCheckIn = Number(sale.duration_hrs||0) > 0 || Number(sale.base_price||0) > 0;
+  if(!esCheckIn) return err(res,'Esta fila no es de check-in. Usá Anular en su lugar.');
+  const { data: refunds } = await supabase.from('sales')
+    .select('id').eq('room_id', sale.room_id).eq('check_in_ms', Number(sale.check_in_ms||0))
+    .eq('type','REFUND').limit(1);
+  if(refunds && refunds.length) return err(res,'Esta venta tiene una devolución asociada, no se puede editar');
+  const cfg = MASTER_PRICING[sale.category] || MASTER_PRICING['Junior'];
+  const valorPorPersona = Number(cfg.extraPerson || 0);
+  const extraPeopleValueNuevo = valorPorPersona * nuevaCantidad;
+  const diferencia = Number(sale.extra_people_value||0) - extraPeopleValueNuevo;
+  if(diferencia < 0) return err(res,'Inconsistencia: el valor nuevo es mayor que el original');
+  const totalNuevo = Number(sale.total||0) - diferencia;
+  if(totalNuevo < 0) return err(res,'Inconsistencia: el nuevo total queda negativo');
+  const includedPeople = Number(sale.included_people||0);
+  const peopleNuevo = includedPeople + nuevaCantidad;
+  const payMethod = String(sale.pay_method||'EFECTIVO').toUpperCase();
+  let newA1 = Number(sale.amount_1||0);
+  let newA2 = Number(sale.amount_2||0);
+  let newA3 = Number(sale.amount_3||0);
+  if(payMethod === 'EFECTIVO'){ newA1 = totalNuevo; newA2 = 0; newA3 = 0; }
+  else if(payMethod === 'TARJETA'){ newA1 = 0; newA2 = totalNuevo; newA3 = 0; }
+  else if(payMethod === 'NEQUI'){ newA1 = 0; newA2 = 0; newA3 = totalNuevo; }
+  else if(payMethod === 'MIXTO'){
+    let restante = diferencia;
+    const efDeducir = Math.min(restante, newA1);
+    newA1 -= efDeducir; restante -= efDeducir;
+    if(restante > 0){
+      const tjDeducir = Math.min(restante, newA2);
+      newA2 -= tjDeducir; restante -= tjDeducir;
+    }
+    if(restante > 0){
+      const nqDeducir = Math.min(restante, newA3);
+      newA3 -= nqDeducir; restante -= nqDeducir;
+    }
+    if(restante > 0) return err(res,'Inconsistencia en reparto MIXTO: amounts insuficientes');
+    if((newA1 + newA2 + newA3) !== totalNuevo) return err(res,'Inconsistencia: suma amounts no cuadra con total nuevo');
+  } else {
+    return err(res,'Método de pago no reconocido: '+payMethod);
+  }
+  const now = Date.now();
+  const noteFinal = String(sale.note||'') + ' | EDITADO: ' + motivo;
+  const { error: errUpd } = await supabase.from('sales').update({
+    extra_people: nuevaCantidad,
+    extra_people_value: extraPeopleValueNuevo,
+    total: totalNuevo,
+    people: peopleNuevo,
+    amount_1: newA1,
+    amount_2: newA2,
+    amount_3: newA3,
+    note: noteFinal,
+    editada: true,
+    editada_por: userName,
+    editada_ms: now,
+    motivo_edicion: motivo
+  }).eq('id', saleId);
+  if(errUpd) return err(res,'Error actualizando venta: '+errUpd.message);
+  await supabase.from('state_history').insert({
+    ts_ms: now,
+    business_day: sale.business_day,
+    shift_id: sale.shift_id,
+    user_role: userRole,
+    user_name: userName,
+    room_id: sale.room_id,
+    from_state: 'AJUSTE',
+    to_state: 'PERSONAS_EDITADAS',
+    people: peopleNuevo,
+    meta_json: JSON.stringify({
+      accion: 'PERSONAS_CHECKIN_EDITADAS',
+      saleId,
+      motivo,
+      personasAntes: personasOriginales,
+      personasDespues: nuevaCantidad,
+      extraPeopleValueAntes: Number(sale.extra_people_value||0),
+      extraPeopleValueDespues: extraPeopleValueNuevo,
+      totalAntes: Number(sale.total||0),
+      totalDespues: totalNuevo,
+      diferencia,
+      payMethod
+    })
+  });
+  return ok(res, { saleId, personasAntes: personasOriginales, personasDespues: nuevaCantidad, totalAntes: Number(sale.total||0), totalDespues: totalNuevo, diferencia });
 }
 async function apiAddExtraPerson(p, res) {
   const now=Date.now();
