@@ -1597,6 +1597,14 @@ function entrar(){
   var shiftSel=document.getElementById('lShift');
   var shiftId=shiftSel?shiftSel.value:'';
 
+  // Aviso: turnos 12h (1T12/2T12) solo aplican los domingos.
+  // Si el usuario los elige en cualquier otro día (calendario), pedir confirmación
+  // para evitar errores como el del 18-may donde se eligió 1T12 un lunes.
+  if((shiftId==='SHIFT_1_12'||shiftId==='SHIFT_2_12') && new Date().getDay()!==0){
+    var ok12h=confirm('⚠️ Atención\n\nHoy NO es domingo. Los turnos de 12 horas (1T12 / 2T12) son solo para domingos.\n\n¿Estás seguro de querer entrar al turno 12 horas?\nSi te equivocaste, cancelá y elegí T1, T2 o T3.');
+    if(!ok12h){btn.disabled=false;btn.textContent='Ingresar';return;}
+  }
+
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
     if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
