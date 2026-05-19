@@ -1399,7 +1399,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 
 <script>
 // ---- ESTADO GLOBAL ----
-var BS={},rooms=[],sess=null,curRoom=null,multiMaidMode=false,maidSelected='',maidHasTaken=false,maidNamesInShift=[];
+var BS={},rooms=[],sess=null,curRoom=null,multiMaidMode=false,maidSelected='',maidHasTaken=false,maidNamesInShift=[],_dayDriftPending=false;
 var selDur=3,selPpl=2,selArr='WALK',selPay='EFECTIVO';
 var totalHabDia=0;
 var selExtMode='ext'; // 'ext' o 'renew'
@@ -1427,6 +1427,16 @@ function rpc(fn,p,ok,er){
   .catch(function(e){if(er)er(e);else toast(e.message||String(e),'err');});
 }
 function fmt(n){return '$'+Number(n||0).toLocaleString('es-CO');}
+// Espejo exacto de businessDay() del backend (api/index.js línea 30).
+// Si los dos algoritmos divergen, checkBusinessDayDrift daría falsos positivos.
+function computeBusinessDay(){
+  var d = new Date(Date.now() - 5 * 3600000);
+  if(d.getUTCHours() < 6) d.setUTCDate(d.getUTCDate() - 1);
+  var y = d.getUTCFullYear();
+  var m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var day = String(d.getUTCDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
 function fT(ms){if(!ms||Number(ms)===0)return '--';return new Date(Number(ms)).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});}
 function fDur(ms){var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h+'h '+String(m).padStart(2,'0')+'m';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -1499,7 +1509,6 @@ window.onload=function(){
     updSI();
     if(saved&&saved.userName){
       sess=saved;
-      sess.businessDay=BS.businessDay;
       saveSess(sess);
       startApp();
     }
@@ -1607,7 +1616,7 @@ function entrar(){
 
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
     btn.disabled=false;btn.textContent='Ingresar';
-    if(res&&res.ok){sess=res.session;sess.businessDay=BS.businessDay;saveSess(sess);startApp();}
+    if(res&&res.ok){sess=res.session;saveSess(sess);startApp();}
     else showLE('Error al ingresar.');
   },function(e){
     btn.disabled=false;btn.textContent='Ingresar';
@@ -1767,12 +1776,30 @@ function forceHardReload(){
   });
 }
 
+// Detecta si la página sobrevivió el cruce de las 6am Bogotá y sess.businessDay
+// quedó stale (causa raíz del bug 19may26 de Viviana: 10 ventas con day stale).
+// Solo recarga si sess está ATRASADO; si está adelantado (T1 MADRUGADA legítimo)
+// no toca.
+function checkBusinessDayDrift(){
+  if(_dayDriftPending) return;
+  if(!sess || !sess.businessDay) return;
+  var actual = computeBusinessDay();
+  if(sess.businessDay >= actual) return;
+  _dayDriftPending = true;
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = '<div style="background:#22222c;border:2px solid #f59e0b;border-radius:14px;padding:24px;max-width:360px;text-align:center"><div style="font-size:48px;margin-bottom:12px">🕐</div><div style="font-size:20px;font-weight:800;color:#f59e0b;margin-bottom:10px">Cambió el día</div><div style="font-size:14px;color:#d1d5db">Recargando el sistema…</div></div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ location.reload(); }, 2000);
+}
+
 function startPoll(){
   clearInterval(pT);
   pT=setInterval(function(){
    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}});
     loadNotes();
     if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
+    checkBusinessDayDrift();
   },10000);
   checkAlarms();checkTurnoAlert();clearInterval(aT);aT=setInterval(function(){checkAlarms();checkTurnoAlert();},30000);
 }
