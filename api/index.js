@@ -525,6 +525,10 @@ async function apiLogin(p, res) {
       }
     }
  await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
+    if(!existing) {
+      // Primer login del turno → congelar snapshot de inventario inicial (inmutable).
+      await capturarSnapshotInventarioInicial(bDay, shift, userName, now);
+    }
     const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now, fromMs } });
@@ -4006,6 +4010,8 @@ async function apiGetInventarioByDay(p, res) {
   const {data:sales}=await supabase.from('room_products').select('*').eq('business_day',bd);
   const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
   const {data:movements}=await supabase.from('stock_movements').select('*').eq('business_day',bd);
+  const {data:snapsRows}=await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
+  const snaps={};(snapsRows||[]).forEach(s=>{if(!snaps[s.shift_id])snaps[s.shift_id]={};snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial);});
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
  const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
   const ayerStr=ayer.getFullYear()+'-'+String(ayer.getMonth()+1).padStart(2,'0')+'-'+String(ayer.getDate()).padStart(2,'0');
@@ -4020,7 +4026,8 @@ async function apiGetInventarioByDay(p, res) {
     const entradasAyer=(entriesAyer||[]).filter(e=>e.product_id===prod.id).reduce((a,e)=>a+Number(e.cantidad||0),0);
    const totalTraslados=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
     const totalDevoluciones=(movements||[]).filter(m=>m.product_id===prod.id&&m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
-    const saldoInicialReal=Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados-totalEntradas+totalDevoluciones;
+    const snapT1=(snaps['SHIFT_1']||{})[prod.id];
+    const saldoInicialReal=(snapT1!=null)?snapT1:(Number(prod.stock_actual||0)+totalVentas+totalCortesias-totalTraslados-totalEntradas+totalDevoluciones);
     const turnosData={};
     shifts.forEach(function(sid){
       const ent=(entries||[]).filter(e=>e.product_id===prod.id&&e.shift_id===sid).reduce((a,e)=>a+Number(e.cantidad||0),0);
@@ -4049,6 +4056,30 @@ return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:p
     resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.cantidad||0)*Number(s.precio_unit||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
   });
   return ok(res,{rows,resumenTurnos,businessDay:bd});
+}
+// ==================== SNAPSHOT INMUTABLE DE INVENTARIO POR TURNO ====================
+// Invocado SOLO al primer LOGIN de RECEPTION de cada (business_day, shift_id).
+// ON CONFLICT DO NOTHING (vía ignoreDuplicates) garantiza que el snapshot original
+// NUNCA se sobreescribe — ni por relogins, reintentos ni concurrencia.
+// Inmutabilidad del turno aplicada a inventario inicial.
+async function capturarSnapshotInventarioInicial(bDay, shiftId, userName, now) {
+  try {
+    const { data: products } = await supabase.from('products')
+      .select('id, stock_actual').eq('activo', true);
+    if(!products || !products.length) return;
+    const rows = products.map(p => ({
+      business_day: bDay,
+      shift_id: shiftId,
+      product_id: p.id,
+      saldo_inicial: Number(p.stock_actual||0),
+      ts_ms: now,
+      created_by: userName || ''
+    }));
+    await supabase.from('shift_inventory_start')
+      .upsert(rows, { onConflict: 'business_day,shift_id,product_id', ignoreDuplicates: true });
+  } catch(e) {
+    console.error('snapshot inventario fallo (fallback a formula):', e && e.message || e);
+  }
 }
 async function apiIngresoBodega(p, res) {
   const userRole = String(p.userRole||'').toUpperCase();
@@ -4520,6 +4551,8 @@ async function apiGetPrintTurno(p, res) {
   const { data: salesDay } = await supabase.from('room_products').select('*').eq('business_day',bd);
   const { data: movements } = await supabase.from('stock_movements').select('*').eq('business_day',bd);
   const { data: entries } = await supabase.from('stock_entries').select('*').eq('business_day',bd);
+  const { data: snapsRows } = await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
+  const snaps = {}; (snapsRows||[]).forEach(s=>{ if(!snaps[s.shift_id]) snaps[s.shift_id]={}; snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial); });
 
   const salesShift = (salesDay||[]).filter(s => s.shift_id === sid);
 
@@ -4551,11 +4584,17 @@ async function apiGetPrintTurno(p, res) {
     const totalCortesiasDia = (salesDay||[]).filter(s => s.product_id === prod.id && s.is_cortesia).reduce((a,s) => a + Number(s.cantidad||0), 0);
     const totalTrasladosDia = (movements||[]).filter(m => m.product_id === prod.id && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
     const totalEntradasDia = (entries||[]).filter(e => e.product_id === prod.id).reduce((a,e) => a + Number(e.cantidad||0), 0);
-    const saldoInicialDia = Number(prod.stock_actual||0) + totalVentasDia + totalCortesiasDia - totalTrasladosDia - totalEntradasDia;
+    const snapT1 = (snaps['SHIFT_1']||{})[prod.id];
+    const saldoInicialDia = (snapT1 != null)
+      ? snapT1
+      : (Number(prod.stock_actual||0) + totalVentasDia + totalCortesiasDia - totalTrasladosDia - totalEntradasDia);
 
     let saldoTurno = saldoInicialDia;
     let saldoInicialTurno = saldoInicialDia;
     for(let i = 0; i <= shiftIdx; i++) {
+      // Si hay snapshot del turno i, anclar saldoTurno al valor congelado (inmutable por turno).
+      const snapI = (snaps[SHIFTS[i]]||{})[prod.id];
+      if(snapI != null) saldoTurno = snapI;
       if(i === shiftIdx) saldoInicialTurno = saldoTurno;
       const s = SHIFTS[i];
       const entsUntil = (movements||[]).filter(m => m.product_id === prod.id && m.shift_id === s && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
