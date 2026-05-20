@@ -406,9 +406,9 @@ async function apiLogin(p, res) {
         // Solo cambia a SHIFT_1 si el logout fue tambien en la madrugada
         if(logoutHour >= 0 && logoutHour < 6){
           shift = 'SHIFT_1';
-          // Avanzar el business_day un día porque este SHIFT_1 pertenece al dia siguiente comercialmente
-          const tomorrow = new Date(now + 24 * 3600 * 1000);
-          bDay = tomorrow.toISOString().slice(0,10);
+          // Avanzar el business_day al día calendario actual en Bogotá (este SHIFT_1
+          // pertenece a "hoy", no al business_day "ayer" que devolvió businessDay()).
+          bDay = new Date(now - 5*3600000).toISOString().slice(0,10);
         }
       }
     }
@@ -425,8 +425,7 @@ async function apiLogin(p, res) {
       if(logoutT3b && logoutT3b.length){
         const logoutHourB = new Date(Number(logoutT3b[0].ts_ms) + (-5*3600000)).getUTCHours();
         if(logoutHourB >= 0 && logoutHourB < 6){
-          const tomorrow = new Date(now + 24 * 3600 * 1000);
-          bDay = tomorrow.toISOString().slice(0,10);
+          bDay = new Date(now - 5*3600000).toISOString().slice(0,10);
         }
       }
     }
