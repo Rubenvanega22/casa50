@@ -8064,9 +8064,12 @@ function renderStaff(){
         if(hasHist) h += '<span style="font-size:11px;color:#9ca3af">'+(expand?'▼':'▶')+' ('+historial.length+')</span>';
         h += '</div>';
         if(expand){
-          h += '<div style="margin-top:4px;padding:4px 8px">';
+          h += '<div style="margin-top:4px;padding:4px 8px;display:flex;flex-direction:column;gap:3px">';
           historial.forEach(function(v){
-            h += '<div style="font-size:11px;color:#ef4444;padding:2px 0">🔴 '+esc(v.fechaSalidaVacaciones)+' → '+esc(v.fechaReingreso)+'</div>';
+            h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#ef4444">';
+            h += '<span>Ingreso: <b style="color:#fca5a5">'+esc(v.fechaIngreso||'—')+'</b></span>';
+            h += '<span>Vacaciones: <b style="color:#fca5a5">'+esc(v.fechaSalidaVacaciones||'—')+'</b></span>';
+            h += '</div>';
           });
           h += '</div>';
         }
