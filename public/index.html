@@ -8751,7 +8751,11 @@ function renderRankings(d,dPrev){
       h+=medalla;
       h+='<div style="flex:1;min-width:0">';
       h+='<div style="font-size:12px;font-weight:500;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.nombre)+'</div>';
-      h+='<div style="font-size:10px;color:#9ca3af">'+(r.turnos||0)+' turnos · <span style="color:'+fallasColor+'">'+r.fallas+' fallas</span></div>';
+      h+='<div style="font-size:10px;color:#9ca3af">'+(r.turnos||0)+' turnos · <span style="color:'+fallasColor+'">'+r.fallas+' fallas</span>';
+      if(r.fallas>0){
+        h+=' · <button onclick="_abrirHistorialFallas(\''+esc(r.nombre).replace(/\x27/g,"\\\x27")+'\')" style="background:#22222c;border:1px solid #2e2e3a;border-radius:4px;padding:1px 6px;font-size:9px;color:#9ca3af;cursor:pointer">📋 Historial</button>';
+      }
+      h+='</div>';
       h+='</div>';
       h+='<div style="text-align:right">';
       h+='<div style="font-size:13px;font-weight:700;color:#22c55e">'+fmt(r.total)+'</div>';
@@ -8765,6 +8769,70 @@ function renderRankings(d,dPrev){
   
   h+='</div>';
   return h;
+}
+
+// ============ HISTORIAL DE FALLAS — agrupado por mes ============
+function _fmtFechaCorta(bDay){
+  if(!bDay)return'—';
+  var p=String(bDay).split('-'); if(p.length!==3)return bDay;
+  var ms=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return Number(p[2])+' '+(ms[Number(p[1])-1]||'?');
+}
+function _fmtMesHeader(ym){
+  var ms=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  var p=String(ym).split('-'); if(p.length<2)return ym;
+  return (ms[Number(p[1])-1]||'?')+' '+p[0];
+}
+function _fmtShiftFalla(sid){
+  var m={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3',SHIFT_1_12:'T1·12h',SHIFT_2_12:'T2·12h',SHIFT_DC:'Día completo'};
+  return m[sid]||sid||'—';
+}
+function _abrirHistorialFallas(nombre){
+  document.getElementById('mHistT').textContent='📋 Historial de fallas — '+nombre;
+  document.getElementById('mHistB').innerHTML='<p style="color:#9ca3af;padding:10px">⏳ Cargando...</p>';
+  openM('mHist');
+  rpc('getShiftFailures',{filterUserName:nombre,userName:sess.userName,userRole:sess.userRole},function(d){
+    _renderHistorialFallas(nombre,(d&&d.raw)||[]);
+  },function(e){
+    document.getElementById('mHistB').innerHTML='<p style="color:#ef4444;padding:10px">Error: '+esc(e||'')+'</p>';
+  });
+}
+function _renderHistorialFallas(nombre,fallas){
+  var box=document.getElementById('mHistB');
+  if(!fallas.length){
+    box.innerHTML='<p style="color:#9ca3af;padding:10px;text-align:center">Sin fallas registradas.</p>';
+    return;
+  }
+  // Agrupar por YYYY-MM. El endpoint ya devuelve ts_ms DESC, asi que el orden
+  // de insercion de claves y de fallas dentro de cada grupo ya queda correcto.
+  var grupos={}; var ordenMeses=[];
+  fallas.forEach(function(r){
+    var ym=String(r.businessDay||'').slice(0,7);
+    if(!grupos[ym]){grupos[ym]=[];ordenMeses.push(ym);}
+    grupos[ym].push(r);
+  });
+  var h='<div style="display:flex;flex-direction:column;gap:14px;padding:4px">';
+  h+='<div style="font-size:11px;color:#9ca3af">'+fallas.length+' registro(s) — '+ordenMeses.length+' mes(es)</div>';
+  ordenMeses.forEach(function(ym){
+    h+='<div>';
+    h+='<div style="font-size:11px;font-weight:700;color:#fac775;letter-spacing:.8px;border-bottom:1px solid #2e2e3a;padding-bottom:4px;margin-bottom:6px">'+_fmtMesHeader(ym)+'</div>';
+    grupos[ym].forEach(function(r){
+      var fs=r.failures||[];
+      h+='<div style="padding:6px 0;border-bottom:1px solid rgba(46,46,58,.3)">';
+      h+='<div style="font-size:12px"><span style="color:#9ca3af">'+_fmtFechaCorta(r.businessDay)+' · '+_fmtShiftFalla(r.shiftId)+'</span> · <span style="color:#6b7280;font-size:11px">por '+esc(r.createdBy||'ADMIN')+'</span></div>';
+      if(fs.length){
+        fs.forEach(function(f){
+          h+='<div style="font-size:12px;color:#ef4444;padding-left:14px;margin-top:2px">• '+esc(String(f))+'</div>';
+        });
+      } else {
+        h+='<div style="font-size:12px;color:#6b7280;padding-left:14px;margin-top:2px">• (sin descripción)</div>';
+      }
+      h+='</div>';
+    });
+    h+='</div>';
+  });
+  h+='</div>';
+  box.innerHTML=h;
 }
 
 // Renderiza la caja de horas pico (HTML con canvas)

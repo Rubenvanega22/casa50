@@ -3766,9 +3766,11 @@ async function apiSaveShiftFailure(p, res) {
 async function apiGetShiftFailures(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const yearMonth=String(p.yearMonth||'');
+  const filterUserName=String(p.filterUserName||'').trim();
   let query=supabase.from('shift_failures').select('*').order('ts_ms',{ascending:false});
   if(yearMonth) query=query.like('business_day',yearMonth+'%');
-  const{data}=await query.limit(200);
+  if(filterUserName) query=query.eq('user_name',filterUserName);
+  const{data}=await query.limit(filterUserName?1000:200);
   // Agrupar por recepcionista
   const byUser={};
   (data||[]).forEach(r=>{
