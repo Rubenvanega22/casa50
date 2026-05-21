@@ -3379,15 +3379,73 @@ async function apiGetHistorialMant(p, res) {
     });
   }
 
+  // 3) REVISIONES (G1) — explotar array revisiones como items individuales
+  if(tipo === 'todos' || tipo === 'danos'){
+    let q3 = supabase.from('room_issues')
+      .select('id, ubicacion_id, ubicacion_tipo, description, revisiones')
+      .eq('anulada', false)
+      .not('revisiones', 'is', null);
+    if(ubicacionFilter) q3 = q3.ilike('ubicacion_id', '%'+ubicacionFilter+'%');
+    const { data: conRevs } = await q3;
+    const mantLower = mantenedorFilter.toLowerCase();
+    (conRevs||[]).forEach(function(r){
+      const revs = Array.isArray(r.revisiones) ? r.revisiones : [];
+      revs.forEach(function(rv){
+        const tsMs = Number(rv.ts||0);
+        if(tsMs < desdeMs || tsMs >= hastaMs) return;
+        if(mantenedorFilter && String(rv.por||'').trim().toLowerCase() !== mantLower) return;
+        items.push({
+          tipo: 'revision',
+          id: r.id + '-' + tsMs,
+          reporteId: r.id,
+          ubicacionTipo: r.ubicacion_tipo || 'habitacion',
+          ubicacionId: r.ubicacion_id || '',
+          descripcion: r.description || '',
+          motivo: String(rv.motivo||''),
+          por: String(rv.por||''),
+          rol: String(rv.rol||''),
+          fotoUrl: rv.fotoUrl || null,
+          tecnicoExterno: rv.tecnicoExterno === true,
+          sortMs: tsMs
+        });
+      });
+    });
+  }
+
+  // 4) BITACORAS LIBRES — una por dia/mantenedor (si tiene texto)
+  if(tipo === 'todos' && !ubicacionFilter){
+    let q4 = supabase.from('maintenance_bitacora').select('*')
+      .gte('fecha', desde).lte('fecha', hasta);
+    if(mantenedorFilter) q4 = q4.eq('mantenedor', mantenedorFilter);
+    const { data: bits } = await q4;
+    (bits||[]).forEach(function(b){
+      if(!b.nota_libre || !String(b.nota_libre).trim()) return;
+      items.push({
+        tipo: 'bitacora',
+        id: 'bit-'+b.id,
+        mantenedor: b.mantenedor || '',
+        notaLibre: b.nota_libre || '',
+        fecha: b.fecha || '',
+        sortMs: new Date((b.fecha||'1970-01-01')+'T23:59:59').getTime()
+      });
+    });
+  }
+
   // Ordenar combinado por sortMs descendente (lo mas reciente primero)
   items.sort(function(a, b){ return b.sortMs - a.sortMs; });
 
   const danosCount = items.filter(function(x){return x.tipo==='dano';}).length;
   const tareasCount = items.filter(function(x){return x.tipo==='tarea';}).length;
+  const revisionesCount = items.filter(function(x){return x.tipo==='revision';}).length;
+  const bitacorasCount = items.filter(function(x){return x.tipo==='bitacora';}).length;
 
   return ok(res, {
     items: items,
-    contadores: { total: items.length, danos: danosCount, tareas: tareasCount },
+    contadores: {
+      total: items.length,
+      danos: danosCount, tareas: tareasCount,
+      revisiones: revisionesCount, bitacoras: bitacorasCount
+    },
     rango: { desde, hasta }
   });
 }

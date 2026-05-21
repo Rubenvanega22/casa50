@@ -7246,6 +7246,7 @@ function openHistorialMant(){
   document.getElementById('hmUbicacion').value = '';
   document.getElementById('hmResumen').textContent = '';
   document.getElementById('hmLista').innerHTML = '<div style="text-align:center;padding:20px">Cargando...</div>';
+  window._histDiasAbiertos = {};  // todos colapsados al abrir
   openM('mHistorialMant');
   loadHistorialMant();
 }
@@ -7276,41 +7277,104 @@ function renderHistorialMant(d){
   if(!lista) return;
   var items = d.items || [];
   var c = d.contadores || {};
+  window._histItems = items;
+  window._histContadores = c;
   if(resumen){
-    resumen.textContent = (c.total||0)+' items · '+(c.danos||0)+' daños · '+(c.tareas||0)+' tareas';
+    var partes = [(c.total||0)+' items', (c.danos||0)+' daños', (c.tareas||0)+' tareas'];
+    if(c.revisiones) partes.push(c.revisiones+' revisiones');
+    if(c.bitacoras) partes.push(c.bitacoras+' bitácoras');
+    resumen.textContent = partes.join(' · ');
   }
   if(!items.length){
     lista.innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af">Sin resultados con esos filtros.</div>';
     return;
   }
-  function fmtFechaCorta(ms){
+
+  function dayKeyBogota(ms){
     if(!ms) return '';
-    var dd = new Date(Number(ms));
-    return dd.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})+' '+dd.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    var dd = new Date(Number(ms) - 5*3600000);
+    return dd.toISOString().slice(0,10);
   }
-  var bullets = {urgente:'🔴', normal:'🟡', baja:'🟢'};
-  var h = '';
+  function fmtDiaHeader(ymd){
+    if(!ymd) return '';
+    var p = ymd.split('-');
+    var meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return Number(p[2])+' '+(meses[Number(p[1])-1]||'?')+' '+p[0];
+  }
+  function fmtHora(ms){
+    var dd = new Date(Number(ms));
+    return dd.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  var grupos = {}; var ordenDias = [];
   items.forEach(function(it){
-    var pri = it.prioridad || 'normal';
-    var bullet = bullets[pri] || '⚪';
-    var icono = it.tipo === 'dano' ? '🔧' : '📋';
-    var titulo = it.tipo === 'dano'
-      ? (it.ubicacionTipo === 'zona_comun' ? it.ubicacionId : 'Hab '+it.ubicacionId)
-      : it.descripcion;
-    var subtitulo = it.tipo === 'dano' ? it.descripcion : ('Tarea — '+(it.fechaObjetivo||'sin fecha'));
-    var quien = it.tipo === 'dano' ? it.arregladoPor : it.completadoPor;
-    h += '<div style="padding:10px;border-bottom:1px solid #2e2e3a;cursor:pointer" onclick="openHistDetalle(\''+it.tipo+'\','+it.id+')">';
-    h += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
-    h += '<div style="flex:1">';
-    h += '<div style="color:#e5e7eb;font-size:13px">'+icono+' '+bullet+' <b>'+esc(titulo)+'</b></div>';
-    h += '<div style="font-size:11px;color:#9ca3af;margin-top:2px">'+esc(subtitulo)+'</div>';
-    h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">Por '+esc(quien||'?')+' · '+fmtFechaCorta(it.sortMs)+'</div>';
+    var dia = it.tipo === 'bitacora' ? it.fecha : dayKeyBogota(it.sortMs);
+    if(!grupos[dia]){grupos[dia] = []; ordenDias.push(dia);}
+    grupos[dia].push(it);
+  });
+  ordenDias.sort(function(a,b){return b.localeCompare(a);});
+
+  if(!window._histDiasAbiertos) window._histDiasAbiertos = {};
+
+  var h = '';
+  ordenDias.forEach(function(dia){
+    var items_d = grupos[dia];
+    items_d.sort(function(a,b){
+      if(a.tipo === 'bitacora' && b.tipo !== 'bitacora') return 1;
+      if(b.tipo === 'bitacora' && a.tipo !== 'bitacora') return -1;
+      return b.sortMs - a.sortMs;
+    });
+    var abierto = !!window._histDiasAbiertos[dia];
+    var arrow = abierto ? '▼' : '▶';
+    h += '<div style="border:1px solid #2e2e3a;border-radius:8px;margin-bottom:8px;overflow:hidden">';
+    h += '<div onclick="_histToggleDia(\''+dia+'\')" style="cursor:pointer;background:#22222c;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">';
+    h += '<div style="font-size:13px;font-weight:700;color:#e5e7eb">'+esc(fmtDiaHeader(dia))+' <span style="font-size:11px;color:#9ca3af;font-weight:400">('+items_d.length+' '+(items_d.length===1?'item':'items')+')</span></div>';
+    h += '<div style="color:#9ca3af;font-size:14px">'+arrow+'</div>';
     h += '</div>';
-    h += '<div style="color:#9ca3af;font-size:14px">▶</div>';
-    h += '</div>';
+    if(abierto){
+      h += '<div style="padding:6px 8px;background:#0f0f17">';
+      items_d.forEach(function(it){ h += _histItemRow(it, fmtHora); });
+      h += '</div>';
+    }
     h += '</div>';
   });
   lista.innerHTML = h;
+}
+
+function _histItemRow(it, fmtHora){
+  if(it.tipo === 'bitacora'){
+    return '<div style="background:rgba(245,158,11,.05);border-left:3px solid #f97316;padding:8px 10px;margin:4px 0;border-radius:4px">' +
+      '<div style="font-size:11px;color:#fac775;font-weight:700;margin-bottom:2px">📋 Bitácora del día — '+esc(it.mantenedor||'')+'</div>' +
+      '<div style="font-size:12px;color:#e5e7eb;white-space:pre-wrap">'+esc(it.notaLibre||'')+'</div>' +
+      '</div>';
+  }
+  var ubi = (it.ubicacionTipo === 'zona_comun') ? it.ubicacionId : 'Hab '+it.ubicacionId;
+  if(it.tipo === 'dano'){
+    return '<div onclick="openHistDetalle(\'dano\','+it.id+')" style="cursor:pointer;background:rgba(34,197,94,.05);border-left:3px solid #22c55e;padding:6px 10px;margin:4px 0;border-radius:4px">' +
+      '<div style="font-size:12px;color:#e5e7eb"><b>'+esc(ubi)+'</b> — '+esc(it.descripcion||'')+' <span style="color:#22c55e;font-weight:700">(arreglado)</span></div>' +
+      '<div style="font-size:10px;color:#9ca3af">'+fmtHora(it.sortMs)+' · por '+esc(it.arregladoPor||'?')+'</div>' +
+      '</div>';
+  }
+  if(it.tipo === 'revision'){
+    return '<div style="background:rgba(59,130,246,.05);border-left:3px solid #3b82f6;padding:6px 10px;margin:4px 0;border-radius:4px">' +
+      '<div style="font-size:12px;color:#e5e7eb"><b>'+esc(ubi)+'</b> — '+esc(it.descripcion||'')+' <span style="color:#3b82f6;font-weight:700">(revisado)</span></div>' +
+      (it.motivo ? '<div style="font-size:11px;color:#9ca3af;margin-top:2px">'+esc(it.motivo)+'</div>' : '') +
+      '<div style="font-size:10px;color:#9ca3af">'+fmtHora(it.sortMs)+' · por '+esc(it.por||'?')+(it.tecnicoExterno?' · 🔧 sugiere técnico externo':'')+'</div>' +
+      '</div>';
+  }
+  if(it.tipo === 'tarea'){
+    return '<div onclick="openHistDetalle(\'tarea\','+it.id+')" style="cursor:pointer;background:rgba(168,85,247,.05);border-left:3px solid #a855f7;padding:6px 10px;margin:4px 0;border-radius:4px">' +
+      '<div style="font-size:12px;color:#e5e7eb"><b>📋 Tarea</b> — '+esc(it.descripcion||'')+' <span style="color:#a855f7;font-weight:700">(hecha)</span></div>' +
+      '<div style="font-size:10px;color:#9ca3af">'+fmtHora(it.sortMs)+' · por '+esc(it.completadoPor||'?')+'</div>' +
+      '</div>';
+  }
+  return '';
+}
+
+function _histToggleDia(dia){
+  if(!window._histDiasAbiertos) window._histDiasAbiertos = {};
+  window._histDiasAbiertos[dia] = !window._histDiasAbiertos[dia];
+  renderHistorialMant({items: window._histItems || [], contadores: window._histContadores || {}});
 }
 
 function openHistDetalle(tipo, id){
