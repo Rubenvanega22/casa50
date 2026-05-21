@@ -3038,6 +3038,7 @@ async function apiMarcarRevision(p, res) {
 
   const prev = Array.isArray(reporte.revisiones) ? reporte.revisiones : [];
   const nueva = { ts: Date.now(), por: userName, rol: userRole, motivo: motivo, fotoUrl: fotoUrl };
+  if(p.tecnicoExterno === true) nueva.tecnicoExterno = true;
   const nuevas = prev.concat([nueva]);
 
   await supabase.from('room_issues').update({ revisiones: nuevas }).eq('id', reporteId);

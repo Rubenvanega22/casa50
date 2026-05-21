@@ -826,6 +826,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
     <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">📷 Tomar foto<input type="file" id="rvFotoCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoCambio('rvFotoCam','rvFotoGal')"></label>
     <label class="btn bk sm" style="flex:1;cursor:pointer;margin:0;justify-content:center">🖼️ Galería<input type="file" id="rvFotoGal" accept="image/*" style="display:none" onchange="onFotoCambio('rvFotoGal','rvFotoCam')"></label>
   </div>
+  <label style="margin-top:10px;display:flex;align-items:center;gap:8px;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:8px 10px">
+    <input type="checkbox" id="rvTecnicoExterno" style="width:16px;height:16px;cursor:pointer">
+    <span style="font-size:12px;color:#e5e7eb">🔧 Recomendar técnico externo</span>
+  </label>
   <div style="display:flex;gap:6px;margin-top:12px">
     <button class="btn bk" style="flex:1" onclick="closeM('mNuevaRevision')">Cancelar</button>
     <button class="btn ba" style="flex:2;background:#3b82f6;color:#fff;font-weight:700" onclick="doRevisar()">📝 Guardar revisión</button>
@@ -2085,6 +2089,9 @@ function buildRoomB(r){
     h+='<div style="font-size:10px;color:#9ca3af;margin-top:4px">Reportado por '+esc(d.reportadoPor||'?')+'</div>';
     // Indicador de revisiones (G1)
     var revsDA = Array.isArray(d.revisiones) ? d.revisiones : [];
+    if(revsDA.some(function(rv){return rv.tecnicoExterno===true;})){
+      h+='<div style="margin-top:6px;display:inline-block;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.5);color:#fac775;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px">🔧 Sugiere técnico externo</div>';
+    }
     if(revsDA.length){
       h+='<div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:6px;padding:5px 8px">';
       h+='<span style="font-size:10px;color:#93c5fd;font-weight:700">📝 '+revsDA.length+' revisión'+(revsDA.length===1?'':'es')+' registrada'+(revsDA.length===1?'':'s')+'</span>';
@@ -6288,6 +6295,7 @@ function openRevisar(reporteId){
   var ubi = (r.ubicacionTipo==='zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
   document.getElementById('rvDesc').textContent = ubi + ' — ' + (r.descripcion||'');
   document.getElementById('rvMotivo').value = '';
+  var _cbTe = document.getElementById('rvTecnicoExterno'); if(_cbTe) _cbTe.checked = false;
   resetFoto('rvFotoCam','rvFotoGal');
   window._rvReporteId = reporteId;
   openM('mNuevaRevision');
@@ -6298,6 +6306,7 @@ function doRevisar(){
   if(!reporteId){toast('Sin reporte seleccionado','err');return;}
   var motivo = (document.getElementById('rvMotivo').value||'').trim();
   if(motivo.length < 3){toast('La nota es obligatoria (mín 3 caracteres)','err');return;}
+  var tecnicoExterno = !!(document.getElementById('rvTecnicoExterno')||{}).checked;
   var fotoFile = getFotoFile('rvFotoCam','rvFotoGal');
 
   function send(fotoUrl){
@@ -6306,7 +6315,8 @@ function doRevisar(){
       userName: sess.userName,
       reporteId: reporteId,
       motivo: motivo,
-      fotoUrl: fotoUrl || ''
+      fotoUrl: fotoUrl || '',
+      tecnicoExterno: tecnicoExterno
     }, function(){
       toast('✓ Revisión registrada','ok');
       closeM('mNuevaRevision');
@@ -6388,6 +6398,9 @@ function openVerRevisiones(reporteId){
       h += '<div style="font-size:11px;font-weight:700;color:#93c5fd">'+esc(rv.por||'?')+esc(rolLbl)+'</div>';
       h += '<div style="font-size:10px;color:#9ca3af;text-align:right;white-space:nowrap">'+esc(hace)+(fechaAbs?'<br>'+esc(fechaAbs):'')+'</div>';
       h += '</div>';
+      if(rv.tecnicoExterno===true){
+        h += '<div style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.5);color:#fac775;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;margin-bottom:6px;display:inline-block">🔧 Sugiere técnico externo</div>';
+      }
       h += '<div style="font-size:13px;color:#e5e7eb;margin-bottom:'+(rv.fotoUrl?'8':'0')+'px">'+esc(rv.motivo||'')+'</div>';
       if(rv.fotoUrl){
         h += '<a href="'+rv.fotoUrl+'" target="_blank"><img src="'+rv.fotoUrl+'" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid #2e2e3a;display:block" alt="Foto revisión"></a>';
@@ -7601,6 +7614,9 @@ function loadDanosActivos(){
       hi += '</div>';
       // Indicador de revisiones (G1)
       var revsR = Array.isArray(r.revisiones) ? r.revisiones : [];
+      if(revsR.some(function(rv){return rv.tecnicoExterno===true;})){
+        hi += '<div style="margin-top:4px;display:inline-block;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.5);color:#fac775;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px">🔧 Sugiere técnico externo</div>';
+      }
       if(revsR.length){
         hi += '<div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:6px;padding:4px 8px">';
         hi += '<span style="font-size:10px;color:#93c5fd;font-weight:700">📝 '+revsR.length+' revisión'+(revsR.length===1?'':'es')+'</span>';
