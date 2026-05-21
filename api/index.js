@@ -4063,6 +4063,24 @@ return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:p
 // Inmutabilidad del turno aplicada a inventario inicial.
 async function capturarSnapshotInventarioInicial(bDay, shiftId, userName, now) {
   try {
+    // === DEFENSA: inmutabilidad del turno ===
+    // Coherencia entre bDay y dia real Bogota segun naturaleza del turno.
+    // - bDay en el futuro: SIEMPRE es bug (rechazar)
+    // - bDay del pasado: solo legitimo en T3 nocturno cruzando medianoche
+    //   (ej: T3 entra a la 1am del dia siguiente; bDay sigue siendo el de
+    //   inicio del turno, dia real = bDay+1)
+    // - Turnos diurnos (T1, T2, T1_12, T2_12, DC): bDay debe = dia real
+    const diaRealBogota = new Date(now - 5*3600000).toISOString().slice(0,10);
+    const difDias = (new Date(bDay).getTime() - new Date(diaRealBogota).getTime()) / 86400000;
+    const esNocturno = String(shiftId||'').startsWith('SHIFT_3');
+    const minDif = esNocturno ? -1 : 0;
+    if(difDias > 0 || difDias < minDif) {
+      console.error('[SNAPSHOT-RECHAZADO] bDay incoherente. bDay=' + bDay +
+        ' diaReal=' + diaRealBogota + ' difDias=' + difDias +
+        ' shift=' + shiftId + ' user=' + userName +
+        ' (esperado: ' + (esNocturno ? '-1..0' : '0') + ')');
+      return;
+    }
     const { data: products } = await supabase.from('products')
       .select('id, stock_actual').eq('activo', true);
     if(!products || !products.length) return;
