@@ -595,6 +595,26 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label>Contacto de emergencia</label><input type="text" id="sContacto" placeholder="Nombre del contacto">
 <button class="btn ba full" style="margin-top:8px" onclick="saveStaff()">Guardar</button>
 </div></div>
+
+<!-- MODAL: Registrar vacaciones del staff -->
+<div class="ov" id="mVacaciones"><div class="modal" style="max-width:440px">
+  <div class="mh">
+    <div class="mt">🌴 Registrar vacaciones</div>
+    <button class="mc" onclick="closeM('mVacaciones')">✕</button>
+  </div>
+  <div id="vacInfo" style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px"></div>
+  <label>Fecha de ingreso actual (cierra este ciclo)</label>
+  <input type="text" id="vacFechaIngreso" disabled style="background:#0f0f17;color:#9ca3af">
+  <label style="margin-top:10px">Fecha de salida a vacaciones</label>
+  <input type="date" id="vacFechaSalida">
+  <label style="margin-top:10px">Fecha de re-ingreso</label>
+  <input type="date" id="vacFechaReingreso">
+  <div style="display:flex;gap:6px;margin-top:14px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mVacaciones')">Cancelar</button>
+    <button class="btn ba" style="flex:2;background:#16a34a;color:#fff;font-weight:700" onclick="doGuardarVacaciones()">💾 Guardar</button>
+  </div>
+</div></div>
+
  <div class="ov" id="mEnable"><div class="modal"><div class="mh"><div class="mt">Habilitar Habitacion</div><button class="mc" onclick="closeM('mEnable')">✕</button></div>
 <div id="mEnableInfo" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
 <label>Descripcion del arreglo (opcional)</label><input type="text" id="enableDesc" placeholder="Ej: Se cambio la chapa">
@@ -7912,6 +7932,45 @@ function clearMaintHistory(){
 }
 // ---- PERSONAL (admin) ----
 function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});}
+
+function _vacToggle(staffId){
+  if(!window._vacExpand) window._vacExpand = {};
+  window._vacExpand[staffId] = !window._vacExpand[staffId];
+  renderStaff();
+}
+
+function openVacacionesModal(staffId){
+  var s = staffList.find(function(x){return String(x.id)===String(staffId);});
+  if(!s){toast('Staff no encontrado','err');return;}
+  window._vacStaff = s;
+  document.getElementById('vacInfo').innerHTML =
+    '<b style="color:#e5e7eb;font-size:13px">'+esc(s.name)+'</b> <span style="color:#9ca3af">— '+esc(s.area||'')+'</span>';
+  document.getElementById('vacFechaIngreso').value = s.fechaIngreso || '';
+  document.getElementById('vacFechaSalida').value = '';
+  document.getElementById('vacFechaReingreso').value = '';
+  openM('mVacaciones');
+}
+
+function doGuardarVacaciones(){
+  var s = window._vacStaff;
+  if(!s){toast('Sin staff seleccionado','err');return;}
+  var fs = document.getElementById('vacFechaSalida').value;
+  var fr = document.getElementById('vacFechaReingreso').value;
+  if(!fs){toast('Falta fecha de salida','err');return;}
+  if(!fr){toast('Falta fecha de re-ingreso','err');return;}
+  if(fr < fs){toast('Re-ingreso no puede ser antes de salida','err');return;}
+  rpc('saveVacacionesEvent',{
+    userRole: sess.userRole, userName: sess.userName,
+    staffId: s.id, fechaSalidaVacaciones: fs, fechaReingreso: fr
+  }, function(){
+    toast('✓ Vacaciones registradas','ok');
+    closeM('mVacaciones');
+    window._vacStaff = null;
+    loadStaff();
+  }, function(e){
+    toast('Error: '+(e.message||String(e)),'err');
+  });
+}
 function renderStaff(){
   var areas=['Recepcion','Camarera','Patiero','Mantenimiento','Administrador'];
   var hoy=new Date();
@@ -7963,27 +8022,56 @@ function renderStaff(){
         if(mv<0||(mv===0&&hoy.getDate()<nac.getDate()))edad--;
         edadStr=edad+' años';
       }
-      // Calcular fecha salida
-      var salidaStr='';
-      if(s.fechaIngreso){
+      // Tentativa de vacaciones: usar staff.fechaVacaciones. Fallback: +1 año del ingreso.
+      var salidaStr = s.fechaVacaciones || '';
+      if(!salidaStr && s.fechaIngreso){
         var sal=new Date(s.fechaIngreso);sal.setFullYear(sal.getFullYear()+1);
         salidaStr=sal.getFullYear()+'-'+String(sal.getMonth()+1).padStart(2,'0')+'-'+String(sal.getDate()).padStart(2,'0');
       }
+      // Alerta si la tentativa cae en el mes actual
+      var alertaMes = false;
+      if(salidaStr){
+        var hoyYM = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+        alertaMes = (salidaStr.slice(0,7) === hoyYM);
+      }
       h+='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:7px">';
-      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">';
       h+='<div><span style="font-weight:700;font-size:13px;'+(active?'':'opacity:.5;text-decoration:line-through')+'">'+esc(s.name)+'</span>';
       h+='<span style="font-size:10px;color:'+(active?'#22c55e':'#ef4444')+';margin-left:6px">'+(active?'Activo':'Inactivo')+'</span></div>';
-      h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button></div>';
+      h+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">';
+      h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button>';
+      h+='<button class="btn bk xs" style="background:#16a34a;color:#fff" onclick="openVacacionesModal(\''+esc(s.id)+'\')">🌴 Vacaciones</button>';
+      h+='</div></div>';
       h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
       if(s.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(s.cedula)+'</b></span>';
       if(s.celular)h+='<span>📱 <b style="color:#e5e7eb">'+esc(s.celular)+'</b></span>';
       if(edadStr)h+='<span>Edad: <b style="color:#a78bfa">'+edadStr+'</b></span>';
       if(s.fechaNacimiento)h+='<span>Nac: <b style="color:#e5e7eb">'+esc(s.fechaNacimiento)+'</b></span>';
-      if(s.fechaIngreso)h+='<span>Ingreso: <b style="color:#e5e7eb">'+esc(s.fechaIngreso)+'</b></span>';
-      if(salidaStr)h+='<span>Sal. tentativa: <b style="color:#22c55e">'+salidaStr+'</b></span>';
+      if(s.fechaIngreso)h+='<span style="grid-column:span 2">Ingreso: <b style="color:#e5e7eb">'+esc(s.fechaIngreso)+'</b></span>';
       if(s.direccion)h+='<span style="grid-column:span 2">📍 Dirección: <b style="color:#e5e7eb">'+esc(s.direccion)+'</b></span>';
       if(s.contactoEmergencia)h+='<span style="grid-column:span 2">🚨 Emergencia: <b style="color:#f59e0b">'+esc(s.contactoEmergencia)+'</b></span>';
-      h+='</div></div>';
+      h+='</div>';
+      // Bloque tentativa + historial colapsable
+      if(salidaStr){
+        var historial = s.vacacionesHistorial || [];
+        var hasHist = historial.length > 0;
+        var expand = hasHist && !!(window._vacExpand && window._vacExpand[s.id]);
+        var camp = alertaMes ? '<span style="animation:pulse 1.2s ease-in-out infinite;display:inline-block">🔔</span> ' : '';
+        var headerStyle = 'margin-top:6px;padding:6px 8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:6px;display:flex;justify-content:space-between;align-items:center'+(hasHist?';cursor:pointer':'');
+        var clickAttr = hasHist ? ' onclick="_vacToggle(\''+esc(s.id)+'\')"' : '';
+        h += '<div style="'+headerStyle+'"'+clickAttr+'>';
+        h += '<span style="font-size:11px;color:#9ca3af">'+camp+'🌴 Tentativa vacaciones: <b style="color:#22c55e">'+salidaStr+'</b></span>';
+        if(hasHist) h += '<span style="font-size:11px;color:#9ca3af">'+(expand?'▼':'▶')+' ('+historial.length+')</span>';
+        h += '</div>';
+        if(expand){
+          h += '<div style="margin-top:4px;padding:4px 8px">';
+          historial.forEach(function(v){
+            h += '<div style="font-size:11px;color:#ef4444;padding:2px 0">🔴 '+esc(v.fechaSalidaVacaciones)+' → '+esc(v.fechaReingreso)+'</div>';
+          });
+          h += '</div>';
+        }
+      }
+      h+='</div>';
     });
     h+='</div>';
   });

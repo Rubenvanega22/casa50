@@ -178,6 +178,7 @@ module.exports = async function handler(req, res) {
       case 'maidPanel':         return await apiMaidPanel(payload, res);
       case 'getStaff':          return await apiGetStaff(payload, res);
       case 'saveStaff':         return await apiSaveStaff(payload, res);
+      case 'saveVacacionesEvent': return await apiSaveVacacionesEvent(payload, res);
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
@@ -1861,11 +1862,24 @@ async function apiMaidPanel(p, res) {
 // ==================== PERSONAL / CALENDARIO ====================
 async function apiGetStaff(p, res) {
   const { data } = await supabase.from('staff').select('*').order('area').order('name');
+  const { data: hist } = await supabase.from('staff_vacaciones_historial')
+    .select('*').order('created_at', { ascending: false });
+  const histByStaff = {};
+  (hist||[]).forEach(h => {
+    if(!histByStaff[h.staff_id]) histByStaff[h.staff_id] = [];
+    histByStaff[h.staff_id].push({
+      id: h.id,
+      fechaIngreso: h.fecha_ingreso || '',
+      fechaSalidaVacaciones: h.fecha_salida_vacaciones || '',
+      fechaReingreso: h.fecha_reingreso || ''
+    });
+  });
   return ok(res, { staff: (data||[]).map(r=>({
     id:r.id, name:r.name, area:r.area, type:r.type, active:r.active,
     cedula:r.cedula||'', celular:r.celular||'', direccion:r.direccion||'',
     contactoEmergencia:r.contacto_emergencia||'', fechaNacimiento:r.fecha_nacimiento||'',
-    fechaIngreso:r.fecha_ingreso||'', fechaVacaciones:r.fecha_vacaciones||''
+    fechaIngreso:r.fecha_ingreso||'', fechaVacaciones:r.fecha_vacaciones||'',
+    vacacionesHistorial: histByStaff[r.id] || []
   })) });
 }
 
@@ -1882,6 +1896,41 @@ async function apiSaveStaff(p, res) {
   if(id){await supabase.from('staff').update({name,area,active,...extra}).eq('id',id);}
   else{await supabase.from('staff').insert({id:'S'+Date.now(),name,area,type:'nomina',active,created_ms:Date.now(),...extra});}
   return ok(res,{});
+}
+
+async function apiSaveVacacionesEvent(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const staffId = String(p.staffId||'').trim();
+  const fechaSalida = String(p.fechaSalidaVacaciones||'').trim();
+  const fechaReingreso = String(p.fechaReingreso||'').trim();
+  if(!staffId) return err(res, 'staffId requerido');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaSalida)) return err(res, 'Fecha salida invalida (YYYY-MM-DD)');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaReingreso)) return err(res, 'Fecha reingreso invalida (YYYY-MM-DD)');
+  if(fechaReingreso < fechaSalida) return err(res, 'Reingreso no puede ser antes de salida');
+
+  const { data: staffRow } = await supabase.from('staff').select('fecha_ingreso').eq('id', staffId).single();
+  if(!staffRow) return err(res, 'Staff no existe');
+
+  // Proxima fecha tentativa = re-ingreso + 1 año
+  const proxima = new Date(fechaReingreso + 'T00:00:00');
+  proxima.setFullYear(proxima.getFullYear() + 1);
+  const proximaStr = proxima.getFullYear() + '-' +
+    String(proxima.getMonth()+1).padStart(2,'0') + '-' +
+    String(proxima.getDate()).padStart(2,'0');
+
+  await supabase.from('staff_vacaciones_historial').insert({
+    staff_id: staffId,
+    fecha_ingreso: staffRow.fecha_ingreso,
+    fecha_salida_vacaciones: fechaSalida,
+    fecha_reingreso: fechaReingreso
+  });
+  await supabase.from('staff').update({
+    fecha_ingreso: fechaReingreso,
+    fecha_vacaciones: proximaStr
+  }).eq('id', staffId);
+
+  return ok(res, { ok: true, fechaIngreso: fechaReingreso, fechaVacaciones: proximaStr });
 }
 
 async function apiGetSchedule(p, res) {
