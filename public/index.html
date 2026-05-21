@@ -10099,6 +10099,11 @@ function renderCajaPaola(d){
   var s=d.saldos||{paola:0,cajaFuerteRuben:0,gastosRuben:0};
   var entregas=(d.entregas&&d.entregas.lista)||[];
   var gastos=(d.gastos&&d.gastos.lista)||[];
+  gastos.sort(function(a,b){
+    var fa = String(a.fecha||''), fb = String(b.fecha||'');
+    if(fa !== fb) return fb.localeCompare(fa);  // fecha desc
+    return Number(b.ts_ms||0) - Number(a.ts_ms||0);  // tiebreak: registro mas reciente arriba
+  });
   var totalE=Number(d.entregas&&d.entregas.totalAprobadas||0);
   var totalG=Number(d.gastos&&d.gastos.total||0);
   var publico=Number(d.efectivoEnCajaPublico||0);
