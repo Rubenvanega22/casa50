@@ -836,6 +836,15 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Bitácora del mantenedor (resumen del día + nota libre) -->
+<div class="ov" id="mBitacoraMant"><div class="modal" style="max-width:640px;max-height:92vh;overflow-y:auto">
+  <div class="mh">
+    <div class="mt">📓 Bitácora del día</div>
+    <button class="mc" onclick="closeM('mBitacoraMant')">✕</button>
+  </div>
+  <div id="bmCont"><p style="color:#9ca3af;padding:10px">⏳ Cargando...</p></div>
+</div></div>
+
 <!-- MODAL: Ver revisiones registradas (G1) — lista cronológica de revisiones del daño -->
 <div class="ov" id="mVerRevisiones"><div class="modal" style="max-width:560px">
   <div class="mh">
@@ -6089,8 +6098,11 @@ function renderMisDanos(d, dTareas, dSolicitudes){
   h+='<div class="mdC" style="background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.5)"><div class="mdN" style="color:#16a34a">'+hechosHoyCombinado+'</div><div class="mdL" style="color:#4ade80">✅ Hechos hoy</div></div>';
   h+='</div>';
 
-  // Botón "Hacer solicitud a ADM" — siempre visible
-  h+='<div style="padding:0 12px 12px"><button class="btn ba" style="width:100%;background:#f97316;color:#fff;font-weight:700;padding:12px" onclick="openNuevaSolicitud()">+ 📝 Hacer solicitud a ADM</button></div>';
+  // Botón "Hacer solicitud a ADM" + "Bitácora" — siempre visibles
+  h+='<div style="padding:0 12px 12px;display:flex;gap:8px">';
+  h+='<button class="btn ba" style="flex:1;background:#f97316;color:#fff;font-weight:700;padding:12px" onclick="openNuevaSolicitud()">+ 📝 Hacer solicitud a ADM</button>';
+  h+='<button class="btn ba" style="flex:0 0 auto;background:#8b5cf6;color:#fff;font-weight:700;padding:12px 14px" onclick="openBitacoraMant()">📓 Bitácora</button>';
+  h+='</div>';
 
   if(!totalActivos && !totalTareas && !totalSolicitudes){
     h+='<div style="padding:30px 16px;text-align:center;color:#9ca3af">No tenés trabajos asignados.</div>';
@@ -6359,6 +6371,89 @@ function doRevisar(){
   } else {
     send('');
   }
+}
+
+// ============ BITÁCORA DEL MANTENEDOR (Feature 2/3) ============
+function openBitacoraMant(){
+  if(!sess){toast('Sesión expirada','err');return;}
+  document.getElementById('bmCont').innerHTML = '<p style="color:#9ca3af;padding:10px">⏳ Cargando...</p>';
+  openM('mBitacoraMant');
+  rpc('getBitacoraMantenedor',{
+    userName: sess.userName, userRole: sess.userRole, mantenedor: sess.userName
+  }, function(d){ _renderBitacoraMant(d); }, function(e){
+    document.getElementById('bmCont').innerHTML = '<p style="color:#ef4444;padding:10px">Error: '+esc(e||'')+'</p>';
+  });
+}
+
+function _renderBitacoraMant(d){
+  var arr = d.arreglados || [];
+  var rev = d.revisados || [];
+  var h = '';
+
+  h += '<div style="background:#22222c;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#9ca3af">';
+  h += 'Fecha: <b style="color:#e5e7eb">'+esc(d.fecha||'')+'</b> · Mantenedor: <b style="color:#e5e7eb">'+esc(d.mantenedor||'')+'</b>';
+  h += '</div>';
+
+  h += '<div style="margin-bottom:14px">';
+  h += '<div style="font-size:13px;font-weight:700;color:#22c55e;margin-bottom:6px">✅ Lo que arreglé hoy ('+arr.length+')</div>';
+  if(!arr.length){
+    h += '<div style="font-size:12px;color:#6b7280;padding:8px;background:#18181f;border-radius:6px">Sin arreglos registrados hoy.</div>';
+  } else {
+    arr.forEach(function(r){
+      var ubi = (r.ubicacionTipo==='zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
+      h += '<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #22c55e;border-radius:6px;padding:8px 10px;margin-bottom:6px">';
+      h += '<div style="font-size:12px;color:#e5e7eb"><b>'+esc(ubi)+'</b> — '+esc(r.descripcion||'')+'</div>';
+      if(r.arregloNota){
+        h += '<div style="font-size:11px;color:#9ca3af;margin-top:2px">Nota: '+esc(r.arregloNota)+'</div>';
+      }
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+
+  h += '<div style="margin-bottom:14px">';
+  h += '<div style="font-size:13px;font-weight:700;color:#3b82f6;margin-bottom:6px">📝 Lo que revisé hoy ('+rev.length+')</div>';
+  if(!rev.length){
+    h += '<div style="font-size:12px;color:#6b7280;padding:8px;background:#18181f;border-radius:6px">Sin revisiones registradas hoy.</div>';
+  } else {
+    rev.forEach(function(r){
+      var ubi = (r.ubicacionTipo==='zona_comun') ? r.ubicacionId : ('Hab '+r.ubicacionId);
+      h += '<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #3b82f6;border-radius:6px;padding:8px 10px;margin-bottom:6px">';
+      h += '<div style="font-size:12px;color:#e5e7eb"><b>'+esc(ubi)+'</b> — '+esc(r.descripcion||'')+'</div>';
+      (r.motivos||[]).forEach(function(m){
+        h += '<div style="font-size:11px;color:#9ca3af;margin-top:2px">• '+esc(m)+'</div>';
+      });
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+
+  h += '<div style="margin-bottom:12px">';
+  h += '<div style="font-size:13px;font-weight:700;color:#fac775;margin-bottom:6px">📋 Otras cosas que hice hoy</div>';
+  h += '<textarea id="bmNotaLibre" rows="5" placeholder="Ej: cambié la cerradura del cuarto X, ayudé con la limpieza profunda de la lavandería..." style="width:100%;font-size:13px">'+esc(d.notaLibre||'')+'</textarea>';
+  h += '</div>';
+
+  h += '<div style="display:flex;gap:6px;margin-top:12px">';
+  h += '<button class="btn bk" style="flex:1" onclick="closeM(\'mBitacoraMant\')">Cerrar</button>';
+  h += '<button class="btn ba" style="flex:2;background:#8b5cf6;color:#fff;font-weight:700" onclick="doGuardarBitacora()">💾 Guardar bitácora</button>';
+  h += '</div>';
+
+  window._bmFecha = d.fecha;
+  window._bmMantenedor = d.mantenedor;
+  document.getElementById('bmCont').innerHTML = h;
+}
+
+function doGuardarBitacora(){
+  var notaLibre = (document.getElementById('bmNotaLibre').value||'').trim();
+  rpc('saveBitacoraMantenedor',{
+    userName: sess.userName, userRole: sess.userRole,
+    fecha: window._bmFecha, mantenedor: window._bmMantenedor, notaLibre: notaLibre
+  }, function(){
+    toast('✓ Bitácora guardada','ok');
+    closeM('mBitacoraMant');
+  }, function(e){
+    toast('Error guardando: '+(e.message||String(e)),'err');
+  });
 }
 
 function openVerRevisiones(reporteId){

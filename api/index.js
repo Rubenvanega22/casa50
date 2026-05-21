@@ -304,6 +304,8 @@ module.exports = async function handler(req, res) {
       case 'anularDescargoNequi': return await apiAnularDescargoNequi(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
       case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
+      case 'getBitacoraMantenedor':  return await apiGetBitacoraMantenedor(payload, res);
+      case 'saveBitacoraMantenedor': return await apiSaveBitacoraMantenedor(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -3044,6 +3046,82 @@ async function apiMarcarRevision(p, res) {
   await supabase.from('room_issues').update({ revisiones: nuevas }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, revisiones: nuevas });
+}
+
+// ==================== BITACORA DEL MANTENEDOR ====================
+async function apiGetBitacoraMantenedor(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE' && userRole !== 'ADMIN') return err(res, 'Sin permiso');
+  const fecha = String(p.fecha || businessDay(Date.now())).trim();
+  const mantenedor = String(p.mantenedor || p.userName || '').trim();
+  if(!mantenedor) return err(res, 'Mantenedor requerido');
+
+  const inicio = new Date(fecha + 'T00:00:00').getTime();
+  const fin = inicio + 86400000;
+
+  const { data: arreglados } = await supabase.from('room_issues')
+    .select('id, ubicacion_id, ubicacion_tipo, description, estado, arreglo_nota, arreglado_ms')
+    .eq('arreglado_por', mantenedor)
+    .eq('anulada', false)
+    .gte('arreglado_ms', inicio)
+    .lt('arreglado_ms', fin)
+    .order('arreglado_ms', { ascending: true });
+
+  // Filtro del array revisiones en JS (jsonb-por-elemento no es queryable directo aqui)
+  const { data: conRevs } = await supabase.from('room_issues')
+    .select('id, ubicacion_id, ubicacion_tipo, description, revisiones')
+    .not('revisiones', 'is', null);
+
+  const mantLower = mantenedor.toLowerCase();
+  const revisados = (conRevs||[]).map(r => {
+    const revs = Array.isArray(r.revisiones) ? r.revisiones : [];
+    const revsHoy = revs.filter(rv =>
+      String(rv.por||'').trim().toLowerCase() === mantLower
+      && Number(rv.ts||0) >= inicio && Number(rv.ts||0) < fin
+    );
+    if(!revsHoy.length) return null;
+    return {
+      id: r.id,
+      ubicacionTipo: r.ubicacion_tipo || 'habitacion',
+      ubicacionId: r.ubicacion_id || '',
+      descripcion: r.description || '',
+      motivos: revsHoy.map(rv => String(rv.motivo||'')).filter(Boolean)
+    };
+  }).filter(Boolean);
+
+  const { data: bitRow } = await supabase.from('maintenance_bitacora')
+    .select('nota_libre').eq('fecha', fecha).eq('mantenedor', mantenedor).maybeSingle();
+
+  return ok(res, {
+    fecha, mantenedor,
+    arreglados: (arreglados||[]).map(r => ({
+      id: r.id,
+      ubicacionTipo: r.ubicacion_tipo || 'habitacion',
+      ubicacionId: r.ubicacion_id || '',
+      descripcion: r.description || '',
+      arregloNota: r.arreglo_nota || '',
+      estado: r.estado || ''
+    })),
+    revisados,
+    notaLibre: (bitRow && bitRow.nota_libre) || ''
+  });
+}
+
+async function apiSaveBitacoraMantenedor(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'MAINTENANCE' && userRole !== 'ADMIN') return err(res, 'Sin permiso');
+  const fecha = String(p.fecha || businessDay(Date.now())).trim();
+  const mantenedor = String(p.mantenedor || p.userName || '').trim();
+  const notaLibre = String(p.notaLibre || '').trim();
+  if(!mantenedor) return err(res, 'Mantenedor requerido');
+  if(!fecha) return err(res, 'Fecha requerida');
+
+  const { error } = await supabase.from('maintenance_bitacora').upsert({
+    fecha, mantenedor, nota_libre: notaLibre, ts_ms: Date.now()
+  }, { onConflict: 'fecha,mantenedor' });
+  if(error) return err(res, 'Error guardando: ' + error.message);
+
+  return ok(res, { saved: true });
 }
 
 // ==================== TAREAS MANTENEDOR (Fase 4.5) ====================
