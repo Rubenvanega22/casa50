@@ -7049,7 +7049,10 @@ function adaptarMantPanelPorRol(){
   var $ = function(id){ return document.getElementById(id); };
   var show = function(el, ok){ if(el) el.style.display = ok ? '' : 'none'; };
 
-  show($('mtCards'),         isAdm || isRec);
+  // mtCards usa display:grid (no block). El helper show() escribe display=''
+  // que cae a block por default → rompe el grid de 4 columnas. Asignación explícita.
+  var elCards = $('mtCards');
+  if(elCards) elCards.style.display = (isAdm || isRec) ? 'grid' : 'none';
   show($('mtBtnRDano'),      isAdm || isRec);
   show($('mtBtnRDanoMaid'),  isMaid);
   show($('mtBtnAsigTarea'),  isAdm);
