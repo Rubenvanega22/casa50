@@ -1312,7 +1312,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
 <input type="date" id="notesDay" style="width:auto;margin:0">
 <button class="btn bk sm" onclick="loadNotes()">Ver dia</button>
-<button class="btn bk sm" onclick="loadAllNotes()">Ver historial</button>
+<button id="btnVerHistorial" class="btn bk sm" onclick="loadAllNotes()">Ver historial</button>
 </div>
 <div id="notesCont"></div>
 </div>
@@ -1436,6 +1436,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <script>
 // ---- ESTADO GLOBAL ----
 var BS={},rooms=[],sess=null,curRoom=null,multiMaidMode=false,maidSelected='',maidHasTaken=false,maidNamesInShift=[],_dayDriftPending=false;
+var historyOpen=false; // Toggle del botón "Ver historial" en Informes — guarda el flag para que startPoll no sobrescriba la vista
 var selDur=3,selPpl=2,selArr='WALK',selPay='EFECTIVO';
 var totalHabDia=0;
 var selExtMode='ext'; // 'ext' o 'renew'
@@ -1732,6 +1733,13 @@ if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Tu
 }
 
 function sw(id){
+  // Reset toggle del historial si nos vamos de Informes (evita inconsistencia
+  // de flag=true con vista del día al volver).
+  if(id !== 'notes' && historyOpen){
+    historyOpen = false;
+    var btnHistReset = document.getElementById('btnVerHistorial');
+    if(btnHistReset) btnHistReset.textContent = 'Ver historial';
+  }
   document.querySelectorAll('.pnl').forEach(function(p){p.classList.remove('on');});
   document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('on');});
   var p=document.getElementById('pnl-'+id);if(p)p.classList.add('on');
@@ -1839,7 +1847,7 @@ function startPoll(){
   clearInterval(pT);
   pT=setInterval(function(){
    rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}});
-    loadNotes();
+    if(!historyOpen) loadNotes();
     if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
     checkBusinessDayDrift();
   },10000);
@@ -11196,6 +11204,18 @@ function loadNotes(){
 
 function loadAllNotes(){
   if(!sess)return;
+  // Toggle: 2do click cierra y vuelve a vista del día
+  if(historyOpen){
+    historyOpen = false;
+    var btnClose = document.getElementById('btnVerHistorial');
+    if(btnClose) btnClose.textContent = 'Ver historial';
+    loadNotes();
+    return;
+  }
+  historyOpen = true;
+  var btnOpen = document.getElementById('btnVerHistorial');
+  if(btnOpen) btnOpen.textContent = '← Volver al día';
+
   var c=document.getElementById('notesCont');
   // Capturar cajas abiertas antes del placeholder "Cargando..." (el
   // innerHTML del placeholder ya destruye las cajas, así que primero
