@@ -224,6 +224,7 @@ module.exports = async function handler(req, res) {
       case 'rechazarArreglo':   return await apiRechazarArreglo(payload, res);
       case 'resolverDanoZonaComun': return await apiResolverDanoZonaComun(payload, res);
       case 'marcarRevision':    return await apiMarcarRevision(payload, res);
+      case 'marcarDanioVisto':  return await apiMarcarDanioVisto(payload, res);
       case 'crearTareaMant':    return await apiCrearTareaMant(payload, res);
       case 'getTareasMant':     return await apiGetTareasMant(payload, res);
       case 'completarTareaMant':return await apiCompletarTareaMant(payload, res);
@@ -2758,7 +2759,9 @@ async function apiGetReportesActivos(p, res) {
       verificadoPor: r.verificado_por || null,
       verificadoMs: Number(r.verificado_ms || 0),
       motivoRechazo: r.motivo_rechazo || null,
-      revisiones: Array.isArray(r.revisiones) ? r.revisiones : []
+      revisiones: Array.isArray(r.revisiones) ? r.revisiones : [],
+      vistoPorAdmin: !!r.visto_por_admin,
+      vistoPorAdminMs: Number(r.visto_por_admin_ms || 0)
     }))
   });
 }
@@ -3095,6 +3098,34 @@ async function apiMarcarRevision(p, res) {
   await supabase.from('room_issues').update({ revisiones: nuevas }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, revisiones: nuevas });
+}
+
+// ==================== VISTO POR ADMIN ====================
+// Acuse de recibo del admin sobre un daño activo. NO cambia el estado del
+// reporte (sigue activo hasta que mantenimiento lo arregle y recepcion lo
+// verifique). Solo marca que Ruben ya vio que ese daño existe — sirve para
+// el badge rojo en la pestaña Mantenimiento.
+async function apiMarcarDanioVisto(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Solo ADMIN');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const { data: reporte } = await supabase.from('room_issues')
+    .select('id, anulada, visto_por_admin').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(reporte.visto_por_admin) return ok(res, { id: reporteId, yaVisto: true });
+
+  await supabase.from('room_issues').update({
+    visto_por_admin: true,
+    visto_por_admin_ms: Date.now()
+  }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, vistoPorAdmin: true });
 }
 
 // ==================== BITACORA DEL MANTENEDOR ====================

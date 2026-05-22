@@ -168,6 +168,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .bomb.verificar{background:#22c55e;color:#22c55e;display:flex;align-items:center;justify-content:center}
 .bomb.verificar::after{content:'✓';font-size:10px;color:#fff;font-weight:900;line-height:1}
 @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)}}
+/* Badge rojo en pestaña Mantenimiento (daños no vistos por admin) */
+.tabBadge{display:inline-block;margin-left:4px;background:#ef4444;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:10px;animation:blink 1.2s ease-in-out infinite;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -1731,6 +1733,7 @@ if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Tu
     b.dataset.tab=t.id;
     b.onclick=function(){sw(t.id);};bar.appendChild(b);
   });
+  if(sess && sess.userRole==='ADMIN') loadBadgeDanosNoVistos();
 }
 
 function sw(id){
@@ -1744,7 +1747,7 @@ function sw(id){
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
- if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();loadResumenMantHoy();loadSolicitudesAdmin();if(roomIssuesOpen)loadRoomIssuesGrid();}
+ if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();loadResumenMantHoy();loadSolicitudesAdmin();loadBadgeDanosNoVistos();if(roomIssuesOpen)loadRoomIssuesGrid();}
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
@@ -7019,6 +7022,37 @@ function doAsigTarea(){
   }, function(e){toast(e.message||String(e),'err');});
 }
 
+// Badge rojo en pestaña Mantenimiento: cuenta daños activos no vistos por admin.
+// Refresca: al entrar a la pestaña (sw('maint')), al cargar setupTabs por
+// primera vez, y después de marcar un daño como visto. SIN polling.
+function loadBadgeDanosNoVistos(){
+  if(!sess || sess.userRole !== 'ADMIN') return;
+  rpc('getReportesActivos', {userRole:sess.userRole, userName:sess.userName}, function(d){
+    var reportes = (d && d.reportes) || [];
+    var noVistos = reportes.filter(function(r){ return r.vistoPorAdmin === false; }).length;
+    var tabBtn = document.querySelector('.tab[data-tab="maint"]');
+    if(!tabBtn) return;
+    var prev = tabBtn.querySelector('.tabBadge');
+    if(prev) prev.remove();
+    if(noVistos > 0){
+      var bg = document.createElement('span');
+      bg.className = 'tabBadge';
+      bg.textContent = noVistos;
+      tabBtn.appendChild(bg);
+    }
+  });
+}
+
+function doMarcarDanioVisto(reporteId){
+  rpc('marcarDanioVisto', {userRole:sess.userRole, userName:sess.userName, reporteId:reporteId},
+    function(){
+      toast('✓ Marcado como visto','ok');
+      loadDanosActivos();
+      loadBadgeDanosNoVistos();
+    },
+    function(e){ toast(e.message||'Error','err'); });
+}
+
 // Resumen del día para 4 cards de Mantenimiento ADM (Fase 7.2)
 function loadResumenMantHoy(){
   if(!sess) return;
@@ -7808,6 +7842,11 @@ function loadDanosActivos(){
         hi += '<button class="btn br xs" style="flex:1" onclick="openRechazarArreglo('+r.id+')">✗ Rechazar</button>';
         hi += '<button class="btn bg xs" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doVerificarArreglo('+r.id+')">✓ Solucionado</button>';
         hi += '</div>';
+      }
+      // Botón "Visto" — solo ADMIN, solo si aún no lo vio. Es acuse de recibo,
+      // no cambia el estado del reporte.
+      if(sess.userRole==='ADMIN' && r.vistoPorAdmin === false){
+        hi += '<div style="margin-top:6px"><button class="btn ba xs" style="width:100%;background:#3b82f6;color:#fff;font-weight:700" onclick="doMarcarDanioVisto('+r.id+')">👁 Visto</button></div>';
       }
       hi += '</div>';
       return hi;
