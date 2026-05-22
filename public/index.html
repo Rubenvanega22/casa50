@@ -1346,8 +1346,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <!-- MANTENIMIENTO (admin) -->
 <div class="pnl" id="pnl-maint">
 
-<!-- 4 cards resumen del día (Fase 7.2) -->
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+<!-- 4 cards resumen del día (Fase 7.2) — ADMIN + RECEPTION -->
+<div id="mtCards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
   <div style="background:#18181f;border:1px solid rgba(59,130,246,.4);border-radius:10px;padding:12px;text-align:center">
     <div id="rmNuevosHoy" style="font-size:24px;font-weight:900;color:#60a5fa">0</div>
     <div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px">Nuevos hoy</div>
@@ -1366,20 +1366,28 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div>
 
-<!-- NUEVO Fase 2.2 + 4.5: Reportar daño + Asignar tarea + listas -->
+<!-- Botones + listas — visibilidad ajustada por adaptarMantPanelPorRol() -->
 <div style="margin-bottom:14px">
   <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn ba" style="background:#22c55e;color:#fff;font-weight:700" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
-    <button class="btn ba" style="background:#3b82f6;color:#fff;font-weight:700" onclick="openAsigTarea()">+ 📋 Asignar tarea</button>
-    <button class="btn ba" style="background:#a855f7;color:#fff;font-weight:700" onclick="openHistorialMant()">📚 Historial</button>
+    <button id="mtBtnRDano" class="btn ba" style="background:#22c55e;color:#fff;font-weight:700" onclick="openReportarDano()">+ 🔧 Reportar daño</button>
+    <button id="mtBtnRDanoMaid" class="btn ba" style="display:none;background:#f97316;color:#fff;font-weight:700" onclick="openReportarDanoMaid()">🔧 Reportar daño</button>
+    <button id="mtBtnAsigTarea" class="btn ba" style="background:#3b82f6;color:#fff;font-weight:700" onclick="openAsigTarea()">+ 📋 Asignar tarea</button>
+    <button id="mtBtnHistorial" class="btn ba" style="background:#a855f7;color:#fff;font-weight:700" onclick="openHistorialMant()">📚 Historial</button>
   </div>
-  <div class="sec" style="margin-top:6px;color:#f97316">📝 Solicitudes pendientes</div>
-  <div id="solicitudesAdmCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
-  <div class="sec" style="margin-top:14px">⚠️ Daños activos ahora</div>
-  <div id="danosActivosCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
-  <div class="sec" style="margin-top:14px">📋 Tareas asignadas a mantenedor</div>
-  <div id="tareasMantCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+  <div id="mtSolicitudesWrap">
+    <div class="sec" style="margin-top:6px;color:#f97316">📝 Solicitudes pendientes</div>
+    <div id="solicitudesAdmCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+  </div>
+  <div id="mtDanosWrap">
+    <div id="mtDanosTit" class="sec" style="margin-top:14px">⚠️ Daños activos ahora</div>
+    <div id="danosActivosCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+  </div>
+  <div id="mtTareasWrap">
+    <div class="sec" style="margin-top:14px">📋 Tareas asignadas a mantenedor</div>
+    <div id="tareasMantCont" style="background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:10px;font-size:12px;color:#9ca3af">Cargando...</div>
+  </div>
 </div>
+<div id="mtFiltrosWrap">
 <hr style="border-color:#2e2e3a;margin:12px 0">
 
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
@@ -1391,6 +1399,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="maintCont"><p style="color:#9ca3af">Selecciona un rango de fechas y presiona Ver.</p></div>
 <div class="sec" style="cursor:pointer" onclick="toggleRoomIssues()">🏨 Estado de Habitaciones <span id="roomIssuesArrow">▼</span></div>
 <div id="roomIssuesCont" style="display:none"></div>
+</div>
 </div>
  <!-- PROYECCION (admin) -->
 <div class="pnl" id="pnl-proyeccion">
@@ -1723,8 +1732,8 @@ function buildTabs(){
   if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones',i:'ti-bed'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos',i:'ti-broom'});
   if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños',i:'ti-tool'});
- if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-receipt'},{id:'cuadre',l:'Cierre de caja',i:'ti-cash'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'productos',l:'Inventario',i:'ti-package'});
-if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-calendar'});
+ if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-receipt'},{id:'cuadre',l:'Cierre de caja',i:'ti-cash'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'productos',l:'Inventario',i:'ti-package'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
+if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
   if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-month'},{id:'gastosmes',l:'Gastos',i:'ti-receipt'},{id:'maids',l:'Limpieza',i:'ti-broom'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-cash'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-package'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Configuración',i:'ti-settings'});
   tabs.forEach(function(t){
@@ -1747,7 +1756,18 @@ function sw(id){
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
- if(id==='maint'){loadMaintMonth();loadDanosActivos();loadTareasAdmin();loadResumenMantHoy();loadSolicitudesAdmin();loadBadgeDanosNoVistos();if(roomIssuesOpen)loadRoomIssuesGrid();}
+ if(id==='maint'){
+   adaptarMantPanelPorRol();
+   loadDanosActivos();
+   if(sess.userRole==='ADMIN' || sess.userRole==='RECEPTION') loadResumenMantHoy();
+   if(sess.userRole==='ADMIN'){
+     loadMaintMonth();
+     loadTareasAdmin();
+     loadSolicitudesAdmin();
+     loadBadgeDanosNoVistos();
+     if(roomIssuesOpen) loadRoomIssuesGrid();
+   }
+ }
  if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
@@ -7020,6 +7040,32 @@ function doAsigTarea(){
     closeM('mAsigTarea');
     loadTareasAdmin();
   }, function(e){toast(e.message||String(e),'err');});
+}
+
+// Ajusta visibilidad de secciones de pnl-maint según rol.
+// ADMIN ve todo; RECEPTION ve cards + reportar daño + daños activos;
+// MAID ve solo botón naranja de reportar daño + sus daños propios.
+function adaptarMantPanelPorRol(){
+  if(!sess) return;
+  var r = sess.userRole;
+  var isAdm = (r==='ADMIN');
+  var isRec = (r==='RECEPTION');
+  var isMaid = (r==='MAID');
+
+  var $ = function(id){ return document.getElementById(id); };
+  var show = function(el, ok){ if(el) el.style.display = ok ? '' : 'none'; };
+
+  show($('mtCards'),         isAdm || isRec);
+  show($('mtBtnRDano'),      isAdm || isRec);
+  show($('mtBtnRDanoMaid'),  isMaid);
+  show($('mtBtnAsigTarea'),  isAdm);
+  show($('mtBtnHistorial'),  isAdm);
+  show($('mtSolicitudesWrap'), isAdm);
+  show($('mtTareasWrap'),    isAdm);
+  show($('mtFiltrosWrap'),   isAdm);
+
+  var titDanos = $('mtDanosTit');
+  if(titDanos) titDanos.textContent = isMaid ? '🔧 Mis daños reportados' : '⚠️ Daños activos ahora';
 }
 
 // Badge rojo en pestaña Mantenimiento: cuenta daños activos no vistos por admin.
