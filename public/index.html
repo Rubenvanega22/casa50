@@ -7834,6 +7834,12 @@ function loadDanosActivos(){
       cont.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:8px">No hay daños activos.</div>';
       return;
     }
+    // MAID en pestaña Mantenimiento: render simplificado con estados legibles.
+    // El backend ya filtró a created_by=userName, así que reportes son solo suyos.
+    if(sess.userRole === 'MAID'){
+      cont.innerHTML = renderMisDanosReportadosMaid(reportes);
+      return;
+    }
     var bullets = {urgente:'🔴', normal:'🟡', baja:'🟢'};
     var badgeBg = {urgente:'rgba(239,68,68,.15)', normal:'rgba(245,158,11,.15)', baja:'rgba(34,197,94,.15)'};
     var badgeColor = {urgente:'#ef4444', normal:'#f59e0b', baja:'#22c55e'};
@@ -7888,6 +7894,16 @@ function loadDanosActivos(){
         hi += '<button class="btn br xs" style="flex:1" onclick="openRechazarArreglo('+r.id+')">✗ Rechazar</button>';
         hi += '<button class="btn bg xs" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doVerificarArreglo('+r.id+')">✓ Solucionado</button>';
         hi += '</div>';
+      }
+      // Botón "Marcar arreglado" — atajo ADM/RECEP para resolver daños en zonas
+      // comunes sin pasar por mantenedor (bombillito, basura, etc). Solo aplica
+      // a NOTA_ACTIVA / RECHAZADO_VERIFICACION; ESPERA_VERIFICACION ya tiene su
+      // par "Rechazar / Solucionado" arriba.
+      if((sess.userRole==='ADMIN' || sess.userRole==='RECEPTION')
+         && r.ubicacionTipo==='zona_comun'
+         && (r.estado==='NOTA_ACTIVA' || r.estado==='RECHAZADO_VERIFICACION')){
+        var ubiEsc = esc(ubi).replace(/'/g,"\\'");
+        hi += '<div style="margin-top:6px"><button class="btn bg xs" style="width:100%;background:#22c55e;color:#fff;font-weight:700" onclick="doResolverZonaComun('+r.id+',\''+ubiEsc+'\')">✓ Marcar arreglado</button></div>';
       }
       // Botón "Visto" — solo ADMIN, solo si aún no lo vio. Es acuse de recibo,
       // no cambia el estado del reporte.
@@ -11177,7 +11193,13 @@ function doResolverZonaComun(reporteId, ubicacionLabel){
   if(!sess || !['ADMIN','RECEPTION'].includes(sess.userRole)){ toast('Solo ADM/Recep','err'); return; }
   conf('¿Marcar arreglado el daño de '+ubicacionLabel+'?', function(){
     rpc('resolverDanoZonaComun', { reporteId: reporteId, userName: sess.userName, userRole: sess.userRole },
-      function(){ toast('✓ Marcado como resuelto','ok'); loadNotes(); },
+      function(){
+        toast('✓ Marcado como resuelto','ok');
+        loadNotes();
+        if(document.getElementById('danosActivosCont')) loadDanosActivos();
+        if(sess.userRole==='ADMIN' || sess.userRole==='RECEPTION') loadResumenMantHoy();
+        if(sess.userRole==='ADMIN') loadBadgeDanosNoVistos();
+      },
       function(e){ toast(e.message || String(e),'err'); });
   });
 }
