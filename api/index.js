@@ -7062,6 +7062,15 @@ async function apiAjusteInventarioV2(p, res) {
       nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
       await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
 
+      await supabase.from('stock_movements').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        user_name: recepNameAj, user_role: 'ADMIN',
+        product_id: productId, product_name: prod.nombre,
+        tipo: 'ajuste_venta_olvidada',
+        cantidad: -cantidad,
+        nota: 'AJUSTE (admin '+adminName+'): '+motivo
+      });
+
       await supabase.from('room_products').insert({
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
@@ -7083,6 +7092,15 @@ async function apiAjusteInventarioV2(p, res) {
       valorAfectado = -(cantidad * precio);
       nuevoStockBod = Number(prod.stock_actual||0) + cantidad;
       await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+      await supabase.from('stock_movements').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        user_name: recepNameAj, user_role: 'ADMIN',
+        product_id: productId, product_name: prod.nombre,
+        tipo: 'ajuste_venta_duplicada',
+        cantidad: cantidad,
+        nota: 'AJUSTE (admin '+adminName+'): '+motivo
+      });
 
       await supabase.from('room_products').insert({
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
@@ -7151,6 +7169,23 @@ async function apiAjusteInventarioV2(p, res) {
 
       nuevoStockBod = Math.max(0, Number(prod.stock_actual||0) - cantidad);
       await supabase.from('products').update({ stock_actual: nuevoStockBod }).eq('id',productId);
+
+      await supabase.from('stock_movements').insert({
+        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
+        user_name: recepNameAj, user_role: 'ADMIN',
+        product_id: productoViejoId, product_name: prodViejo.nombre,
+        tipo: 'ajuste_cambio_producto',
+        cantidad: cantidad,
+        nota: 'AJUSTE cambio producto (admin '+adminName+'): '+motivo
+      });
+      await supabase.from('stock_movements').insert({
+        ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
+        user_name: recepNameAj, user_role: 'ADMIN',
+        product_id: productId, product_name: prod.nombre,
+        tipo: 'ajuste_cambio_producto',
+        cantidad: -cantidad,
+        nota: 'AJUSTE cambio producto (admin '+adminName+'): '+motivo
+      });
 
       await supabase.from('room_products').insert({
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
