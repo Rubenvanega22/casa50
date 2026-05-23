@@ -1846,9 +1846,11 @@ function checkBusinessDayDrift(){
 function startPoll(){
   clearInterval(pT);
   pT=setInterval(function(){
-   rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}});
+   rpc('getRooms',null,function(d){
+     if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}
+     if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
+   });
     if(!historyOpen) loadNotes();
-    if(sess&&sess.userRole==='RECEPTION')checkAutoHora();
     checkBusinessDayDrift();
   },10000);
   checkAlarms();checkTurnoAlert();clearInterval(aT);aT=setInterval(function(){checkAlarms();checkTurnoAlert();},30000);

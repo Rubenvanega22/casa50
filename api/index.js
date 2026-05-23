@@ -742,11 +742,18 @@ async function apiExtendTime(p, res) {
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
+  const noteIn = String(p.note || '').trim();
+  if (noteIn === 'AUTO') {
+    const dueMsServer = Number(room.due_ms || 0);
+    if (!dueMsServer || now - dueMsServer < 30*60*1000) {
+      return err(res, 'Auto-cobro rechazado: habitacion no esta vencida >= 30min en servidor');
+    }
+  }
   const cfg = MASTER_PRICING[room.category] || MASTER_PRICING['Junior'];
   const extraCost = extraHrs * Number(cfg.extraHour || 0);
   const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
-  const note = String(p.note || '').trim();
+  const note = noteIn;
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await supabase.from('sales').insert({
     ts_ms: now, business_day: bDay, shift_id: shift,
