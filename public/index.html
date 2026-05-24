@@ -12759,7 +12759,7 @@ var AJ_ESCENARIOS = {
   RECEPCION: [
     {tipo:'conteo',           icon:'📋', titulo:'Ajuste por conteo',        desc:'El conteo físico no cuadra (NO afecta plata)',  cuadre:false, stock:'recepcion', pide:'cantidad_signo'},
     {tipo:'producto',         icon:'🔄', titulo:'Cambiar producto vendido', desc:'Vendió un producto por otro (cambiar A por B)', cuadre:true, stock:'ambos',     pide:'productoViejo'},
-    {tipo:'metodo_pago',      icon:'💳', titulo:'Cambiar método de pago',   desc:'Efectivo → Tarjeta, Nequi, etc',                cuadre:true, stock:'ninguno',   pide:'metodoPagoDoble'},
+    {tipo:'metodo_pago',      icon:'💳', titulo:'Cambiar método de pago',   desc:'Selecciona la venta del bar y cambia su método',cuadre:true, stock:'ninguno',   pide:'roomProductPicker'},
     {tipo:'venta_duplicada',  icon:'➖', titulo:'Quitar venta (vendió de más)', desc:'Registró 2 cuando era 1',                cuadre:true, stock:'recepcion', pide:'payMethod'},
     {tipo:'venta_olvidada',   icon:'➕', titulo:'Agregar venta olvidada',   desc:'Vendió pero no registró',                       cuadre:true, stock:'recepcion', pide:'payMethod'}
   ]
@@ -12948,9 +12948,11 @@ function ajRenderConfig(){
 
   // Fecha + turno + recepcionista (solo si afecta cuadre)
   if(e.cuadre){
+    var trig = (e.pide === 'roomProductPicker') ? 'ajActualizarWarning();ajRenderPreview();ajLoadRoomProducts()' : 'ajActualizarWarning();ajRenderPreview()';
+    var trigSimple = (e.pide === 'roomProductPicker') ? 'ajRenderPreview();ajLoadRoomProducts()' : 'ajRenderPreview()';
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
-    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Fecha</label><input type="date" id="ajFecha" value="'+today+'" onchange="ajActualizarWarning();ajRenderPreview()" style="width:100%"></div>';
-    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Turno</label><select id="ajTurno" onchange="ajRenderPreview()" style="width:100%">';
+    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Fecha</label><input type="date" id="ajFecha" value="'+today+'" onchange="'+trig+'" style="width:100%"></div>';
+    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Turno</label><select id="ajTurno" onchange="'+trigSimple+'" style="width:100%">';
     h += '<option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2" selected>T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option>';
     h += '</select></div>';
     h += '</div>';
@@ -12969,14 +12971,16 @@ function ajRenderConfig(){
     h += '</div>';
   }
 
-  // Metodo pago viejo + nuevo
-  if(e.pide === 'metodoPagoDoble'){
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
-    h += '<div><label style="font-size:10px;color:#fca5a5;display:block;margin-bottom:3px">❌ Método registrado</label>';
-    h += '<select id="ajPayViejo" onchange="ajRenderPreview()" style="width:100%"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
-    h += '<div><label style="font-size:10px;color:#86efac;display:block;margin-bottom:3px">✅ Método correcto</label>';
-    h += '<select id="ajPay" onchange="ajRenderPreview()" style="width:100%"><option value="TARJETA">Tarjeta</option><option value="EFECTIVO">Efectivo</option><option value="NEQUI">Nequi</option></select></div>';
+  // Picker de venta de bar especifica (nuevo flujo de cambio de metodo de pago)
+  if(e.pide === 'roomProductPicker'){
+    h += '<div style="background:rgba(168,85,247,.05);border-left:3px solid #a855f7;padding:8px 10px;border-radius:0 6px 6px 0;margin-bottom:10px">';
+    h += '<label style="font-size:10px;color:#c4b5fd;display:block;margin-bottom:3px">Ventas del bar del turno seleccionado</label>';
+    h += '<div id="ajRpList" style="background:#18181f;border-radius:6px;max-height:180px;overflow-y:auto;margin-bottom:4px;font-size:11px;color:#9ca3af;padding:6px">Elegí fecha + turno + recepcionista para listar las ventas…</div>';
+    h += '<input type="hidden" id="ajRpId" value="">';
+    h += '<div id="ajRpSelDisp" style="font-size:11px;color:#86efac;margin-top:4px;font-weight:700"></div>';
     h += '</div>';
+    h += '<div><label style="font-size:10px;color:#86efac;display:block;margin-bottom:3px">✅ Nuevo método</label>';
+    h += '<select id="ajPay" onchange="ajRenderPreview()" style="width:100%;margin-bottom:10px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select></div>';
   }
 
   // Metodo pago simple
@@ -12985,11 +12989,13 @@ function ajRenderConfig(){
     h += '<select id="ajPay" onchange="ajRenderPreview()" style="width:100%;margin-bottom:10px"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="NEQUI">Nequi</option></select>';
   }
 
-  // Cantidad
-  var cantLabel = (e.pide==='cantidad_signo') ? 'Cantidad (+ suma, − resta)' : 'Cantidad';
-  var cantMin = (e.pide==='cantidad_signo') ? '' : 'min="1"';
-  h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">'+cantLabel+'</label>';
-  h += '<input type="number" id="ajCantidad" value="1" '+cantMin+' oninput="ajChCant(this.value)" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:700">';
+  // Cantidad (oculta para roomProductPicker: la cantidad viene del registro seleccionado)
+  if(e.pide !== 'roomProductPicker'){
+    var cantLabel = (e.pide==='cantidad_signo') ? 'Cantidad (+ suma, − resta)' : 'Cantidad';
+    var cantMin = (e.pide==='cantidad_signo') ? '' : 'min="1"';
+    h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">'+cantLabel+'</label>';
+    h += '<input type="number" id="ajCantidad" value="1" '+cantMin+' oninput="ajChCant(this.value)" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:700">';
+  }
 
   // Motivo
   h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Motivo (obligatorio)</label>';
@@ -13001,6 +13007,7 @@ function ajRenderConfig(){
   if(e.cuadre) ajFillRecep();
   ajRenderPreview();
   ajActualizarWarning();
+  if(e.pide === 'roomProductPicker') ajLoadRoomProducts();
 }
 
 function ajFillRecep(){
@@ -13013,7 +13020,9 @@ function ajFillRecep(){
     if(nm) h += '<option value="'+esc(nm)+'"'+(nm===cur?' selected':'')+'>'+esc(nm)+'</option>';
   });
   sel.innerHTML = h;
-  sel.onchange = function(){ajRenderPreview();};
+  var escObj = (AJ_ESCENARIOS[window._aj.tabActual]||[]).find(function(x){return x.tipo===window._aj.escenario;});
+  var triggerPicker = !!(escObj && escObj.pide === 'roomProductPicker');
+  sel.onchange = function(){ ajRenderPreview(); if(triggerPicker) ajLoadRoomProducts(); };
 }
 
 function ajChCant(v){
@@ -13057,10 +13066,10 @@ function ajRenderPreview(){
   var tipo = window._aj.escenario;
   var tab = window._aj.tabActual;
   var cant = Number(window._aj.cantidad||0);
-  if(!prod || !tipo || !cant){ cont.innerHTML=''; return; }
-
   var e = (AJ_ESCENARIOS[tab]||[]).find(function(x){return x.tipo===tipo;});
-  if(!e){ cont.innerHTML=''; return; }
+  if(!prod || !tipo || !e){ cont.innerHTML=''; return; }
+  // roomProductPicker no usa cantidad (viene del registro seleccionado)
+  if(e.pide !== 'roomProductPicker' && !cant){ cont.innerHTML=''; return; }
 
   var stockActual = Number(prod.stockActual||0);
   var stockBodega = Number(prod.stockBodega||0);
@@ -13103,14 +13112,17 @@ function ajRenderPreview(){
       }
     }
     else if(tipo === 'metodo_pago'){
-      var payV = (document.getElementById('ajPayViejo')||{}).value || 'EFECTIVO';
-      var payN = (document.getElementById('ajPay')||{}).value || 'TARJETA';
-      var valor = cant * precio;
-      h += '<table style="width:100%;font-size:11px">';
-      h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock:</td><td colspan="3" style="color:#6b7280">Sin cambios</td></tr>';
-      h += '<tr><td style="color:#9ca3af;padding:3px 0">💵 Cuadre '+payV+':</td><td colspan="3" style="color:#fca5a5">−'+fmt(valor)+'</td></tr>';
-      h += '<tr><td style="color:#9ca3af;padding:3px 0">💳 Cuadre '+payN+':</td><td colspan="3" style="color:#86efac;font-weight:700">+'+fmt(valor)+'</td></tr>';
-      h += '</table>';
+      var rpId = Number((document.getElementById('ajRpId')||{}).value||0);
+      if(!rpId){
+        h += '<div style="color:#9ca3af;font-size:11px">Selecciona la venta de bar para ver la vista previa</div>';
+      } else {
+        var payN = (document.getElementById('ajPay')||{}).value || 'EFECTIVO';
+        h += '<table style="width:100%;font-size:11px">';
+        h += '<tr><td style="color:#9ca3af;padding:3px 0">📦 Stock:</td><td colspan="3" style="color:#6b7280">Sin cambios</td></tr>';
+        h += '<tr><td style="color:#9ca3af;padding:3px 0">💳 Nuevo método:</td><td colspan="3" style="color:#86efac;font-weight:700">'+payN+'</td></tr>';
+        h += '<tr><td colspan="4" style="color:#6b7280;font-size:10px;padding-top:6px">Se actualiza el registro original — el cuadre del turno se recalcula con el nuevo método</td></tr>';
+        h += '</table>';
+      }
     }
     else if(tipo === 'venta_duplicada'){
       var val = cant * precio;
@@ -13155,7 +13167,16 @@ function ajToggleBtnGuardar(){
   var tipo = window._aj.escenario;
   var cant = Number(window._aj.cantidad||0);
   var motivo = ((document.getElementById('ajMotivo')||{}).value||'').trim();
-  var ok = prod && tipo && cant!==0 && motivo.length>=3;
+  var tab = window._aj.tabActual;
+  var escObj = (AJ_ESCENARIOS[tab]||[]).find(function(x){return x.tipo===tipo;});
+  var ok;
+  if(escObj && escObj.pide === 'roomProductPicker'){
+    // No requiere cantidad; sí requiere venta seleccionada y motivo de 5+ letras
+    var rpId = Number((document.getElementById('ajRpId')||{}).value||0);
+    ok = prod && tipo && rpId && motivo.length>=5;
+  } else {
+    ok = prod && tipo && cant!==0 && motivo.length>=3;
+  }
   btn.disabled = !ok;
   btn.style.opacity = ok ? '1' : '0.4';
   btn.style.cursor = ok ? 'pointer' : 'not-allowed';
@@ -13168,8 +13189,32 @@ function ajGuardar(){
   var cant = window._aj.cantidad || 0;
   var motivo = ((document.getElementById('ajMotivo')||{}).value||'').trim();
 
-  if(!prod){toast('Selecciona un producto','err');return;}
   if(!tipo){toast('Selecciona un escenario','err');return;}
+  var escObj = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
+  if(!escObj){toast('Escenario inválido','err');return;}
+
+  // Flujo especial: cambio de metodo de pago de venta de bar — usa apiChangePaymentMethodBar
+  if(escObj.pide === 'roomProductPicker'){
+    if(!prod){toast('Selecciona un producto','err');return;}
+    var rpId = Number((document.getElementById('ajRpId')||{}).value||0);
+    if(!rpId){toast('Selecciona la venta del bar a corregir','err');return;}
+    var newPm = (document.getElementById('ajPay')||{}).value || 'EFECTIVO';
+    if(motivo.length < 5){toast('Motivo mínimo 5 letras','err');return;}
+    conf('¿Confirmar el cambio de método de pago?', function(){
+      rpc('changePaymentMethodBar', {
+        userName: sess.userName, userRole: sess.userRole,
+        roomProductId: rpId, newPayMethod: newPm, reason: motivo
+      }, function(){
+        toast('✓ Método de pago actualizado','ok');
+        closeM('mAjusteInv');
+        loadProductos();
+      }, function(e){toast(e.message||String(e),'err');});
+    });
+    return;
+  }
+
+  // Flujo genérico: apiAjusteInventarioV2
+  if(!prod){toast('Selecciona un producto','err');return;}
   if(cant === 0){toast('Cantidad no puede ser 0','err');return;}
   if(motivo.length < 3){toast('Motivo mínimo 3 letras','err');return;}
 
@@ -13178,9 +13223,6 @@ function ajGuardar(){
     categoria: tab, tipo: tipo,
     productId: prod.id, cantidad: cant, motivo: motivo
   };
-
-  var escObj = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
-  if(!escObj){toast('Escenario inválido','err');return;}
 
   if(escObj.cuadre){
     payload.businessDay = (document.getElementById('ajFecha')||{}).value||'';
@@ -13193,10 +13235,6 @@ function ajGuardar(){
 
   if(escObj.pide === 'payMethod'){
     payload.payMethod = (document.getElementById('ajPay')||{}).value||'EFECTIVO';
-  }
-  if(escObj.pide === 'metodoPagoDoble'){
-    payload.payMethod = (document.getElementById('ajPay')||{}).value||'EFECTIVO';
-    payload.payMethodViejo = (document.getElementById('ajPayViejo')||{}).value||'';
   }
   if(escObj.pide === 'productoViejo'){
     payload.productoViejoId = Number((document.getElementById('ajProdViejoId')||{}).value||0);
@@ -13213,6 +13251,43 @@ function ajGuardar(){
       function(e){toast(e.message||String(e),'err');}
     );
   });
+}
+
+// Carga ventas de bar del turno seleccionado, filtradas por producto seleccionado
+// y recepcionista. Se invoca cuando admin elige fecha/turno/recep en el escenario
+// "cambiar metodo de pago" del modulo de ajuste.
+function ajLoadRoomProducts(){
+  var cont = document.getElementById('ajRpList');
+  if(!cont) return;
+  var prod = window._aj.prodSel;
+  var bDay = (document.getElementById('ajFecha')||{}).value||'';
+  var sid = (document.getElementById('ajTurno')||{}).value||'';
+  var recep = (document.getElementById('ajRecep')||{}).value||'';
+  if(!prod || !bDay || !sid){ cont.innerHTML = '<div style="padding:6px;color:#9ca3af">Elegí fecha + turno (y la recepcionista) para listar las ventas…</div>'; return; }
+  cont.innerHTML = '<div style="padding:6px;color:#9ca3af">Cargando…</div>';
+  rpc('listRoomProductsTurno', { userRole: sess.userRole, businessDay: bDay, shiftId: sid }, function(d){
+    var items = (d.items||[]).filter(function(r){ return r.productId === prod.id; });
+    if(recep) items = items.filter(function(r){ return (r.userName||'').toLowerCase() === recep.toLowerCase(); });
+    if(!items.length){ cont.innerHTML = '<div style="padding:6px;color:#9ca3af">No hay ventas de este producto en ese turno.</div>'; document.getElementById('ajRpId').value=''; document.getElementById('ajRpSelDisp').textContent=''; ajRenderPreview(); ajToggleBtnGuardar(); return; }
+    var h = '';
+    items.forEach(function(r){
+      var hora = new Date(r.tsMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      h += '<div onclick="ajSelRoomProduct('+r.id+')" style="padding:7px 8px;cursor:pointer;border-bottom:1px solid rgba(46,46,58,.5);display:flex;justify-content:space-between;align-items:center">';
+      h += '<div style="color:#e5e7eb"><b>'+hora+'</b> · Hab '+esc(r.roomId)+' · '+r.cantidad+'x</div>';
+      h += '<div style="color:#fbbf24;font-weight:700">'+esc(r.payMethod)+' '+fmt(r.total)+'</div>';
+      h += '</div>';
+    });
+    cont.innerHTML = h;
+  }, function(e){ cont.innerHTML = '<div style="padding:6px;color:#fca5a5">Error: '+(e.message||'?')+'</div>'; });
+}
+
+function ajSelRoomProduct(rpId){
+  document.getElementById('ajRpId').value = rpId;
+  // Marcar visualmente: re-pinto la lista para resaltar la seleccion (re-query no es necesario)
+  var disp = document.getElementById('ajRpSelDisp');
+  if(disp) disp.textContent = '✓ Venta #'+rpId+' seleccionada';
+  ajRenderPreview();
+  ajToggleBtnGuardar();
 }
 function openTrasladoRecepcion(){
   var h='<div class="mh"><div class="mt">Bajar a Recepción</div><button class="mc" onclick="closeM(\'mTrasladoRec\')">✕</button></div>';

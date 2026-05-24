@@ -306,6 +306,8 @@ module.exports = async function handler(req, res) {
       case 'anularDescargoNequi': return await apiAnularDescargoNequi(payload, res);
       case 'updatePrecioCompra': return await apiUpdatePrecioCompra(payload, res);
       case 'changePaymentMethod': return await apiChangePaymentMethod(payload, res);
+      case 'changePaymentMethodBar': return await apiChangePaymentMethodBar(payload, res);
+      case 'listRoomProductsTurno': return await apiListRoomProductsTurno(payload, res);
       case 'getBitacoraMantenedor':  return await apiGetBitacoraMantenedor(payload, res);
       case 'saveBitacoraMantenedor': return await apiSaveBitacoraMantenedor(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
@@ -6915,6 +6917,75 @@ async function apiChangePaymentMethod(p, res) {
     return err(res, e.message || String(e));
   }
 }
+// Cambia el metodo de pago de una venta de bar (room_products) directamente sobre
+// el registro original. NO crea entradas -N/+N como hacia el ajuste viejo
+// (tipo='metodo_pago' en apiAjusteInventarioV2). Registra en payment_method_changes
+// con room_product_id seteado y sale_id NULL.
+async function apiChangePaymentMethodBar(p, res) {
+  try {
+    const userRole = String(p.userRole||'').toUpperCase();
+    if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
+    const roomProductId = Number(p.roomProductId||0);
+    const newPm = String(p.newPayMethod||'').toUpperCase();
+    const reason = String(p.reason||'').trim();
+    const userName = String(p.userName||'').trim();
+    if(!roomProductId) return err(res,'Falta roomProductId');
+    if(!['EFECTIVO','TARJETA','NEQUI'].includes(newPm)) return err(res,'Metodo invalido (EFECTIVO/TARJETA/NEQUI)');
+    if(!reason || reason.length < 5) return err(res,'Motivo requerido (min 5 caracteres)');
+    if(!userName) return err(res,'Falta usuario');
+    const { data: rp, error: rpErr } = await supabase.from('room_products').select('*').eq('id', roomProductId).maybeSingle();
+    if(rpErr) return err(res, rpErr.message);
+    if(!rp) return err(res,'Venta de bar no encontrada');
+    if(rp.is_cortesia) return err(res,'Las cortesias no tienen metodo de pago');
+    const oldPm = String(rp.pay_method||'').toUpperCase();
+    if(oldPm === newPm) return err(res,'El metodo de pago ya es '+newPm);
+    const nowMs = Date.now();
+    const { error: insErr } = await supabase.from('payment_method_changes').insert({
+      sale_id: null,
+      room_product_id: roomProductId,
+      changed_at_ms: nowMs,
+      business_day: rp.business_day,
+      shift_id: rp.shift_id,
+      user_role: userRole,
+      user_name: userName,
+      old_pay_method: oldPm,
+      new_pay_method: newPm,
+      total: Number(rp.total||0),
+      reason: reason
+    });
+    if(insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
+    const { error: updErr } = await supabase.from('room_products').update({ pay_method: newPm }).eq('id', roomProductId);
+    if(updErr) return err(res, 'Error actualizando venta: ' + updErr.message);
+    return ok(res, { changed: true, roomProductId, oldPayMethod: oldPm, newPayMethod: newPm });
+  } catch (e) {
+    return err(res, e.message || String(e));
+  }
+}
+// Lista ventas de bar de un dia+turno para que admin pueda seleccionar una y
+// cambiarle el metodo de pago. Excluye cortesias y ajustes admin (created_by_admin).
+async function apiListRoomProductsTurno(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole!=='ADMIN'&&userRole!=='RECEPTION') return err(res,'Sin permiso');
+  const bDay = String(p.businessDay||'').trim();
+  const shiftId = String(p.shiftId||'').trim();
+  if(!bDay) return err(res,'businessDay requerido');
+  if(!shiftId) return err(res,'shiftId requerido');
+  const { data, error } = await supabase.from('room_products')
+    .select('id, ts_ms, room_id, product_id, product_name, cantidad, precio_unit, total, pay_method, user_name, is_cortesia, created_by_admin')
+    .eq('business_day', bDay)
+    .eq('shift_id', shiftId)
+    .eq('is_cortesia', false)
+    .order('ts_ms');
+  if(error) return err(res, error.message);
+  const list = (data||[]).filter(r => !r.created_by_admin && Number(r.cantidad||0) > 0).map(r => ({
+    id: r.id, tsMs: Number(r.ts_ms), roomId: r.room_id,
+    productId: r.product_id, productName: r.product_name,
+    cantidad: Number(r.cantidad||0), precioUnit: Number(r.precio_unit||0),
+    total: Number(r.total||0), payMethod: r.pay_method||'EFECTIVO',
+    userName: r.user_name||''
+  }));
+  return ok(res, { items: list });
+}
 // ==================== AJUSTE DE INVENTARIO V2 (13 ESCENARIOS) ====================
 // Maneja todos los escenarios de ajuste: BODEGA, RECEPCION, FALTANTES, AJUSTE
 // ==================== HISTORIAL DE AJUSTES (BITÁCORA) ====================
@@ -7162,41 +7233,6 @@ async function apiAjusteInventarioV2(p, res) {
         is_cortesia: false,
         created_by_admin: true,
         tipo_ajuste: 'venta_duplicada',
-        motivo_ajuste: motivo
-      });
-    }
-
-    // Escenario 2: cambiar metodo de pago
-    else if(tipo === 'metodo_pago') {
-      payMethodViejo = String(p.payMethodViejo||'').toUpperCase();
-      if(!payMethodViejo) return err(res,'Metodo anterior requerido');
-      if(payMethodViejo === payMethodAj) return err(res,'Los metodos son iguales');
-      if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
-      afectaStock = 'ninguno';
-      valorAfectado = cantidad * precio;
-
-      await supabase.from('room_products').insert({
-        ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: -cantidad, precio_unit: precio,
-        total: -(cantidad * precio), pay_method: payMethodViejo,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'metodo_pago_resta',
-        motivo_ajuste: motivo
-      });
-      await supabase.from('room_products').insert({
-        ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
-        room_id: 'AJUSTE', check_in_ms: 0,
-        product_id: productId, product_name: prod.nombre,
-        cantidad: cantidad, precio_unit: precio,
-        total: cantidad * precio, pay_method: payMethodAj,
-        user_name: recepNameAj,
-        is_cortesia: false,
-        created_by_admin: true,
-        tipo_ajuste: 'metodo_pago_suma',
         motivo_ajuste: motivo
       });
     }
