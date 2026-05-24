@@ -4118,6 +4118,14 @@ async function apiAddRoomProduct(p, res) {
   });
   const { data: stockRestante, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
+  await supabase.from('stock_movements').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_name: userName, user_role: 'RECEPTION',
+    product_id: productId, product_name: prod.nombre,
+    tipo: isCortesia ? 'venta_bar_cortesia' : 'venta_bar',
+    cantidad: -cantidad,
+    nota: roomId ? ('Hab '+roomId) : ''
+  });
   if(isCortesia) {
     await supabase.from('cortesias').insert({
       ts_ms: now, business_day: bDay, shift_id: shift,
@@ -4148,6 +4156,16 @@ async function apiEditRoomProduct(p, res) {
   }).eq('id', id);
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: -diff });
   if(stockErr) return err(res, stockErr.message);
+  if(diff !== 0) {
+    await supabase.from('stock_movements').insert({
+      ts_ms: Date.now(), business_day: rp.business_day, shift_id: rp.shift_id,
+      user_name: String(p.userName||rp.user_name||''), user_role: String(p.userRole||'').toUpperCase() || 'RECEPTION',
+      product_id: rp.product_id, product_name: rp.product_name,
+      tipo: 'edit_venta_bar',
+      cantidad: -diff,
+      nota: 'Hab '+rp.room_id+' — edit cantidad '+rp.cantidad+'->'+nuevaCantidad
+    });
+  }
   return ok(res, { nuevoTotal });
 }
 
@@ -4158,6 +4176,14 @@ async function apiDeleteRoomProduct(p, res) {
   if(!rp) return err(res,'Registro no existe');
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: Number(rp.cantidad||0) });
   if(stockErr) return err(res, stockErr.message);
+  await supabase.from('stock_movements').insert({
+    ts_ms: Date.now(), business_day: rp.business_day, shift_id: rp.shift_id,
+    user_name: String(p.userName||rp.user_name||''), user_role: String(p.userRole||'').toUpperCase() || 'RECEPTION',
+    product_id: rp.product_id, product_name: rp.product_name,
+    tipo: 'delete_venta_bar',
+    cantidad: Number(rp.cantidad||0),
+    nota: 'Hab '+rp.room_id+' — delete'
+  });
   await supabase.from('room_products').delete().eq('id', id);
   return ok(res, {});
 }
@@ -4183,6 +4209,14 @@ async function apiSaveCortesia(p, res) {
   });
   const { data: stockRestante, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
+  await supabase.from('stock_movements').insert({
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_name: userName, user_role: 'RECEPTION',
+    product_id: productId, product_name: prod.nombre,
+    tipo: 'cortesia_bar',
+    cantidad: -cantidad,
+    nota: 'Cortesia'
+  });
   return ok(res, { stockRestante });
 }
 async function apiSaveObservacionTurno(p, res) {
