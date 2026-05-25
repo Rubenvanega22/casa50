@@ -317,6 +317,7 @@ module.exports = async function handler(req, res) {
       case 'getBitacoraMantenedor':  return await apiGetBitacoraMantenedor(payload, res);
       case 'saveBitacoraMantenedor': return await apiSaveBitacoraMantenedor(payload, res);
       case 'lucianaChat':         return await apiLucianaChat(payload, res);
+      case 'lucianaGastoMes':     return await apiLucianaGastoMes(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -7929,5 +7930,44 @@ async function apiLucianaChat(p, res) {
     tokensIn,
     tokensOut,
     costoUsd: Number(costoUsd.toFixed(6))
+  });
+}
+
+// Suma el costo USD y tokens del mes calendario actual (no business_day).
+// Solo ADMIN. Para alimentar el contador "Mes: $X" del header del modal.
+async function apiLucianaGastoMes(p, res) {
+  if (String(p.userRole || '').toUpperCase() !== 'ADMIN') {
+    return err(res, 'Solo el administrador', 403);
+  }
+  // Mes calendario en horario Bogota (UTC-5)
+  const d = new Date(Date.now() - 5 * 3600000);
+  const yyyymm = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+
+  // luciana_chats.business_day es 'YYYY-MM-DD' -> LIKE 'YYYY-MM%'
+  const { data, error } = await supabase
+    .from('luciana_chats')
+    .select('costo_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write')
+    .like('business_day', yyyymm + '%');
+
+  if (error) {
+    console.error('lucianaGastoMes error:', error);
+    return err(res, 'Error consultando gasto: ' + error.message, 500);
+  }
+
+  let totalUsd = 0, totIn = 0, totOut = 0, totCR = 0, totCW = 0;
+  (data || []).forEach(r => {
+    totalUsd += Number(r.costo_usd || 0);
+    totIn    += Number(r.tokens_input  || 0);
+    totOut   += Number(r.tokens_output || 0);
+    totCR    += Number(r.tokens_cache_read  || 0);
+    totCW    += Number(r.tokens_cache_write || 0);
+  });
+
+  return ok(res, {
+    mes: yyyymm,
+    totalUsd: Number(totalUsd.toFixed(4)),
+    preguntas: (data || []).length,
+    tokensIn: totIn, tokensOut: totOut,
+    cacheRead: totCR, cacheWrite: totCW
   });
 }

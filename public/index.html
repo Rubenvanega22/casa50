@@ -198,6 +198,9 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .luci-foto-preview.h{display:none}
 .luci-foto-preview img{max-height:60px;max-width:80px;border-radius:6px;border:1px solid #2e2e3a}
 .luci-foto-preview button{background:#ef4444;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:auto}
+.luci-gasto{font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.5px;margin-top:3px}
+.luci-gasto.warn{color:#f59e0b}
+.luci-gasto.danger{color:#ef4444}
 </style>
 </head>
 <body>
@@ -13819,6 +13822,7 @@ initBarcodeScanner();
       <div>
         <h3>💬 Luciana</h3>
         <div class="sub">ASISTENTE IA</div>
+        <div id="luciGasto" class="luci-gasto">💰 Mes: ...</div>
       </div>
       <button class="luci-x" onclick="lucianaToggle()" title="Cerrar">×</button>
     </div>
@@ -13843,12 +13847,28 @@ function lucianaInit(){
   var fab = document.getElementById('luciFab');
   if(fab) fab.classList.add('on');
 }
+function lucianaLoadGasto(){
+  // Lee gasto del mes calendario y pinta chip arriba del modal.
+  // Verde <$10, amarillo $10-$20, rojo >$20.
+  var el = document.getElementById('luciGasto');
+  if(!el || !sess || sess.userRole !== 'ADMIN') return;
+  rpc('lucianaGastoMes', { userRole: sess.userRole }, function(r){
+    var usd = Number(r.totalUsd || 0);
+    el.textContent = '💰 Mes: $' + usd.toFixed(4) + ' USD (' + (r.preguntas || 0) + ')';
+    el.classList.remove('warn', 'danger');
+    if(usd > 20)      el.classList.add('danger');
+    else if(usd > 10) el.classList.add('warn');
+  }, function(){
+    el.textContent = '💰 Mes: ?';
+  });
+}
 function lucianaToggle(){
   var m = document.getElementById('luciModal');
   if(!m) return;
   var wasHidden = m.classList.contains('h');
   m.classList.toggle('h');
   if(wasHidden){
+    lucianaLoadGasto();
     var msgs = document.getElementById('luciMsgs');
     if(msgs && msgs.children.length === 0){
       // Primer saludo del dia: solo si no salude ya en este business_day.
@@ -13939,6 +13959,7 @@ function lucianaSend(){
       lucianaAddMsg(r.respuesta || '(respuesta vacia)', 'bot');
       lucianaClearFoto();
       reset();
+      lucianaLoadGasto();
     }, function(e){ fail(e.message || String(e)); });
   }
 
