@@ -7360,14 +7360,47 @@ async function apiAjusteInventarioV2(p, res) {
 //   (cache write = 1.25x input, cache read = 0.1x input)
 // El schema BD se cachea con cache_control:ephemeral (TTL 5min).
 
-const LUCIANA_SYSTEM_BASE =
-  'Eres Luciana, asistente IA del administrador de Casa 50 ' +
-  '(motel/spa en Cali, Colombia). Solo lectura: nunca modificas datos, ' +
-  'solo informas y sugieres. Responde en espanol, breve y claro. ' +
-  'Si no estas 100% segura, deci "no lo se" en vez de inventar. ' +
-  'Cuando el admin pregunte por datos, podes asumir que el conoce su sistema; ' +
-  'tu rol es ayudarlo a diagnosticar problemas usando el esquema de BD que se ' +
-  'detalla a continuacion.';
+// SYSTEM_BASE es funcion porque incluye el nombre del admin (cambia por usuario).
+// Sigue SIN cache (200 tokens, no significativo). El bloque cacheable es el SCHEMA_BD.
+function lucianaSystemBase(userName) {
+  return [
+    'Eres Luciana, asistente IA del administrador de Casa 50 (motel/spa en Cali, Colombia).',
+    'El admin que te esta hablando se llama ' + userName + '. Saludalo por su nombre y',
+    'tratalo con calidez, pero NO uses su nombre en cada mensaje forzadamente; solo',
+    'cuando suene natural.',
+    '',
+    'REGLAS DE ESTILO (importantes):',
+    '- Se MUY breve. Responde lo minimo necesario. NO expliques de mas.',
+    '- NO listes opciones a menos que el admin lo pida.',
+    '- NO repitas informacion del schema.',
+    '- Si la respuesta puede ser de 1 linea, que sea de 1 linea.',
+    '- Estilo: directo, amable, conciso. Como un mensaje de WhatsApp a un amigo,',
+    '  no como un informe.',
+    '',
+    'Ejemplos de tono:',
+    '- Pregunta: "Cuanto vendio Diana hoy?"',
+    '  MAL: "Hola Ruben, voy a consultar la base de datos para revisar..."',
+    '  BIEN: "Diana vendio $850.000 hoy."',
+    '- Pregunta: "Por que la 211 esta atascada?"',
+    '  BIEN: "Esta en MAID_PROGRESS con Ingrid Ruiz desde las 21:54.',
+    '         Probablemente no marco terminado."',
+    '',
+    'PERSONALIDAD:',
+    '- Calida pero profesional',
+    '- Amigable sin exagerar emojis',
+    '- Si descubris algo grave (descuadre importante), lo decis directo',
+    '- No sos servil ni excesivamente disculpativa',
+    '',
+    'PRINCIPIOS OPERATIVOS:',
+    '- Solo lectura: nunca modificas datos, solo informas y sugieres.',
+    '- Si no estas 100% segura, deci "no lo se" en vez de inventar.',
+    '- Tenes una herramienta query_supabase para consultar datos en vivo cuando',
+    '  haga falta. Usala con criterio - no la uses para cosas que ya estan',
+    '  resueltas en el schema. Si necesitas datos concretos (ej: comparar foto',
+    '  vs sistema, analizar descuadre, ver ventas de hoy), llamala.',
+    '- El admin conoce su sistema; tu rol es ayudarlo a diagnosticar problemas.'
+  ].join('\n');
+}
 
 const LUCIANA_SCHEMA_BD = `# Esquema de la base de datos Casa 50
 
@@ -7808,6 +7841,81 @@ de antes vs despues, considera esto:
   vencida hace >=30min. Antes podia haber falsos positivos.
 `;
 
+// ==================== LUCIANA — Tool Use (queries en vivo) ====================
+// Tool unica que Claude puede invocar para leer datos de la BD.
+// Tres capas defensivas: regex en JS, RPC luciana_query con read-only
+// transaction, y LIMIT 100 forzado. Detalle en migrations/20260525_luciana_query_rpc.sql.
+const LUCIANA_TOOL_QUERY = {
+  name: 'query_supabase',
+  description:
+    'Ejecuta una query SQL SELECT de solo lectura en la BD de Casa 50. ' +
+    'Solo SELECT (o WITH ... SELECT). Maximo 100 filas. Timeout 10s. ' +
+    'Solo las 22 tablas del schema descritas arriba. ' +
+    'NO se permiten INSERT/UPDATE/DELETE/DROP ni nada destructivo. ' +
+    'Devuelve un JSON array de objetos. ' +
+    'Usala cuando necesites datos concretos para responder al admin ' +
+    '(ej: descuadre del dia, ventas por turno, comparar foto vs sistema). ' +
+    'NO la uses para preguntas que podes contestar con el schema solo.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      sql: {
+        type: 'string',
+        description: 'Query SQL SELECT. Ejemplo: SELECT shift_id, SUM(total) ' +
+          'AS total FROM sales WHERE business_day = \'2026-05-25\' ' +
+          'AND anulada IS NOT TRUE GROUP BY shift_id'
+      }
+    },
+    required: ['sql']
+  }
+};
+
+const MAX_LUCIANA_ITER = 5;
+
+// Capa 1: validacion regex previa.
+function validarSqlLuciana(sqlRaw) {
+  const s = String(sqlRaw || '').trim();
+  if (!s) throw new Error('SQL vacio');
+  if (s.length > 2000) throw new Error('SQL muy largo (max 2000 chars)');
+  const sinFinal = s.replace(/;\s*$/, '');
+  if (sinFinal.includes(';')) throw new Error('No se permiten multiples statements');
+  if (!/^(SELECT|WITH)\s/i.test(sinFinal)) {
+    throw new Error('Solo SELECT (o WITH ... SELECT). Empieza con: ' + sinFinal.slice(0, 30));
+  }
+  const blacklist = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|COMMIT|ROLLBACK|CALL|COPY|VACUUM|REINDEX|CLUSTER|LOCK|REFRESH|REASSIGN|SET\s+ROLE|SET\s+SESSION|RESET|LISTEN|NOTIFY|PREPARE|DEALLOCATE|DISCARD|LOAD|FETCH|MOVE|DECLARE|CLOSE)\b/i;
+  if (blacklist.test(sinFinal)) {
+    throw new Error('Palabra clave no permitida en el SQL');
+  }
+  const schemasBloqueados = /\b(pg_catalog|information_schema|pg_user|pg_roles|pg_authid|pg_shadow|auth\.|storage\.|luciana_chats)\b/i;
+  if (schemasBloqueados.test(sinFinal)) {
+    throw new Error('No se puede consultar esquemas internos ni luciana_chats');
+  }
+  return sinFinal;
+}
+
+// Capa 3: limite 100 filas. Si ya tiene LIMIT, lo capamos a 100.
+// Si no, envolvemos en subquery.
+function envolverConLimit(sql) {
+  if (/\bLIMIT\s+\d+/i.test(sql)) {
+    return sql.replace(/\bLIMIT\s+(\d+)/i, function(_, n) {
+      return 'LIMIT ' + Math.min(Number(n), 100);
+    });
+  }
+  return 'SELECT * FROM (' + sql + ') AS luciana_sub LIMIT 100';
+}
+
+async function ejecutarQueryLuciana(sqlRaw) {
+  const sqlValidado = validarSqlLuciana(sqlRaw);
+  const sqlLimitado = envolverConLimit(sqlValidado);
+  const { data, error } = await supabase.rpc('luciana_query', { query_text: sqlLimitado });
+  if (error) throw new Error(error.message);
+  // La RPC devuelve {error: msg} si fallo el EXECUTE interno (ej: tabla no existe)
+  if (data && typeof data === 'object' && !Array.isArray(data) && data.error) {
+    throw new Error(data.error);
+  }
+  return Array.isArray(data) ? data : [];
+}
+
 async function apiLucianaChat(p, res) {
   // Validacion estricta: SOLO admin
   if (String(p.userRole || '').toUpperCase() !== 'ADMIN') {
@@ -7873,23 +7981,69 @@ async function apiLucianaChat(p, res) {
     console.error('luciana historial load error:', e);
   }
 
-  let response;
-  try {
-    response = await anthropic.messages.create({
-      model: LUCIANA_MODEL,
-      max_tokens: 4000,
-      // System en 2 bloques: base corto sin cache + schema BD largo con
-      // cache_control ephemeral (TTL 5min). Primera pregunta paga write
-      // (1.25x). Siguientes dentro de 5min pagan read (0.1x).
-      system: [
-        { type: 'text', text: LUCIANA_SYSTEM_BASE },
-        { type: 'text', text: LUCIANA_SCHEMA_BD, cache_control: { type: 'ephemeral' } }
-      ],
-      messages: [...historial, { role: 'user', content: userContent }]
-    });
-  } catch (e) {
-    console.error('Anthropic error:', e);
-    return err(res, 'Luciana no disponible: ' + (e.message || 'error'), 502);
+  // Loop tool_use: Claude puede pedir query_supabase y nosotros la ejecutamos.
+  // Hasta MAX_LUCIANA_ITER iteraciones para evitar loops infinitos.
+  // Acumulamos tokens de TODAS las iteraciones para auditoria de costo.
+  let messages = [...historial, { role: 'user', content: userContent }];
+  let response = null;
+  let totIn = 0, totOut = 0, totCR = 0, totCW = 0;
+  let queriesEjecutadas = 0;
+
+  for (let iter = 0; iter < MAX_LUCIANA_ITER; iter++) {
+    try {
+      response = await anthropic.messages.create({
+        model: LUCIANA_MODEL,
+        max_tokens: 4000,
+        tools: [LUCIANA_TOOL_QUERY],
+        // System en 2 bloques: base corto sin cache + schema BD con
+        // cache_control ephemeral (TTL 5min).
+        system: [
+          { type: 'text', text: lucianaSystemBase(userName) },
+          { type: 'text', text: LUCIANA_SCHEMA_BD, cache_control: { type: 'ephemeral' } }
+        ],
+        messages: messages
+      });
+    } catch (e) {
+      console.error('Anthropic error iter ' + iter + ':', e);
+      return err(res, 'Luciana no disponible: ' + (e.message || 'error'), 502);
+    }
+
+    const u = response.usage || {};
+    totIn  += u.input_tokens  || 0;
+    totOut += u.output_tokens || 0;
+    totCR  += u.cache_read_input_tokens     || 0;
+    totCW  += u.cache_creation_input_tokens || 0;
+
+    if (response.stop_reason !== 'tool_use') break;
+
+    // Procesar cada tool_use block y armar tool_results
+    const toolUses = (response.content || []).filter(b => b.type === 'tool_use');
+    const toolResults = [];
+    for (const tu of toolUses) {
+      queriesEjecutadas++;
+      let content, isError = false;
+      try {
+        const sql = String((tu.input || {}).sql || '');
+        const rows = await ejecutarQueryLuciana(sql);
+        content = JSON.stringify(rows);
+        // Truncar respuestas gigantes para no romper el contexto de Claude
+        if (content.length > 50000) {
+          content = content.slice(0, 50000) + '...[TRUNCADO ' + content.length + ' chars totales]';
+        }
+      } catch (e) {
+        content = 'Error: ' + (e.message || 'unknown');
+        isError = true;
+      }
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: tu.id,
+        content: content,
+        is_error: isError
+      });
+    }
+    // Appendear assistant (con tool_use blocks) + user (con tool_results)
+    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'user', content: toolResults });
   }
 
   const respuesta = (response.content || [])
@@ -7898,13 +8052,8 @@ async function apiLucianaChat(p, res) {
     .join('\n')
     .trim();
 
-  const u = response.usage || {};
-  const tokensIn   = u.input_tokens || 0;
-  const tokensOut  = u.output_tokens || 0;
-  const cacheRead  = u.cache_read_input_tokens || 0;
-  const cacheWrite = u.cache_creation_input_tokens || 0;
   // Costo USD: input $3, output $15, cache_write $3.75 (1.25x), cache_read $0.30 (0.1x)
-  const costoUsd = (tokensIn * 3 + tokensOut * 15 + cacheWrite * 3.75 + cacheRead * 0.30) / 1_000_000;
+  const costoUsd = (totIn * 3 + totOut * 15 + totCW * 3.75 + totCR * 0.30) / 1_000_000;
 
   // Guardar en BD (best-effort: si falla, igual devolvemos la respuesta)
   try {
@@ -7915,10 +8064,10 @@ async function apiLucianaChat(p, res) {
       pregunta,
       respuesta,
       foto_url: fotoUrl,
-      tokens_input: tokensIn,
-      tokens_output: tokensOut,
-      tokens_cache_read: cacheRead,
-      tokens_cache_write: cacheWrite,
+      tokens_input: totIn,
+      tokens_output: totOut,
+      tokens_cache_read: totCR,
+      tokens_cache_write: totCW,
       costo_usd: costoUsd
     });
   } catch (e) {
@@ -7927,8 +8076,9 @@ async function apiLucianaChat(p, res) {
 
   return ok(res, {
     respuesta,
-    tokensIn,
-    tokensOut,
+    tokensIn: totIn,
+    tokensOut: totOut,
+    queries: queriesEjecutadas,
     costoUsd: Number(costoUsd.toFixed(6))
   });
 }
