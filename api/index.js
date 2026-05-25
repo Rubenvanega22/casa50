@@ -7353,7 +7353,460 @@ async function apiAjusteInventarioV2(p, res) {
 // Fase 3 minimal: pregunta texto -> Claude -> respuesta + guardado.
 // Sin foto, sin cache, sin historial, sin schema BD. Solo conexion E2E.
 //
-// Costos claude-sonnet-4-6: $3/1M input, $15/1M output.
+// Costos claude-sonnet-4-6 (USD por 1M tokens):
+//   input normal:  $3      | output:           $15
+//   cache write:   $3.75   | cache read:       $0.30
+//   (cache write = 1.25x input, cache read = 0.1x input)
+// El schema BD se cachea con cache_control:ephemeral (TTL 5min).
+
+const LUCIANA_SYSTEM_BASE =
+  'Eres Luciana, asistente IA del administrador de Casa 50 ' +
+  '(motel/spa en Cali, Colombia). Solo lectura: nunca modificas datos, ' +
+  'solo informas y sugieres. Responde en espanol, breve y claro. ' +
+  'Si no estas 100% segura, deci "no lo se" en vez de inventar. ' +
+  'Cuando el admin pregunte por datos, podes asumir que el conoce su sistema; ' +
+  'tu rol es ayudarlo a diagnosticar problemas usando el esquema de BD que se ' +
+  'detalla a continuacion.';
+
+const LUCIANA_SCHEMA_BD = `# Esquema de la base de datos Casa 50
+
+Casa 50 es un motel/spa en Cali, Colombia. Atiende habitaciones por horas
+(3h, 6h, 8h, 12h) y vende productos de bar a los huespedes. Opera 24/7
+con 3 turnos: SHIFT_1 (6am-2pm), SHIFT_2 (2pm-9pm), SHIFT_3 (9pm-6am).
+Los domingos hay 2 turnos 12h: SHIFT_1_12 (6am-6pm) y SHIFT_2_12 (6pm-6am,
+que se NORMALIZA en BD a SHIFT_3). El "business_day" cambia a las 6am,
+no a las 00:00.
+
+Roles: ADMIN, RECEPTION, MAID (camarera), MAINTENANCE (mantenedor).
+
+Metodos de pago: EFECTIVO, TARJETA, NEQUI, MIXTO (mas de un metodo en
+la misma venta, usa amount_1/2/3 + pay_method/pay_method_2).
+
+REGLA CRITICA: shift_id, business_day y los conteos iniciales de un turno
+son INMUTABLES en BD. Si ves datos viejos, son validos para ese momento
+aunque hoy parezcan raros.
+
+---
+
+## sales - ventas de habitacion
+Cada check-in, extension de tiempo, hora gratis, renovacion, cambio de
+habitacion o anulacion crea o modifica una fila aca.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_role, user_name
+- type: SALE (check-in normal) | EXTENSION (renovacion de tiempo) |
+  EXTRA_HOUR (extension pagada por hora) | EXTRA_PERSON (persona adicional) |
+  ROOM_CHANGE (cambio de habitacion, sale anterior anulada + sale nueva) |
+  REFUND (devolucion) | HORA_GRATIS (cortesia) | ANULADA (marcador
+  historico cuando aplica)
+- room_id, category (Junior, Suite Jacuzzi, Presidencial, Suite Multiple,
+  Suite Disco)
+- duration_hrs (3/6/8/12), base_price, people, included_people,
+  extra_people, extra_people_value, extra_hours, extra_hours_value
+- total (lo que efectivamente cobro)
+- pay_method (EFECTIVO/TARJETA/NEQUI/MIXTO), paid_with, change_given
+- pay_method_2, amount_1, amount_2, amount_3 (para MIXTO)
+- check_in_ms, due_ms, checkout_ms
+- anulada (bool), anulada_ms, anulada_por
+- editada (bool), editada_ms, editada_por, motivo_edicion
+- devolucion_efectivo (bool), devolucion_metodo_original
+- refund_reason (si es REFUND)
+- arrival_type (CARRO/MOTO/A_PIE), arrival_plate
+- note
+
+Si anulada=true, NO contar en cuadres. Edicion se registra con motivo.
+
+---
+
+## room_products - ventas de bar a una habitacion
+Productos consumidos por huespedes. Una fila por linea de venta.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, room_id, check_in_ms
+- product_id, product_name, cantidad, precio_unit, total
+- pay_method (mismo set que sales)
+- user_name (quien registro la venta)
+- is_cortesia (bool), cortesia_destinatario (a quien se la regalaron)
+- created_by_admin (true si admin la agrego manualmente)
+- tipo_ajuste, motivo_ajuste (si fue correccion)
+
+Cortesias NO afectan caja pero SI afectan stock.
+
+---
+
+## shift_close - cierre de turno (cuadre)
+Una fila cada vez que RECEPTION o ADMIN cierra un turno.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_name
+- total_sales, total_refunds, total_taxi, total_loans, total_extra_staff
+- total_efectivo, total_tarjeta, total_nequi (suma por metodo)
+- net (sales - refunds - taxi - loans - extra_staff)
+- rooms_sold, people
+- cash_count (efectivo contado al cierre), cash_billetes, cash_monedas
+- notes
+
+Si cash_count != total_efectivo esperado, hay descuadre. Diferencia
+positiva = sobrante, negativa = faltante.
+
+---
+
+## shift_inventory_start - inventario inicial del turno (INMUTABLE)
+Por cada producto, cuanto habia al ABRIR el turno. Snapshot, nunca se actualiza.
+
+PK compuesta: business_day + shift_id + product_id
+- saldo_inicial, ts_ms, created_by, created_at
+
+Sirve para validar el inventario del turno:
+saldo_inicial + ingresos - ventas - cortesias = saldo_final esperado.
+
+---
+
+## stock_movements - movimientos de stock (auditoria completa)
+Cada cambio de stock crea una fila. Es la fuente de verdad para auditar
+descuadres de inventario.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_name, user_role
+- product_id, product_name, cantidad (positivo = entra, negativo = sale)
+- tipo (string), nota
+
+Valores conocidos de tipo:
+- venta_bar - venta normal al huesped (resta stock_actual)
+- venta_bar_cortesia - cortesia durante venta (resta stock_actual, no afecta caja)
+- edit_venta_bar - correccion de venta existente (ajusta delta)
+- delete_venta_bar - venta borrada (devuelve al stock)
+- cortesia_bar - cortesia suelta (no asociada a venta)
+- ajuste_venta_olvidada - venta cargada despues del cierre
+- ajuste_venta_duplicada - correccion por doble carga
+- ajuste_cambio_producto - cambio de producto en venta existente
+- ajuste_metodo_pago (DEPRECATED - no usar para nuevos analisis,
+  se reemplazo por payment_method_changes desde el Fix 3 del 23 may)
+- ajuste_manual - ajuste libre por admin
+- recepcion_conteo - conteo fisico de recepcion al cambio de turno
+- ingreso_bodega - compra/ingreso a bodega (suma stock_bodega)
+- traslado_recepcion - pasaje de bodega a recepcion (resta bodega, suma actual)
+- devolucion_bodega - pasaje de recepcion a bodega (resta actual, suma bodega)
+
+Para diagnosticar descuadres: sumar todos los movimientos del rango
+contra cambio neto en products.stock_actual / stock_bodega.
+
+---
+
+## taxi_expenses - gastos de taxi
+Gastos por taxi pagados por la caja.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_role, user_name
+- amount, note, room_id (si fue para huesped especifico)
+- anulada, anulada_ms, anulada_por, motivo_anulacion
+- editada, editada_ms, editada_por, motivo_edicion, amount_original
+
+Resta de caja. Si anulada=true, NO descontar.
+
+---
+
+## general_expenses - gastos generales del turno
+Gastos varios cargados por RECEPTION durante el turno (compras chicas,
+servicios, propinas operativas).
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_name
+- description, amount, category (texto libre)
+
+Suma a "total_extra" en el cuadre del turno.
+
+---
+
+## gastos_mes - gastos del mes (vista admin)
+Gastos cargados por ADMIN en la pestania "Gastos" agrupados por mes.
+
+Columnas clave:
+- id, ts_ms, fecha (date), mes (text 'YYYY-MM')
+- categoria (texto libre), concepto, monto, pay_method
+- created_by, edited_ms, edited_by, motivo_edicion, monto_original
+- anulada, anulada_ms, anulada_por, motivo_anulacion
+
+Son gastos fijos/grandes (alquiler, servicios, impuestos, sueldos).
+No afectan caja del turno; son para reportes mensuales.
+
+---
+
+## loans - prestamos a personal
+Prestamos en efectivo a empleados que descuentan de la caja.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_name (quien lo registro)
+- borrower_name (a quien se le presto), amount, note
+- anulada, anulada_ms, anulada_por, motivo_anulacion
+- editada, editada_ms, editada_por, motivo_edicion, amount_original
+- manual (bool), motivo_manual
+
+Descuentan de total_loans en shift_close.
+
+---
+
+## extra_staff - personal extra del turno
+Empleados temporales contratados solo para un turno (suma a gastos).
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, registered_by
+- person_name, area, payment, work_hours
+- entry_ms, exit_ms, scheduled_exit_ms, active
+- paid_ms, paid_by
+- anulada, anulada_ms, anulada_por, motivo_anulacion
+- editada, editada_ms, editada_por, motivo_edicion, payment_original
+
+El pago suma a total_extra_staff en shift_close.
+
+---
+
+## caja_paola - caja secundaria (operativa de Paola)
+Movimientos de una caja paralela manejada por Paola (admin secundaria).
+Se aprueba antes de incluirse en cuadres.
+
+Columnas clave:
+- id, ts_ms, fecha (date), mes (text)
+- tipo, monto, concepto, nota
+- estado (PENDIENTE / APROBADA / RECHAZADA u similar - verificar en operacion)
+- created_by, approved_ms, approved_by
+- edited_ms, edited_by
+- anulada, anulada_ms, anulada_por, motivo_anulacion
+
+Solo cuentan las APROBADAS.
+
+---
+
+## descargos_nequi - descargos de Nequi
+Cuando se descarga dinero acumulado en Nequi (transferencia a banco /
+retiro en efectivo). Mensual, no por turno.
+
+Columnas clave:
+- id, ts_ms, fecha (date), mes (text)
+- monto, nota, created_by
+- anulada, anulada_ms, anulada_por
+
+Sirve para reconciliar saldo de Nequi: total_nequi (acumulado de ventas)
+- descargos = saldo actual estimado en la app.
+
+---
+
+## retiros_dueno - retiros del dueno
+Retiros de efectivo del dueno (Ruben) desde caja.
+
+Columnas clave:
+- id, ts_ms, business_day, dia_origen, shift_id
+- monto, pay_method (solo EFECTIVO o NEQUI), motivo
+- user_name, user_role
+- anulado, anulado_ms, anulado_por, motivo_anulacion
+
+Descuentan de caja.
+
+---
+
+## ventas_gastos_anuales - agregados anuales por mes
+Snapshot anual de ventas/gastos por mes (12 columnas de ventas + 12
+de gastos). Editable por admin para reportes historicos.
+
+Columnas: id, ano, ventas_ene..ventas_dic, gastos_ene..gastos_dic,
+edited_ms, edited_by.
+
+Source de la pestania "Resumen mensual" anual.
+
+---
+
+## rooms - estado actual de cada habitacion
+Una fila por habitacion. Es el estado VIGENTE, no historico.
+
+Columnas clave:
+- room_id (PK), floor, category
+- state: LIBRE | OCUPADA | LIMPIEZA | CONTAMINADA | DISPONIBLE |
+  MAID_PROGRESS | RETOQUE
+- state_since_ms, people, check_in_ms, due_ms, last_checkout_ms
+- pay_method (ultimo usado)
+- note_minor (bool), note_minor_text, note_minor_date_ms
+- disabled (bool), disabled_reason, disabled_date_ms
+- last_maid_name, last_maid_done_ms, last_maid_contaminated
+- maid_in_progress (bool), maid_name_progress, retoque (bool)
+- arrival_type, arrival_plate, alarm_silenced_ms,
+  alarm_silenced_for_due_ms
+- contaminated_since_ms, checkout_obs, barcode
+
+Si una habitacion "se atasca" suele ser por state que no transiciona
+(ej: queda en MAID_PROGRESS porque la camarera no marco terminado).
+
+---
+
+## staff - personal
+Empleados con sus datos personales.
+
+Columnas: id, name, area, type, active, cedula, celular, direccion,
+contacto_emergencia, fecha_nacimiento, fecha_ingreso, fecha_vacaciones.
+
+Si active=false, esta dado de baja. fecha_vacaciones marca el periodo
+actual de vacaciones.
+
+---
+
+## maid_log - log de actividad de camareras
+Cada inicio/fin de limpieza de habitacion. Tambien entradas/salidas
+del turno.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, maid_name, room_id
+- action: INICIO_LIMPIEZA | FIN_LIMPIEZA | CANCELAR | ENTRADA |
+  SALIDA | RETOQUE
+- state, state_from, state_to (transicion del cuarto)
+- started_ms, finished_ms (duracion real de la limpieza)
+- check_in_ms, checkout_ms, category (del cuarto que limpio)
+- note, exit_ms
+
+Para auditoria: cuantas habitaciones limpio X camarera hoy?
+cuanto tardo en promedio?
+
+---
+
+## room_issues - reportes de dano / mantenimiento
+Danos reportados por recepcion/camarera/admin sobre habitaciones o
+zonas comunes.
+
+Columnas clave:
+- id, ubicacion_tipo (habitacion/zona_comun), ubicacion_id (room_id si
+  aplica), room_id (legacy)
+- type, description, prioridad (BAJA/MEDIA/ALTA)
+- estado: NOTA_ACTIVA | ESPERA_VERIFICACION | RECHAZADO_VERIFICACION |
+  RESUELTO | PENDIENTE_RECEPCION
+- reportado_por_rol, reportado_ms, created_by, business_day, shift_id
+- foto_dano_url, foto_arreglo_url
+- aprobado_por, aprobado_ms, comentario_recepcion
+- arreglado_por, arreglado_ms, arreglo_nota
+- verificado_por, verificado_ms, motivo_rechazo
+- editada/editada_por/editada_ms
+- anulada/anulada_por/anulada_ms/motivo_anulacion
+- revisiones (jsonb - array de revisiones rechazadas con motivo)
+- visto_por_admin (bool), visto_por_admin_ms
+
+Flujo: reporta (NOTA_ACTIVA) -> mantenedor arregla
+(ESPERA_VERIFICACION) -> recepcion verifica -> RESUELTO o
+RECHAZADO_VERIFICACION (vuelve a NOTA_ACTIVA).
+
+---
+
+## shift_notes - informes/notas del turno
+Notas que escriben los roles para comunicarse o reportar.
+
+Columnas clave:
+- id, ts_ms, business_day, shift_id, user_role, user_name
+- note, target (ALL/ADMIN/MAID/RECEPTION - a quien va dirigida)
+- photo_url
+- is_deleted (bool), deleted_by, deleted_ms
+- seen_by (texto con quien la vio)
+- pasado_a_mantenimiento (bool)
+- respuestas (jsonb - array de respuestas anidadas)
+
+target define visibilidad en pestania Informes. Si is_deleted=true,
+no contar.
+
+---
+
+## products - catalogo de productos del bar
+Productos disponibles para venta.
+
+Columnas: id, nombre, codigo_barras, precio, precio_compra, categoria,
+stock_actual (recepcion), stock_bodega, stock_minimo, activo.
+
+stock_actual = lo que hay en recepcion listo para vender.
+stock_bodega = lo que esta guardado.
+
+REGLA CRITICA: stock_actual y stock_bodega NUNCA se updatean
+directamente con UPDATE. SIEMPRE via RPCs atomicos
+apply_stock_actual_delta(product_id, delta) y
+apply_stock_bodega_delta(product_id, delta) que evitan race conditions
+en ventas concurrentes (Fix 1 del 23 may).
+
+Si ves un cambio de stock que no paso por stock_movements, es un bug.
+
+---
+
+## payment_method_changes - cambios de metodo de pago
+Cada vez que admin cambia el metodo de pago de una venta (sale o
+room_product).
+
+Columnas clave:
+- id, sale_id (nullable), room_product_id (nullable - uno de los dos
+  debe estar)
+- changed_at_ms, business_day, shift_id, user_role, user_name
+- old_pay_method, old_pay_method_2, old_amount_1/2/3
+- new_pay_method, new_pay_method_2, new_amount_1/2/3
+- total, reason
+
+Si una venta cambio de TARJETA -> EFECTIVO, debe haber una fila aca.
+La venta original conserva su pay_method actualizado.
+
+room_product_id es lo que se sumo en el Fix 3 del 23 may para soportar
+cambios de metodo sobre ventas de bar (antes solo sales).
+
+---
+
+## shift_log - log de login/logout de turnos
+Cada entrada (LOGIN) y salida (LOGOUT) de un usuario operativo.
+
+Columnas: id, ts_ms, business_day, shift_id, user_role, user_name,
+action (LOGIN/LOGOUT), logout_ms, released (bool - true cuando el turno
+cerro cuadre).
+
+Util para auditar: quien abrio el turno SHIFT_2 del 2026-05-25?
+se cerro ya?
+
+---
+
+## Reglas generales
+
+1. Timestamps: ts_ms es epoch en milisegundos (Bogota local convertido).
+   created_at es timestamptz cuando existe.
+2. Anulacion: si una fila tiene anulada=true (o anulado=true en
+   retiros_dueno), NO la sumes a metricas (a menos que el usuario te
+   pida ver anuladas).
+3. Edicion: editada=true significa que el monto/datos cambio
+   posteriormente. amount_original / monto_original / payment_original
+   guarda el valor previo.
+4. Multi-turno 12h: si ves shift_id=SHIFT_3 pero la hora de ts_ms es
+   6am-6pm de domingo, probablemente fue un SHIFT_2_12 normalizado.
+5. Nunca modifiques datos: solo lees y sugieres. Si el admin necesita
+   cambiar algo, decile que endpoint/modulo de la app usar.
+
+---
+
+## Contexto: fixes recientes (23 may 2026)
+
+Hubo una serie de fixes importantes el 23 de mayo. Si analizas datos
+de antes vs despues, considera esto:
+
+- Fix 1 (atomic stock RPCs - commit 81c1a37 + d027252): se crearon
+  apply_stock_actual_delta y apply_stock_bodega_delta. Antes, updates
+  de stock con UPDATE simple podian pisarse en ventas concurrentes.
+  Despues del 23 may, todo cambio de stock pasa por estos RPCs.
+
+- Fix 2 (stock_movements completo - commit b59c951): se sumo la
+  escritura de stock_movements en TODAS las operaciones de venta de
+  bar: venta, edit, delete, cortesia. Antes, ventas de bar NO dejaban
+  rastro en stock_movements (solo se actualizaba stock_actual directo).
+  Despues del 23 may, los tipos venta_bar / venta_bar_cortesia /
+  edit_venta_bar / delete_venta_bar / cortesia_bar aparecen aca.
+  Si auditas stock_movements de antes del 23 may para entender ventas
+  de bar, NO los vas a encontrar - usa room_products en ese caso.
+
+- Fix 3 (payment_method_changes para bar - commit e8c6311): se sumo
+  room_product_id a payment_method_changes. Antes, cambios de metodo
+  de pago sobre ventas de bar se registraban con tipo='ajuste_metodo_pago'
+  en stock_movements (deprecated). Despues del 23 may, van limpios a
+  payment_method_changes con room_product_id.
+
+- Fix auto-cobro (commit 184b8e0): el auto-cobro de horas vencidas
+  ahora rechaza si el servidor no confirma que la habitacion esta
+  vencida hace >=30min. Antes podia haber falsos positivos.
+`;
+
 async function apiLucianaChat(p, res) {
   // Validacion estricta: SOLO admin
   if (String(p.userRole || '').toUpperCase() !== 'ADMIN') {
@@ -7371,14 +7824,6 @@ async function apiLucianaChat(p, res) {
   const bDay = businessDay(now);
   const userName = String(p.userName || 'admin').slice(0, 100);
   const fotoUrl = String(p.fotoUrl || '').trim() || null;
-
-  // System prompt minimal para esta fase. En Fase 7 le metemos el schema
-  // de las 14 tablas + cache_control.
-  const systemPrompt =
-    'Eres Luciana, asistente IA del administrador de Casa 50 ' +
-    '(motel/spa en Cali, Colombia). Solo lectura: nunca modificas datos, ' +
-    'solo informas y sugieres. Responde en espanol, breve y claro. ' +
-    'Si no estas 100% segura, deci "no lo se" en vez de inventar.';
 
   // Si vino foto, fetchear y convertir a base64 para vision.
   // Restringimos a URLs del propio bucket por seguridad (evita SSRF).
@@ -7412,7 +7857,13 @@ async function apiLucianaChat(p, res) {
     response = await anthropic.messages.create({
       model: LUCIANA_MODEL,
       max_tokens: 4000,
-      system: systemPrompt,
+      // System en 2 bloques: base corto sin cache + schema BD largo con
+      // cache_control ephemeral (TTL 5min). Primera pregunta paga write
+      // (1.25x). Siguientes dentro de 5min pagan read (0.1x).
+      system: [
+        { type: 'text', text: LUCIANA_SYSTEM_BASE },
+        { type: 'text', text: LUCIANA_SCHEMA_BD, cache_control: { type: 'ephemeral' } }
+      ],
       messages: [{ role: 'user', content: userContent }]
     });
   } catch (e) {
@@ -7420,17 +7871,19 @@ async function apiLucianaChat(p, res) {
     return err(res, 'Luciana no disponible: ' + (e.message || 'error'), 502);
   }
 
-  // Extraer texto. content es array de bloques; en esta fase solo hay text.
   const respuesta = (response.content || [])
     .filter(b => b.type === 'text')
     .map(b => b.text)
     .join('\n')
     .trim();
 
-  const tokensIn  = response.usage?.input_tokens  || 0;
-  const tokensOut = response.usage?.output_tokens || 0;
-  // Costo USD (sin cache en esta fase): in*$3/1M + out*$15/1M
-  const costoUsd = (tokensIn * 3 + tokensOut * 15) / 1_000_000;
+  const u = response.usage || {};
+  const tokensIn   = u.input_tokens || 0;
+  const tokensOut  = u.output_tokens || 0;
+  const cacheRead  = u.cache_read_input_tokens || 0;
+  const cacheWrite = u.cache_creation_input_tokens || 0;
+  // Costo USD: input $3, output $15, cache_write $3.75 (1.25x), cache_read $0.30 (0.1x)
+  const costoUsd = (tokensIn * 3 + tokensOut * 15 + cacheWrite * 3.75 + cacheRead * 0.30) / 1_000_000;
 
   // Guardar en BD (best-effort: si falla, igual devolvemos la respuesta)
   try {
@@ -7443,8 +7896,8 @@ async function apiLucianaChat(p, res) {
       foto_url: fotoUrl,
       tokens_input: tokensIn,
       tokens_output: tokensOut,
-      tokens_cache_read: 0,
-      tokens_cache_write: 0,
+      tokens_cache_read: cacheRead,
+      tokens_cache_write: cacheWrite,
       costo_usd: costoUsd
     });
   } catch (e) {
