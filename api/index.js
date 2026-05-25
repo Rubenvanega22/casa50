@@ -11,11 +11,17 @@
 //  - shift_failures: registro de fallas por turno
 // ============================================================
 const { createClient } = require('@supabase/supabase-js');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
+});
+const LUCIANA_MODEL = 'claude-sonnet-4-6';
 
 // ==================== PRECIOS ====================
 const MASTER_PRICING = {
@@ -310,6 +316,7 @@ module.exports = async function handler(req, res) {
       case 'listRoomProductsTurno': return await apiListRoomProductsTurno(payload, res);
       case 'getBitacoraMantenedor':  return await apiGetBitacoraMantenedor(payload, res);
       case 'saveBitacoraMantenedor': return await apiSaveBitacoraMantenedor(payload, res);
+      case 'lucianaChat':         return await apiLucianaChat(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -7339,5 +7346,87 @@ async function apiAjusteInventarioV2(p, res) {
     afectaCuadre: afectaCuadre,
     valorAfectado: valorAfectado,
     nuevoStockBodega: nuevoStockBod
+  });
+}
+
+// ==================== LUCIANA (asistente IA admin) ====================
+// Fase 3 minimal: pregunta texto -> Claude -> respuesta + guardado.
+// Sin foto, sin cache, sin historial, sin schema BD. Solo conexion E2E.
+//
+// Costos claude-sonnet-4-6: $3/1M input, $15/1M output.
+async function apiLucianaChat(p, res) {
+  // Validacion estricta: SOLO admin
+  if (String(p.userRole || '').toUpperCase() !== 'ADMIN') {
+    return err(res, 'Solo el administrador puede usar Luciana', 403);
+  }
+  const pregunta = String(p.pregunta || '').trim();
+  if (!pregunta) return err(res, 'Pregunta vacia', 400);
+  if (pregunta.length > 4000) return err(res, 'Pregunta muy larga (max 4000)', 400);
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return err(res, 'ANTHROPIC_API_KEY no configurada en Vercel', 500);
+  }
+
+  const now = Date.now();
+  const bDay = businessDay(now);
+  const userName = String(p.userName || 'admin').slice(0, 100);
+
+  // System prompt minimal para esta fase. En Fase 7 le metemos el schema
+  // de las 14 tablas + cache_control.
+  const systemPrompt =
+    'Eres Luciana, asistente IA del administrador de Casa 50 ' +
+    '(motel/spa en Cali, Colombia). Solo lectura: nunca modificas datos, ' +
+    'solo informas y sugieres. Responde en espanol, breve y claro. ' +
+    'Si no estas 100% segura, deci "no lo se" en vez de inventar.';
+
+  let response;
+  try {
+    response = await anthropic.messages.create({
+      model: LUCIANA_MODEL,
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: pregunta }]
+    });
+  } catch (e) {
+    console.error('Anthropic error:', e);
+    return err(res, 'Luciana no disponible: ' + (e.message || 'error'), 502);
+  }
+
+  // Extraer texto. content es array de bloques; en esta fase solo hay text.
+  const respuesta = (response.content || [])
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('\n')
+    .trim();
+
+  const tokensIn  = response.usage?.input_tokens  || 0;
+  const tokensOut = response.usage?.output_tokens || 0;
+  // Costo USD (sin cache en esta fase): in*$3/1M + out*$15/1M
+  const costoUsd = (tokensIn * 3 + tokensOut * 15) / 1_000_000;
+
+  // Guardar en BD (best-effort: si falla, igual devolvemos la respuesta)
+  try {
+    await supabase.from('luciana_chats').insert({
+      ts_ms: now,
+      user_name: userName,
+      business_day: bDay,
+      pregunta,
+      respuesta,
+      foto_url: null,
+      tokens_input: tokensIn,
+      tokens_output: tokensOut,
+      tokens_cache_read: 0,
+      tokens_cache_write: 0,
+      costo_usd: costoUsd
+    });
+  } catch (e) {
+    console.error('luciana_chats insert error:', e);
+  }
+
+  return ok(res, {
+    respuesta,
+    tokensIn,
+    tokensOut,
+    costoUsd: Number(costoUsd.toFixed(6))
   });
 }
