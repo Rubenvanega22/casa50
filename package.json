@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Sistema Casa 50 Spa Motel",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@supabase/supabase-js": "^2.39.0"
   }
 }
