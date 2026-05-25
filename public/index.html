@@ -170,6 +170,28 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)}}
 /* Badge rojo en pestaña Mantenimiento (daños no vistos por admin) */
 .tabBadge{display:inline-block;margin-left:4px;background:#ef4444;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:10px;animation:blink 1.2s ease-in-out infinite;vertical-align:middle}
+/* ==================== LUCIANA — asistente IA admin ==================== */
+.luci-fab{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#7c5cfc;color:#fff;border:none;font-size:26px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9998;display:none;align-items:center;justify-content:center;transition:transform .15s}
+.luci-fab:hover{transform:scale(1.08)}
+.luci-fab.on{display:flex}
+.luci-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px}
+.luci-modal.h{display:none}
+.luci-panel{background:#18181f;border:1px solid #2e2e3a;border-radius:14px;width:100%;max-width:420px;height:80vh;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.luci-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#22222c;border-bottom:1px solid #2e2e3a}
+.luci-head h3{margin:0;font-size:15px;color:#a78bfa;font-weight:900}
+.luci-head .sub{font-size:10px;color:#6b7280;letter-spacing:1px}
+.luci-x{background:transparent;border:none;color:#9ca3af;font-size:22px;cursor:pointer;padding:0 4px;line-height:1}
+.luci-x:hover{color:#fff}
+.luci-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.luci-msg{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap}
+.luci-msg-bot{background:#22222c;color:#e5e7eb;align-self:flex-start;border-bottom-left-radius:3px}
+.luci-msg-user{background:#7c5cfc;color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.luci-msg-sys{background:transparent;color:#6b7280;align-self:center;font-size:11px;font-style:italic;max-width:100%;text-align:center}
+.luci-input{display:flex;gap:6px;padding:10px;border-top:1px solid #2e2e3a;background:#22222c}
+.luci-input input{flex:1;background:#0f0f17;border:1px solid #2e2e3a;color:#e5e7eb;border-radius:8px;padding:8px 10px;font-size:13px;outline:none;margin:0}
+.luci-input input:focus{border-color:#7c5cfc}
+.luci-input button{background:#7c5cfc;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer}
+.luci-input button:disabled{opacity:.4;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -1705,6 +1727,7 @@ actualizarBtnCaja();
       renderMultiMaidBtn();
     });
   }
+  if(sess.userRole==='ADMIN') lucianaInit();
   loadNotes();
 }
 function actualizarBtnCaja(){
@@ -13782,6 +13805,73 @@ function filRoomCat(cat){
 initBarcodeScanner();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<!-- ==================== LUCIANA — boton flotante + modal ==================== -->
+<button id="luciFab" class="luci-fab" onclick="lucianaToggle()" title="Hablar con Luciana">💬</button>
+<div id="luciModal" class="luci-modal h" onclick="lucianaBgClick(event)">
+  <div class="luci-panel" onclick="event.stopPropagation()">
+    <div class="luci-head">
+      <div>
+        <h3>💬 Luciana</h3>
+        <div class="sub">ASISTENTE IA</div>
+      </div>
+      <button class="luci-x" onclick="lucianaToggle()" title="Cerrar">×</button>
+    </div>
+    <div class="luci-msgs" id="luciMsgs"></div>
+    <div class="luci-input">
+      <input id="luciIn" type="text" placeholder="Escribi tu pregunta..." onkeydown="if(event.key==='Enter')lucianaSend()" maxlength="4000">
+      <button id="luciBtn" onclick="lucianaSend()">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== LUCIANA — UI (Fase 4: sin conexion al backend) ====================
+function lucianaInit(){
+  var fab = document.getElementById('luciFab');
+  if(fab) fab.classList.add('on');
+}
+function lucianaToggle(){
+  var m = document.getElementById('luciModal');
+  if(!m) return;
+  var wasHidden = m.classList.contains('h');
+  m.classList.toggle('h');
+  if(wasHidden){
+    // Al abrir: si no hay mensajes, pintar saludo. Foco al input.
+    var msgs = document.getElementById('luciMsgs');
+    if(msgs && msgs.children.length === 0){
+      var nombre = (sess && sess.userName) ? sess.userName : 'admin';
+      lucianaAddMsg('Hola ' + nombre + ', soy Luciana tu asistente. ¿Que necesitas hoy?', 'bot');
+    }
+    setTimeout(function(){ var inp = document.getElementById('luciIn'); if(inp) inp.focus(); }, 50);
+  }
+}
+function lucianaBgClick(e){
+  // Click en el overlay (fuera del panel) cierra
+  if(e.target && e.target.id === 'luciModal') lucianaToggle();
+}
+function lucianaAddMsg(text, who){
+  // who: 'bot' | 'user' | 'sys'
+  var msgs = document.getElementById('luciMsgs');
+  if(!msgs) return;
+  var div = document.createElement('div');
+  div.className = 'luci-msg luci-msg-' + (who || 'bot');
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+function lucianaSend(){
+  var inp = document.getElementById('luciIn');
+  if(!inp) return;
+  var txt = (inp.value || '').trim();
+  if(!txt) return;
+  lucianaAddMsg(txt, 'user');
+  inp.value = '';
+  // Fase 4: sin backend todavia. Mensaje de placeholder.
+  lucianaAddMsg('(Aun no conectado al backend — eso llega en Fase 5)', 'sys');
+  console.log('[luciana] pregunta:', txt);
+}
+</script>
+
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
