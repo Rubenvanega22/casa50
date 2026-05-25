@@ -7852,6 +7852,26 @@ async function apiLucianaChat(p, res) {
     ? [imageBlock, { type: 'text', text: pregunta }]
     : pregunta;
 
+  // Historial multi-turno: ultimas 10 preguntas/respuestas del business_day
+  // actual. Permite seguimiento de hilo ("y en el SHIFT_3?" referido al
+  // SHIFT_2 de la pregunta anterior). Solo texto - fotos viejas no se
+  // re-fetchean. Si falla, seguimos sin historial.
+  let historial = [];
+  try {
+    const { data: prevs } = await supabase
+      .from('luciana_chats')
+      .select('pregunta, respuesta')
+      .eq('business_day', bDay)
+      .order('ts_ms', { ascending: false })
+      .limit(10);
+    historial = (prevs || []).reverse().flatMap(c => [
+      { role: 'user',      content: c.pregunta },
+      { role: 'assistant', content: c.respuesta }
+    ]);
+  } catch (e) {
+    console.error('luciana historial load error:', e);
+  }
+
   let response;
   try {
     response = await anthropic.messages.create({
@@ -7864,7 +7884,7 @@ async function apiLucianaChat(p, res) {
         { type: 'text', text: LUCIANA_SYSTEM_BASE },
         { type: 'text', text: LUCIANA_SCHEMA_BD, cache_control: { type: 'ephemeral' } }
       ],
-      messages: [{ role: 'user', content: userContent }]
+      messages: [...historial, { role: 'user', content: userContent }]
     });
   } catch (e) {
     console.error('Anthropic error:', e);
