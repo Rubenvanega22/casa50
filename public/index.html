@@ -192,6 +192,12 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .luci-input input:focus{border-color:#7c5cfc}
 .luci-input button{background:#7c5cfc;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer}
 .luci-input button:disabled{opacity:.4;cursor:not-allowed}
+.luci-input button.luci-foto-btn{background:#22222c;color:#e5e7eb;border:1px solid #2e2e3a;padding:0 10px;font-size:16px}
+.luci-input button.luci-foto-btn.activa{background:#22c55e;color:#fff;border-color:#22c55e}
+.luci-foto-preview{padding:8px 10px;border-top:1px solid #2e2e3a;background:#22222c;display:flex;align-items:center;gap:8px;font-size:11px;color:#9ca3af}
+.luci-foto-preview.h{display:none}
+.luci-foto-preview img{max-height:60px;max-width:80px;border-radius:6px;border:1px solid #2e2e3a}
+.luci-foto-preview button{background:#ef4444;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:auto}
 </style>
 </head>
 <body>
@@ -13817,8 +13823,15 @@ initBarcodeScanner();
       <button class="luci-x" onclick="lucianaToggle()" title="Cerrar">×</button>
     </div>
     <div class="luci-msgs" id="luciMsgs"></div>
+    <div id="luciFotoPreview" class="luci-foto-preview h">
+      <img id="luciFotoImg" src="" alt="preview">
+      <span id="luciFotoLbl">foto adjunta</span>
+      <button type="button" onclick="lucianaClearFoto()">Quitar</button>
+    </div>
     <div class="luci-input">
       <input id="luciIn" type="text" placeholder="Escribi tu pregunta..." onkeydown="if(event.key==='Enter')lucianaSend()" maxlength="4000">
+      <button id="luciFotoBtn" class="luci-foto-btn" type="button" onclick="document.getElementById('luciFotoFile').click()" title="Adjuntar foto">📷</button>
+      <input id="luciFotoFile" type="file" accept="image/*" style="display:none" onchange="lucianaPickFoto()">
       <button id="luciBtn" onclick="lucianaSend()">Enviar</button>
     </div>
   </div>
@@ -13867,37 +13880,83 @@ function lucianaAddMsg(text, who){
   msgs.scrollTop = msgs.scrollHeight;
   return div;
 }
+function lucianaPickFoto(){
+  var f = (document.getElementById('luciFotoFile') || {}).files;
+  if(!f || !f[0]) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    document.getElementById('luciFotoImg').src = e.target.result;
+    document.getElementById('luciFotoLbl').textContent = f[0].name.slice(0, 30);
+    document.getElementById('luciFotoPreview').classList.remove('h');
+    document.getElementById('luciFotoBtn').classList.add('activa');
+  };
+  reader.readAsDataURL(f[0]);
+}
+function lucianaClearFoto(){
+  var inp = document.getElementById('luciFotoFile');
+  if(inp) inp.value = '';
+  document.getElementById('luciFotoPreview').classList.add('h');
+  document.getElementById('luciFotoBtn').classList.remove('activa');
+}
 function lucianaSend(){
   var inp = document.getElementById('luciIn');
   var btn = document.getElementById('luciBtn');
+  var fotoFile = ((document.getElementById('luciFotoFile') || {}).files || [])[0] || null;
   if(!inp || !btn) return;
   var txt = (inp.value || '').trim();
-  if(!txt) return;
-  lucianaAddMsg(txt, 'user');
+  // Permitir enviar sin texto si hay foto (Luciana describe lo que ve)
+  if(!txt && !fotoFile) return;
+  if(!txt && fotoFile) txt = 'Analiza esta foto y descrime que ves. Si es un cuadre, comparalo con los datos del sistema.';
+
+  // Mostrar burbuja del user (incluyendo "[foto]" si aplica)
+  lucianaAddMsg((fotoFile ? '[📷 foto] ' : '') + txt, 'user');
   inp.value = '';
   inp.disabled = true;
   btn.disabled = true;
   btn.textContent = '...';
-  var pensando = lucianaAddMsg('Pensando...', 'sys');
+  var pensando = lucianaAddMsg(fotoFile ? 'Subiendo foto...' : 'Pensando...', 'sys');
+
   function reset(){
     inp.disabled = false;
     btn.disabled = false;
     btn.textContent = 'Enviar';
     inp.focus();
   }
-  rpc('lucianaChat', {
-    userRole: sess.userRole,
-    userName: sess.userName,
-    pregunta: txt
-  }, function(r){
+  function fail(msg){
     if(pensando) pensando.remove();
-    lucianaAddMsg(r.respuesta || '(respuesta vacia)', 'bot');
+    lucianaAddMsg('Error: ' + msg, 'sys');
     reset();
-  }, function(e){
-    if(pensando) pensando.remove();
-    lucianaAddMsg('Error: ' + (e.message || String(e)), 'sys');
-    reset();
-  });
+  }
+  function enviar(fotoUrl){
+    if(pensando){ pensando.textContent = 'Pensando...'; }
+    rpc('lucianaChat', {
+      userRole: sess.userRole,
+      userName: sess.userName,
+      pregunta: txt,
+      fotoUrl: fotoUrl || null
+    }, function(r){
+      if(pensando) pensando.remove();
+      lucianaAddMsg(r.respuesta || '(respuesta vacia)', 'bot');
+      lucianaClearFoto();
+      reset();
+    }, function(e){ fail(e.message || String(e)); });
+  }
+
+  if(!fotoFile){ enviar(null); return; }
+
+  // Comprimir + subir a bucket luciana-photos (mismo patron que sendNote)
+  compressImage(fotoFile, function(blob){
+    var fileName = 'luci_' + Date.now() + '.jpg';
+    fetch(SUPA_URL + '/storage/v1/object/luciana-photos/' + fileName, {
+      method: 'PUT',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'x-upsert': 'true', 'Content-Type': 'image/jpeg' },
+      body: blob
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){ throw new Error('upload HTTP ' + r.status + ': ' + t); });
+      var url = SUPA_URL + '/storage/v1/object/public/luciana-photos/' + fileName;
+      enviar(url);
+    }).catch(function(e){ fail('subiendo foto: ' + (e.message || String(e))); });
+  }, function(err){ fail('procesando foto: ' + (err.message || String(err))); });
 }
 </script>
 

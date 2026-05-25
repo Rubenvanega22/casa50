@@ -7370,6 +7370,7 @@ async function apiLucianaChat(p, res) {
   const now = Date.now();
   const bDay = businessDay(now);
   const userName = String(p.userName || 'admin').slice(0, 100);
+  const fotoUrl = String(p.fotoUrl || '').trim() || null;
 
   // System prompt minimal para esta fase. En Fase 7 le metemos el schema
   // de las 14 tablas + cache_control.
@@ -7379,13 +7380,40 @@ async function apiLucianaChat(p, res) {
     'solo informas y sugieres. Responde en espanol, breve y claro. ' +
     'Si no estas 100% segura, deci "no lo se" en vez de inventar.';
 
+  // Si vino foto, fetchear y convertir a base64 para vision.
+  // Restringimos a URLs del propio bucket por seguridad (evita SSRF).
+  let imageBlock = null;
+  if (fotoUrl) {
+    const allowedPrefix = (process.env.SUPABASE_URL || '') + '/storage/v1/object/public/luciana-photos/';
+    if (!fotoUrl.startsWith(allowedPrefix)) {
+      return err(res, 'fotoUrl no permitida (solo bucket luciana-photos)', 400);
+    }
+    try {
+      const r = await fetch(fotoUrl);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const ct = (r.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+      const buf = Buffer.from(await r.arrayBuffer());
+      imageBlock = {
+        type: 'image',
+        source: { type: 'base64', media_type: ct, data: buf.toString('base64') }
+      };
+    } catch (e) {
+      console.error('fetch foto error:', e);
+      return err(res, 'No se pudo cargar la foto: ' + (e.message || 'error'), 502);
+    }
+  }
+
+  const userContent = imageBlock
+    ? [imageBlock, { type: 'text', text: pregunta }]
+    : pregunta;
+
   let response;
   try {
     response = await anthropic.messages.create({
       model: LUCIANA_MODEL,
       max_tokens: 4000,
       system: systemPrompt,
-      messages: [{ role: 'user', content: pregunta }]
+      messages: [{ role: 'user', content: userContent }]
     });
   } catch (e) {
     console.error('Anthropic error:', e);
@@ -7412,7 +7440,7 @@ async function apiLucianaChat(p, res) {
       business_day: bDay,
       pregunta,
       respuesta,
-      foto_url: null,
+      foto_url: fotoUrl,
       tokens_input: tokensIn,
       tokens_output: tokensOut,
       tokens_cache_read: 0,
