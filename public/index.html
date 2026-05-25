@@ -13836,11 +13836,17 @@ function lucianaToggle(){
   var wasHidden = m.classList.contains('h');
   m.classList.toggle('h');
   if(wasHidden){
-    // Al abrir: si no hay mensajes, pintar saludo. Foco al input.
     var msgs = document.getElementById('luciMsgs');
     if(msgs && msgs.children.length === 0){
-      var nombre = (sess && sess.userName) ? sess.userName : 'admin';
-      lucianaAddMsg('Hola ' + nombre + ', soy Luciana tu asistente. ¿Que necesitas hoy?', 'bot');
+      // Primer saludo del dia: solo si no salude ya en este business_day.
+      // El business_day cambia a las 6am, asi que vuelve a saludar 1 vez/dia.
+      var bDay = (sess && sess.businessDay) || '';
+      var ultimo = localStorage.getItem('lucianaUltimoSaludoBD');
+      if(ultimo !== bDay){
+        var nombre = (sess && sess.userName) ? sess.userName : 'admin';
+        lucianaAddMsg('Hola ' + nombre + ', soy Luciana tu asistente. ¿Que necesitas hoy?', 'bot');
+        if(bDay) localStorage.setItem('lucianaUltimoSaludoBD', bDay);
+      }
     }
     setTimeout(function(){ var inp = document.getElementById('luciIn'); if(inp) inp.focus(); }, 50);
   }
@@ -13850,25 +13856,48 @@ function lucianaBgClick(e){
   if(e.target && e.target.id === 'luciModal') lucianaToggle();
 }
 function lucianaAddMsg(text, who){
-  // who: 'bot' | 'user' | 'sys'
+  // who: 'bot' | 'user' | 'sys'. Devuelve el div creado para poder removerlo
+  // luego (ej: borrar el "Pensando..." cuando llega la respuesta).
   var msgs = document.getElementById('luciMsgs');
-  if(!msgs) return;
+  if(!msgs) return null;
   var div = document.createElement('div');
   div.className = 'luci-msg luci-msg-' + (who || 'bot');
   div.textContent = text;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
+  return div;
 }
 function lucianaSend(){
   var inp = document.getElementById('luciIn');
-  if(!inp) return;
+  var btn = document.getElementById('luciBtn');
+  if(!inp || !btn) return;
   var txt = (inp.value || '').trim();
   if(!txt) return;
   lucianaAddMsg(txt, 'user');
   inp.value = '';
-  // Fase 4: sin backend todavia. Mensaje de placeholder.
-  lucianaAddMsg('(Aun no conectado al backend — eso llega en Fase 5)', 'sys');
-  console.log('[luciana] pregunta:', txt);
+  inp.disabled = true;
+  btn.disabled = true;
+  btn.textContent = '...';
+  var pensando = lucianaAddMsg('Pensando...', 'sys');
+  function reset(){
+    inp.disabled = false;
+    btn.disabled = false;
+    btn.textContent = 'Enviar';
+    inp.focus();
+  }
+  rpc('lucianaChat', {
+    userRole: sess.userRole,
+    userName: sess.userName,
+    pregunta: txt
+  }, function(r){
+    if(pensando) pensando.remove();
+    lucianaAddMsg(r.respuesta || '(respuesta vacia)', 'bot');
+    reset();
+  }, function(e){
+    if(pensando) pensando.remove();
+    lucianaAddMsg('Error: ' + (e.message || String(e)), 'sys');
+    reset();
+  });
 }
 </script>
 
