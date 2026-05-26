@@ -199,6 +199,11 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .luci-mood-happy .luci-eye{animation:none;transform:scaleY(0.4)}
 .luci-avatar .luci-hand-chin{opacity:0;transition:opacity .3s}
 .luci-mood-thinking .luci-hand-chin{opacity:1}
+.luci-avatar .luci-hand-left,.luci-avatar .luci-hand-right{opacity:0;transform-origin:center;transform-box:fill-box}
+.luci-action-hair .luci-hand-left{animation:luci-anim-hair-left 2s ease-in-out}
+.luci-action-hair .luci-hand-right{animation:luci-anim-hair-right 2s ease-in-out}
+@keyframes luci-anim-hair-left{0%{opacity:0;transform:translate(0,8px)}15%{opacity:1;transform:translate(0,0)}35%{opacity:1;transform:translate(-6px,-14px)}65%{opacity:1;transform:translate(-6px,-14px)}85%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(0,8px)}}
+@keyframes luci-anim-hair-right{0%{opacity:0;transform:translate(0,8px)}15%{opacity:1;transform:translate(0,0)}35%{opacity:1;transform:translate(6px,-14px)}65%{opacity:1;transform:translate(6px,-14px)}85%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(0,8px)}}
 @keyframes luci-thought-pulse{0%,100%{opacity:.5;transform:translateY(0)}50%{opacity:1;transform:translateY(-1px)}}
 .luci-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px}
 .luci-modal.h{display:none}
@@ -13843,12 +13848,12 @@ initBarcodeScanner();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <!-- ==================== LUCIANA — boton flotante + modal ==================== -->
-<button id="luciFab" class="luci-fab" onclick="lucianaToggle()" title="Hablar con Luciana"><svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><path class="luci-brow" d="M21.5 28 L24.5 27"/><path class="luci-brow" d="M31.5 27 L34.5 28"/><g class="luci-eyes"><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/></g><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/><line class="luci-mouth-small" x1="27" y1="35.5" x2="29" y2="35.5"/><g class="luci-hand-chin"><circle cx="34.5" cy="41" r="3.2" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-thought"><circle cx="44" cy="5" r="1.2" fill="#fff" opacity="0.9"/><circle cx="46.5" cy="3" r="1.6" fill="#fff" opacity="0.9"/><circle cx="49" cy="0.5" r="2.0" fill="#fff" opacity="0.9"/></g></svg></button>
+<button id="luciFab" class="luci-fab" onclick="lucianaToggle()" title="Hablar con Luciana"><svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><path class="luci-brow" d="M21.5 28 L24.5 27"/><path class="luci-brow" d="M31.5 27 L34.5 28"/><g class="luci-eyes"><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/></g><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/><line class="luci-mouth-small" x1="27" y1="35.5" x2="29" y2="35.5"/><g class="luci-hand-chin"><circle cx="34.5" cy="41" r="3.2" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-hand-left"><circle cx="15" cy="38" r="3" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-hand-right"><circle cx="41" cy="38" r="3" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-thought"><circle cx="44" cy="5" r="1.2" fill="#fff" opacity="0.9"/><circle cx="46.5" cy="3" r="1.6" fill="#fff" opacity="0.9"/><circle cx="49" cy="0.5" r="2.0" fill="#fff" opacity="0.9"/></g></svg></button>
 <div id="luciModal" class="luci-modal h" onclick="lucianaBgClick(event)">
   <div class="luci-panel" onclick="event.stopPropagation()">
     <div class="luci-head">
       <div class="luci-avatar-big">
-        <svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><path class="luci-brow" d="M21.5 28 L24.5 27"/><path class="luci-brow" d="M31.5 27 L34.5 28"/><g class="luci-eyes"><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/></g><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/><line class="luci-mouth-small" x1="27" y1="35.5" x2="29" y2="35.5"/><g class="luci-hand-chin"><circle cx="34.5" cy="41" r="3.2" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-thought"><circle cx="44" cy="5" r="1.2" fill="#fff" opacity="0.9"/><circle cx="46.5" cy="3" r="1.6" fill="#fff" opacity="0.9"/><circle cx="49" cy="0.5" r="2.0" fill="#fff" opacity="0.9"/></g></svg>
+        <svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><path class="luci-brow" d="M21.5 28 L24.5 27"/><path class="luci-brow" d="M31.5 27 L34.5 28"/><g class="luci-eyes"><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/></g><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/><line class="luci-mouth-small" x1="27" y1="35.5" x2="29" y2="35.5"/><g class="luci-hand-chin"><circle cx="34.5" cy="41" r="3.2" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-hand-left"><circle cx="15" cy="38" r="3" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-hand-right"><circle cx="41" cy="38" r="3" fill="#fcd9b8" stroke="#5a3a24" stroke-width="0.4"/></g><g class="luci-thought"><circle cx="44" cy="5" r="1.2" fill="#fff" opacity="0.9"/><circle cx="46.5" cy="3" r="1.6" fill="#fff" opacity="0.9"/><circle cx="49" cy="0.5" r="2.0" fill="#fff" opacity="0.9"/></g></svg>
       </div>
       <div class="luci-head-info">
         <h3>Luciana</h3>
@@ -13877,6 +13882,23 @@ initBarcodeScanner();
 function lucianaInit(){
   var fab = document.getElementById('luciFab');
   if(fab) fab.classList.add('on');
+  lucianaScheduleHair();
+}
+function lucianaPlayHair(){
+  // Gesto de recoger pelo: solo cuando esta tranquila (no interrumpir)
+  if(lucianaMoodActual !== 'idle' && lucianaMoodActual !== 'listening') return;
+  var b = document.body;
+  b.classList.add('luci-action-hair');
+  setTimeout(function(){ b.classList.remove('luci-action-hair'); }, 2000);
+}
+function lucianaScheduleHair(){
+  // Intervalo random 45-60s, recursivo (no setInterval) para que cada
+  // delay sea genuinamente aleatorio dentro del rango.
+  var delay = 45000 + Math.random() * 15000;
+  setTimeout(function(){
+    lucianaPlayHair();
+    lucianaScheduleHair();
+  }, delay);
 }
 var lucianaMoodActual = 'idle';
 function lucianaSetMood(m){
