@@ -42,6 +42,16 @@ function businessDay(ms) {
   return `${y}-${m}-${day}`;
 }
 
+function previousBusinessDay(bDay) {
+  const [y, m, d] = bDay.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() - 1);
+  const yy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
 function businessDayRange(bDay) {
   const [y, m, d] = bDay.split('-').map(Number);
   const start = Date.UTC(y, m - 1, d, 11, 0, 0, 0);
@@ -7363,7 +7373,32 @@ async function apiAjusteInventarioV2(p, res) {
 // SYSTEM_BASE es funcion porque incluye el nombre del admin (cambia por usuario).
 // Sigue SIN cache (200 tokens, no significativo). El bloque cacheable es el SCHEMA_BD.
 function lucianaSystemBase(userName) {
+  const now = Date.now();
+  const bogota = new Date(now - 5 * 3600000);
+  const dd  = String(bogota.getUTCDate()).padStart(2, '0');
+  const mm  = String(bogota.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy= bogota.getUTCFullYear();
+  const hh  = String(bogota.getUTCHours()).padStart(2, '0');
+  const mi  = String(bogota.getUTCMinutes()).padStart(2, '0');
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const diaSemana = dias[bogota.getUTCDay()];
+  const bDay = businessDay(now);
+  const bDayAyer = previousBusinessDay(bDay);
+  const turno = currentShiftId(now);
+
   return [
+    'INFORMACION DE TIEMPO ACTUAL (NO INVENTAR FECHAS):',
+    '- Fecha y hora actual en Cali: ' + dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + mi,
+    '- Dia de la semana: ' + diaSemana,
+    '- Business day actual (hoy en terminos operativos): ' + bDay,
+    '- Business day de ayer: ' + bDayAyer,
+    '- Turno operativo actual: ' + turno,
+    '',
+    'Cuando el admin diga "hoy" usa el business_day actual.',
+    'Cuando diga "ayer" usa el business_day de ayer.',
+    'Cuando diga "la semana pasada" usa business_day actual menos 7 dias.',
+    'NUNCA inventes ni adivines fechas. Si dudas de que fecha quiere el admin, preguntale.',
+    '',
     'Eres Luciana, asistente IA del administrador de Casa 50 (motel/spa en Cali, Colombia).',
     'El admin que te esta hablando se llama ' + userName + '. Saludalo por su nombre y',
     'tratalo con calidez, pero NO uses su nombre en cada mensaje forzadamente; solo',
