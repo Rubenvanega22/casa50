@@ -204,6 +204,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .luci-action-hair .luci-hand-right{animation:luci-anim-hair-right 2s ease-in-out}
 @keyframes luci-anim-hair-left{0%{opacity:0;transform:translate(0,8px)}15%{opacity:1;transform:translate(0,0)}35%{opacity:1;transform:translate(-6px,-14px)}65%{opacity:1;transform:translate(-6px,-14px)}85%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(0,8px)}}
 @keyframes luci-anim-hair-right{0%{opacity:0;transform:translate(0,8px)}15%{opacity:1;transform:translate(0,0)}35%{opacity:1;transform:translate(6px,-14px)}65%{opacity:1;transform:translate(6px,-14px)}85%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(0,8px)}}
+.luci-action-wave .luci-hand-right{animation:luci-anim-wave 1.5s ease-in-out}
+@keyframes luci-anim-wave{0%{opacity:0;transform:translate(0,8px)}15%{opacity:1;transform:translate(7px,-21px)}30%{opacity:1;transform:translate(4px,-21px)}45%{opacity:1;transform:translate(10px,-21px)}60%{opacity:1;transform:translate(4px,-21px)}75%{opacity:1;transform:translate(7px,-21px)}90%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(0,8px)}}
 @keyframes luci-thought-pulse{0%,100%{opacity:.5;transform:translateY(0)}50%{opacity:1;transform:translateY(-1px)}}
 .luci-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px}
 .luci-modal.h{display:none}
@@ -13900,6 +13902,12 @@ function lucianaScheduleHair(){
     lucianaScheduleHair();
   }, delay);
 }
+function lucianaPlayWave(){
+  // Saludo: mano sube al costado de la cara y oscila. 1.5s.
+  var b = document.body;
+  b.classList.add('luci-action-wave');
+  setTimeout(function(){ b.classList.remove('luci-action-wave'); }, 1500);
+}
 var lucianaMoodActual = 'idle';
 function lucianaSetMood(m){
   var b = document.body;
@@ -13950,6 +13958,7 @@ function lucianaToggle(){
         var nombre = (sess && sess.userName) ? sess.userName : 'admin';
         lucianaAddMsg('Hola ' + nombre + ', soy Luciana tu asistente. ¿Que necesitas hoy?', 'bot');
         if(bDay) localStorage.setItem('lucianaUltimoSaludoBD', bDay);
+        lucianaPlayWave();
       }
     }
     setTimeout(function(){ var inp = document.getElementById('luciIn'); if(inp) inp.focus(); }, 50);
