@@ -182,6 +182,22 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .luci-avatar .luci-smile{stroke:#1a1a1a;transform-origin:center;transform-box:fill-box;transition:transform .2s ease}
 .luci-fab:hover .luci-smile{transform:scale(1.25) translateY(0.5px)}
 @keyframes luci-blink{0%,92%,100%{transform:scaleY(1)}94%,97%{transform:scaleY(0.05)}}
+/* Estados de mood (FASE B): clases en <body> sincronizan ambos avatares */
+.luci-avatar .luci-brow{stroke:#1a1a1a;stroke-width:1.3;stroke-linecap:round;fill:none;opacity:0;transition:opacity .25s}
+.luci-avatar .luci-mouth-small{stroke:#1a1a1a;stroke-width:1.3;stroke-linecap:round;opacity:0;transition:opacity .25s}
+.luci-avatar .luci-thought{opacity:0;transition:opacity .3s}
+.luci-avatar .luci-eyes{transform-origin:center;transform-box:fill-box;transition:transform .25s}
+.luci-mood-listening .luci-eyes{transform:translate(0.5px,0.4px)}
+.luci-mood-thinking .luci-smile{opacity:0}
+.luci-mood-thinking .luci-mouth-small{opacity:1}
+.luci-mood-thinking .luci-thought{opacity:1;animation:luci-thought-pulse 1.5s infinite ease-in-out}
+.luci-mood-thinking .luci-eyes{transform:translateY(-1px)}
+.luci-mood-responding .luci-smile{transform:scale(1.3) translateY(0.5px)}
+.luci-mood-worried .luci-brow{opacity:1}
+.luci-mood-worried .luci-smile{transform:scale(0.8) translateY(0.5px)}
+.luci-mood-happy .luci-smile{transform:scale(1.4) translateY(0.5px)}
+.luci-mood-happy .luci-eye{animation:none;transform:scaleY(0.4)}
+@keyframes luci-thought-pulse{0%,100%{opacity:.5;transform:translateY(0)}50%{opacity:1;transform:translateY(-1px)}}
 .luci-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px}
 .luci-modal.h{display:none}
 .luci-panel{background:#18181f;border:1px solid #2e2e3a;border-radius:14px;width:100%;max-width:420px;height:80vh;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
@@ -13825,12 +13841,12 @@ initBarcodeScanner();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <!-- ==================== LUCIANA — boton flotante + modal ==================== -->
-<button id="luciFab" class="luci-fab" onclick="lucianaToggle()" title="Hablar con Luciana"><svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg></button>
+<button id="luciFab" class="luci-fab" onclick="lucianaToggle()" title="Hablar con Luciana"><svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><path class="luci-brow" d="M21.5 28 L24.5 27"/><path class="luci-brow" d="M31.5 27 L34.5 28"/><g class="luci-eyes"><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/></g><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/><line class="luci-mouth-small" x1="27" y1="35.5" x2="29" y2="35.5"/><g class="luci-thought"><circle cx="44" cy="5" r="1.2" fill="#fff" opacity="0.9"/><circle cx="46.5" cy="3" r="1.6" fill="#fff" opacity="0.9"/><circle cx="49" cy="0.5" r="2.0" fill="#fff" opacity="0.9"/></g></svg></button>
 <div id="luciModal" class="luci-modal h" onclick="lucianaBgClick(event)">
   <div class="luci-panel" onclick="event.stopPropagation()">
     <div class="luci-head">
       <div class="luci-avatar-big">
-        <svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        <svg class="luci-avatar" viewBox="0 0 56 56" width="56" height="56" xmlns="http://www.w3.org/2000/svg"><path class="luci-hair" d="M16 22 C10 19, 2 23, 4 30 C7 33, 14 31, 17 27 Z"/><path class="luci-hair" d="M40 22 C46 19, 54 23, 52 30 C49 33, 42 31, 39 27 Z"/><path class="luci-hair" d="M12 28 C12 17, 19 9, 28 9 C37 9, 44 17, 44 28 L44 40 C44 40, 41 36, 41 32 L41 24 L15 24 L15 32 C15 36, 12 40, 12 40 Z"/><ellipse class="luci-face" cx="28" cy="30" rx="11.5" ry="12.5"/><path class="luci-hair" d="M15 24 C16 18, 22 13, 28 13 C34 13, 40 18, 41 24 C38 22, 34 25, 30 25 C26 25, 22 22, 18 24 C17 24, 16 24, 15 24 Z"/><circle class="luci-cheek" cx="21" cy="34" r="2.2"/><circle class="luci-cheek" cx="35" cy="34" r="2.2"/><path class="luci-brow" d="M21.5 28 L24.5 27"/><path class="luci-brow" d="M31.5 27 L34.5 28"/><g class="luci-eyes"><ellipse class="luci-eye" cx="23.5" cy="31" rx="1.5" ry="1.8"/><ellipse class="luci-eye" cx="32.5" cy="31" rx="1.5" ry="1.8"/></g><path class="luci-smile" d="M25 35.5 Q28 38 31 35.5" stroke-width="1.3" stroke-linecap="round" fill="none"/><line class="luci-mouth-small" x1="27" y1="35.5" x2="29" y2="35.5"/><g class="luci-thought"><circle cx="44" cy="5" r="1.2" fill="#fff" opacity="0.9"/><circle cx="46.5" cy="3" r="1.6" fill="#fff" opacity="0.9"/><circle cx="49" cy="0.5" r="2.0" fill="#fff" opacity="0.9"/></g></svg>
       </div>
       <div class="luci-head-info">
         <h3>Luciana</h3>
@@ -13846,7 +13862,7 @@ initBarcodeScanner();
       <button type="button" onclick="lucianaClearFoto()">Quitar</button>
     </div>
     <div class="luci-input">
-      <input id="luciIn" type="text" placeholder="Escribi tu pregunta..." onkeydown="if(event.key==='Enter')lucianaSend()" maxlength="4000">
+      <input id="luciIn" type="text" placeholder="Escribi tu pregunta..." onkeydown="if(event.key==='Enter')lucianaSend()" oninput="lucianaInputChanged()" onfocus="lucianaInputChanged()" onblur="lucianaInputChanged()" maxlength="4000">
       <button id="luciFotoBtn" class="luci-foto-btn" type="button" onclick="document.getElementById('luciFotoFile').click()" title="Adjuntar foto">📷</button>
       <input id="luciFotoFile" type="file" accept="image/*" style="display:none" onchange="lucianaPickFoto()">
       <button id="luciBtn" onclick="lucianaSend()">Enviar</button>
@@ -13859,6 +13875,24 @@ initBarcodeScanner();
 function lucianaInit(){
   var fab = document.getElementById('luciFab');
   if(fab) fab.classList.add('on');
+}
+var lucianaMoodActual = 'idle';
+function lucianaSetMood(m){
+  var b = document.body;
+  ['idle','listening','thinking','responding','worried','happy'].forEach(function(x){
+    b.classList.remove('luci-mood-' + x);
+  });
+  b.classList.add('luci-mood-' + m);
+  lucianaMoodActual = m;
+}
+function lucianaInputChanged(){
+  // Solo cambiar a listening/idle desde estos estados (no interrumpir thinking/responding/etc)
+  if(lucianaMoodActual !== 'idle' && lucianaMoodActual !== 'listening') return;
+  var inp = document.getElementById('luciIn');
+  if(!inp) return;
+  var tieneTexto = (inp.value || '').trim().length > 0;
+  var tieneFoco  = (document.activeElement === inp);
+  lucianaSetMood(tieneTexto && tieneFoco ? 'listening' : 'idle');
 }
 function lucianaLoadGasto(){
   // Lee gasto del mes calendario y pinta chip arriba del modal.
@@ -13948,6 +13982,7 @@ function lucianaSend(){
   btn.disabled = true;
   btn.textContent = '...';
   var pensando = lucianaAddMsg(fotoFile ? 'Subiendo foto...' : 'Pensando...', 'sys');
+  lucianaSetMood('thinking');
 
   function reset(){
     inp.disabled = false;
@@ -13958,6 +13993,7 @@ function lucianaSend(){
   function fail(msg){
     if(pensando) pensando.remove();
     lucianaAddMsg('Error: ' + msg, 'sys');
+    lucianaSetMood('idle');
     reset();
   }
   function enviar(fotoUrl){
@@ -13976,6 +14012,18 @@ function lucianaSend(){
       lucianaClearFoto();
       reset();
       lucianaLoadGasto();
+      lucianaSetMood('responding');
+      setTimeout(function(){
+        var moodMap = { 'alegre':'happy', 'preocupado':'worried', 'neutro':'idle' };
+        lucianaSetMood(moodMap[r.mood] || 'idle');
+        if(r.mood === 'alegre' || r.mood === 'preocupado'){
+          setTimeout(function(){
+            if(lucianaMoodActual === 'happy' || lucianaMoodActual === 'worried'){
+              lucianaSetMood('idle');
+            }
+          }, 5000);
+        }
+      }, 2000);
     }, function(e){ fail(e.message || String(e)); });
   }
 
