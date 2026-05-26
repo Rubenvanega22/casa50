@@ -7925,6 +7925,27 @@ async function ejecutarQueryLuciana(sqlRaw) {
   return Array.isArray(data) ? data : [];
 }
 
+function detectarMoodLuciana(respuesta) {
+  const txt = String(respuesta || '').toLowerCase();
+  // Preocupado gana sobre alegre (seguridad operativa: si hay
+  // problemas mencionados, no sonreir aunque tambien diga "todo ok").
+  const preocupado = [
+    'descuadre', 'no cuadra', 'no cuadran', 'faltan', 'falta ',
+    'error', 'problema', 'problemas', 'sospech', 'atascad',
+    'robo', 'perdid', 'deuda', 'danad', 'dañad', 'roto', 'rota'
+  ];
+  for (const k of preocupado) if (txt.includes(k)) return 'preocupado';
+
+  const alegre = [
+    'perfecto', 'excelente', 'todo ok', 'todo bien', 'sin problemas',
+    'cuadra perfecto', 'ningun problema', 'ningún problema',
+    'todo en orden', 'completo', 'sin novedad'
+  ];
+  for (const k of alegre) if (txt.includes(k)) return 'alegre';
+
+  return 'neutro';
+}
+
 async function apiLucianaChat(p, res) {
   // Validacion estricta: SOLO admin
   if (String(p.userRole || '').toUpperCase() !== 'ADMIN') {
@@ -8061,6 +8082,8 @@ async function apiLucianaChat(p, res) {
     .join('\n')
     .trim();
 
+  const mood = detectarMoodLuciana(respuesta);
+
   // Costo USD: input $3, output $15, cache_write $3.75 (1.25x), cache_read $0.30 (0.1x)
   const costoUsd = (totIn * 3 + totOut * 15 + totCW * 3.75 + totCR * 0.30) / 1_000_000;
 
@@ -8077,7 +8100,8 @@ async function apiLucianaChat(p, res) {
       tokens_output: totOut,
       tokens_cache_read: totCR,
       tokens_cache_write: totCW,
-      costo_usd: costoUsd
+      costo_usd: costoUsd,
+      mood
     });
   } catch (e) {
     console.error('luciana_chats insert error:', e);
@@ -8085,6 +8109,7 @@ async function apiLucianaChat(p, res) {
 
   return ok(res, {
     respuesta,
+    mood,
     tokensIn: totIn,
     tokensOut: totOut,
     queries: queriesEjecutadas,
