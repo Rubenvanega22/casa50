@@ -7914,7 +7914,12 @@ const LUCIANA_TOOL_QUERY = {
   }
 };
 
-const MAX_LUCIANA_ITER = 5;
+// MAX_LUCIANA_ITER limita TURNOS del modelo (cuantas veces le pedimos a Claude).
+// MAX_LUCIANA_QUERIES limita queries TOTALES, sumando todas las paralelas. Sin
+// este segundo limite Claude puede pedir 4 queries por turno x 5 turnos = 20
+// queries reales aunque MAX_LUCIANA_ITER diga 5.
+const MAX_LUCIANA_ITER = 3;
+const MAX_LUCIANA_QUERIES = 6;
 
 // Capa 1: validacion regex previa.
 function validarSqlLuciana(sqlRaw) {
@@ -8047,14 +8052,20 @@ async function apiLucianaChat(p, res) {
   }
 
   // Loop tool_use: Claude puede pedir query_supabase y nosotros la ejecutamos.
-  // Hasta MAX_LUCIANA_ITER iteraciones para evitar loops infinitos.
+  // Doble limite: MAX_LUCIANA_ITER (turnos del modelo) y MAX_LUCIANA_QUERIES
+  // (queries totales, incluyendo paralelas dentro de un mismo turno).
   // Acumulamos tokens de TODAS las iteraciones para auditoria de costo.
   let messages = [...historial, { role: 'user', content: userContent }];
   let response = null;
   let totIn = 0, totOut = 0, totCR = 0, totCW = 0;
   let queriesEjecutadas = 0;
+  let iteraciones = 0;
+  // motivo: 'end_turn' (Claude termino normal) | 'limit_iter' (agoto turnos)
+  // | 'limit_queries' (agoto queries totales)
+  let motivo = 'end_turn';
 
   for (let iter = 0; iter < MAX_LUCIANA_ITER; iter++) {
+    iteraciones = iter + 1;
     try {
       response = await anthropic.messages.create({
         model: LUCIANA_MODEL,
@@ -8079,12 +8090,33 @@ async function apiLucianaChat(p, res) {
     totCR  += u.cache_read_input_tokens     || 0;
     totCW  += u.cache_creation_input_tokens || 0;
 
-    if (response.stop_reason !== 'tool_use') break;
+    if (response.stop_reason !== 'tool_use') {
+      motivo = 'end_turn';
+      break;
+    }
+    if (iter === MAX_LUCIANA_ITER - 1) {
+      motivo = 'limit_iter';
+      break;
+    }
 
-    // Procesar cada tool_use block y armar tool_results
+    // Procesar cada tool_use block y armar tool_results. Si llegamos al
+    // limite total de queries, devolvemos is_error para las restantes
+    // (Claude las ve como fallidas y deberia parar de pedir mas).
     const toolUses = (response.content || []).filter(b => b.type === 'tool_use');
     const toolResults = [];
+    let cortadoPorLimite = false;
     for (const tu of toolUses) {
+      if (queriesEjecutadas >= MAX_LUCIANA_QUERIES) {
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: tu.id,
+          content: 'Error: limite de queries alcanzado (' + MAX_LUCIANA_QUERIES +
+            '). Respondele al admin con lo que ya sabes o pedile que use modo profundo.',
+          is_error: true
+        });
+        cortadoPorLimite = true;
+        continue;
+      }
       queriesEjecutadas++;
       let content, isError = false;
       try {
@@ -8109,13 +8141,36 @@ async function apiLucianaChat(p, res) {
     // Appendear assistant (con tool_use blocks) + user (con tool_results)
     messages.push({ role: 'assistant', content: response.content });
     messages.push({ role: 'user', content: toolResults });
+
+    if (cortadoPorLimite && queriesEjecutadas >= MAX_LUCIANA_QUERIES) {
+      // Le damos un turno mas a Claude para que responda con lo que sabe,
+      // pero marcamos el motivo. Si en ese turno vuelve a pedir tool_use,
+      // saldra por limit_iter o limit_queries en la proxima vuelta.
+      motivo = 'limit_queries';
+    }
   }
 
-  const respuesta = (response.content || [])
+  let respuesta = (response.content || [])
     .filter(b => b.type === 'text')
     .map(b => b.text)
     .join('\n')
     .trim();
+
+  // Fallback claro si el loop termino sin texto util (paso siempre que
+  // motivo != end_turn y Claude no alcanzo a redactar respuesta final).
+  let truncado = false;
+  if (!respuesta) {
+    respuesta = 'Disculpame Ruben, esta consulta requiere mas investigacion. ' +
+      '¿Querés que investigue más a fondo? Decime "investigá" al inicio de tu pregunta.';
+    truncado = true;
+  }
+
+  console.log('[luciana] queries=' + queriesEjecutadas + '/' + MAX_LUCIANA_QUERIES +
+    ' iters=' + iteraciones + '/' + MAX_LUCIANA_ITER +
+    ' motivo=' + motivo +
+    ' truncado=' + truncado +
+    ' user=' + userName +
+    ' preg=' + JSON.stringify(pregunta.slice(0, 80)));
 
   const mood = detectarMoodLuciana(respuesta);
 
@@ -8148,7 +8203,8 @@ async function apiLucianaChat(p, res) {
     tokensIn: totIn,
     tokensOut: totOut,
     queries: queriesEjecutadas,
-    costoUsd: Number(costoUsd.toFixed(6))
+    costoUsd: Number(costoUsd.toFixed(6)),
+    truncado
   });
 }
 
