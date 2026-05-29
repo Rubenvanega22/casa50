@@ -7442,8 +7442,44 @@ function lucianaSystemBase(userName) {
     '  haga falta. Usala con criterio - no la uses para cosas que ya estan',
     '  resueltas en el schema. Si necesitas datos concretos (ej: comparar foto',
     '  vs sistema, analizar descuadre, ver ventas de hoy), llamala.',
-    '- El admin conoce su sistema; tu rol es ayudarlo a diagnosticar problemas.'
+    '- El admin conoce su sistema; tu rol es ayudarlo a diagnosticar problemas.',
+    '',
+    'REGLAS DE CONSULTAS A BD (CRITICAS - leelas antes de cada respuesta):',
+    '- Para SALUDOS (hola, qué tal, buenos días, hey, buenas) NO consultes la',
+    '  BD. Respondé directamente con saludo amable y preguntale en qué podes',
+    '  ayudarlo. Ejemplo: "Hola Ruben, ¿en qué te ayudo hoy?".',
+    '- Para PREGUNTAS DE FECHA/HORA usá el contexto de tiempo de arriba, NO',
+    '  consultes la BD.',
+    '- Para PREGUNTAS SIMPLES del día (ventas hoy, ocupación, descuadre',
+    '  rápido) usá MÁXIMO 2-3 queries.',
+    '- Para "¿cómo va el día?" / "¿cómo vamos hoy?" hacé MÁXIMO 2 queries:',
+    '  una para ventas+habitaciones del día, otra opcional si sospechas',
+    '  descuadre/atasco. Respondé en formato corto, ejemplo:',
+    '  "Mira Ruben, hoy vamos así:',
+    '   $1.250.000 en ventas (15 habitaciones).',
+    '   Todo cuadrando bien, sin alertas."',
+    '- Solo hacé MUCHAS queries (5+) si el admin usó palabras como',
+    '  "investigá", "análisis a fondo", "revisá bien", "detalle completo".',
+    '- Si necesitás más queries pero el admin NO activó modo profundo,',
+    '  terminá tu respuesta preguntandole: "¿Querés que investigue más a',
+    '  fondo? Decime \'investigá\' al inicio de tu pregunta."'
   ].join('\n');
+}
+
+// Detecta si la pregunta del admin pide modo profundo (mas queries permitidas).
+// Es match laxo: si la pregunta contiene alguna keyword, activa profundo.
+function detectarModoLuciana(pregunta) {
+  const txt = String(pregunta || '').toLowerCase();
+  const keywords = [
+    'investigá', 'investiga', 'investigar',
+    'análisis a fondo', 'analisis a fondo',
+    'analiza a fondo', 'analizá a fondo',
+    'revisá bien', 'revisa bien',
+    'detalle completo',
+    'comparación detallada', 'comparacion detallada'
+  ];
+  for (const k of keywords) if (txt.includes(k)) return 'profundo';
+  return 'normal';
 }
 
 const LUCIANA_SCHEMA_BD = `# Esquema de la base de datos Casa 50
@@ -7914,12 +7950,15 @@ const LUCIANA_TOOL_QUERY = {
   }
 };
 
-// MAX_LUCIANA_ITER limita TURNOS del modelo (cuantas veces le pedimos a Claude).
-// MAX_LUCIANA_QUERIES limita queries TOTALES, sumando todas las paralelas. Sin
-// este segundo limite Claude puede pedir 4 queries por turno x 5 turnos = 20
-// queries reales aunque MAX_LUCIANA_ITER diga 5.
-const MAX_LUCIANA_ITER = 3;
-const MAX_LUCIANA_QUERIES = 6;
+// LUCIANA_LIMITS limita TURNOS del modelo (iter) y queries TOTALES por modo.
+// Normal: dia a dia, preguntas simples. Profundo: investigaciones que pide
+// el admin con keywords ("investigá", "análisis a fondo", etc).
+// Sin el limite de queries totales Claude puede pedir 4 queries por turno x
+// N turnos y disparar el costo, aunque iter este capado.
+const LUCIANA_LIMITS = {
+  normal:   { iter: 3,  queries: 6  },
+  profundo: { iter: 12, queries: 20 }
+};
 
 // Capa 1: validacion regex previa.
 function validarSqlLuciana(sqlRaw) {
@@ -8051,9 +8090,16 @@ async function apiLucianaChat(p, res) {
     console.error('luciana historial load error:', e);
   }
 
+  // Modo (normal/profundo) detectado por keywords en la pregunta. Profundo
+  // permite mas iter y mas queries totales (para investigaciones).
+  const modoUsado = detectarModoLuciana(pregunta);
+  const limits = LUCIANA_LIMITS[modoUsado];
+  const maxIter = limits.iter;
+  const maxQueries = limits.queries;
+
   // Loop tool_use: Claude puede pedir query_supabase y nosotros la ejecutamos.
-  // Doble limite: MAX_LUCIANA_ITER (turnos del modelo) y MAX_LUCIANA_QUERIES
-  // (queries totales, incluyendo paralelas dentro de un mismo turno).
+  // Doble limite: maxIter (turnos del modelo) y maxQueries (queries totales,
+  // incluyendo paralelas dentro de un mismo turno).
   // Acumulamos tokens de TODAS las iteraciones para auditoria de costo.
   let messages = [...historial, { role: 'user', content: userContent }];
   let response = null;
@@ -8064,7 +8110,7 @@ async function apiLucianaChat(p, res) {
   // | 'limit_queries' (agoto queries totales)
   let motivo = 'end_turn';
 
-  for (let iter = 0; iter < MAX_LUCIANA_ITER; iter++) {
+  for (let iter = 0; iter < maxIter; iter++) {
     iteraciones = iter + 1;
     try {
       response = await anthropic.messages.create({
@@ -8094,7 +8140,7 @@ async function apiLucianaChat(p, res) {
       motivo = 'end_turn';
       break;
     }
-    if (iter === MAX_LUCIANA_ITER - 1) {
+    if (iter === maxIter - 1) {
       motivo = 'limit_iter';
       break;
     }
@@ -8106,11 +8152,11 @@ async function apiLucianaChat(p, res) {
     const toolResults = [];
     let cortadoPorLimite = false;
     for (const tu of toolUses) {
-      if (queriesEjecutadas >= MAX_LUCIANA_QUERIES) {
+      if (queriesEjecutadas >= maxQueries) {
         toolResults.push({
           type: 'tool_result',
           tool_use_id: tu.id,
-          content: 'Error: limite de queries alcanzado (' + MAX_LUCIANA_QUERIES +
+          content: 'Error: limite de queries alcanzado (' + maxQueries +
             '). Respondele al admin con lo que ya sabes o pedile que use modo profundo.',
           is_error: true
         });
@@ -8142,7 +8188,7 @@ async function apiLucianaChat(p, res) {
     messages.push({ role: 'assistant', content: response.content });
     messages.push({ role: 'user', content: toolResults });
 
-    if (cortadoPorLimite && queriesEjecutadas >= MAX_LUCIANA_QUERIES) {
+    if (cortadoPorLimite && queriesEjecutadas >= maxQueries) {
       // Le damos un turno mas a Claude para que responda con lo que sabe,
       // pero marcamos el motivo. Si en ese turno vuelve a pedir tool_use,
       // saldra por limit_iter o limit_queries en la proxima vuelta.
@@ -8165,8 +8211,9 @@ async function apiLucianaChat(p, res) {
     truncado = true;
   }
 
-  console.log('[luciana] queries=' + queriesEjecutadas + '/' + MAX_LUCIANA_QUERIES +
-    ' iters=' + iteraciones + '/' + MAX_LUCIANA_ITER +
+  console.log('[luciana] modo=' + modoUsado +
+    ' queries=' + queriesEjecutadas + '/' + maxQueries +
+    ' iters=' + iteraciones + '/' + maxIter +
     ' motivo=' + motivo +
     ' truncado=' + truncado +
     ' user=' + userName +
@@ -8200,6 +8247,7 @@ async function apiLucianaChat(p, res) {
   return ok(res, {
     respuesta,
     mood,
+    modoUsado,
     tokensIn: totIn,
     tokensOut: totOut,
     queries: queriesEjecutadas,

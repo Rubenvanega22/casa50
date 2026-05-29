@@ -14039,7 +14039,9 @@ function lucianaSend(){
     }, function(r){
       if(pensando) pensando.remove();
       lucianaAddMsg(r.respuesta || '(respuesta vacia)', 'bot');
-      if(Number(r.queries || 0) > 0){
+      if(r.modoUsado === 'profundo'){
+        lucianaAddMsg('(modo profundo: ' + (r.queries || 0) + ' queries)', 'sys');
+      } else if(Number(r.queries || 0) > 0){
         lucianaAddMsg('(consulto la BD ' + r.queries + (r.queries === 1 ? ' vez)' : ' veces)'), 'sys');
       }
       lucianaClearFoto();
