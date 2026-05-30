@@ -436,6 +436,26 @@ async function apiLogin(p, res) {
         }
       }
     }
+    // FIX FANTASMA T3 MAÑANA (Nivel 2): a partir de las 6am businessDay() ya rotó
+    // a HOY, pero un login de turno noche entre las 6am y antes de que arranque el
+    // T3 real (6pm) en realidad CONTINÚA el turno noche de AYER si ese sigue abierto
+    // (LOGIN sin LOGOUT). Sin esto se crea un "T3 fantasma" de hoy que congela el
+    // snapshot con el stock de la mañana (bug del agua del 29-may).
+    else if(nowHour >= 6 && nowHour < 17){
+      const prevBDay = previousBusinessDay(bDay);
+      const { data: prevT3Login } = await supabase.from('shift_log')
+        .select('id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
+        .in('action',['LOGIN','RELOGIN']).limit(1);
+      if(prevT3Login && prevT3Login.length){
+        const { data: prevT3Logout } = await supabase.from('shift_log')
+          .select('id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
+          .eq('action','LOGOUT').limit(1);
+        if(!prevT3Logout || !prevT3Logout.length){
+          // El turno noche de ayer sigue abierto → este login lo continúa.
+          bDay = prevBDay;
+        }
+      }
+    }
   }
 
   // FIX SHIFT_1 MADRUGADA (simétrico al FIX T3): si recep elige T1 explícito
@@ -4353,6 +4373,21 @@ async function capturarSnapshotInventarioInicial(bDay, shiftId, userName, now) {
         ' shift=' + shiftId + ' user=' + userName +
         ' (esperado: ' + (esNocturno ? '-1..0' : '0') + ')');
       return;
+    }
+
+    // === DEFENSA 2: hora coherente con turno noche (Nivel 1) ===
+    // Un turno noche (SHIFT_3; incluye el 2T12 de domingo ya normalizado) solo
+    // arranca en la tarde-noche. Si llega una foto de turno noche en horario
+    // diurno (6:00am–4:59pm) es un login fantasma (ej: el relogin del T3 saliente
+    // a las 6am). Se BLOQUEA la foto pero NO se interrumpe el login (solo return).
+    if(esNocturno) {
+      const horaBogota = new Date(now - 5*3600000).getUTCHours();
+      if(horaBogota >= 6 && horaBogota < 17) {
+        console.error('[SNAPSHOT-BLOQUEADO] foto de turno noche en horario diurno. ' +
+          'bDay=' + bDay + ' shift=' + shiftId + ' horaBogota=' + horaBogota +
+          ' user=' + userName + ' (turno noche arranca 6pm; rango bloqueado 6am-4:59pm)');
+        return;
+      }
     }
     const { data: products } = await supabase.from('products')
       .select('id, stock_actual').eq('activo', true);
