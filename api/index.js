@@ -134,7 +134,7 @@ async function fetchAll(queryBuilder, batchSize = 1000) {
   const all = [];
   let from = 0;
   while (true) {
-    const { data, error } = await queryBuilder().range(from, from + batchSize - 1);
+    const { data, error } = await queryBuilder().order('id', { ascending: true }).range(from, from + batchSize - 1);
     if (error) throw error;
     if (!data || !data.length) break;
     all.push(...data);
