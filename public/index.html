@@ -10196,6 +10196,7 @@ function renderGastosMesTabla(lista){
   h+='<thead><tr style="background:#18181f">';
   h+='<th style="text-align:left;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:140px">Categoría</th>';
   h+='<th style="text-align:left;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:50px">Fecha</th>';
+  h+='<th style="text-align:center;padding:10px 4px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:34px">✓</th>';
   h+='<th style="text-align:left;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase">Gasto</th>';
   h+='<th style="text-align:right;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:100px">Monto</th>';
   h+='<th style="text-align:center;padding:10px 12px;font-weight:500;color:#9ca3af;font-size:10px;text-transform:uppercase;width:80px">Pago</th>';
@@ -10219,8 +10220,9 @@ function renderGastosMesTabla(lista){
         h+='<td rowspan="'+items.length+'" style="padding:10px 12px;vertical-align:top;border-right:0.5px solid rgba(46,46,58,.5)"><div style="font-size:12px;font-weight:500">'+(iconos[cat]||'•')+' '+esc(cat)+'</div><div style="font-size:10px;color:#6b7280;margin-top:2px">'+items.length+' '+(items.length===1?'item':'items')+'</div></td>';
       }
       h+='<td style="padding:8px 12px;color:#9ca3af">'+esc(dia)+'</td>';
+      h+='<td style="padding:8px 4px;text-align:center"><input type="checkbox" onclick="toggleAuditadoVisual(this,document.getElementById(\'gmMonto'+item.id+'\'))" style="cursor:pointer;width:15px;height:15px;accent-color:#fbbf24"></td>';
       h+='<td style="padding:8px 12px">'+esc(item.concepto||'')+'</td>';
-      h+='<td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;color:#ef4444">'+fmt(item.monto||0)+'</td>';
+      h+='<td id="gmMonto'+item.id+'" style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;color:#ef4444">'+fmt(item.monto||0)+'</td>';
       h+='<td style="padding:8px 12px;text-align:center">'+pmTag+'</td>';
       if(idx===0){
         var topeMsg='';
@@ -10241,6 +10243,11 @@ function renderGastosMesTabla(lista){
   });
   h+='</tbody></table></div>';
   return h;
+}
+// Checkbox de auditoria VISUAL (no persiste): amarillo si marcado, rojo si no
+function toggleAuditadoVisual(checkbox,montoTd){
+  if(!montoTd)return;
+  montoTd.style.color=checkbox.checked?'#fbbf24':'#ef4444';
 }
 function openAddGastoMes(){
   if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
