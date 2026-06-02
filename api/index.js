@@ -491,14 +491,30 @@ async function apiLogin(p, res) {
   }
 
   if (userRole === 'ADMIN') {
-    const settings = await getSettings();
-    const expected = String(settings.ADMIN_CODE || '2206');
-    if (String(p.adminCode || '') !== expected) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
-      return err(res, 'PIN de administrador incorrecto.');
+    // Buscar el admin por su PIN propio en admin_pins.
+    // Si coincide: usamos el nombre canonico de la tabla (auditoria confiable)
+    // y su flag ver_luciana. El nombre escrito a mano se ignora a proposito,
+    // asi nadie puede hacerse pasar por otro admin tipeando otro nombre.
+    const { data: adminRow } = await supabase.from('admin_pins')
+      .select('user_name, ver_luciana').eq('pin', String(p.adminCode || '')).maybeSingle();
+    let adminName, verLuciana;
+    if (adminRow) {
+      adminName = adminRow.user_name;
+      verLuciana = adminRow.ver_luciana !== false;
+    } else {
+      // Fallback: PIN compartido viejo (settings.ADMIN_CODE) para no romper
+      // ningun login previo si la tabla fallara o no tuviera la fila.
+      const settings = await getSettings();
+      const expected = String(settings.ADMIN_CODE || '2206');
+      if (String(p.adminCode || '') !== expected) {
+        await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
+        return err(res, 'PIN de administrador incorrecto.');
+      }
+      adminName = userName;
+      verLuciana = true;
     }
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: userName, action: 'LOGIN' });
-    return ok(res, { session: { userName, userRole: 'ADMIN', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
+    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: adminName, action: 'LOGIN' });
+    return ok(res, { session: { userName: adminName, userRole: 'ADMIN', verLuciana: verLuciana, shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'RECEPTION') {
