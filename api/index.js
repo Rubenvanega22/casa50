@@ -8163,6 +8163,16 @@ async function apiLucianaChat(p, res) {
   if (String(p.userRole || '').toUpperCase() !== 'ADMIN') {
     return err(res, 'Solo el administrador puede usar Luciana', 403);
   }
+  // Bloqueo por admin especifico: si el admin tiene ver_luciana=false en
+  // admin_pins, no puede usar Luciana aunque su rol sea ADMIN (caso lisset).
+  const quien = String(p.userName || '').trim().toLowerCase();
+  if (quien) {
+    const { data: adminRow } = await supabase.from('admin_pins')
+      .select('ver_luciana').eq('user_name', quien).maybeSingle();
+    if (adminRow && adminRow.ver_luciana === false) {
+      return err(res, 'Este administrador no tiene acceso a Luciana', 403);
+    }
+  }
   const pregunta = String(p.pregunta || '').trim();
   if (!pregunta) return err(res, 'Pregunta vacia', 400);
   if (pregunta.length > 4000) return err(res, 'Pregunta muy larga (max 4000)', 400);
