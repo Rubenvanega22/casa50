@@ -1771,7 +1771,7 @@ actualizarBtnCaja();
       renderMultiMaidBtn();
     });
   }
-  if(sess.userRole==='ADMIN') lucianaInit();
+  if(sess.userRole==='ADMIN' && sess.verLuciana===true) lucianaInit();
   loadNotes();
 }
 function actualizarBtnCaja(){
