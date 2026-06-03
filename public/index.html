@@ -5369,8 +5369,19 @@ function ncalFiltrarPersonas(){
 function ncalAbrirExtra(fecha,area){
   var limites={Camareria:4,Patio:2,Recepcion:1};
   var limite=limites[area]||1;
-  var extrasDelDia=(window.ncalExtras||[]).filter(function(ex){return ex.fecha===fecha&&ex.area===area;});
+  var todosDia=(window.ncalExtras||[]).filter(function(ex){return ex.fecha===fecha&&ex.area===area;});
+  var reales=todosDia.filter(function(ex){return ex.origen==='real';});
+  var extrasDelDia=todosDia.filter(function(ex){return ex.origen!=='real';});
   var h='<div class="mh"><div class="mt">Extras — '+area+' — '+fecha+'</div><button class="mc" onclick="closeM(\'mExtrasCal\')">✕</button></div>';
+  if(reales.length){
+    h+='<div style="margin-bottom:10px">';
+    reales.forEach(function(ex){
+      h+='<div style="background:#22222c;border-left:3px solid #f59e0b;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:6px">';
+      h+='<div><b>'+esc(ex.nombre)+'</b><span style="font-size:10px;color:#9ca3af;margin-left:6px">(recepción'+(ex.turno?' · '+ex.turno:'')+')</span></div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
   if(extrasDelDia.length){
     h+='<div style="margin-bottom:10px">';
     extrasDelDia.forEach(function(ex){

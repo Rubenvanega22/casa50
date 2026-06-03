@@ -3988,11 +3988,26 @@ async function apiMaidCancel(p, res) {
 }
 
 // ==================== CALENDARIO EXTRAS ====================
+function ncalMapAreaExtra(a){
+  a=String(a||'').trim();
+  if(a==='Recepcion')return 'Recepcion';
+  if(a==='Camarera'||a==='Camareria')return 'Camareria';
+  if(a==='Patiero'||a==='Patio')return 'Patio';
+  return '';
+}
 async function apiGetExtras(p, res) {
   const mes=String(p.mes||'').trim();
   if(!mes) return err(res,'mes requerido');
   const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
-  return ok(res,{extras:(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||''}))});
+  const manual=(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||'',origen:'manual'}));
+  const SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+  const{data:reales}=await supabase.from('extra_staff').select('id,person_name,area,shift_id,business_day').like('business_day',mes+'%').eq('anulada',false);
+  const realesMap=(reales||[]).map(r=>{
+    const area=ncalMapAreaExtra(r.area);
+    if(!area)return null;
+    return {id:'real_'+r.id,fecha:r.business_day,area:area,nombre:r.person_name||'',horaEntrada:'',horaSalida:'',tipo:'normal',turno:SHIFT[r.shift_id]||'',vacInicio:'',vacFin:'',fijo:'',origen:'real'};
+  }).filter(Boolean);
+  return ok(res,{extras:manual.concat(realesMap)});
 }
 async function apiSaveExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
