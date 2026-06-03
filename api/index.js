@@ -4001,11 +4001,11 @@ async function apiGetExtras(p, res) {
   const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
   const manual=(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||'',origen:'manual'}));
   const SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-  const{data:reales}=await supabase.from('extra_staff').select('id,person_name,area,shift_id,business_day').like('business_day',mes+'%').eq('anulada',false);
+  const{data:reales}=await supabase.from('extra_staff').select('id,person_name,area,shift_id,business_day,entry_ms,exit_ms,payment,registered_by').like('business_day',mes+'%').eq('anulada',false);
   const realesMap=(reales||[]).map(r=>{
     const area=ncalMapAreaExtra(r.area);
     if(!area)return null;
-    return {id:'real_'+r.id,fecha:r.business_day,area:area,nombre:r.person_name||'',horaEntrada:'',horaSalida:'',tipo:'normal',turno:SHIFT[r.shift_id]||'',vacInicio:'',vacFin:'',fijo:'',origen:'real'};
+    return {id:'real_'+r.id,fecha:r.business_day,area:area,nombre:r.person_name||'',horaEntrada:'',horaSalida:'',tipo:'normal',turno:SHIFT[r.shift_id]||'',vacInicio:'',vacFin:'',fijo:'',origen:'real',entryMs:r.entry_ms,exitMs:r.exit_ms,payment:r.payment,registeredBy:r.registered_by};
   }).filter(Boolean);
   return ok(res,{extras:manual.concat(realesMap)});
 }

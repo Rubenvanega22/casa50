@@ -644,6 +644,11 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <label>¿Cuántas horas va a trabajar?</label><select id="exHours"><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="7">7 horas</option><option value="8">8 horas</option><option value="9">9 horas</option><option value="10">10 horas</option><option value="11">11 horas</option><option value="12">12 horas</option></select>
 <input type="hidden" id="exEditId" value="">
 <button class="btn ba full" style="margin-top:8px" onclick="saveExtra()">Registrar</button></div></div>
+<div class="ov" id="mVerExtra"><div class="modal"><div class="mh"><div class="mt">Ver P. Extra de recepción</div><button class="mc" onclick="closeM('mVerExtra')">✕</button></div>
+<div id="verExtraBody" style="font-size:13px;line-height:1.7"></div>
+<p style="font-size:11px;color:#9ca3af;margin-top:10px">Este P. Extra fue cargado por recepción y se edita desde su pestaña P. Extras.</p>
+<button class="btn ba full" style="margin-top:8px" onclick="closeM('mVerExtra')">Cerrar</button>
+</div></div>
 <div class="ov" id="mExCo"><div class="modal"><div class="mh"><div class="mt" id="mExCoT">Pago y Salida</div><button class="mc" onclick="closeM('mExCo')">✕</button></div><div id="mExCoI" style="font-size:12px;color:#9ca3af;margin-bottom:10px"></div>
 <label>Hora de salida</label><input type="time" id="exExitTime">
 <label>Pago</label><input type="number" id="exPay" min="0" placeholder="Valor a pagar">
@@ -5167,6 +5172,7 @@ function ncalDiaInicioSem(area,turno){
   return turno==='T1'?0:1;
 }
 
+function ncalTurnoDeHora(h){h=(h||'').slice(0,5);if(h>='06:00'&&h<'14:00')return 'T1';if(h>='14:00'&&h<'21:00')return 'T2';return 'T3';}
 function ncalNumSemanas(area,turno){
   var ini=ncalDiaInicioSem(area,turno);
   var ultimoDia=new Date(ncalAnio,ncalMes+1,0).getDate();
@@ -5321,38 +5327,20 @@ function ncalRender(){
           if(esDes){if(cob)html+='<span class="ncal-ext">+'+esc(cob.nombre.split(' ')[0])+'</span>';else html+='<span class="ncal-sc">!</span>';}
           var extraReemplaza=(window.ncalExtras||[]).find(function(ex){return ex.fecha===fecha&&ex.area===area&&ex.fijo===persona;});
           if(extraReemplaza){html+='<span class="ncal-ext">'+esc(extraReemplaza.nombre.split(' ')[0])+'</span>';}
+          if(info.turno){
+            var exTurno=(window.ncalExtras||[]).filter(function(ex){
+              return ex.fecha===fecha&&ex.area===area&&!ex.fijo&&(ex.turno||ncalTurnoDeHora(ex.horaEntrada))===info.turno;
+            });
+            exTurno.forEach(function(ex){
+              var oc=isAdmin?(ex.origen==='real'?'onclick="ncalVerExtra(\''+ex.id+'\')"':'onclick="ncalAbrirExtra(\''+fecha+'\',\''+area+'\')"'):'';
+              html+='<span style="display:block;font-size:8px;color:#a78bfa;line-height:1.25;cursor:'+(isAdmin?'pointer':'default')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap" '+oc+'>👤'+esc(ex.nombre.split(' ')[0])+'</span>';
+            });
+          }
         }
         html+='</div></td>';
       }
       html+='<td style="position:sticky;right:0;z-index:1;background:#18181f;padding:3px 4px;text-align:center;border:0.5px solid #2e2e3a;font-size:10px"><div style="color:#22c55e;font-weight:700">'+st.t+'</div><div style="color:#9ca3af">'+st.d+'</div><div style="color:#fcd34d">'+st.n+'</div></td></tr>';
     });
-    // Fila EXTRA del area
-    if(true){
-      var limiteExtra=area==='Camareria'?4:area==='Patio'?2:1;
-      html+='<tr><td style="position:sticky;left:0;z-index:1;background:#1a1a24;padding:4px 8px;font-size:10px;font-weight:700;color:#f59e0b;border:0.5px solid #2e2e3a;white-space:nowrap">EXTRA</td>';
-      for(var dia2=1;dia2<=ultimoDia;dia2++){
-        var fecha2=ncalFecha(dia2);
-        var extrasDelDia=(window.ncalExtras||[]).filter(function(ex){return ex.fecha===fecha2&&ex.area===area;});
-        var count=extrasDelDia.length;
-        var esHoy3=hoy.getFullYear()===ncalAnio&&hoy.getMonth()===ncalMes&&hoy.getDate()===dia2;
-        html+='<td style="padding:2px;vertical-align:top;border:0.5px solid rgba(46,46,58,.5);'+(esHoy3?'background:rgba(124,92,252,.08);':'background:rgba(245,158,11,.03);')+'">';
-        html+='<div style="cursor:'+(isAdmin?'pointer':'default')+';min-height:36px;padding:2px;border-radius:2px" '+(isAdmin?'onclick="ncalAbrirExtra(\''+fecha2+'\',\''+area+'\')"':'')+' >';
-        if(count>0){
-          html+='<span style="font-size:9px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,.2);border-radius:3px;padding:1px 3px">+'+count+'</span>';
-          extrasDelDia.forEach(function(ex){
-            if(ex.origen==='real'){
-              html+='<span style="display:block;font-size:8px;color:#a78bfa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👤'+esc(ex.nombre.split(' ')[0])+'</span>';
-            } else {
-              html+='<span style="display:block;font-size:8px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(ex.nombre.split(' ')[0])+'</span>';
-            }
-          });
-        } else {
-          html+='<span style="font-size:9px;color:#2e2e3a">+</span>';
-        }
-        html+='</div></td>';
-      }
-      html+='<td style="position:sticky;right:0;z-index:1;background:#1a1a24;border:0.5px solid #2e2e3a"></td></tr>';
-    }
     html+='</tbody></table></div></div>';
   });
   cont.innerHTML=html;
@@ -5410,6 +5398,23 @@ function ncalAbrirExtra(fecha,area){
   if(!modal){var div=document.createElement('div');div.className='ov';div.id='mExtrasCal';div.innerHTML='<div class="modal" style="max-height:90vh;overflow-y:auto"><div id="mExtrasCalB"></div></div>';div.addEventListener('click',function(e){if(e.target===div)closeM('mExtrasCal');});document.body.appendChild(div);}
   document.getElementById('mExtrasCalB').innerHTML=h;
   openM('mExtrasCal');
+}
+
+function ncalVerExtra(id){
+  var ex=(window.ncalExtras||[]).find(function(e){return e.id===id;});
+  if(!ex)return;
+  function hm(ms){if(!ms)return '—';var d=new Date(Number(ms));return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+  var pago=ex.payment?('$'+Number(ex.payment).toLocaleString('es-CO')):'Pendiente';
+  document.getElementById('verExtraBody').innerHTML=
+    '<div><b>'+esc(ex.nombre)+'</b></div>'+
+    '<div>Área: '+esc(ex.area)+'</div>'+
+    '<div>Turno: '+esc(ex.turno||'—')+'</div>'+
+    '<div>Fecha: '+esc(ex.fecha)+'</div>'+
+    '<div>Entrada: '+hm(ex.entryMs)+'</div>'+
+    '<div>Salida: '+hm(ex.exitMs)+'</div>'+
+    '<div>Monto: '+pago+'</div>'+
+    '<div>Cargado por: '+esc(ex.registeredBy||'—')+'</div>';
+  openM('mVerExtra');
 }
 
 function ncalFormExtra(fecha,area,extraId){
