@@ -5165,6 +5165,17 @@ function ncalDiaInicioSem(area,turno){
   return turno==='T1'?0:1;
 }
 
+function ncalNumSemanas(area,turno){
+  var ini=ncalDiaInicioSem(area,turno);
+  var ultimoDia=new Date(ncalAnio,ncalMes+1,0).getDate();
+  var f=new Date(ncalAnio,ncalMes,ultimoDia);
+  var dsd=(f.getDay()-ini+7)%7;
+  var iniMs=f.getTime()-dsd*86400000;
+  var p=new Date(ncalAnio,ncalMes,1);
+  var dpd=(p.getDay()-ini+7)%7;
+  var pMs=p.getTime()-dpd*86400000;
+  return Math.round((iniMs-pMs)/604800000)+1;
+}
 function ncalGetSemana(dia,area,turno){
   var ini=ncalDiaInicioSem(area,turno);
   var f=new Date(ncalAnio,ncalMes,dia);
@@ -5174,7 +5185,7 @@ function ncalGetSemana(dia,area,turno){
   var p=new Date(ncalAnio,ncalMes,1);
   var dpd=(p.getDay()-ini+7)%7;
   var pMs=p.getTime()-dpd*86400000;
-  return Math.min(Math.max(Math.round((iniMs-pMs)/604800000)+1,1),4);
+  return Math.min(Math.max(Math.round((iniMs-pMs)/604800000)+1,1),ncalNumSemanas(area,turno));
 }
 
 function ncalGetInfo(area,persona,dia,fecha){
