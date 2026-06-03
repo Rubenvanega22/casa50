@@ -638,7 +638,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
 <div class="ov" id="mExtra"><div class="modal"><div class="mh"><div class="mt">Registrar Personal Extra</div><button class="mc" onclick="closeM('mExtra')">✕</button></div>
 <label>Nombre</label><input type="text" id="exName" placeholder="Nombre completo">
-<label>Area</label><select id="exArea"><option value="Servicios">Servicios</option><option value="Camarera">Camarera</option><option value="Patiero">Patiero</option><option value="Mantenimiento">Mantenimiento</option><option value="Recepcion">Recepcion</option></select>
+<label>Area</label><select id="exArea"><option value="Recepcion">Recepcion</option><option value="Camareria" selected>Camareria</option><option value="Patio">Patio</option></select>
 <label>Turno</label><select id="exShift"><option value="SHIFT_1">Turno 1 (6am-2pm)</option><option value="SHIFT_2">Turno 2 (2pm-9pm)</option><option value="SHIFT_3">Turno 3 (9pm-6am)</option></select>
 <label>Hora de entrada</label><input type="time" id="exEntryTime">
 <label>¿Cuántas horas va a trabajar?</label><select id="exHours"><option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4 horas</option><option value="5">5 horas</option><option value="6">6 horas</option><option value="7">7 horas</option><option value="8">8 horas</option><option value="9">9 horas</option><option value="10">10 horas</option><option value="11">11 horas</option><option value="12">12 horas</option></select>
@@ -3380,7 +3380,7 @@ function editExtra(id){
     var entryTime='';
     if(e.entryMs){var d=new Date(e.entryMs);entryTime=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
     document.getElementById('exName').value=e.personName||'';
-    document.getElementById('exArea').value=e.area||'Servicios';
+    document.getElementById('exArea').value=e.area||'Camareria';
     document.getElementById('exShift').value=e.shiftId||sess.shiftId;
     document.getElementById('exEntryTime').value=entryTime;
     document.getElementById('exHours').value=e.workHours||4;
