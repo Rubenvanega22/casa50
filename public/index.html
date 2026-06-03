@@ -5166,6 +5166,22 @@ function ncalGetVac(area,persona,fecha){
   for(var i=0;i<r.length;i++){if(fecha>=r[i].inicio&&fecha<=r[i].fin)return r[i];}
   return null;
 }
+function ncalCargarVacaciones(){
+  ncalVacRangos={};
+  var aMap={Recepcion:'Recepcion',Camarera:'Camareria',Camareria:'Camareria',Patiero:'Patio',Patio:'Patio'};
+  (staffList||[]).forEach(function(s){
+    var gArea=aMap[s.area];if(!gArea)return;
+    (s.vacacionesHistorial||[]).forEach(function(v){
+      var ini=(v.fechaSalidaVacaciones||'').slice(0,10),fr=(v.fechaReingreso||'').slice(0,10);
+      if(!ini||!fr)return;
+      var d=new Date(fr+'T00:00:00');d.setDate(d.getDate()-1);
+      var fin=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      if(fin<ini)return;
+      var vk=ncalVacKey(gArea,s.name);
+      (ncalVacRangos[vk]=ncalVacRangos[vk]||[]).push({id:'vh_'+v.id,inicio:ini,fin:fin,obs:'Vacaciones'});
+    });
+  });
+}
 
 function ncalDiaInicioSem(area,turno){
   if(area==='Recepcion')return turno==='T2'?0:1;
@@ -5217,6 +5233,7 @@ function loadSched(){
   var ym=ncalGetYM();
   var p=ym.split('-');
   ncalAnio=parseInt(p[0]);ncalMes=parseInt(p[1])-1;
+  ncalCargarVacaciones();
   var isAdmin=sess&&sess.userRole==='ADMIN';
   var btn=document.getElementById('btnProgMes');
   if(btn)btn.style.display=isAdmin?'':'none';
