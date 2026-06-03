@@ -5228,6 +5228,18 @@ function ncalGetInfo(area,persona,dia,fecha){
   if(!sd)return null;
   return{tipo:'normal',turno:sd.turno,entrada:sd.entrada,salida:sd.salida};
 }
+function ncalTurnoProgramado(area,persona,dia,fecha){
+  var pData=(ncalDatos[ncalAnio+'-'+ncalMes+'-'+area]||{})[persona];
+  if(!pData)return '';
+  if(pData.exc&&pData.exc[fecha])return pData.exc[fecha].turno||'';
+  var ds=(['Dom','Lun','Mar','Mie','Jue','Vie','Sab'])[new Date(ncalAnio,ncalMes,dia).getDay()];
+  if(pData.desc&&pData.desc.indexOf(ds)>=0)return '';
+  var s1=pData.sem&&pData.sem[1];
+  var tRef=s1?s1.turno:'T1';
+  var sem=ncalGetSemana(dia,area,tRef);
+  var sd=pData.sem&&pData.sem[sem]?pData.sem[sem]:s1;
+  return sd?sd.turno:'';
+}
 
 function loadSched(){
   var ym=ncalGetYM();
@@ -5344,9 +5356,10 @@ function ncalRender(){
           if(esDes){if(cob)html+='<span class="ncal-ext">+'+esc(cob.nombre.split(' ')[0])+'</span>';else html+='<span class="ncal-sc">!</span>';}
           var extraReemplaza=(window.ncalExtras||[]).find(function(ex){return ex.fecha===fecha&&ex.area===area&&ex.fijo===persona;});
           if(extraReemplaza){html+='<span class="ncal-ext">'+esc(extraReemplaza.nombre.split(' ')[0])+'</span>';}
-          if(info.turno){
+          var turnoCelda=info.turno||(info.tipo==='vacaciones'?ncalTurnoProgramado(area,persona,dia,fecha):'');
+          if(turnoCelda){
             var exTurno=(window.ncalExtras||[]).filter(function(ex){
-              return ex.fecha===fecha&&ex.area===area&&!ex.fijo&&(ex.turno||ncalTurnoDeHora(ex.horaEntrada))===info.turno;
+              return ex.fecha===fecha&&ex.area===area&&!ex.fijo&&(ex.turno||ncalTurnoDeHora(ex.horaEntrada))===turnoCelda;
             });
             exTurno.forEach(function(ex){
               var oc=isAdmin?(ex.origen==='real'?'onclick="ncalVerExtra(\''+ex.id+'\')"':'onclick="ncalAbrirExtra(\''+fecha+'\',\''+area+'\')"'):'';
