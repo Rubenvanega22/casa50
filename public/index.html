@@ -5340,7 +5340,11 @@ function ncalRender(){
         if(count>0){
           html+='<span style="font-size:9px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,.2);border-radius:3px;padding:1px 3px">+'+count+'</span>';
           extrasDelDia.forEach(function(ex){
-            html+='<span style="display:block;font-size:8px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(ex.nombre.split(' ')[0])+'</span>';
+            if(ex.origen==='real'){
+              html+='<span style="display:block;font-size:8px;color:#a78bfa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👤'+esc(ex.nombre.split(' ')[0])+'</span>';
+            } else {
+              html+='<span style="display:block;font-size:8px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(ex.nombre.split(' ')[0])+'</span>';
+            }
           });
         } else {
           html+='<span style="font-size:9px;color:#2e2e3a">+</span>';
@@ -5376,8 +5380,8 @@ function ncalAbrirExtra(fecha,area){
   if(reales.length){
     h+='<div style="margin-bottom:10px">';
     reales.forEach(function(ex){
-      h+='<div style="background:#22222c;border-left:3px solid #f59e0b;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:6px">';
-      h+='<div><b>'+esc(ex.nombre)+'</b><span style="font-size:10px;color:#9ca3af;margin-left:6px">(recepción'+(ex.turno?' · '+ex.turno:'')+')</span></div>';
+      h+='<div style="background:#22222c;border-left:3px solid #7c5cfc;border-radius:0 7px 7px 0;padding:8px 10px;margin-bottom:6px">';
+      h+='<div><b>👤 '+esc(ex.nombre)+'</b><span style="font-size:10px;color:#a78bfa;margin-left:6px">(recepción'+(ex.turno?' · '+ex.turno:'')+')</span></div>';
       h+='</div>';
     });
     h+='</div>';
