@@ -2542,8 +2542,10 @@ async function apiRoomChange(p, res) {
     return base + extra * Number(cfg.extraPerson||0);
   }
 
-  const fromPrice = calcTotalPrice(fromCfg, durationHrs, people);
-  const toPrice = calcTotalPrice(toCfg, durationHrs, people);
+  // La 304 es cortesia: precio efectivo siempre 0 (misma regla que apiCheckIn L669)
+  const precio304Aware = (rid, cfg) => rid==='304' ? 0 : calcTotalPrice(cfg, durationHrs, people);
+  const fromPrice = precio304Aware(fromRoomId, fromCfg);
+  const toPrice = precio304Aware(toRoomId, toCfg);
   const diff = toPrice - fromPrice;
 
   // Marcar habitacion origen como RETOQUE
@@ -2566,47 +2568,89 @@ async function apiRoomChange(p, res) {
     arrival_plate: fromRoom.arrival_plate || '',
     alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
     checkout_obs: '', contaminated_since_ms: 0,
-    pay_method: fromRoom.payMethod || payMethod,
+    pay_method: fromRoomId==='304' ? payMethod : (fromRoom.payMethod || payMethod),
     updated_at: new Date().toISOString()
   }).eq('room_id', toRoomId);
 
   // ITEM 8: Transferir la venta original de fromRoom a toRoom
   // Buscar la venta original de esta estadia
   const { data: originalSale } = await supabase.from('sales')
-    .select('id')
+    .select('id, total, pay_method')
     .eq('room_id', fromRoomId)
     .eq('type', 'SALE')
     .eq('check_in_ms', originalCheckInMs)
     .limit(1);
+  const saleId = (originalSale && originalSale.length) ? originalSale[0].id : null;
+  const saleTotalOriginal = (originalSale && originalSale.length) ? Number(originalSale[0].total||0) : 0;
 
-  if(originalSale && originalSale.length) {
-    // Actualizar la venta original para que apunte a la nueva habitacion
-    await supabase.from('sales').update({
-      room_id: toRoomId,
-      category: toRoom.category
-    }).eq('id', originalSale[0].id);
+  let caso = 'NORMAL';
+  if(toRoomId === '304'){
+    // ===== CASO A: cambio HACIA la 304 (entra a cortesia) =====
+    // La venta queda en $0. La plata cobrada se devuelve fisicamente al cliente.
+    // NO se inserta REFUND: poner total=0 ya representa ingreso neto $0 y mantiene
+    // Cierre = Resumen = Cuadre (REGLA DE ORO). La traza queda en la nota.
+    caso = 'A_CORTESIA';
+    if(saleId){
+      await supabase.from('sales').update({
+        room_id: '304', category: toRoom.category,
+        total: 0, amount_1: 0, amount_2: 0, amount_3: 0, pay_method_2: '',
+        note: 'Cambio a 304 (cortesia): cobrado y devuelto $'+saleTotalOriginal+' al cliente. Origen hab '+fromRoomId
+      }).eq('id', saleId);
+    }
+  } else if(fromRoomId === '304'){
+    // ===== CASO B: cambio DESDE la 304 (sale de cortesia) =====
+    // Ahora si paga la habitacion nueva: se cobra el precio completo con el metodo elegido.
+    caso = 'B_DESDE_CORTESIA';
+    const mixtoEf = Number(p.mixtoEf||0), mixtoTj = Number(p.mixtoTj||0), mixtoNq = Number(p.mixtoNq||0);
+    if(payMethod==='MIXTO' && (mixtoEf+mixtoTj+mixtoNq)!==toPrice){
+      return err(res, 'Los montos MIXTO deben sumar '+toPrice);
+    }
+    if(saleId){
+      await supabase.from('sales').update({
+        room_id: toRoomId, category: toRoom.category,
+        total: toPrice, pay_method: payMethod,
+        pay_method_2: payMethod==='MIXTO'?'MIXTO_EF_TJ_NQ':'',
+        amount_1: payMethod==='MIXTO'?mixtoEf:(payMethod==='EFECTIVO'?toPrice:0),
+        amount_2: payMethod==='MIXTO'?mixtoTj:(payMethod==='TARJETA'?toPrice:0),
+        amount_3: payMethod==='MIXTO'?mixtoNq:(payMethod==='NEQUI'?toPrice:0),
+        note: 'Cambio desde 304: cobrado $'+toPrice+' ['+payMethod+']. Destino hab '+toRoomId
+      }).eq('id', saleId);
+    }
+  } else {
+    // ===== Caso NORMAL (igual que hoy): mover venta + fila diff =====
+    if(saleId){
+      await supabase.from('sales').update({ room_id: toRoomId, category: toRoom.category }).eq('id', saleId);
+    }
+    if(diff > 0) {
+      await supabase.from('sales').insert({
+        ts_ms: now, business_day: bDay, shift_id: shift,
+        user_role: 'RECEPTION', user_name: userName, type: 'SALE',
+        room_id: toRoomId, category: toRoom.category, duration_hrs: durationHrs,
+        base_price: diff, people, total: diff,
+        pay_method: payMethod, check_in_ms: originalCheckInMs, due_ms: originalDueMs,
+        arrival_type: fromRoom.arrival_type||'WALK'
+      });
+    } else if(diff < 0) {
+      await supabase.from('sales').insert({
+        ts_ms: now, business_day: bDay, shift_id: shift,
+        user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
+        room_id: toRoomId, category: fromRoom.category, total: diff,
+        pay_method: payMethod, refund_reason: 'CAMBIO DE HABITACION de ' + fromRoomId
+      });
+    }
   }
 
-  // Registrar diferencia de precio si la hay
-  if(diff > 0) {
-    await supabase.from('sales').insert({
-      ts_ms: now, business_day: bDay, shift_id: shift,
-      user_role: 'RECEPTION', user_name: userName, type: 'SALE',
-      room_id: toRoomId, category: toRoom.category, duration_hrs: durationHrs,
-      base_price: diff, people, total: diff,
-      pay_method: payMethod, check_in_ms: originalCheckInMs, due_ms: originalDueMs,
-      arrival_type: fromRoom.arrival_type||'WALK'
-    });
-  } else if(diff < 0) {
-    await supabase.from('sales').insert({
-      ts_ms: now, business_day: bDay, shift_id: shift,
-      user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
-      room_id: toRoomId, category: fromRoom.category, total: diff,
-      pay_method: payMethod, refund_reason: 'CAMBIO DE HABITACION de ' + fromRoomId
-    });
-  }
+  // Registrar el cambio en el historial (antes no se registraba state_history)
+  await supabase.from('state_history').insert([
+    { ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName,
+      room_id: fromRoomId, from_state: 'OCCUPIED', to_state: 'AVAILABLE', people: 0,
+      meta_json: JSON.stringify({ accion:'CAMBIO_HAB_SALIDA', destino: toRoomId, checkInMs: originalCheckInMs, caso }) },
+    { ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName,
+      room_id: toRoomId, from_state: 'AVAILABLE', to_state: 'OCCUPIED', people,
+      meta_json: JSON.stringify({ accion:'CAMBIO_HAB_ENTRADA', origen: fromRoomId, checkInMs: originalCheckInMs, dueMs: originalDueMs, caso }) }
+  ]);
 
-  return ok(res, { fromRoomId, toRoomId, diff, newDueMs: originalDueMs });
+  return ok(res, { fromRoomId, toRoomId, diff, newDueMs: originalDueMs, caso });
 }
 
 async function apiUpdatePayMethod(p, res) {

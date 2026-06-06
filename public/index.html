@@ -2577,8 +2577,9 @@ var prodsCI=[..._ciProds];_ciProds=[];
   h+='<div class="pg" style="margin-bottom:10px">';
   durs.forEach(function(hr){h+='<div class="po'+(hr===3?' on':'')+'" id="rcDur'+hr+'" onclick="selRCDur('+hr+')"><div class="ph">'+hr+'h</div></div>';});
   h+='</div>';
-  h+='<label>Método de pago (si hay diferencia)</label>';
-  h+='<div class="pm" style="margin-bottom:10px"><div class="pmo on" id="rcPmEF" onclick="selRCPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="rcPmTA" onclick="selRCPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="rcPmNE" onclick="selRCPm(\'NEQUI\')">Nequi</div></div>';
+  h+='<label>Método de pago</label>';
+  h+='<div class="pm" style="margin-bottom:10px"><div class="pmo on" id="rcPmEF" onclick="selRCPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="rcPmTA" onclick="selRCPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="rcPmNE" onclick="selRCPm(\'NEQUI\')">Nequi</div><div class="pmo" id="rcPmMX" onclick="selRCPm(\'MIXTO\')">Mixto</div></div>';
+  h+='<div id="rcMixtoDiv" class="h" style="margin-bottom:10px"><label>Monto Efectivo</label><input type="number" id="rcMixtoEf" placeholder="0" min="0"><label>Monto Tarjeta</label><input type="number" id="rcMixtoTj" placeholder="0" min="0"><label>Monto Nequi</label><input type="number" id="rcMixtoNq" placeholder="0" min="0"></div>';
   h+='<div id="rcDiffBox" style="background:#22222c;border-radius:8px;padding:10px;text-align:center;margin-bottom:10px"></div>';
   h+='<button class="btn bg full" onclick="confirmRoomChange()">Confirmar Cambio</button>';
   var modal=document.getElementById('mRoomChange');
@@ -2596,8 +2597,10 @@ function selRCDur(h){
 }
 function selRCPm(pm){
   rcPm=pm;
-  ['EF','TA','NE'].forEach(function(k){var el=document.getElementById('rcPm'+k);if(el)el.classList.toggle('on',{EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI'}[k]===pm);});
+  ['EF','TA','NE','MX'].forEach(function(k){var el=document.getElementById('rcPm'+k);if(el)el.classList.toggle('on',{EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI',MX:'MIXTO'}[k]===pm);});
+  var mx=document.getElementById('rcMixtoDiv');if(mx)mx.classList.toggle('h',pm!=='MIXTO');
 }
+function precioHabRC(roomId,cfg,hrs){return roomId==='304'?0:calcP(hrs,cfg);}
 function updRoomChangeDiff(){
   var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
   var toRoom=rooms.find(function(r){return r.roomId===toRoomId;});
@@ -2605,8 +2608,14 @@ function updRoomChangeDiff(){
   if(!toRoom||!el)return;
   var fromCfg=MP[curRoom.category]||MP['Junior'];
   var toCfg=MP[toRoom.category]||MP['Junior'];
-  var fromPrice=calcP(rcDur,fromCfg);
-  var toPrice=calcP(rcDur,toCfg);
+  var fromPrice=precioHabRC(curRoom.roomId,fromCfg,rcDur);
+  var toPrice=precioHabRC(toRoomId,toCfg,rcDur);
+  if(toRoomId==='304'){
+    el.innerHTML='<div style="color:#22c55e">Pasa a <b>cortesía (304)</b>: se devuelve <b>'+fmt(fromPrice)+'</b> al cliente</div>';return;
+  }
+  if(curRoom.roomId==='304'){
+    el.innerHTML='<div style="color:#f59e0b">Sale de cortesía: <b>a cobrar '+fmt(toPrice)+'</b> con el método elegido</div>';return;
+  }
   var diff=toPrice-fromPrice;
   if(diff>0)el.innerHTML='<div style="color:#f59e0b">Diferencia a cobrar: <b>'+fmt(diff)+'</b></div>';
   else if(diff<0)el.innerHTML='<div style="color:#22c55e">Devolución al cliente: <b>'+fmt(Math.abs(diff))+'</b></div>';
@@ -2616,11 +2625,22 @@ function confirmRoomChange(){
   if(!curRoom)return;
   var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
   if(!toRoomId){toast('Selecciona una habitación.','err');return;}
+  var mixtoEf=0,mixtoTj=0,mixtoNq=0;
+  if(rcPm==='MIXTO'){
+    mixtoEf=Number((document.getElementById('rcMixtoEf')||{}).value||0);
+    mixtoTj=Number((document.getElementById('rcMixtoTj')||{}).value||0);
+    mixtoNq=Number((document.getElementById('rcMixtoNq')||{}).value||0);
+    var tr=rooms.find(function(r){return r.roomId===toRoomId;});
+    var tp=tr?precioHabRC(toRoomId,MP[tr.category]||MP['Junior'],rcDur):0;
+    if(mixtoEf+mixtoTj+mixtoNq!==tp){toast('Los montos MIXTO deben sumar '+fmt(tp),'err');return;}
+  }
   conf('Cambiar Hab '+curRoom.roomId+' → Hab '+toRoomId+'?',function(){
-    rpc('roomChange',{fromRoomId:curRoom.roomId,toRoomId:toRoomId,durationHrs:rcDur,payMethod:rcPm,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
+    rpc('roomChange',{fromRoomId:curRoom.roomId,toRoomId:toRoomId,durationHrs:rcDur,payMethod:rcPm,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){
         var msg='Cambio realizado.';
-        if(res.diff>0)msg+=' Cobrar: '+fmt(res.diff);
+        if(res.caso==='A_CORTESIA')msg='Cambio a cortesía (304): devolver '+fmt(Math.abs(res.diff))+' al cliente.';
+        else if(res.caso==='B_DESDE_CORTESIA')msg='Cambio realizado. Cobrar: '+fmt(res.diff);
+        else if(res.diff>0)msg+=' Cobrar: '+fmt(res.diff);
         else if(res.diff<0)msg+=' Devolver: '+fmt(Math.abs(res.diff));
         toast(msg,'ok');
         closeM('mRoomChange');closeM('mRoom');
