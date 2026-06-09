@@ -1771,14 +1771,14 @@ async function apiMonthMetrics(p, res) {
     if(isRoomSale){
       d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
     }
-    if(r.type==='SALE'){
+    if(r.type==='SALE'||r.type==='RENEWAL'){
       const base=t-epv;
       if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
       else if(pm==='NEQUI'){s.nq_hab+=base;s.nq_padd+=epv;}
       else if(pm==='MIXTO'){s.ef_hab+=Number(r.amount_1||0);s.tj_hab+=Number(r.amount_2||0);s.nq_hab+=Number(r.amount_3||0);}
       else{s.ef_hab+=base;s.ef_padd+=epv;}
     }
-    if(r.type==='EXTENSION'||r.type==='RENEWAL'){
+    if(r.type==='EXTENSION'){
       if(pm==='TARJETA')s.tj_had+=t;
       else if(pm==='NEQUI')s.nq_had+=t;
       else if(pm==='MIXTO'){s.ef_had+=Number(r.amount_1||0);s.tj_had+=Number(r.amount_2||0);s.nq_had+=Number(r.amount_3||0);}

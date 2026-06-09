@@ -4634,7 +4634,7 @@ sl.forEach(function(s){
         else ef_hab+=tot;
         return;
       }
-      if(tipo==='EXTENSION'||tipo==='RENEWAL'){
+      if(tipo==='EXTENSION'){
         // Horas adicionales
         if(pm==='TARJETA')tj_hadd+=tot;
         else if(pm==='NEQUI')nq_hadd+=tot;
@@ -8578,21 +8578,21 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       h+='<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;font-weight:800;color:'+color+'">'+fmt(total)+'</td></tr>';
     }
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#3b82f6;border:1px solid #2e2e3a">💳 TARJETA</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&s.type==='SALE';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#3b82f6');
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#3b82f6');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#3b82f6');
-    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0);},'#3b82f6');
+    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&s.type==='EXTENSION';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0);},'#3b82f6');
     dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).shiftBarTarjeta||0);},'#3b82f6');
    dataRowTotal('Total Tarjeta','TARJETA',function(m){return Number((m.totals||{}).shiftBarTarjeta||0);},'#3b82f6');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">📱 NEQUI</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0))&&s.type==='SALE';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#a78bfa');
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#a78bfa');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#a78bfa');
-    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0))&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):Number(s.total||0));},0);},'#a78bfa');
+    dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0))&&s.type==='EXTENSION';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):Number(s.total||0));},0);},'#a78bfa');
     dataRow('Bar Nequi',function(m){return Number((m.totals||{}).shiftBarNequi||0);},'#a78bfa');
     dataRowTotal('Total Nequi','NEQUI',function(m){return Number((m.totals||{}).shiftBarNequi||0);},'#a78bfa');
    h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#22c55e;border:1px solid #2e2e3a">💵 EFECTIVO</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='EFECTIVO'||(s.payMethod==='MIXTO'&&Number(s.amount_1||0)>0))&&s.type==='SALE';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_1||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#22c55e');
+    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='EFECTIVO'||(s.payMethod==='MIXTO'&&Number(s.amount_1||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_1||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#22c55e');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='EFECTIVO'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#22c55e');
-   dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='EFECTIVO'||(s.payMethod==='MIXTO'&&Number(s.amount_1||0)>0))&&(s.type==='EXTENSION'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_1||0):Number(s.total||0));},0);},'#22c55e');
+   dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='EFECTIVO'||(s.payMethod==='MIXTO'&&Number(s.amount_1||0)>0))&&s.type==='EXTENSION';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_1||0):Number(s.total||0));},0);},'#22c55e');
     dataRow('Bar Efectivo',function(m){return Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
    dataRowTotal('Total Efectivo','EFECTIVO',function(m){return Number((m.totals||{}).shiftBarEfectivo||0);},'#22c55e');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#ef4444;border:1px solid #2e2e3a">📤 GASTOS</td></tr>';
