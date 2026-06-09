@@ -3275,7 +3275,7 @@ function loadVentas(){
     var maidLogs=res[1].logs||[];
     var taxiList=(m.taxiList||[]);
     var t=m.totals||{};
-    var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.type==='SALE'&&s.durationHrs>0;}).sort(function(a,b){return a.checkInMs-b.checkInMs;});
+    var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0;}).sort(function(a,b){return (a.tsMs||a.checkInMs)-(b.tsMs||b.checkInMs);});
     var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
     var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     var resumen={SHIFT_1:{count:0,total:0},SHIFT_2:{count:0,total:0},SHIFT_3:{count:0,total:0}};
@@ -3316,7 +3316,7 @@ function loadVentas(){
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
         h+='<div style="background:#18181f;border:0.5px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px">';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-        h+='<div><b style="font-size:14px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(s.category)+'</span></div>';
+        h+='<div><b style="font-size:14px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(s.category)+'</span>'+(s.type==='RENEWAL'?' <span class="badge badge-rn">Renovación</span>':'')+'</div>';
         h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+pmB+'">'+s.payMethod+'</span>';
         h+='<span style="font-size:9px;font-weight:700;color:'+col+';background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px">'+lbl+'</span>';
         h+='<b style="color:#22c55e">'+fmt(s.total)+'</b></div></div>';
@@ -8750,10 +8750,10 @@ h+='</div>';
     var todasVentas=[];
     ms.forEach(function(m,i){
       var sid=shifts[i];
-      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.type==='SALE'&&s.durationHrs>0&&s.roomId!=='304'&&s.shiftId===sid;});
+      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0&&s.roomId!=='304'&&s.shiftId===sid;});
       sl.forEach(function(s){todasVentas.push(s);});
     });
-    todasVentas.sort(function(a,b){return a.checkInMs-b.checkInMs;});
+    todasVentas.sort(function(a,b){return (a.tsMs||a.checkInMs)-(b.tsMs||b.checkInMs);});
     var num=1;
     if(todasVentas.length){
       h+='<div class="sec">Ventas del Día</div>';
@@ -8767,7 +8767,7 @@ h+='</div>';
         var pmB={'EFECTIVO':'badge-ef','TARJETA':'badge-ta','NEQUI':'badge-ne','MIXTO':'badge-mo'}[s.payMethod]||'badge-ap';
         h+='<div style="background:#18181f;border:0.5px solid #2e2e3a;border-left:3px solid '+col+';border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px">';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-        h+='<div><b style="font-size:14px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(s.category)+'</span></div>';
+        h+='<div><b style="font-size:14px">#'+num+' Hab '+s.roomId+'</b> <span style="font-size:10px;color:#9ca3af">'+esc(s.category)+'</span>'+(s.type==='RENEWAL'?' <span class="badge badge-rn">Renovación</span>':'')+'</div>';
         h+='<div style="display:flex;align-items:center;gap:6px"><span class="badge '+pmB+'">'+s.payMethod+'</span>';
         h+='<span style="font-size:9px;font-weight:700;color:'+col+';background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px">'+lbl+'</span>';
         h+='<b style="color:#22c55e">'+fmt(s.total)+'</b></div></div>';
@@ -9673,7 +9673,7 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
   barEf=barEf||0;barTj=barTj||0;barNq=barNq||0;
   var t=(m&&m.totals)||{};
   var sales=m&&m.allSalesList||[];
-  var onlySales=sales.filter(function(s){return s.type==='SALE';});
+  var onlySales=sales.filter(function(s){return s.type==='SALE'||s.type==='RENEWAL';});
   var taxiList=m&&m.taxiList||[];
 
   // Ocupacion actual
@@ -9953,7 +9953,7 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
       h+='<div style="display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid rgba(46,46,58,.5);gap:6px">';
       h+='<span style="font-size:11px;font-weight:700;color:'+col+';min-width:20px;flex-shrink:0">#'+num+'</span>';
       h+='<div style="width:1px;height:20px;background:rgba(46,46,58,.8);flex-shrink:0"></div>';
-      h+='<span style="font-size:12px;font-weight:700;min-width:44px;flex-shrink:0">'+s.roomId+' <span style="font-size:9px;color:#9ca3af;font-weight:400">'+s.durationHrs+'h'+extraI+'</span></span>';
+      h+='<span style="font-size:12px;font-weight:700;min-width:44px;flex-shrink:0">'+s.roomId+' <span style="font-size:9px;color:#9ca3af;font-weight:400">'+s.durationHrs+'h'+extraI+'</span></span>'+(s.type==='RENEWAL'?'<span class="badge badge-rn" style="flex-shrink:0">Renov.</span>':'');
       h+='<div style="width:1px;height:20px;background:rgba(46,46,58,.8);flex-shrink:0"></div>';
       h+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">';
       h+='<span style="font-size:10px;color:#9ca3af">Ent <b style="color:#e5e7eb">'+fT(s.checkInMs)+'</b> · Sal <b style="color:#e5e7eb">'+fT(s.dueMs)+'</b> · '+esc(arrLabel)+'</span>';
