@@ -254,6 +254,11 @@ module.exports = async function handler(req, res) {
       case 'getHistorialSolicitudesGeo': return await apiGetHistorialSolicitudesGeo(payload, res);
       case 'aprobarSolicitudMant':return await apiAprobarSolicitudMant(payload, res);
       case 'rechazarSolicitudMant':return await apiRechazarSolicitudMant(payload, res);
+      // Modulo de mantenimiento de aire (preventivo, ciclo de 4 meses)
+      case 'getAireGrid':       return await apiGetAireGrid(payload, res);
+      case 'registrarAire':     return await apiRegistrarAire(payload, res);
+      case 'cerrarRondaAire':   return await apiCerrarRondaAire(payload, res);
+      case 'getAireHistorial':  return await apiGetAireHistorial(payload, res);
       case 'getProyeccion':     return await apiGetProyeccion(payload, res);
       case 'saveTarea':         return await apiSaveTarea(payload, res);
       case 'updateTarea':       return await apiUpdateTarea(payload, res);
@@ -3761,6 +3766,239 @@ async function apiGetResumenMantHoy(p, res) {
     activos: activosArr.length,
     pendientesMant: pendientesMant,
     hechosHoy: (verifHoyData||[]).length + (tareasHoyData||[]).length
+  });
+}
+
+// ==================== MANTENIMIENTO DE AIRE ====================
+// Mantenimiento preventivo de aires acondicionados, ciclo de 4 meses.
+// 42 unidades (38 habitaciones + 4 espacios). Tablas: aire_unidades,
+// aire_rondas, aire_mantenimiento. Apertura de ronda automatica (al
+// registrar la primera unidad); cierre manual cuando estan las 42.
+const AIRE_CICLO_MESES = 4;
+const AIRE_TAREAS = ['filtros','serpentin','condensador','drenaje','gas','electrico','carcasa','prueba'];
+
+// Suma meses calendario a un timestamp ms (para vence_ms = cierre + 4 meses).
+function aireAddMonthsMs(ms, months){
+  const d = new Date(Number(ms));
+  d.setMonth(d.getMonth() + months);
+  return d.getTime();
+}
+
+// Devuelve la ronda ABIERTA (o null) y la ultima CERRADA (o null).
+async function aireGetRondas(){
+  const { data: abiertaArr } = await supabase.from('aire_rondas')
+    .select('*').eq('estado','ABIERTA').limit(1);
+  const rondaAbierta = (abiertaArr && abiertaArr[0]) || null;
+  const { data: cerradaArr } = await supabase.from('aire_rondas')
+    .select('*').eq('estado','CERRADA').order('cerrada_ms',{ascending:false}).limit(1);
+  const ultimaCerrada = (cerradaArr && cerradaArr[0]) || null;
+  return { rondaAbierta, ultimaCerrada };
+}
+
+// Grilla de las 42 unidades con su estado de color + flags de la ronda.
+async function apiGetAireGrid(p, res){
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','MAINTENANCE'].includes(userRole)) return err(res, 'Sin permiso');
+
+  const now = Date.now();
+
+  const { data: unidades, error: eu } = await supabase.from('aire_unidades')
+    .select('*').eq('activo', true).order('orden', {ascending:true});
+  if(eu) return err(res, 'Error consultando unidades: '+eu.message);
+
+  const { rondaAbierta, ultimaCerrada } = await aireGetRondas();
+
+  // Registros de la ronda de referencia: la abierta si hay; si no, la ultima cerrada.
+  const rondaRef = rondaAbierta || ultimaCerrada || null;
+  let regsPorUnidad = {};
+  if(rondaRef){
+    const { data: regs } = await supabase.from('aire_mantenimiento')
+      .select('*').eq('ronda_id', rondaRef.id);
+    (regs||[]).forEach(function(r){ regsPorUnidad[r.unidad_id] = r; });
+  }
+
+  // vencida: no hay ronda abierta y (nunca cerro o ya paso vence_ms).
+  const vencida = !rondaAbierta && (!ultimaCerrada || (ultimaCerrada.vence_ms && now >= Number(ultimaCerrada.vence_ms)));
+
+  const unidadesOut = (unidades||[]).map(function(u){
+    const reg = regsPorUnidad[u.id] || null;
+    let estado;
+    if(rondaAbierta){
+      estado = reg ? reg.resultado : 'GRIS';        // ronda en curso: registrada o pendiente
+    } else if(ultimaCerrada){
+      estado = vencida ? 'ROJO' : (reg ? reg.resultado : 'GRIS');  // al dia o vencida
+    } else {
+      estado = 'GRIS';                              // nunca hubo ronda
+    }
+    return {
+      id: u.id,
+      tipo: u.tipo,
+      refId: u.ref_id,
+      nombre: u.nombre,
+      piso: u.piso,
+      orden: u.orden,
+      estado: estado,                               // VERDE | AMARILLO | ROJO | GRIS
+      registrada: !!reg,
+      resultado: reg ? reg.resultado : null,
+      reporte: reg ? (reg.reporte||null) : null,
+      registradoMs: reg ? Number(reg.registrado_ms||0) : 0
+    };
+  });
+
+  const totalUnidades = unidadesOut.length;
+  const totalRegistradas = unidadesOut.filter(function(u){ return u.registrada; }).length;
+  const puedeCerrar = !!rondaAbierta && totalUnidades > 0 && totalRegistradas >= totalUnidades;
+
+  return ok(res, {
+    unidades: unidadesOut,
+    rondaAbierta: !!rondaAbierta,
+    rondaNumero: rondaAbierta ? rondaAbierta.numero : (ultimaCerrada ? ultimaCerrada.numero : 0),
+    totalUnidades: totalUnidades,
+    totalRegistradas: rondaAbierta ? totalRegistradas : 0,
+    puedeCerrar: puedeCerrar,
+    vencida: vencida,
+    venceMs: ultimaCerrada ? Number(ultimaCerrada.vence_ms||0) : 0,
+    ultimaCerradaMs: ultimaCerrada ? Number(ultimaCerrada.cerrada_ms||0) : 0
+  });
+}
+
+// Registra (o re-registra) una unidad. Abre ronda automaticamente si no hay.
+async function apiRegistrarAire(p, res){
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','MAINTENANCE'].includes(userRole)) return err(res, 'Sin permiso');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const unidadId = Number(p.unidadId||0);
+  if(!unidadId) return err(res, 'unidadId requerido');
+
+  const resultado = String(p.resultado||'').toUpperCase();
+  if(!['VERDE','AMARILLO'].includes(resultado)) return err(res, 'resultado invalido (VERDE o AMARILLO)');
+
+  const { data: unidad } = await supabase.from('aire_unidades')
+    .select('id').eq('id', unidadId).eq('activo', true).single();
+  if(!unidad) return err(res, 'Unidad no encontrada');
+
+  // Normalizar las 8 tareas a booleanos estrictos.
+  const tareasIn = (p.tareas && typeof p.tareas === 'object') ? p.tareas : {};
+  const tareas = {};
+  AIRE_TAREAS.forEach(function(k){ tareas[k] = tareasIn[k] === true; });
+
+  const reporte = String(p.reporte||'').trim() || null;
+  const now = Date.now();
+
+  // Apertura automatica de ronda.
+  let { rondaAbierta } = await aireGetRondas();
+  if(!rondaAbierta){
+    const { data: ultArr } = await supabase.from('aire_rondas')
+      .select('numero').order('numero',{ascending:false}).limit(1);
+    const siguiente = ((ultArr && ultArr[0] && ultArr[0].numero) || 0) + 1;
+    const { data: nueva, error: ec } = await supabase.from('aire_rondas').insert({
+      numero: siguiente,
+      estado: 'ABIERTA',
+      abierta_ms: now,
+      abierta_por: userName
+    }).select().single();
+    if(ec) return err(res, 'Error al abrir ronda: '+ec.message);
+    rondaAbierta = nueva;
+  }
+
+  const { error: em } = await supabase.from('aire_mantenimiento').upsert({
+    ronda_id: rondaAbierta.id,
+    unidad_id: unidadId,
+    tareas: tareas,
+    reporte: reporte,
+    resultado: resultado,
+    registrado_por: userName,
+    registrado_rol: userRole,
+    registrado_ms: now
+  }, { onConflict: 'ronda_id,unidad_id' });
+  if(em) return err(res, 'Error al registrar: '+em.message);
+
+  return ok(res, { registrado: true, rondaId: rondaAbierta.id, rondaNumero: rondaAbierta.numero });
+}
+
+// Cierra la ronda abierta (exige las 42 registradas; permite amarillos).
+async function apiCerrarRondaAire(p, res){
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','MAINTENANCE'].includes(userRole)) return err(res, 'Sin permiso');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const { rondaAbierta } = await aireGetRondas();
+  if(!rondaAbierta) return err(res, 'No hay ronda abierta para cerrar');
+
+  const { data: unidades } = await supabase.from('aire_unidades')
+    .select('id').eq('activo', true);
+  const totalUnidades = (unidades||[]).length;
+
+  const { data: regs } = await supabase.from('aire_mantenimiento')
+    .select('unidad_id').eq('ronda_id', rondaAbierta.id);
+  const totalReg = (regs||[]).length;
+
+  if(totalReg < totalUnidades){
+    return err(res, 'Faltan '+(totalUnidades-totalReg)+' unidades por registrar');
+  }
+
+  const now = Date.now();
+  const venceMs = aireAddMonthsMs(now, AIRE_CICLO_MESES);
+
+  const { error } = await supabase.from('aire_rondas').update({
+    estado: 'CERRADA',
+    cerrada_ms: now,
+    cerrada_por: userName,
+    vence_ms: venceMs
+  }).eq('id', rondaAbierta.id);
+  if(error) return err(res, 'Error al cerrar ronda: '+error.message);
+
+  return ok(res, { cerrada: true, rondaNumero: rondaAbierta.numero, venceMs: venceMs });
+}
+
+// Historial completo de una unidad a traves de las rondas. SOLO ADMIN.
+async function apiGetAireHistorial(p, res){
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(userRole !== 'ADMIN') return err(res, 'Sin permiso');
+
+  const unidadId = Number(p.unidadId||0);
+  if(!unidadId) return err(res, 'unidadId requerido');
+
+  const { data: unidad } = await supabase.from('aire_unidades')
+    .select('*').eq('id', unidadId).single();
+  if(!unidad) return err(res, 'Unidad no encontrada');
+
+  const { data: regs, error } = await supabase.from('aire_mantenimiento')
+    .select('*').eq('unidad_id', unidadId).order('registrado_ms',{ascending:false});
+  if(error) return err(res, 'Error consultando historial: '+error.message);
+
+  // Enriquecer con datos de cada ronda.
+  const rondaIds = [...new Set((regs||[]).map(function(r){ return r.ronda_id; }))];
+  let rondasMap = {};
+  if(rondaIds.length){
+    const { data: rondas } = await supabase.from('aire_rondas')
+      .select('*').in('id', rondaIds);
+    (rondas||[]).forEach(function(r){ rondasMap[r.id] = r; });
+  }
+
+  const historial = (regs||[]).map(function(r){
+    const ronda = rondasMap[r.ronda_id] || {};
+    return {
+      id: r.id,
+      rondaId: r.ronda_id,
+      rondaNumero: ronda.numero || null,
+      rondaEstado: ronda.estado || null,
+      rondaCerradaMs: ronda.cerrada_ms ? Number(ronda.cerrada_ms) : 0,
+      tareas: r.tareas || {},
+      reporte: r.reporte || null,
+      resultado: r.resultado,
+      registradoPor: r.registrado_por,
+      registradoRol: r.registrado_rol,
+      registradoMs: Number(r.registrado_ms||0)
+    };
+  });
+
+  return ok(res, {
+    unidad: { id: unidad.id, tipo: unidad.tipo, refId: unidad.ref_id, nombre: unidad.nombre, piso: unidad.piso },
+    historial: historial
   });
 }
 
