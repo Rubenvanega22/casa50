@@ -1180,6 +1180,40 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<div class="ov" id="mAprobarReporte"><div class="modal" style="max-width:480px">
+  <div class="mh">
+    <div class="mt">✓ Aprobar y enviar a mantenimiento</div>
+    <button class="mc" onclick="closeM('mAprobarReporte')">✕</button>
+  </div>
+  <div style="font-size:12px;color:#9ca3af;margin-bottom:10px">Asigná una prioridad. El daño pasará al señor de mantenimiento.</div>
+  <label>Prioridad</label>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="apPri" value="urgente"> 🔴 Urgente</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="apPri" value="normal" checked> 🟡 Normal</label>
+    <label style="flex:1;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:6px;font-size:12px;text-align:center"><input type="radio" name="apPri" value="baja"> 🟢 Baja</label>
+  </div>
+  <label>Comentario para mantenimiento (opcional)</label>
+  <textarea id="apComentario" rows="2" placeholder="Ej: revisar primero la llave de paso"></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mAprobarReporte')">Cancelar</button>
+    <button class="btn bg" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doAprobarReporte()">Aprobar y enviar</button>
+  </div>
+</div></div>
+
+<div class="ov" id="mDescartarReporte"><div class="modal" style="max-width:480px">
+  <div class="mh">
+    <div class="mt">🗑 Descartar reporte</div>
+    <button class="mc" onclick="closeM('mDescartarReporte')">✕</button>
+  </div>
+  <div style="font-size:12px;color:#9ca3af;margin-bottom:10px">El reporte se descarta y deja de verse. Queda registrado quién y por qué.</div>
+  <label>Motivo (obligatorio)</label>
+  <textarea id="descMotivo" rows="3" placeholder="Por qué se descarta (mín 3 caracteres)"></textarea>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="btn bk" style="flex:1" onclick="closeM('mDescartarReporte')">Cancelar</button>
+    <button class="btn br" style="flex:2" onclick="doDescartarReporte()">Confirmar descarte</button>
+  </div>
+</div></div>
+
 <!-- LOGIN -->
 <div id="ls">
 <div class="card">
@@ -7052,6 +7086,63 @@ function doRechazarArreglo(){
   );
 }
 
+// ---- APROBAR / DESCARTAR reporte de camarera (Fase 6) ----
+// Recepción/Admin actúa sobre un daño en PENDIENTE_RECEPCION: lo aprueba
+// (asigna prioridad → va al mantenedor) o lo descarta (borrado lógico).
+function openAprobarReporte(reporteId){
+  if(!sess||(sess.userRole!=='ADMIN'&&sess.userRole!=='RECEPTION')){toast('Solo ADMIN o Recepcion','err');return;}
+  window._apReporteId = reporteId;
+  var radios=document.querySelectorAll('input[name="apPri"]');
+  radios.forEach(function(rd){ rd.checked=(rd.value==='normal'); });
+  var c=document.getElementById('apComentario'); if(c) c.value='';
+  openM('mAprobarReporte');
+}
+
+function doAprobarReporte(){
+  var reporteId=window._apReporteId;
+  if(!reporteId){toast('Sin reporte seleccionado','err');return;}
+  var priEl=document.querySelector('input[name="apPri"]:checked');
+  var prioridad=priEl?priEl.value:'normal';
+  var comentario=((document.getElementById('apComentario')||{}).value||'').trim();
+  rpc('aprobarReporteMant',{userRole:sess.userRole, userName:sess.userName, reporteId:reporteId, prioridad:prioridad, comentario:comentario},
+    function(){
+      toast('✓ Aprobado y enviado a mantenimiento.','ok');
+      closeM('mAprobarReporte');
+      window._apReporteId=null;
+      rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+      if(document.getElementById('danosActivosCont')) loadDanosActivos();
+      if(sess.userRole==='ADMIN'||sess.userRole==='RECEPTION') loadResumenMantHoy();
+      if(sess.userRole==='ADMIN') loadBadgeDanosNoVistos();
+    },
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+
+function openDescartarReporte(reporteId){
+  if(!sess||(sess.userRole!=='ADMIN'&&sess.userRole!=='RECEPTION')){toast('Solo ADMIN o Recepcion','err');return;}
+  window._anReporteId = reporteId;
+  var m=document.getElementById('descMotivo'); if(m) m.value='';
+  openM('mDescartarReporte');
+}
+
+function doDescartarReporte(){
+  var reporteId=window._anReporteId;
+  if(!reporteId){toast('Sin reporte seleccionado','err');return;}
+  var motivo=((document.getElementById('descMotivo')||{}).value||'').trim();
+  if(motivo.length<3){toast('El motivo debe tener mínimo 3 caracteres','err');return;}
+  rpc('anularReporteMant',{userRole:sess.userRole, userName:sess.userName, reporteId:reporteId, motivo:motivo},
+    function(){
+      toast('Reporte descartado.','ok');
+      closeM('mDescartarReporte');
+      window._anReporteId=null;
+      if(document.getElementById('danosActivosCont')) loadDanosActivos();
+      if(sess.userRole==='ADMIN'||sess.userRole==='RECEPTION') loadResumenMantHoy();
+      if(sess.userRole==='ADMIN') loadBadgeDanosNoVistos();
+    },
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+
 // ---- PASAR A MANTENIMIENTO (Fase 6): convierte una nota de Reportes en daño ----
 var _paNote = null;
 
@@ -8052,6 +8143,15 @@ function loadDanosActivos(){
         hi += '<div style="display:flex;gap:6px;margin-top:6px">';
         hi += '<button class="btn br xs" style="flex:1" onclick="openRechazarArreglo('+r.id+')">✗ Rechazar</button>';
         hi += '<button class="btn bg xs" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doVerificarArreglo('+r.id+')">✓ Solucionado</button>';
+        hi += '</div>';
+      }
+      // Daño reportado por camarera, pendiente de aprobación por recepción (Fase 6).
+      // Recep/Admin lo aprueba (asigna prioridad → mantenedor) o lo descarta.
+      if(r.estado==='PENDIENTE_RECEPCION' && (sess.userRole==='ADMIN' || sess.userRole==='RECEPTION')){
+        hi += '<div style="margin-top:4px;font-size:10px;color:#f59e0b;font-weight:700">⏳ Reportado por camarera — pendiente de aprobar</div>';
+        hi += '<div style="display:flex;gap:6px;margin-top:6px">';
+        hi += '<button class="btn br xs" style="flex:1" onclick="openDescartarReporte('+r.id+')">🗑 Descartar</button>';
+        hi += '<button class="btn bg xs" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="openAprobarReporte('+r.id+')">✓ Aprobar y enviar</button>';
         hi += '</div>';
       }
       // Botón "Marcar arreglado" — atajo ADM/RECEP para resolver daños en zonas
