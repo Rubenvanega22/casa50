@@ -234,6 +234,8 @@ module.exports = async function handler(req, res) {
       // Modulo de mantenimiento (nuevo flujo con estados)
       case 'getReportesActivos':return await apiGetReportesActivos(payload, res);
       case 'crearReporteMant':  return await apiCrearReporteMant(payload, res);
+      case 'aprobarReporteMant':return await apiAprobarReporteMant(payload, res);
+      case 'anularReporteMant': return await apiAnularReporteMant(payload, res);
       case 'getMisDanos':       return await apiGetMisDanos(payload, res);
       case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
       case 'verificarArreglo':  return await apiVerificarArreglo(payload, res);
@@ -3130,6 +3132,82 @@ async function apiRechazarArreglo(p, res) {
   }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, estado: 'RECHAZADO_VERIFICACION' });
+}
+
+// ==================== APROBAR REPORTE DE CAMARERA (Fase 6) ====================
+// Recepción/Admin aprueba un daño que la camarera dejó en PENDIENTE_RECEPCION:
+// le asigna prioridad y lo pasa a NOTA_ACTIVA para que le llegue al mantenedor.
+async function apiAprobarReporteMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const prioridadInput = String(p.prioridad||'').toLowerCase().trim();
+  const prioridadesValidas = ['urgente','normal','baja'];
+  if(!prioridadesValidas.includes(prioridadInput)) {
+    return err(res,'Prioridad requerida (urgente, normal o baja)');
+  }
+
+  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(reporte.estado !== 'PENDIENTE_RECEPCION') {
+    return err(res, 'Reporte no esta pendiente de recepcion (estado: '+reporte.estado+')');
+  }
+
+  const now = Date.now();
+  const comentario = String(p.comentario||'').trim() || null;
+  await supabase.from('room_issues').update({
+    estado: 'NOTA_ACTIVA',
+    prioridad: prioridadInput,
+    aprobado_por: userName,
+    aprobado_ms: now,
+    comentario_recepcion: comentario
+  }).eq('id', reporteId);
+
+  // Auto-bloqueo (G3): daño urgente en habitación recién aprobado
+  if(prioridadInput === 'urgente' && reporte.ubicacion_tipo === 'habitacion'){
+    await bloquearPorDanoUrgenteSiCorresponde(reporte.ubicacion_id, reporte.description, userName);
+  }
+
+  return ok(res, { id: reporteId, estado: 'NOTA_ACTIVA', prioridad: prioridadInput, aprobadoMs: now });
+}
+
+// ==================== DESCARTAR REPORTE DE CAMARERA (Fase 6) ====================
+// Recepción/Admin descarta (borrado lógico) un daño de camarera que no aplica
+// o es falso, antes de que entre al flujo del mantenedor. Deja rastro auditable.
+async function apiAnularReporteMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const motivo = String(p.motivo || '').trim();
+  if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
+
+  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte ya anulado');
+  if(reporte.estado !== 'PENDIENTE_RECEPCION') {
+    return err(res, 'Solo se pueden descartar reportes pendientes de recepcion (estado: '+reporte.estado+')');
+  }
+
+  const now = Date.now();
+  await supabase.from('room_issues').update({
+    anulada: true,
+    anulada_por: userName,
+    anulada_ms: now,
+    motivo_anulacion: motivo
+  }).eq('id', reporteId);
+
+  return ok(res, { id: reporteId, anulada: true });
 }
 
 // Rediseño Reportes: ADMIN/RECEPTION cierra un daño de zona común sin
