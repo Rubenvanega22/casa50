@@ -863,6 +863,16 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Mantenimiento de aire — vista ADMIN (grilla + historial) -->
+<div class="ov" id="mAireAdmin"><div class="modal" style="max-width:600px">
+  <div class="mh">
+    <div class="mt">❄️ Mantenimiento de aire</div>
+    <button class="mc" onclick="closeM('mAireAdmin')">✕</button>
+  </div>
+  <div id="aireAdminInfo" style="font-size:11px;color:#9ca3af;margin-bottom:8px"></div>
+  <div id="aireAdminCont"><p style="color:#9ca3af;padding:10px">Cargando...</p></div>
+</div></div>
+
 <!-- MODAL: Reportar daño (Camarera — Commit C). Versión simplificada del de
      ADM/RECEP: sin prioridad (la asigna recep al aprobar), foto con cámara
      directa porque la camarera está en el sitio. -->
@@ -1506,6 +1516,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
     <button id="mtBtnRDanoMaid" class="btn ba" style="display:none;background:#f97316;color:#fff;font-weight:700" onclick="openReportarDanoMaid()">🔧 Reportar daño</button>
     <button id="mtBtnAsigTarea" class="btn ba" style="background:#3b82f6;color:#fff;font-weight:700" onclick="openAsigTarea()">+ 📋 Asignar tarea</button>
     <button id="mtBtnHistorial" class="btn ba" style="background:#a855f7;color:#fff;font-weight:700" onclick="openHistorialMant()">📚 Historial</button>
+    <button id="mtBtnAire" class="btn ba" style="background:#06b6d4;color:#fff;font-weight:700" onclick="openAireAdmin()">❄️ Aire</button>
   </div>
   <div id="mtSolicitudesWrap">
     <div class="sec" style="margin-top:6px;color:#f97316">📝 Solicitudes pendientes</div>
@@ -1902,6 +1913,7 @@ function sw(id){
      loadTareasAdmin();
      loadSolicitudesAdmin();
      loadBadgeDanosNoVistos();
+     loadAireBadgeAdmin();
      if(roomIssuesOpen) loadRoomIssuesGrid();
    }
  }
@@ -6288,8 +6300,9 @@ function loadAireGrid(){
   });
 }
 
-function renderAireGrid(d){
-  var cont = document.getElementById('aireCont');
+function renderAireGrid(d, tgt){
+  tgt = tgt || {cont:'aireCont', info:'aireRondaInfo', prog:'aireProgreso', btn:'aireBtnCerrar'};
+  var cont = document.getElementById(tgt.cont);
   if(!cont) return;
   var unidades = d.unidades || [];
 
@@ -6313,17 +6326,17 @@ function renderAireGrid(d){
   cont.innerHTML = h;
 
   // Cabecera: estado de la ronda.
-  var info = document.getElementById('aireRondaInfo');
+  var info = tgt.info ? document.getElementById(tgt.info) : null;
   if(info){
     if(d.rondaAbierta) info.textContent = 'Ronda '+d.rondaNumero+' en curso';
     else if(d.vencida) info.innerHTML = '<span style="color:#ef4444;font-weight:700">⚠️ Toca nueva ronda</span>';
     else info.textContent = 'Al día (ronda '+d.rondaNumero+')';
   }
-  var prog = document.getElementById('aireProgreso');
+  var prog = tgt.prog ? document.getElementById(tgt.prog) : null;
   if(prog) prog.textContent = d.rondaAbierta ? (d.totalRegistradas+' / '+d.totalUnidades+' unidades registradas') : '';
 
-  // Boton "Cerrar mantenimiento": solo cuando estan las 42.
-  var btn = document.getElementById('aireBtnCerrar');
+  // Boton "Cerrar mantenimiento": solo cuando estan las 42 (no aplica a ADMIN).
+  var btn = tgt.btn ? document.getElementById(tgt.btn) : null;
   if(btn) btn.style.display = d.puedeCerrar ? '' : 'none';
 }
 
@@ -6395,6 +6408,96 @@ function cerrarRondaAire(){
     toast('✓ Mantenimiento cerrado (ronda '+d.rondaNumero+')','ok');
     loadAireGrid();
   }, function(e){ toast(e.message||'Error','err'); });
+}
+
+// ---- VISTA ADMIN: grilla en modal + badge "toca otra ronda" ----
+function openAireAdmin(){
+  if(!sess || sess.userRole!=='ADMIN') return;
+  openM('mAireAdmin');
+  loadAireAdmin();
+}
+
+function loadAireAdmin(){
+  if(!sess) return;
+  var cont = document.getElementById('aireAdminCont');
+  if(cont) cont.innerHTML = '<p style="color:#9ca3af;padding:10px">Cargando...</p>';
+  rpc('getAireGrid', {userRole:sess.userRole, userName:sess.userName}, function(d){
+    aireState = d;
+    renderAireGrid(d, {cont:'aireAdminCont', info:'aireAdminInfo', prog:null, btn:null});
+  }, function(e){
+    if(cont) cont.innerHTML = '<p style="color:#ef4444;padding:10px">'+esc(e.message||'Error')+'</p>';
+  });
+}
+
+// Badge en el boton Aire de ADMIN: avisa cuando toca otra ronda (vencida).
+function loadAireBadgeAdmin(){
+  if(!sess || sess.userRole!=='ADMIN') return;
+  rpc('getAireGrid', {userRole:sess.userRole, userName:sess.userName}, function(d){
+    var btn = document.getElementById('mtBtnAire');
+    if(!btn) return;
+    btn.innerHTML = d.vencida ? '❄️ Aire ⚠️' : '❄️ Aire';
+    btn.style.background = d.vencida ? '#ef4444' : '#06b6d4';
+  });
+}
+
+// ---- HISTORIAL DE UNA UNIDAD (solo ADMIN) ----
+// Se renderiza DENTRO del modal #mAireAdmin, reemplazando la grilla, con un
+// boton "Volver". Evita modal-sobre-modal.
+function openAireHistorial(u){
+  if(!sess || sess.userRole!=='ADMIN') return;
+  var cont = document.getElementById('aireAdminCont');
+  if(cont) cont.innerHTML = '<p style="color:#9ca3af;padding:10px">Cargando historial...</p>';
+  var info = document.getElementById('aireAdminInfo');
+  if(info) info.textContent = '';
+  rpc('getAireHistorial', {userRole:sess.userRole, userName:sess.userName, unidadId:u.id}, function(d){
+    renderAireHistorial(d);
+  }, function(e){
+    if(cont) cont.innerHTML = '<p style="color:#ef4444;padding:10px">'+esc(e.message||'Error')+'</p>';
+  });
+}
+
+function renderAireHistorial(d){
+  var cont = document.getElementById('aireAdminCont');
+  if(!cont) return;
+  var u = d.unidad || {};
+  var hist = d.historial || [];
+
+  var h = '<button class="btn bk" style="margin-bottom:10px" onclick="loadAireAdmin()">← Volver a la grilla</button>';
+  h += '<div class="sec">'+esc(u.nombre||'')+' — historial</div>';
+
+  if(!hist.length){
+    h += '<p style="color:#9ca3af;padding:10px">Sin registros todavía.</p>';
+    cont.innerHTML = h;
+    return;
+  }
+
+  hist.forEach(function(r){
+    var fecha = r.registradoMs ? new Date(Number(r.registradoMs)).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}) : '--';
+    var resColor = r.resultado==='VERDE' ? '#22c55e' : '#f59e0b';
+    var resLbl   = r.resultado==='VERDE' ? '🟢 Todo bien' : '🟡 Mejora pendiente';
+    var rondaTxt = 'Ronda '+(r.rondaNumero||'?')+(r.rondaEstado==='ABIERTA' ? ' (en curso)' : '');
+
+    h += '<div style="background:#22222c;border:1px solid #2e2e3a;border-left:3px solid '+resColor+';border-radius:0 8px 8px 0;padding:9px 11px;margin-bottom:8px">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">';
+    h += '<b style="font-size:12px">'+rondaTxt+'</b>';
+    h += '<span style="font-size:11px;font-weight:700;color:'+resColor+'">'+resLbl+'</span>';
+    h += '</div>';
+    h += '<div style="font-size:10px;color:#9ca3af;margin-top:2px">'+fecha+' · '+esc(r.registradoPor||'')+'</div>';
+
+    var tareas = r.tareas || {};
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;font-size:10px;margin-top:6px">';
+    AIRE_TAREAS_LABELS.forEach(function(t){
+      var ok = tareas[t[0]] === true;
+      h += '<div style="color:'+(ok?'#22c55e':'#6b7280')+'">'+(ok?'✓':'✗')+' '+esc(t[1])+'</div>';
+    });
+    h += '</div>';
+
+    if(r.reporte){
+      h += '<div style="font-size:11px;color:#e5e7eb;margin-top:6px;background:#18181f;border-radius:6px;padding:6px"><b style="color:#9ca3af">Reporte:</b> '+esc(r.reporte)+'</div>';
+    }
+    h += '</div>';
+  });
+  cont.innerHTML = h;
 }
 
 // ---- MANTENEDOR: pantalla "Mis Daños" (Fase 4 G3) ----
@@ -7469,6 +7572,7 @@ function adaptarMantPanelPorRol(){
   show($('mtBtnRDanoMaid'),  isMaid);
   show($('mtBtnAsigTarea'),  isAdm);
   show($('mtBtnHistorial'),  isAdm);
+  show($('mtBtnAire'),       isAdm);
   show($('mtSolicitudesWrap'), isAdm);
   show($('mtTareasWrap'),    isAdm);
   show($('mtFiltrosWrap'),   isAdm);
