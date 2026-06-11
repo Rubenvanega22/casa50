@@ -66,6 +66,12 @@ hr{border:none;border-top:1px solid #2e2e3a;margin:10px 0}
 .rtm{font-size:10px;font-weight:700;margin-top:1px}
 .ri{font-size:9px;color:#9ca3af;line-height:1.4;margin-top:1px}
 .ok{color:#22c55e}.warn{color:#f59e0b}.over{color:#ef4444}
+.ac{background:#18181f;border:1px solid #2e2e3a;border-radius:8px;padding:8px 6px;cursor:pointer;border-top:3px solid #2e2e3a;text-align:center;transition:transform .1s}
+.ac:active{transform:scale(.97)}
+.ac.VERDE{border-top-color:#22c55e}.ac.AMARILLO{border-top-color:#f59e0b}.ac.ROJO{border-top-color:#ef4444}.ac.GRIS{border-top-color:#6b7280}
+.acn{font-size:13px;font-weight:800;line-height:1.1}
+.acs{display:inline-block;margin-top:3px;font-size:8px;font-weight:700;padding:1px 5px;border-radius:20px}
+.acs.VERDE{background:rgba(34,197,94,.15);color:#22c55e}.acs.AMARILLO{background:rgba(245,158,11,.15);color:#f59e0b}.acs.ROJO{background:rgba(239,68,68,.15);color:#ef4444}.acs.GRIS{background:rgba(107,114,128,.15);color:#9ca3af}
 .sm2{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
 .chip{background:#18181f;border:1px solid #2e2e3a;border-radius:7px;padding:4px 8px;font-size:11px;display:flex;gap:4px;align-items:center}
 .chip b{font-size:14px}
@@ -840,6 +846,23 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
   </div>
 </div></div>
 
+<!-- MODAL: Registro de mantenimiento de aire (mantenedor) -->
+<div class="ov" id="mAireReg"><div class="modal" style="max-width:520px">
+  <div class="mh">
+    <div class="mt">❄️ <span id="aireRegTit">Aire</span></div>
+    <button class="mc" onclick="closeM('mAireReg')">✕</button>
+  </div>
+  <label>Tareas realizadas</label>
+  <div id="aireTareasWrap" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+  <label>Reporte de mejora / daño (opcional)</label>
+  <textarea id="aireReporte" rows="3" placeholder="Anotá cualquier mejora pendiente o daño detectado"></textarea>
+  <div style="font-size:11px;color:#9ca3af;margin:10px 0 6px">Resultado de la unidad:</div>
+  <div style="display:flex;gap:8px">
+    <button class="btn" style="flex:1;background:#22c55e;color:#fff;font-weight:700" onclick="doRegistrarAire('VERDE')">🟢 Todo bien</button>
+    <button class="btn" style="flex:1;background:#f59e0b;color:#1f1f24;font-weight:700" onclick="doRegistrarAire('AMARILLO')">🟡 Mejora pendiente</button>
+  </div>
+</div></div>
+
 <!-- MODAL: Reportar daño (Camarera — Commit C). Versión simplificada del de
      ADM/RECEP: sin prioridad (la asigna recep al aprobar), foto con cámara
      directa porque la camarera está en el sitio. -->
@@ -1428,6 +1451,17 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="misDanosCont" style="font-size:13px;color:#9ca3af;padding:10px">Cargando...</div>
 </div>
 
+<!-- MANTENIMIENTO DE AIRE (mantenedor) -->
+<div class="pnl" id="pnl-aire">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+    <h2 style="font-size:14px">❄️ Mantenimiento de aire</h2>
+    <div id="aireRondaInfo" style="font-size:11px;color:#9ca3af"></div>
+  </div>
+  <div id="aireProgreso" style="font-size:12px;color:#9ca3af;margin-bottom:8px"></div>
+  <div id="aireCont"><p style="color:#9ca3af;padding:10px">Cargando...</p></div>
+  <button id="aireBtnCerrar" class="btn ba" style="display:none;width:100%;margin-top:12px;background:#22c55e;color:#fff;font-weight:700" onclick="cerrarRondaAire()">✓ Cerrar mantenimiento</button>
+</div>
+
 <!-- CUADRE ADMIN -->
 <div class="pnl" id="pnl-cuadre-admin">
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -1826,7 +1860,7 @@ function buildTabs(){
   var r=sess.userRole,tabs=[];
   if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones',i:'ti-bed'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos',i:'ti-broom'});
-  if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños',i:'ti-tool'});
+  if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños',i:'ti-tool'},{id:'aire',l:'Aire',i:'ti-snowflake'});
  if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-receipt'},{id:'cuadre',l:'Cierre de caja',i:'ti-cash'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'productos',l:'Inventario',i:'ti-package'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
 if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
   if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-month'},{id:'gastosmes',l:'Gastos',i:'ti-receipt'},{id:'maids',l:'Limpieza',i:'ti-broom'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-cash'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-package'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
@@ -1854,6 +1888,7 @@ function sw(id){
   var b=document.querySelector('[data-tab="'+id+'"]');if(b)b.classList.add('on');
   if(id==='notes')loadNotes();
   if(id==='misdanos')loadMisDanos();
+  if(id==='aire')loadAireGrid();
   if(id==='maids')loadMP();
   if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
@@ -6238,6 +6273,130 @@ function deleteIssue(id,rid){
     );
   });
 }
+// ============ MANTENIMIENTO DE AIRE (mantenedor + admin) ============
+var aireState = { unidades: [], rondaAbierta:false, puedeCerrar:false, vencida:false };
+
+function loadAireGrid(){
+  if(!sess) return;
+  var cont = document.getElementById('aireCont');
+  if(cont) cont.innerHTML = '<p style="color:#9ca3af;padding:10px">Cargando...</p>';
+  rpc('getAireGrid', {userRole:sess.userRole, userName:sess.userName}, function(d){
+    aireState = d;
+    renderAireGrid(d);
+  }, function(e){
+    if(cont) cont.innerHTML = '<p style="color:#ef4444;padding:10px">'+esc(e.message||'Error')+'</p>';
+  });
+}
+
+function renderAireGrid(d){
+  var cont = document.getElementById('aireCont');
+  if(!cont) return;
+  var unidades = d.unidades || [];
+
+  // Habitaciones agrupadas por piso + seccion "Espacios" para las 4 no-ROOM.
+  var pisos = [];
+  unidades.forEach(function(u){ if(u.tipo==='ROOM' && pisos.indexOf(u.piso)<0) pisos.push(u.piso); });
+  pisos.sort(function(a,b){return a-b;});
+
+  var h = '';
+  pisos.forEach(function(f){
+    h += '<div class="sec">Piso '+f+'</div><div class="rg">';
+    unidades.filter(function(u){return u.tipo==='ROOM' && u.piso===f;}).forEach(function(u){ h += mkAireCard(u); });
+    h += '</div>';
+  });
+  var espacios = unidades.filter(function(u){return u.tipo==='ESPACIO';});
+  if(espacios.length){
+    h += '<div class="sec">Espacios</div><div class="rg">';
+    espacios.forEach(function(u){ h += mkAireCard(u); });
+    h += '</div>';
+  }
+  cont.innerHTML = h;
+
+  // Cabecera: estado de la ronda.
+  var info = document.getElementById('aireRondaInfo');
+  if(info){
+    if(d.rondaAbierta) info.textContent = 'Ronda '+d.rondaNumero+' en curso';
+    else if(d.vencida) info.innerHTML = '<span style="color:#ef4444;font-weight:700">⚠️ Toca nueva ronda</span>';
+    else info.textContent = 'Al día (ronda '+d.rondaNumero+')';
+  }
+  var prog = document.getElementById('aireProgreso');
+  if(prog) prog.textContent = d.rondaAbierta ? (d.totalRegistradas+' / '+d.totalUnidades+' unidades registradas') : '';
+
+  // Boton "Cerrar mantenimiento": solo cuando estan las 42.
+  var btn = document.getElementById('aireBtnCerrar');
+  if(btn) btn.style.display = d.puedeCerrar ? '' : 'none';
+}
+
+function mkAireCard(u){
+  var lbl = {VERDE:'Al día', AMARILLO:'Mejora', ROJO:'Toca', GRIS:'Sin registro'};
+  var est = u.estado || 'GRIS';
+  var h = '<div class="ac '+est+'" onclick="onAireCardClick('+u.id+')">';
+  h += '<div class="acn">'+esc(u.nombre)+'</div>';
+  h += '<div class="acs '+est+'">'+(lbl[est]||est)+'</div>';
+  h += '</div>';
+  return h;
+}
+
+// Mantenedor -> registro; ADMIN -> historial (este ultimo se agrega en commit 4).
+function onAireCardClick(unidadId){
+  var u = (aireState.unidades||[]).filter(function(x){return x.id===unidadId;})[0];
+  if(!u) return;
+  if(sess.userRole === 'ADMIN') openAireHistorial(u);
+  else openAireRegistro(u);
+}
+
+// Etiquetas de las 8 tareas (mismas claves que el backend AIRE_TAREAS).
+var AIRE_TAREAS_LABELS = [
+  ['filtros',     'Limpieza de filtros'],
+  ['serpentin',   'Limpieza del serpentín / evaporador'],
+  ['condensador', 'Limpieza de unidad externa / condensador'],
+  ['drenaje',     'Revisión y limpieza del drenaje'],
+  ['gas',         'Revisión del nivel de gas'],
+  ['electrico',   'Revisión de conexiones eléctricas'],
+  ['carcasa',     'Limpieza general de carcasa'],
+  ['prueba',      'Prueba de funcionamiento']
+];
+var aireRegUnidadId = 0;
+
+function openAireRegistro(u){
+  aireRegUnidadId = u.id;
+  document.getElementById('aireRegTit').textContent = u.nombre;
+  // Construir los 8 checkboxes (siempre arrancan desmarcados).
+  var wrap = document.getElementById('aireTareasWrap');
+  wrap.innerHTML = AIRE_TAREAS_LABELS.map(function(t){
+    return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#22222c;border:1px solid #2e2e3a;border-radius:6px;padding:8px;font-size:12px">'
+         + '<input type="checkbox" id="aireT_'+t[0]+'"> '+esc(t[1])+'</label>';
+  }).join('');
+  document.getElementById('aireReporte').value = u.reporte || '';
+  openM('mAireReg');
+}
+
+function doRegistrarAire(resultado){
+  if(!aireRegUnidadId) return;
+  var tareas = {};
+  AIRE_TAREAS_LABELS.forEach(function(t){
+    var cb = document.getElementById('aireT_'+t[0]);
+    tareas[t[0]] = !!(cb && cb.checked);
+  });
+  var reporte = document.getElementById('aireReporte').value || '';
+  rpc('registrarAire', {
+    userRole: sess.userRole, userName: sess.userName,
+    unidadId: aireRegUnidadId, tareas: tareas, reporte: reporte, resultado: resultado
+  }, function(){
+    toast('✓ Unidad registrada','ok');
+    closeM('mAireReg');
+    loadAireGrid();
+  }, function(e){ toast(e.message||'Error','err'); });
+}
+
+function cerrarRondaAire(){
+  if(!confirm('¿Cerrar el mantenimiento? Arrancan 4 meses hasta la próxima ronda.')) return;
+  rpc('cerrarRondaAire', {userRole:sess.userRole, userName:sess.userName}, function(d){
+    toast('✓ Mantenimiento cerrado (ronda '+d.rondaNumero+')','ok');
+    loadAireGrid();
+  }, function(e){ toast(e.message||'Error','err'); });
+}
+
 // ---- MANTENEDOR: pantalla "Mis Daños" (Fase 4 G3) ----
 function loadMisDanos(){
   var el=document.getElementById('misDanosCont');
