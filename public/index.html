@@ -1657,7 +1657,7 @@ function tog(id,show){var e=document.getElementById(id);if(e){if(show)e.classLis
 function toast(msg,type){var e=document.getElementById('toast');e.textContent=msg;e.className='toast show '+(type||'');clearTimeout(e._t);e._t=setTimeout(function(){e.className='toast';},4000);}
 function openM(id){document.getElementById(id).classList.add('op');}
 function closeM(id){document.getElementById(id).classList.remove('op');}
-function conf(msg,cb){document.getElementById('mConfB').textContent=msg;confCb=cb;openM('mConf');document.getElementById('mConfOk').onclick=function(){closeM('mConf');if(confCb)confCb();};}
+function conf(msg,cb){document.body.appendChild(document.getElementById('mConf'));document.getElementById('mConfB').textContent=msg;confCb=cb;openM('mConf');document.getElementById('mConfOk').onclick=function(){closeM('mConf');if(confCb)confCb();};}
 document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this)closeM(this.id);});});
 
 // ---- SESION ----
@@ -3937,6 +3937,7 @@ function editarGastoModulo(){
       userRole:sess.userRole
     },function(){
       toast('✓ Gasto editado','ok');
+      closeM('mChangePay');
       mcpLoadGastos();
       if(mcpState.role==='ADMIN')loadCuadreAdmin();else loadCuadre();
     },function(e){toast('Error: '+(e.message||'?'),'err');});
@@ -3956,6 +3957,7 @@ function anularGastoModulo(){
       userRole:sess.userRole
     },function(){
       toast('✓ Gasto anulado','ok');
+      closeM('mChangePay');
       mcpGastoState.selectedId=null;
       mcpLoadGastos();
       if(mcpState.role==='ADMIN')loadCuadreAdmin();else loadCuadre();
