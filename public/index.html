@@ -1729,6 +1729,15 @@ function getShiftLabel(){
   return map[sess.shiftId] || sess.shiftId || '';
 }
 
+// Espejo de currentShiftId() del backend (api/index.js): turno puro segun la
+// hora Bogota (UTC-5) de un timestamp. Se usa para el aviso turno-vs-hora ±15min.
+function shiftForMs(ms){
+  var h=new Date(ms-5*3600000).getUTCHours();
+  if(h>=6&&h<14) return 'SHIFT_1';
+  if(h>=14&&h<21) return 'SHIFT_2';
+  return 'SHIFT_3';
+}
+
 function onRol(){
   var r=document.getElementById('lrol').value;
   tog('nw',!!r&&r!=='RECEPTION'&&r!=='MAINTENANCE');
@@ -1753,11 +1762,14 @@ function filtrarShiftDomingo(){
     ? new Date(bDay+'T12:00:00Z').getUTCDay()===0
     : new Date().getDay()===0;
   var ocultar=esDomingo?['SHIFT_1','SHIFT_2','SHIFT_3']:['SHIFT_1_12','SHIFT_2_12'];
-  var primero=esDomingo?'SHIFT_1_12':'SHIFT_1';
+  // Default del dropdown: en dia normal, el turno segun la hora (server);
+  // en domingo, 1T12. Asi RECEPTION arranca con el turno correcto pre-elegido.
+  var turnoHora=(typeof BS!=='undefined'&&BS&&['SHIFT_1','SHIFT_2','SHIFT_3'].indexOf(BS.currentShiftId)>=0)?BS.currentShiftId:'SHIFT_1';
+  var primero=esDomingo?'SHIFT_1_12':turnoHora;
   Array.prototype.slice.call(sel.options).forEach(function(opt){
     opt.style.display=ocultar.indexOf(opt.value)>=0?'none':'';
   });
-  if(ocultar.indexOf(sel.value)>=0) sel.value=primero;
+  sel.value=primero;   // pre-selecciona el turno-segun-hora (antes solo reseteaba si quedaba oculto)
 }
 function loadRecepPins(){
   rpc('getReceptionPins',{userRole:'ADMIN'},function(data){
@@ -1801,6 +1813,26 @@ function entrar(){
   if((shiftId==='SHIFT_1_12'||shiftId==='SHIFT_2_12') && new Date().getDay()!==0){
     var ok12h=confirm('⚠️ Atención\n\nHoy NO es domingo. Los turnos de 12 horas (1T12 / 2T12) son solo para domingos.\n\n¿Estás seguro de querer entrar al turno 12 horas?\nSi te equivocaste, cancelá y elegí T1, T2 o T3.');
     if(!ok12h){btn.disabled=false;btn.textContent='Ingresar';return;}
+  }
+
+  // Aviso NO bloqueante: el turno elegido no coincide con la hora real.
+  // - Solo RECEPTION (rol que registra ventas).
+  // - Solo turnos puros T1/T2/T3 (los 12h ya tienen su aviso arriba).
+  // - Hora del SERVIDOR (BS.serverNowMs), no del celular.
+  // - Margen ±15min: si el turno coincide con el de ahora, 15min antes o
+  //   15min despues, no avisa (relevos en el borde del corte).
+  // - Excepcion RELOGIN: si la sesion previa ya tenia ese mismo turno+dia.
+  if(rol==='RECEPTION' && ['SHIFT_1','SHIFT_2','SHIFT_3'].indexOf(shiftId)>=0){
+    var prevSess=(typeof sess!=='undefined'&&sess)?sess:loadSess();
+    var reloginMismoTurno=!!(prevSess&&prevSess.shiftId===shiftId&&prevSess.businessDay===BS.businessDay);
+    var ahora=(BS&&BS.serverNowMs)?BS.serverNowMs:0;
+    var permitidos=ahora?[shiftForMs(ahora),shiftForMs(ahora-900000),shiftForMs(ahora+900000)]:[BS.currentShiftId];
+    if(!reloginMismoTurno && permitidos.indexOf(shiftId)<0){
+      var lblEleg=(BS.shifts||[]).find(function(s){return s.id===shiftId;});
+      var lblHora=(BS.shifts||[]).find(function(s){return s.id===BS.currentShiftId;});
+      var okTurno=confirm('⚠️ Atención\n\nEstás iniciando '+(lblEleg?lblEleg.label:shiftId)+', pero según la hora corresponde '+(lblHora?lblHora.label:BS.currentShiftId)+'.\n\n¿Seguro? Si te equivocaste, cancelá y elegí el turno correcto.');
+      if(!okTurno){btn.disabled=false;btn.textContent='Ingresar';return;}
+    }
   }
 
   rpc('login',{userName:nm,userRole:rol,adminCode:ap,userPin:up,forceEntry:fe,shiftId:shiftId},function(res){
