@@ -10616,7 +10616,72 @@ function nrConfirmarRetiro(){
   });
 }
 function openHistorialRetirosModal(){
-  toast('🚧 Historial - próximo paso','warn');
+  if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  closeM('mRetirosDueno');
+  var mes=window._retirosMesActual||'';
+  var modalViejo=document.getElementById('mHistorialRetiros');
+  if(modalViejo) modalViejo.remove();
+  var div=document.createElement('div');
+  div.className='ov';
+  div.id='mHistorialRetiros';
+  var head='<div class="mh"><div class="mt">📋 Historial de Retiros</div><button class="mc" onclick="closeM(\'mHistorialRetiros\');openRetirosDuenoModal();">✕</button></div>';
+  div.innerHTML='<div class="modal" style="max-width:480px;max-height:92vh;overflow-y:auto">'+head+'<div id="hrLista"><p style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Cargando...</p></div></div>';
+  div.addEventListener('click',function(e){if(e.target===div){closeM('mHistorialRetiros');openRetirosDuenoModal();}});
+  document.body.appendChild(div);
+  openM('mHistorialRetiros');
+  rpc('getRetiros',{mes:mes,userName:sess.userName,userRole:sess.userRole},function(d){
+    var lista=(d&&d.retiros)||[];
+    var cont=document.getElementById('hrLista');
+    if(!cont)return;
+    if(!lista.length){
+      cont.innerHTML='<div style="background:#22222c;border:0.5px dashed #2e2e3a;border-radius:8px;padding:30px;text-align:center"><div style="font-size:32px;margin-bottom:8px">📋</div><div style="font-size:13px;color:#9ca3af">No hay retiros registrados en este mes</div></div>';
+      return;
+    }
+    var h='<div style="background:#22222c;border:0.5px solid #2e2e3a;border-radius:8px;overflow:hidden">';
+    lista.forEach(function(item,idx){
+      var diaO=String(item.diaOrigen||'').split('-').reverse().join('/');
+      var reg=new Date(Number(item.tsMs||0));
+      var regStr=String(reg.getDate()).padStart(2,'0')+'/'+String(reg.getMonth()+1).padStart(2,'0')+' '+String(reg.getHours()).padStart(2,'0')+':'+String(reg.getMinutes()).padStart(2,'0');
+      var pm=item.payMethod==='TARJETA'?'💳 Tarjeta':'💵 Efectivo';
+      var anulado=item.anulado;
+      var bgRow=anulado?'rgba(239,68,68,.04)':'transparent';
+      var colorMonto=anulado?'#6b7280':(item.payMethod==='TARJETA'?'#3b82f6':'#22c55e');
+      var textDeco=anulado?'line-through':'none';
+      h+='<div style="display:flex;align-items:flex-start;padding:10px 12px;border-bottom:'+(idx===lista.length-1?'0':'0.5px solid rgba(46,46,58,.5)')+';background:'+bgRow+'">';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:13px;font-weight:700;color:'+colorMonto+';text-decoration:'+textDeco+'">'+fmt(item.monto||0)+' · '+pm+'</div>';
+      h+='<div style="font-size:11px;color:#9ca3af;margin-top:2px">Sacado del día: <b>'+esc(diaO)+'</b></div>';
+      h+='<div style="font-size:10px;color:#6b7280;margin-top:1px">Registrado '+esc(regStr)+' · por '+esc(item.userName||'?')+' · #'+item.id+'</div>';
+      if(item.motivo)h+='<div style="font-size:11px;color:#9ca3af;margin-top:2px">Motivo: '+esc(item.motivo)+'</div>';
+      if(anulado)h+='<div style="font-size:10px;color:#ef4444;margin-top:3px">⚠ ANULADO por '+esc(item.anuladoPor||'?')+(item.motivoAnulacion?' — '+esc(item.motivoAnulacion):'')+'</div>';
+      h+='</div>';
+      if(!anulado){
+        h+='<button onclick="anularRetiroUI('+item.id+')" style="background:rgba(239,68,68,.12);color:#ef4444;border:0.5px solid rgba(239,68,68,.4);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;white-space:nowrap;margin-left:8px">🗑️ Anular</button>';
+      }
+      h+='</div>';
+    });
+    h+='</div>';
+    cont.innerHTML=h;
+  },function(e){var cont=document.getElementById('hrLista');if(cont)cont.innerHTML='<p style="color:#ef4444;text-align:center;padding:20px">Error: '+esc(e.message||'?')+'</p>';});
+}
+function anularRetiroUI(retiroId){
+  if(!sess||sess.userRole!=='ADMIN'){toast('Solo ADMIN','err');return;}
+  var motivo=prompt('Motivo de la anulación (mínimo 5 caracteres):');
+  if(motivo===null)return;
+  motivo=String(motivo||'').trim();
+  if(motivo.length<5){toast('Motivo obligatorio (min 5 caracteres)','err');return;}
+  if(!confirm('¿Anular este retiro?\n\nLa plata vuelve a las ventas del día origen y se reflejará en todas las pantallas (Mes, Cuadre, Métricas).'))return;
+  rpc('anularRetiro',{
+    retiroId:retiroId,
+    motivo:motivo,
+    userName:sess.userName,
+    userRole:sess.userRole
+  },function(){
+    toast('✓ Retiro anulado','ok');
+    closeM('mHistorialRetiros');
+    openRetirosDuenoModal();
+    loadGastosMes();
+  },function(e){toast('Error: '+(e.message||'?'),'err');});
 }
 function loadGastosMes(){
   var mes=document.getElementById('gmPick').value;
