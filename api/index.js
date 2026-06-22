@@ -348,6 +348,7 @@ module.exports = async function handler(req, res) {
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
+      case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
       case 'deleteProduct':          return await apiDeleteProduct(payload, res);
       case 'addStock':               return await apiAddStock(payload, res);
       case 'ingresoBodega':          return await apiIngresoBodega(payload, res);
@@ -4559,6 +4560,39 @@ async function apiDeleteProduct(p, res) {
   if(!id) return err(res,'id requerido');
   await supabase.from('products').update({ activo: false }).eq('id', id);
   return ok(res, {});
+}
+
+// Editor de precios (Configuracion): actualiza los 7 campos del jsonb de UNA
+// categoria, scopeado por MOTEL_ID. Valida ADMIN y rangos. Invalida la cache de
+// getPricing del motel para que el cambio impacte el cobro al instante.
+async function apiSaveCategoriaPrecios(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const nombreDb = String(p.nombreDb||'').trim();
+  if(!nombreDb) return err(res,'nombreDb requerido');
+  const precios = p.precios || {};
+  // 6 campos de dinero: entero > 0
+  const MONEY_KEYS = ['3h','6h','8h','12h','extraHour','extraPerson'];
+  const out = {};
+  for(const k of MONEY_KEYS){
+    const v = Number(precios[k]);
+    if(!Number.isInteger(v) || v <= 0) return err(res,'Valor invalido para '+k+' (entero > 0)');
+    out[k] = v;
+  }
+  // included: entero 1..10
+  const inc = Number(precios.included);
+  if(!Number.isInteger(inc) || inc < 1 || inc > 10) return err(res,'included debe ser entero entre 1 y 10');
+  out.included = inc;
+  // Update scopeado por motel + categoria; .select confirma que la fila existia
+  const { data: upd, error: updErr } = await supabase.from('app_categorias')
+    .update({ precios: out })
+    .eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb)
+    .select('nombre_db');
+  if(updErr) return err(res, updErr.message);
+  if(!upd || !upd.length) return err(res,'Categoria no encontrada para este motel: '+nombreDb);
+  // Refresca cache y devuelve el pricing actualizado para que el front actualice MP
+  invalidatePricingCache(MOTEL_ID);
+  const masterPricing = await getPricing(MOTEL_ID, { force: true });
+  return ok(res, { nombreDb, precios: out, masterPricing });
 }
 
 async function apiAddStock(p, res) {
