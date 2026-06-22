@@ -11918,6 +11918,27 @@ function updNoteBadge(notes){
   tab.style.color=unseen>0?'#ef4444':'';
 }
  function loadCfg(){
+  var h='';
+  h+='<div style="display:flex;gap:6px;margin-bottom:12px">';
+  h+='<button id="cfgTabUsuarios" class="btn ba sm" onclick="cfgTab(\'usuarios\')">👤 Usuarios</button>';
+  h+='<button id="cfgTabPrecios" class="btn bk sm" onclick="cfgTab(\'precios\')">💲 Precios</button>';
+  h+='</div>';
+  h+='<div id="cfgUsuarios"><p style="color:#9ca3af">Cargando...</p></div>';
+  h+='<div id="cfgPrecios" style="display:none"></div>';
+  document.getElementById('cfgCont').innerHTML=h;
+  cfgTab('usuarios');
+  loadCfgUsuarios();
+  renderPreciosEditor();
+}
+function cfgTab(t){
+  var u=document.getElementById('cfgUsuarios'),p=document.getElementById('cfgPrecios');
+  if(u)u.style.display=(t==='usuarios')?'':'none';
+  if(p)p.style.display=(t==='precios')?'':'none';
+  var bu=document.getElementById('cfgTabUsuarios'),bp=document.getElementById('cfgTabPrecios');
+  if(bu)bu.className='btn '+(t==='usuarios'?'ba':'bk')+' sm';
+  if(bp)bp.className='btn '+(t==='precios'?'ba':'bk')+' sm';
+}
+function loadCfgUsuarios(){
   rpc('getReceptionPins',{userRole:sess.userRole},function(data){
     var pins=data.pins||[];
     var h='<div class="cfg"><h3>Recepcionistas Autorizadas</h3>';
@@ -11933,8 +11954,68 @@ function updNoteBadge(notes){
     h+='<button class="btn ba sm" style="margin-top:10px" onclick="openPin(\'\')">+ Agregar Recepcionista</button>';
     h+='</div>';
     h+='<div class="cfg"><h3>PIN Administrador</h3><button class="btn br sm" onclick="openM(\'mChPin\')">Cambiar PIN Admin</button></div>';
-    document.getElementById('cfgCont').innerHTML=h;
-  },function(e){document.getElementById('cfgCont').innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+    document.getElementById('cfgUsuarios').innerHTML=h;
+  },function(e){document.getElementById('cfgUsuarios').innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
+}
+// ---- Editor de precios (Configuracion > Precios) ----
+// Lee las categorias desde MP (que ya viene del bootstrap con los 7 campos).
+// Mapea cada campo a la key que espera el endpoint (h3 -> '3h', etc.).
+var PRECIOS_CATS={}; // slug -> nombre_db (las claves de MP)
+function renderPreciosEditor(){
+  var cont=document.getElementById('cfgPrecios');
+  if(!cont)return;
+  PRECIOS_CATS={};
+  var campos=[
+    {k:'3h',lbl:'3 horas',src:'h3',money:true},
+    {k:'6h',lbl:'6 horas',src:'h6',money:true},
+    {k:'8h',lbl:'8 horas',src:'h8',money:true},
+    {k:'12h',lbl:'12 horas',src:'h12',money:true},
+    {k:'extraHour',lbl:'Hora extra',src:'extraHour',money:true},
+    {k:'extraPerson',lbl:'Persona extra',src:'extraPerson',money:true},
+    {k:'included',lbl:'Personas incluidas (1-10)',src:'included',money:false}
+  ];
+  var cats=Object.keys(MP||{});
+  if(!cats.length){cont.innerHTML='<p style="color:#9ca3af">Sin categorías.</p>';return;}
+  var h='<div class="cfg"><h3>Precios por categoría</h3><p style="font-size:11px;color:#9ca3af">Montos enteros mayores a 0. Personas incluidas entre 1 y 10. Cada categoría se guarda por separado.</p></div>';
+  cats.forEach(function(cat){
+    var slug=String(cat).replace(/[^A-Za-z0-9]/g,'_');
+    PRECIOS_CATS[slug]=cat;
+    var cfg=MP[cat]||{};
+    h+='<div class="cfg"><h3>'+esc(cat)+'</h3>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    campos.forEach(function(c){
+      var val=Number(cfg[c.src]||0);
+      h+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">'+c.lbl+'</label>';
+      h+='<input type="number" id="pr_'+slug+'_'+c.k+'" value="'+val+'" min="1" '+(c.money?'step="1000"':'max="10" step="1"')+' style="width:100%;box-sizing:border-box"></div>';
+    });
+    h+='</div>';
+    h+='<button class="btn ba sm" style="margin-top:8px" onclick="guardarPrecios(\''+slug+'\')">Guardar '+esc(cat)+'</button>';
+    h+='</div>';
+  });
+  cont.innerHTML=h;
+}
+function guardarPrecios(slug){
+  var nombreDb=PRECIOS_CATS[slug];
+  if(!nombreDb){toast('Categoría no encontrada','err');return;}
+  var keys=['3h','6h','8h','12h','extraHour','extraPerson','included'];
+  var precios={};
+  for(var i=0;i<keys.length;i++){
+    var k=keys[i];
+    var el=document.getElementById('pr_'+slug+'_'+k);
+    var v=el?Number(el.value):NaN;
+    if(!Number.isInteger(v)){toast('Valor inválido en '+k+' (debe ser entero)','err');return;}
+    if(k==='included'){
+      if(v<1||v>10){toast('Personas incluidas debe estar entre 1 y 10','err');return;}
+    }else{
+      if(v<=0){toast('El monto de '+k+' debe ser mayor a 0','err');return;}
+    }
+    precios[k]=v;
+  }
+  rpc('saveCategoriaPrecios',{nombreDb:nombreDb,precios:precios,userRole:sess.userRole},function(res){
+    if(res&&res.masterPricing&&typeof res.masterPricing==='object'&&Object.keys(res.masterPricing).length){ MP=res.masterPricing; }
+    toast('Precios de '+nombreDb+' guardados.','ok');
+    renderPreciosEditor();
+  },function(e){toast(e.message||String(e),'err');});
 }
 
 function deletePin(nm){
