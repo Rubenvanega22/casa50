@@ -1694,7 +1694,14 @@ function clearSess(){
 window.onload=function(){
   var saved=loadSess();
   rpc('bootstrap',null,function(d){
-    if(d){BS=d;rooms=d.rooms||[];}
+    if(d){BS=d;rooms=d.rooms||[];
+      // Precios desde el backend (app_categorias con fallback a la constante).
+      // Si llega un objeto no vacio, reemplaza el MP hardcodeado; si no, queda
+      // el MP hardcodeado (:1599) como fallback. No cambia el shape (h3/h6/h8/h12
+      // + extraHour/extraPerson/included), asi que calcP/calcTot y los usos de
+      // cfg siguen igual.
+      if(d.masterPricing && typeof d.masterPricing==='object' && Object.keys(d.masterPricing).length){ MP=d.masterPricing; }
+    }
     updSI();
     if(saved&&saved.userName){
       sess=saved;
