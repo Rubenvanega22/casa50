@@ -34,12 +34,14 @@ const MASTER_PRICING = {
 
 // ==================== PRECIOS EN RUNTIME ====================
 // Parten de MASTER_PRICING (constante = baseline y fallback). Si app_categorias
-// esta disponible, sobrescriben SOLO h3/h6/h8/h12 por nombre_db. Los campos
-// extraHour/extraPerson/included NUNCA se tocan (quedan en la constante).
-// Cache 5 min; el bootstrap llama con {force:true} para reflejar cambios de
-// precio sin redeploy. Ante cualquier fallo de la tabla -> fallback a la constante.
-let PRICING_CACHE = null;
-let PRICING_CACHE_MS = 0;
+// esta disponible, sobrescriben por nombre_db los 7 campos editables por motel:
+// 3h/6h/8h/12h, extraHour, extraPerson, included. Cada campo cae a la constante
+// si falta o es invalido (fallback por campo). Scoped por motel_id (multi-tenant,
+// decision A1: MOTEL_ID por env/constante de la instancia). Cache POR motel, 5 min;
+// el bootstrap llama con {force:true} para reflejar cambios sin redeploy. Ante
+// cualquier fallo de la tabla -> fallback a la constante.
+const MOTEL_ID = process.env.MOTEL_ID || '24992a8a-48d8-4444-a50f-2d6c7d949828';
+const PRICING_CACHE = {}; // { [motelId]: { data, ms } }
 const PRICING_TTL_MS = 5 * 60 * 1000;
 const PRECIO_KEYS = { '3h': 'h3', '6h': 'h6', '8h': 'h8', '12h': 'h12' };
 
@@ -50,32 +52,49 @@ function clonePricing(src) {
   return out;
 }
 
-async function getPricing(opts) {
+// Invalida la cache de un motel (usado tras editar precios) o de todos si no se pasa.
+function invalidatePricingCache(motelId) {
+  if (motelId) delete PRICING_CACHE[motelId];
+  else for (const k in PRICING_CACHE) delete PRICING_CACHE[k];
+}
+
+async function getPricing(motelId, opts) {
+  const mid = motelId || MOTEL_ID;
   const force = !!(opts && opts.force);
   const now = Date.now();
-  if (!force && PRICING_CACHE && (now - PRICING_CACHE_MS) < PRICING_TTL_MS) {
-    return PRICING_CACHE;
+  const cached = PRICING_CACHE[mid];
+  if (!force && cached && (now - cached.ms) < PRICING_TTL_MS) {
+    return cached.data;
   }
   const merged = clonePricing(MASTER_PRICING);
   try {
     const { data, error } = await supabase
       .from('app_categorias')
       .select('nombre_db,precios')
+      .eq('motel_id', mid)
       .eq('activo', true);
     if (error) throw error;
-    if (!data || !data.length) throw new Error('app_categorias vacia');
+    if (!data || !data.length) throw new Error('app_categorias vacia para motel ' + mid);
     data.forEach(row => {
       const cat = String(row.nombre_db || '').trim();
       if (!merged[cat]) return; // categoria no conocida en la constante -> ignorar
       const precios = row.precios || {};
-      for (const tk in PRECIO_KEYS) { // '3h' -> 'h3', ...
+      // 4 precios de bloque: '3h' -> 'h3', ... (numero > 0)
+      for (const tk in PRECIO_KEYS) {
         const val = Number(precios[tk]);
-        // Fallback por campo: solo sobrescribe si es numero > 0; si no, queda la constante
         if (Number.isFinite(val) && val > 0) merged[cat][PRECIO_KEYS[tk]] = val;
       }
+      // extraHour / extraPerson: numero > 0
+      const eh = Number(precios.extraHour);
+      if (Number.isFinite(eh) && eh > 0) merged[cat].extraHour = eh;
+      const ep = Number(precios.extraPerson);
+      if (Number.isFinite(ep) && ep > 0) merged[cat].extraPerson = ep;
+      // included: entero 1..10
+      const inc = Number(precios.included);
+      if (Number.isInteger(inc) && inc >= 1 && inc <= 10) merged[cat].included = inc;
+      // Fallback por campo: cualquier key faltante/invalida queda con el valor de la constante
     });
-    PRICING_CACHE = merged;
-    PRICING_CACHE_MS = now;
+    PRICING_CACHE[mid] = { data: merged, ms: now };
     return merged;
   } catch (e) {
     // Fallback global: no cachear datos malos; devolver copia limpia de la constante
@@ -329,6 +348,7 @@ module.exports = async function handler(req, res) {
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
+      case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
       case 'deleteProduct':          return await apiDeleteProduct(payload, res);
       case 'addStock':               return await apiAddStock(payload, res);
       case 'ingresoBodega':          return await apiIngresoBodega(payload, res);
@@ -402,7 +422,7 @@ async function apiBootstrap(req, res) {
   const { data: rooms } = await supabase.from('rooms').select('*').order('floor').order('room_id');
   return ok(res, {
     settings, rooms: (rooms || []).map(mapRoom),
-    masterPricing: await getPricing({ force: true }), serverNowMs: now,
+    masterPricing: await getPricing(MOTEL_ID, { force: true }), serverNowMs: now,
     businessDay: businessDay(now), currentShiftId: currentShiftId(now),
     shifts: [
       { id: 'SHIFT_1', label: 'Turno 1 (6am-2pm)' },
@@ -713,7 +733,7 @@ async function apiCheckIn(p, res) {
   if (room.disabled) return err(res, 'Habitacion deshabilitada');
   if (room.state !== 'AVAILABLE') return err(res, `Hab ${roomId} no disponible (${room.state})`);
 
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const cfg = PRICING[room.category] || PRICING['Junior'];
   if (room.category === 'Suite Multiple' && durationHrs === 6 && !cfg.h6) {
     return err(res, 'Suite Multiple no tiene precio para 6h');
@@ -865,7 +885,7 @@ async function apiExtendTime(p, res) {
       return err(res, 'Auto-cobro rechazado: habitacion no esta vencida >= 30min en servidor');
     }
   }
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const cfg = PRICING[room.category] || PRICING['Junior'];
   const extraCost = extraHrs * Number(cfg.extraHour || 0);
   const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
@@ -919,7 +939,7 @@ async function apiRenewTime(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
 
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const cfg = PRICING[room.category] || PRICING['Junior'];
   const renewPrice = calcPrice(durationHrs, cfg);
   if (!renewPrice) return err(res, 'Precio no definido para esa duracion');
@@ -2437,7 +2457,7 @@ async function apiAgregarPersonaManual(p, res) {
   if(!motivo||motivo.length<5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
   const room = await getRoom(roomId);
   if(!room) return err(res,'Habitación no existe');
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const cfg = PRICING[room.category]||PRICING['Junior'];
   const costPerPerson = Number(cfg.extraPerson||0);
   const totalCost = costPerPerson * cantidad;
@@ -2479,7 +2499,7 @@ async function apiEditarPersonasCheckIn(p, res) {
     .select('id').eq('room_id', sale.room_id).eq('check_in_ms', Number(sale.check_in_ms||0))
     .eq('type','REFUND').limit(1);
   if(refunds && refunds.length) return err(res,'Esta venta tiene una devolución asociada, no se puede editar');
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const cfg = PRICING[sale.category] || PRICING['Junior'];
   const valorPorPersona = Number(cfg.extraPerson || 0);
   const extraPeopleValueNuevo = valorPorPersona * nuevaCantidad;
@@ -2567,7 +2587,7 @@ async function apiAddExtraPerson(p, res) {
   if(room.state!=='OCCUPIED')return err(res,'Habitacion no esta ocupada');
   const currentPeople=Number(room.people||0);
   if(currentPeople>=10)return err(res,'Maximo 10 personas');
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const cfg=PRICING[room.category]||PRICING['Junior'];
   const cost=Number(cfg.extraPerson||0),newPeople=currentPeople+1;
   await supabase.from('rooms').update({people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
@@ -2593,7 +2613,7 @@ async function apiRoomChange(p, res) {
   if(fromRoom.state !== 'OCCUPIED') return err(res, 'Habitacion origen no esta ocupada');
   if(toRoom.state !== 'AVAILABLE') return err(res, 'Habitacion destino no esta disponible');
 
-  const PRICING = await getPricing();
+  const PRICING = await getPricing(MOTEL_ID);
   const fromCfg = PRICING[fromRoom.category] || PRICING['Junior'];
   const toCfg = PRICING[toRoom.category] || PRICING['Junior'];
   const durationHrs = Number(p.durationHrs || 3);
@@ -4540,6 +4560,39 @@ async function apiDeleteProduct(p, res) {
   if(!id) return err(res,'id requerido');
   await supabase.from('products').update({ activo: false }).eq('id', id);
   return ok(res, {});
+}
+
+// Editor de precios (Configuracion): actualiza los 7 campos del jsonb de UNA
+// categoria, scopeado por MOTEL_ID. Valida ADMIN y rangos. Invalida la cache de
+// getPricing del motel para que el cambio impacte el cobro al instante.
+async function apiSaveCategoriaPrecios(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const nombreDb = String(p.nombreDb||'').trim();
+  if(!nombreDb) return err(res,'nombreDb requerido');
+  const precios = p.precios || {};
+  // 6 campos de dinero: entero > 0
+  const MONEY_KEYS = ['3h','6h','8h','12h','extraHour','extraPerson'];
+  const out = {};
+  for(const k of MONEY_KEYS){
+    const v = Number(precios[k]);
+    if(!Number.isInteger(v) || v <= 0) return err(res,'Valor invalido para '+k+' (entero > 0)');
+    out[k] = v;
+  }
+  // included: entero 1..10
+  const inc = Number(precios.included);
+  if(!Number.isInteger(inc) || inc < 1 || inc > 10) return err(res,'included debe ser entero entre 1 y 10');
+  out.included = inc;
+  // Update scopeado por motel + categoria; .select confirma que la fila existia
+  const { data: upd, error: updErr } = await supabase.from('app_categorias')
+    .update({ precios: out })
+    .eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb)
+    .select('nombre_db');
+  if(updErr) return err(res, updErr.message);
+  if(!upd || !upd.length) return err(res,'Categoria no encontrada para este motel: '+nombreDb);
+  // Refresca cache y devuelve el pricing actualizado para que el front actualice MP
+  invalidatePricingCache(MOTEL_ID);
+  const masterPricing = await getPricing(MOTEL_ID, { force: true });
+  return ok(res, { nombreDb, precios: out, masterPricing });
 }
 
 async function apiAddStock(p, res) {
