@@ -11951,24 +11951,98 @@ function updNoteBadge(notes){
 }
  function loadCfg(){
   var h='';
-  h+='<div style="display:flex;gap:6px;margin-bottom:12px">';
+  h+='<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
   h+='<button id="cfgTabUsuarios" class="btn ba sm" onclick="cfgTab(\'usuarios\')">👤 Usuarios</button>';
   h+='<button id="cfgTabPrecios" class="btn bk sm" onclick="cfgTab(\'precios\')">💲 Precios</button>';
+  h+='<button id="cfgTabMotel" class="btn bk sm" onclick="cfgTab(\'motel\')">🏨 Datos del motel</button>';
   h+='</div>';
   h+='<div id="cfgUsuarios"><p style="color:#9ca3af">Cargando...</p></div>';
   h+='<div id="cfgPrecios" style="display:none"></div>';
+  h+='<div id="cfgMotel" style="display:none"></div>';
   document.getElementById('cfgCont').innerHTML=h;
   cfgTab('usuarios');
   loadCfgUsuarios();
   renderPreciosEditor();
+  renderMotelEditor();
 }
 function cfgTab(t){
-  var u=document.getElementById('cfgUsuarios'),p=document.getElementById('cfgPrecios');
-  if(u)u.style.display=(t==='usuarios')?'':'none';
-  if(p)p.style.display=(t==='precios')?'':'none';
-  var bu=document.getElementById('cfgTabUsuarios'),bp=document.getElementById('cfgTabPrecios');
-  if(bu)bu.className='btn '+(t==='usuarios'?'ba':'bk')+' sm';
-  if(bp)bp.className='btn '+(t==='precios'?'ba':'bk')+' sm';
+  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',motel:'cfgMotel'};
+  for(var k in ids){var el=document.getElementById(ids[k]); if(el)el.style.display=(k===t)?'':'none';}
+  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',motel:'cfgTabMotel'};
+  for(var b in btns){var bt=document.getElementById(btns[b]); if(bt)bt.className='btn '+(b===t?'ba':'bk')+' sm';}
+}
+// ---- Editor de Datos del motel (Configuracion > Datos del motel) ----
+function renderMotelEditor(){
+  var cont=document.getElementById('cfgMotel');
+  if(!cont)return;
+  var mi=MI||{};
+  function val(k){return esc(mi[k]||'');}
+  var h='<div class="cfg"><h3>Datos del motel</h3>';
+  h+='<p style="font-size:11px;color:#9ca3af">El nombre aparece en la app y en los recibos. Los datos fiscales salen en los recibos (solo los que cargues).</p>';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin:8px 0 2px">Logo</label>';
+  h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">';
+  h+='<img id="motelLogoPreview" src="'+(mi.logo_url?esc(mi.logo_url):'')+'" style="height:48px;width:auto;background:#22222c;border-radius:6px'+(mi.logo_url?'':';display:none')+'">';
+  h+='<label class="btn bk sm" style="cursor:pointer;margin:0">📷 Subir logo<input type="file" id="motelLogoFile" accept="image/*" style="display:none" onchange="subirLogoMotel(this)"></label>';
+  h+='<span id="motelLogoMsg" style="font-size:11px;color:#9ca3af"></span>';
+  h+='</div>';
+  h+='<input type="hidden" id="motelLogoUrl" value="'+(mi.logo_url?esc(mi.logo_url):'')+'">';
+  var campos=[
+    {k:'nombre',lbl:'Nombre del motel *'},
+    {k:'razon_social',lbl:'Razón social'},
+    {k:'nit',lbl:'NIT'},
+    {k:'direccion',lbl:'Dirección'},
+    {k:'telefono',lbl:'Teléfono'},
+    {k:'ciudad',lbl:'Ciudad'},
+    {k:'resolucion_dian',lbl:'Resolución DIAN'}
+  ];
+  campos.forEach(function(c){
+    h+='<label style="font-size:11px;color:#9ca3af;display:block;margin:6px 0 2px">'+c.lbl+'</label>';
+    h+='<input type="text" id="mi_'+c.k+'" value="'+val(c.k)+'" style="width:100%;box-sizing:border-box">';
+  });
+  h+='<button class="btn ba sm" style="margin-top:10px" onclick="guardarMotelInfo()">Guardar datos del motel</button>';
+  h+='</div>';
+  cont.innerHTML=h;
+}
+function subirLogoMotel(input){
+  var file=input.files&&input.files[0];
+  if(!file)return;
+  var msg=document.getElementById('motelLogoMsg');
+  if(msg){msg.textContent='Procesando...';msg.style.color='#9ca3af';}
+  compressImage(file,function(blob){
+    var fileName='branding/logo_'+Date.now()+'.jpg';
+    fetch(SUPA_URL+'/storage/v1/object/maid-photos/'+fileName,{
+      method:'PUT',
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'x-upsert':'true','Content-Type':'image/jpeg'},
+      body:blob
+    }).then(function(r){ if(!r.ok)return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);}); return r.json(); })
+    .then(function(){
+      var url=SUPA_URL+'/storage/v1/object/public/maid-photos/'+fileName;
+      var hu=document.getElementById('motelLogoUrl'); if(hu)hu.value=url;
+      var pv=document.getElementById('motelLogoPreview'); if(pv){pv.src=url;pv.style.display='';}
+      if(msg){msg.textContent='Logo subido (guardá para aplicar)';msg.style.color='#22c55e';}
+    }).catch(function(e){ if(msg){msg.textContent='Error subiendo: '+(e.message||String(e));msg.style.color='#ef4444';} });
+  },function(err){ if(msg){msg.textContent='Error procesando: '+(err.message||String(err));msg.style.color='#ef4444';} });
+}
+function guardarMotelInfo(){
+  var nombre=(document.getElementById('mi_nombre').value||'').trim();
+  if(!nombre){toast('El nombre del motel es obligatorio','err');return;}
+  var payload={
+    nombre:nombre,
+    logoUrl:(document.getElementById('motelLogoUrl').value||'').trim(),
+    nit:(document.getElementById('mi_nit').value||'').trim(),
+    razonSocial:(document.getElementById('mi_razon_social').value||'').trim(),
+    direccion:(document.getElementById('mi_direccion').value||'').trim(),
+    telefono:(document.getElementById('mi_telefono').value||'').trim(),
+    ciudad:(document.getElementById('mi_ciudad').value||'').trim(),
+    resolucionDian:(document.getElementById('mi_resolucion_dian').value||'').trim(),
+    userRole:sess.userRole
+  };
+  rpc('saveMotelInfo',payload,function(res){
+    if(res&&res.motelInfo&&typeof res.motelInfo==='object'){ MI=res.motelInfo; }
+    aplicarMotelInfo();
+    renderMotelEditor();
+    toast('Datos del motel guardados.','ok');
+  },function(e){toast(e.message||String(e),'err');});
 }
 function loadCfgUsuarios(){
   rpc('getReceptionPins',{userRole:sess.userRole},function(data){
