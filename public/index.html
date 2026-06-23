@@ -1922,12 +1922,6 @@ actualizarBtnCaja();
       rpc('getRooms',null,function(rd){if(rd){rooms=rd.rooms||[];}renderMaid();checkMaidSelection();});
     });
   }
-  if(sess.userRole==='ADMIN'){
-    rpc('getMultiMaidMode',{},function(d){
-      multiMaidMode=d.multiMaidMode||false;
-      renderMultiMaidBtn();
-    });
-  }
   if(sess.userRole==='ADMIN' && sess.verLuciana===true) lucianaInit();
   loadNotes();
 }
