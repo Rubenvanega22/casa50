@@ -11949,21 +11949,51 @@ function updNoteBadge(notes){
   h+='<button id="cfgTabUsuarios" class="btn ba sm" onclick="cfgTab(\'usuarios\')">👤 Usuarios</button>';
   h+='<button id="cfgTabPrecios" class="btn bk sm" onclick="cfgTab(\'precios\')">💲 Precios</button>';
   h+='<button id="cfgTabMotel" class="btn bk sm" onclick="cfgTab(\'motel\')">🏨 Datos del motel</button>';
+  h+='<button id="cfgTabOperacion" class="btn bk sm" onclick="cfgTab(\'operacion\')">⚙️ Operación</button>';
   h+='</div>';
   h+='<div id="cfgUsuarios"><p style="color:#9ca3af">Cargando...</p></div>';
   h+='<div id="cfgPrecios" style="display:none"></div>';
   h+='<div id="cfgMotel" style="display:none"></div>';
+  h+='<div id="cfgOperacion" style="display:none"></div>';
   document.getElementById('cfgCont').innerHTML=h;
   cfgTab('usuarios');
   loadCfgUsuarios();
   renderPreciosEditor();
   renderMotelEditor();
+  renderOperacionEditor();
 }
 function cfgTab(t){
-  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',motel:'cfgMotel'};
+  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',motel:'cfgMotel',operacion:'cfgOperacion'};
   for(var k in ids){var el=document.getElementById(ids[k]); if(el)el.style.display=(k===t)?'':'none';}
-  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',motel:'cfgTabMotel'};
+  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',motel:'cfgTabMotel',operacion:'cfgTabOperacion'};
   for(var b in btns){var bt=document.getElementById(btns[b]); if(bt)bt.className='btn '+(b===t?'ba':'bk')+' sm';}
+}
+// ---- Operación (Configuracion > Operación): toggle modo multi-camarera ----
+function renderOperacionEditor(){
+  var cont=document.getElementById('cfgOperacion');
+  if(!cont)return;
+  cont.innerHTML='<div class="cfg"><h3>Operación</h3><p style="color:#9ca3af;font-size:12px">Cargando...</p></div>';
+  rpc('getMultiMaidMode',{},function(d){
+    var on=!!(d&&d.multiMaidMode);
+    multiMaidMode=on; // sincroniza el global
+    var h='<div class="cfg"><h3>Operación</h3>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px">';
+    h+='<div><div style="font-weight:700">Modo multi-camarera</div>';
+    h+='<div style="font-size:11px;color:#9ca3af;margin-top:2px">Cuando está activo, las camareras deben seleccionar compañera antes de marcar la habitación como lista.</div></div>';
+    h+='<button id="mmToggle" class="btn '+(on?'ba':'bk')+' sm" style="white-space:nowrap" onclick="toggleMultiMaid()">'+(on?'✓ Activado':'Desactivado')+'</button>';
+    h+='</div></div>';
+    cont.innerHTML=h;
+  },function(e){ cont.innerHTML='<div class="cfg"><h3>Operación</h3><p style="color:#ef4444">'+esc(e.message||String(e))+'</p></div>'; });
+}
+function toggleMultiMaid(){
+  var nuevo=!multiMaidMode;
+  conf((nuevo?'¿Activar':'¿Desactivar')+' el modo multi-camarera? Esto cambia el flujo de las camareras en turno.',function(){
+    rpc('setMultiMaidMode',{enabled:nuevo,userRole:sess.userRole},function(res){
+      multiMaidMode=!!(res&&res.multiMaidMode);
+      renderOperacionEditor();
+      toast('Modo multi-camarera '+(multiMaidMode?'activado':'desactivado')+'.','ok');
+    },function(e){toast(e.message||String(e),'err');});
+  });
 }
 // ---- Editor de Datos del motel (Configuracion > Datos del motel) ----
 function renderMotelEditor(){
