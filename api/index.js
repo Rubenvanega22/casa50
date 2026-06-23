@@ -349,6 +349,7 @@ module.exports = async function handler(req, res) {
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
       case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
+      case 'saveMotelInfo':          return await apiSaveMotelInfo(payload, res);
       case 'deleteProduct':          return await apiDeleteProduct(payload, res);
       case 'addStock':               return await apiAddStock(payload, res);
       case 'ingresoBodega':          return await apiIngresoBodega(payload, res);
@@ -415,6 +416,25 @@ module.exports = async function handler(req, res) {
   }
 };
 
+// Datos del motel (nombre, logo, fiscales) por motel_id. Fallback a un objeto
+// minimo con nombre 'Casa 50' si la tabla falla o no hay fila (no rompe la app).
+const MOTEL_INFO_FIELDS = 'motel_id,nombre,logo_url,nit,razon_social,direccion,telefono,ciudad,resolucion_dian';
+function motelInfoFallback() {
+  return { motel_id: MOTEL_ID, nombre: 'Casa 50', logo_url: '', nit: '', razon_social: '', direccion: '', telefono: '', ciudad: '', resolucion_dian: '' };
+}
+async function getMotelInfo() {
+  try {
+    const { data, error } = await supabase.from('motel_info')
+      .select(MOTEL_INFO_FIELDS).eq('motel_id', MOTEL_ID).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('motel_info sin fila para ' + MOTEL_ID);
+    return data;
+  } catch (e) {
+    console.error('getMotelInfo fallback a {nombre:Casa 50}:', (e && e.message) || e);
+    return motelInfoFallback();
+  }
+}
+
 // ==================== BOOTSTRAP ====================
 async function apiBootstrap(req, res) {
   const now = Date.now();
@@ -422,6 +442,7 @@ async function apiBootstrap(req, res) {
   const { data: rooms } = await supabase.from('rooms').select('*').order('floor').order('room_id');
   return ok(res, {
     settings, rooms: (rooms || []).map(mapRoom),
+    motelInfo: await getMotelInfo(),
     masterPricing: await getPricing(MOTEL_ID, { force: true }), serverNowMs: now,
     businessDay: businessDay(now), currentShiftId: currentShiftId(now),
     shifts: [
@@ -4593,6 +4614,31 @@ async function apiSaveCategoriaPrecios(p, res) {
   invalidatePricingCache(MOTEL_ID);
   const masterPricing = await getPricing(MOTEL_ID, { force: true });
   return ok(res, { nombreDb, precios: out, masterPricing });
+}
+
+// Editor de datos del motel (Configuracion > Datos del motel). Valida ADMIN y
+// nombre no vacio; el resto (logo, fiscales) son opcionales. Scoped por MOTEL_ID.
+async function apiSaveMotelInfo(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const nombre = String(p.nombre||'').trim();
+  if(!nombre) return err(res,'El nombre del motel es obligatorio');
+  const upd = {
+    nombre,
+    logo_url: String(p.logoUrl||'').trim(),
+    nit: String(p.nit||'').trim(),
+    razon_social: String(p.razonSocial||'').trim(),
+    direccion: String(p.direccion||'').trim(),
+    telefono: String(p.telefono||'').trim(),
+    ciudad: String(p.ciudad||'').trim(),
+    resolucion_dian: String(p.resolucionDian||'').trim(),
+    actualizado: new Date().toISOString()
+  };
+  const { data, error } = await supabase.from('motel_info')
+    .update(upd).eq('motel_id', MOTEL_ID)
+    .select(MOTEL_INFO_FIELDS).maybeSingle();
+  if(error) return err(res, error.message);
+  if(!data) return err(res,'No existe motel_info para este motel');
+  return ok(res, { motelInfo: data });
 }
 
 async function apiAddStock(p, res) {
