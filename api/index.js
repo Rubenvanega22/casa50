@@ -779,10 +779,7 @@ async function apiCheckIn(p, res) {
   if (room.state !== 'AVAILABLE') return err(res, `Hab ${roomId} no disponible (${room.state})`);
 
   const PRICING = await getPricing(MOTEL_ID);
-  const cfg = PRICING[room.category] || PRICING['Junior'];
-  if (room.category === 'Suite Multiple' && durationHrs === 6 && !cfg.h6) {
-    return err(res, 'Suite Multiple no tiene precio para 6h');
-  }
+  const cfg = cfgFor(PRICING, room.category);
 
   const basePrice = calcPrice(durationHrs, cfg);
   if (!basePrice) return err(res, 'Precio no definido para esa duracion');
@@ -931,7 +928,7 @@ async function apiExtendTime(p, res) {
     }
   }
   const PRICING = await getPricing(MOTEL_ID);
-  const cfg = PRICING[room.category] || PRICING['Junior'];
+  const cfg = cfgFor(PRICING, room.category);
   const extraCost = extraHrs * Number(cfg.extraHour || 0);
   const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
@@ -985,7 +982,7 @@ async function apiRenewTime(p, res) {
   if (room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
 
   const PRICING = await getPricing(MOTEL_ID);
-  const cfg = PRICING[room.category] || PRICING['Junior'];
+  const cfg = cfgFor(PRICING, room.category);
   const renewPrice = calcPrice(durationHrs, cfg);
   if (!renewPrice) return err(res, 'Precio no definido para esa duracion');
 
@@ -2503,7 +2500,7 @@ async function apiAgregarPersonaManual(p, res) {
   const room = await getRoom(roomId);
   if(!room) return err(res,'Habitación no existe');
   const PRICING = await getPricing(MOTEL_ID);
-  const cfg = PRICING[room.category]||PRICING['Junior'];
+  const cfg = cfgFor(PRICING, room.category);
   const costPerPerson = Number(cfg.extraPerson||0);
   const totalCost = costPerPerson * cantidad;
   await supabase.from('sales').insert({
@@ -2545,7 +2542,7 @@ async function apiEditarPersonasCheckIn(p, res) {
     .eq('type','REFUND').limit(1);
   if(refunds && refunds.length) return err(res,'Esta venta tiene una devolución asociada, no se puede editar');
   const PRICING = await getPricing(MOTEL_ID);
-  const cfg = PRICING[sale.category] || PRICING['Junior'];
+  const cfg = cfgFor(PRICING, sale.category);
   const valorPorPersona = Number(cfg.extraPerson || 0);
   const extraPeopleValueNuevo = valorPorPersona * nuevaCantidad;
   const diferencia = Number(sale.extra_people_value||0) - extraPeopleValueNuevo;
@@ -2633,7 +2630,7 @@ async function apiAddExtraPerson(p, res) {
   const currentPeople=Number(room.people||0);
   if(currentPeople>=10)return err(res,'Maximo 10 personas');
   const PRICING = await getPricing(MOTEL_ID);
-  const cfg=PRICING[room.category]||PRICING['Junior'];
+  const cfg = cfgFor(PRICING, room.category);
   const cost=Number(cfg.extraPerson||0),newPeople=currentPeople+1;
   await supabase.from('rooms').update({people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
   await supabase.from('sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
@@ -2659,8 +2656,8 @@ async function apiRoomChange(p, res) {
   if(toRoom.state !== 'AVAILABLE') return err(res, 'Habitacion destino no esta disponible');
 
   const PRICING = await getPricing(MOTEL_ID);
-  const fromCfg = PRICING[fromRoom.category] || PRICING['Junior'];
-  const toCfg = PRICING[toRoom.category] || PRICING['Junior'];
+  const fromCfg = cfgFor(PRICING, fromRoom.category);
+  const toCfg = cfgFor(PRICING, toRoom.category);
   const durationHrs = Number(p.durationHrs || 3);
   const people = Number(fromRoom.people || 2);
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
