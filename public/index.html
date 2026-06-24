@@ -11947,7 +11947,7 @@ function updNoteBadge(notes){
   var h='';
   h+='<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
   h+='<button id="cfgTabUsuarios" class="btn ba sm" onclick="cfgTab(\'usuarios\')">👤 Usuarios</button>';
-  h+='<button id="cfgTabPrecios" class="btn bk sm" onclick="cfgTab(\'precios\')">💲 Precios</button>';
+  h+='<button id="cfgTabPrecios" class="btn bk sm" onclick="cfgTab(\'precios\')">💲 Categorías y precios</button>';
   h+='<button id="cfgTabMotel" class="btn bk sm" onclick="cfgTab(\'motel\')">🏨 Datos del motel</button>';
   h+='<button id="cfgTabOperacion" class="btn bk sm" onclick="cfgTab(\'operacion\')">⚙️ Operación</button>';
   h+='</div>';
@@ -12088,63 +12088,118 @@ function loadCfgUsuarios(){
   },function(e){document.getElementById('cfgUsuarios').innerHTML='<p style="color:#ef4444">'+esc(e.message)+'</p>';});
 }
 // ---- Editor de precios (Configuracion > Precios) ----
-// Lee las categorias desde MP (que ya viene del bootstrap con los 7 campos).
-// Mapea cada campo a la key que espera el endpoint (h3 -> '3h', etc.).
-var PRECIOS_CATS={}; // slug -> nombre_db (las claves de MP)
+// Editor de Categorías y precios. Lee las filas completas (incl. inactivas) via
+// getCategorias. Permite crear, editar nombre visible + orden, editar precios y
+// baja/alta logica. nombre_db (clave de match con rooms) es inmutable.
+var PRECIOS_CATS={}; // slug(id) -> {id, nombreDb}
+var PRECIOS_CAMPOS=[
+  {k:'3h',lbl:'3 horas',money:true},
+  {k:'6h',lbl:'6 horas',money:true},
+  {k:'8h',lbl:'8 horas',money:true},
+  {k:'12h',lbl:'12 horas',money:true},
+  {k:'extraHour',lbl:'Hora extra',money:true},
+  {k:'extraPerson',lbl:'Persona extra',money:true},
+  {k:'included',lbl:'Personas incluidas (1-10)',money:false}
+];
 function renderPreciosEditor(){
   var cont=document.getElementById('cfgPrecios');
   if(!cont)return;
+  cont.innerHTML='<div class="cfg"><h3>Categorías y precios</h3><p style="color:#9ca3af;font-size:12px">Cargando...</p></div>';
+  rpc('getCategorias',{userRole:sess.userRole},function(d){
+    renderPreciosEditorUI(d.categorias||[]);
+  },function(e){ cont.innerHTML='<div class="cfg"><h3>Categorías y precios</h3><p style="color:#ef4444">'+esc(e.message||String(e))+'</p></div>'; });
+}
+function _inputsPreciosHtml(prefix,precios){
+  var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  PRECIOS_CAMPOS.forEach(function(c){
+    var val=precios?Number(precios[c.k]||0):'';
+    h+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">'+c.lbl+'</label>';
+    h+='<input type="number" id="'+prefix+c.k+'" '+(val!==''?'value="'+val+'" ':'')+'min="1" '+(c.money?'step="1000"':'max="10" step="1"')+' style="width:100%;box-sizing:border-box"></div>';
+  });
+  return h+'</div>';
+}
+function renderPreciosEditorUI(cats){
+  var cont=document.getElementById('cfgPrecios');
+  if(!cont)return;
   PRECIOS_CATS={};
-  var campos=[
-    {k:'3h',lbl:'3 horas',src:'h3',money:true},
-    {k:'6h',lbl:'6 horas',src:'h6',money:true},
-    {k:'8h',lbl:'8 horas',src:'h8',money:true},
-    {k:'12h',lbl:'12 horas',src:'h12',money:true},
-    {k:'extraHour',lbl:'Hora extra',src:'extraHour',money:true},
-    {k:'extraPerson',lbl:'Persona extra',src:'extraPerson',money:true},
-    {k:'included',lbl:'Personas incluidas (1-10)',src:'included',money:false}
-  ];
-  var cats=Object.keys(MP||{});
-  if(!cats.length){cont.innerHTML='<p style="color:#9ca3af">Sin categorías.</p>';return;}
-  var h='<div class="cfg"><h3>Precios por categoría</h3><p style="font-size:11px;color:#9ca3af">Montos enteros mayores a 0. Personas incluidas entre 1 y 10. Cada categoría se guarda por separado.</p></div>';
+  var h='<div class="cfg"><h3>Categorías y precios</h3>';
+  h+='<p style="font-size:11px;color:#9ca3af">Montos enteros &gt; 0. Personas incluidas 1-10. El nombre interno (de match) no cambia una vez creada.</p>';
+  h+='<button class="btn ba sm" onclick="togNuevaCat()">+ Nueva categoría</button>';
+  h+='<div id="nuevaCatForm" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">Nombre de la categoría</label>';
+  h+='<input type="text" id="ncat_nombre" placeholder="Ej: Suite Romántica" style="width:100%;box-sizing:border-box;margin-bottom:8px">';
+  h+=_inputsPreciosHtml('ncat_',null);
+  h+='<button class="btn ba sm" style="margin-top:8px" onclick="crearCategoria()">Crear categoría</button>';
+  h+='</div></div>';
+  if(!cats.length){ h+='<div class="cfg"><p style="color:#9ca3af">Sin categorías. Creá la primera arriba.</p></div>'; }
   cats.forEach(function(cat){
-    var slug=String(cat).replace(/[^A-Za-z0-9]/g,'_');
-    PRECIOS_CATS[slug]=cat;
-    var cfg=MP[cat]||{};
-    h+='<div class="cfg"><h3>'+esc(cat)+'</h3>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
-    campos.forEach(function(c){
-      var val=Number(cfg[c.src]||0);
-      h+='<div><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">'+c.lbl+'</label>';
-      h+='<input type="number" id="pr_'+slug+'_'+c.k+'" value="'+val+'" min="1" '+(c.money?'step="1000"':'max="10" step="1"')+' style="width:100%;box-sizing:border-box"></div>';
-    });
+    var slug=String(cat.id).replace(/[^A-Za-z0-9]/g,'_');
+    PRECIOS_CATS[slug]={id:cat.id,nombreDb:cat.nombre_db};
+    var inactiva=!cat.activo;
+    h+='<div class="cfg"'+(inactiva?' style="opacity:.6"':'')+'><h3>'+esc(cat.nombre_ui||cat.nombre_db)+(inactiva?' <span style="color:#ef4444;font-size:11px">(inactiva)</span>':'')+'</h3>';
+    h+='<div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">';
+    h+='<div style="flex:1"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">Nombre visible</label><input type="text" id="nm_'+slug+'" value="'+esc(cat.nombre_ui||'')+'" style="width:100%;box-sizing:border-box"></div>';
+    h+='<div style="width:64px"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">Orden</label><input type="number" id="or_'+slug+'" value="'+Number(cat.orden||0)+'" min="1" step="1" style="width:100%;box-sizing:border-box"></div>';
+    h+='<button class="btn bk sm" onclick="guardarNombreCat(\''+slug+'\')">Guardar</button>';
     h+='</div>';
-    h+='<button class="btn ba sm" style="margin-top:8px" onclick="guardarPrecios(\''+slug+'\')">Guardar '+esc(cat)+'</button>';
-    h+='</div>';
+    h+=_inputsPreciosHtml('pr_'+slug+'_',cat.precios||{});
+    h+='<div style="display:flex;gap:6px;margin-top:8px">';
+    h+='<button class="btn ba sm" onclick="guardarPrecios(\''+slug+'\')">Guardar precios</button>';
+    h+=inactiva?'<button class="btn bg sm" onclick="toggleCat(\''+slug+'\',true)">Activar</button>':'<button class="btn br sm" onclick="toggleCat(\''+slug+'\',false)">Desactivar</button>';
+    h+='</div></div>';
   });
   cont.innerHTML=h;
 }
-function guardarPrecios(slug){
-  var nombreDb=PRECIOS_CATS[slug];
-  if(!nombreDb){toast('Categoría no encontrada','err');return;}
+function togNuevaCat(){var el=document.getElementById('nuevaCatForm');if(el)el.style.display=(el.style.display==='none')?'block':'none';}
+// Lee y valida los 7 inputs de precios con un prefijo dado. Devuelve obj o null.
+function _leerPrecios(prefix){
   var keys=['3h','6h','8h','12h','extraHour','extraPerson','included'];
   var precios={};
   for(var i=0;i<keys.length;i++){
     var k=keys[i];
-    var el=document.getElementById('pr_'+slug+'_'+k);
+    var el=document.getElementById(prefix+k);
     var v=el?Number(el.value):NaN;
-    if(!Number.isInteger(v)){toast('Valor inválido en '+k+' (debe ser entero)','err');return;}
-    if(k==='included'){
-      if(v<1||v>10){toast('Personas incluidas debe estar entre 1 y 10','err');return;}
-    }else{
-      if(v<=0){toast('El monto de '+k+' debe ser mayor a 0','err');return;}
-    }
+    if(!Number.isInteger(v)){toast('Valor inválido en '+k+' (debe ser entero)','err');return null;}
+    if(k==='included'){ if(v<1||v>10){toast('Personas incluidas debe estar entre 1 y 10','err');return null;} }
+    else { if(v<=0){toast('El monto de '+k+' debe ser mayor a 0','err');return null;} }
     precios[k]=v;
   }
-  rpc('saveCategoriaPrecios',{nombreDb:nombreDb,precios:precios,userRole:sess.userRole},function(res){
+  return precios;
+}
+function guardarPrecios(slug){
+  var c=PRECIOS_CATS[slug]; if(!c){toast('Categoría no encontrada','err');return;}
+  var precios=_leerPrecios('pr_'+slug+'_'); if(!precios)return;
+  rpc('saveCategoriaPrecios',{nombreDb:c.nombreDb,precios:precios,userRole:sess.userRole},function(res){
     if(res&&res.masterPricing&&typeof res.masterPricing==='object'&&Object.keys(res.masterPricing).length){ MP=res.masterPricing; }
-    toast('Precios de '+nombreDb+' guardados.','ok');
-    renderPreciosEditor();
+    toast('Precios guardados.','ok'); renderPreciosEditor();
+  },function(e){toast(e.message||String(e),'err');});
+}
+function guardarNombreCat(slug){
+  var c=PRECIOS_CATS[slug]; if(!c){toast('Categoría no encontrada','err');return;}
+  var nombre=((document.getElementById('nm_'+slug)||{}).value||'').trim();
+  if(!nombre){toast('El nombre visible es obligatorio','err');return;}
+  var orden=Number((document.getElementById('or_'+slug)||{}).value||0);
+  rpc('editCategoria',{id:c.id,nombre:nombre,orden:orden,userRole:sess.userRole},function(res){
+    if(res&&res.masterPricing&&typeof res.masterPricing==='object'&&Object.keys(res.masterPricing).length){ MP=res.masterPricing; }
+    toast('Categoría actualizada.','ok'); renderPreciosEditor();
+  },function(e){toast(e.message||String(e),'err');});
+}
+function toggleCat(slug,activar){
+  var c=PRECIOS_CATS[slug]; if(!c){toast('Categoría no encontrada','err');return;}
+  conf((activar?'¿Activar':'¿Desactivar')+' la categoría "'+c.nombreDb+'"?',function(){
+    rpc('toggleCategoria',{id:c.id,activo:activar,userRole:sess.userRole},function(res){
+      if(res&&res.masterPricing&&typeof res.masterPricing==='object'&&Object.keys(res.masterPricing).length){ MP=res.masterPricing; }
+      toast('Categoría '+(activar?'activada':'desactivada')+'.','ok'); renderPreciosEditor();
+    },function(e){toast(e.message||String(e),'err');});
+  });
+}
+function crearCategoria(){
+  var nombre=((document.getElementById('ncat_nombre')||{}).value||'').trim();
+  if(!nombre){toast('El nombre de la categoría es obligatorio','err');return;}
+  var precios=_leerPrecios('ncat_'); if(!precios)return;
+  rpc('createCategoria',{nombre:nombre,precios:precios,userRole:sess.userRole},function(res){
+    if(res&&res.masterPricing&&typeof res.masterPricing==='object'&&Object.keys(res.masterPricing).length){ MP=res.masterPricing; }
+    toast('Categoría "'+nombre+'" creada.','ok'); renderPreciosEditor();
   },function(e){toast(e.message||String(e),'err');});
 }
 
