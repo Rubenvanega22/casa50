@@ -1,10 +1,10 @@
 # MotelSysPro — Diseño de Arquitectura SaaS Multi-Tenant
 
-**Versión 0.8 — borrador para iterar**
+**Versión 1.0 — borrador para iterar**
 **Fecha:** 24 de junio de 2026
 **Autor del sistema:** Rubén · **Co-diseño:** Claude (arquitecto/auditor)
-**Cambios v0.8:** registrado el orden de trabajo acordado (superadmin primero como base de la empresa → reservas/Casa 50 → venta; legal + web en paralelo) y la dependencia técnica del superadmin con Fases 1-3.
-**Cambios v0.7:** + sección 9.5 (funciones del superadmin de la industria).
+**Cambios v1.0:** + sección 1.ter (ventaja competitiva central: motor de reservas autónomo, sin depender de recepción — el diferenciador clave y producto premium).
+**Cambios v0.9:** + sección 1.bis (visión de portafolio "familia SysPro").
 
 ---
 
@@ -37,6 +37,43 @@ Lo que tiene que pasar, en tus palabras:
    - Ves cuánto te cuesta la infraestructura (Vercel, Supabase, etc.) para saber tu margen.
 
 Mercado objetivo (de sesiones previas): ~5.000–7.000 moteles en Colombia, ~50.000 en LatAm.
+
+---
+
+## 1.ter Ventaja competitiva central: el motor de reservas autónomo **[DIFERENCIADOR CLAVE]**
+
+El diferenciador más fuerte de SysPro frente a la competencia: **el motor de reservas funciona solo, sin depender de una persona.**
+
+**El problema que resuelve:** la mayoría de los moteles en Colombia reservan por WhatsApp o teléfono → dependen de que haya alguien en recepción. Eso significa: reservas perdidas cuando hay mucho movimiento, nadie que conteste de madrugada (horario fuerte del negocio), errores humanos, sobreventas, y —clave— el cliente tiene que exponerse a hablar con alguien.
+
+**Lo que ofrece SysPro:** el cliente reserva solo, paga solo (Wompi), y la habitación queda lista/activada automáticamente — cero intervención humana. Esto lo tienen los grandes PMS de hotel, pero **casi ningún sistema de motel en Colombia** lo ofrece integrado y pensado para el modelo por horas.
+
+**Por qué vende:**
+- **Discreción = oro en este negocio.** "Reservá sin hablar con nadie, pagá desde el celular, llegá y entrá" es un beneficio enorme para el cliente final → más ocupación para el motel.
+- **Es el producto premium:** corresponde al "Plan Sistema + Reservas" (sección 9.2). El motor de reservas no es solo un diferenciador, es el upsell que se vende más caro.
+- **Argumento de venta al motel:** "te traigo clientes nuevos que hoy no llegan" (los que planifican y los que buscan discreción), sin reemplazar el walk-in tradicional. Suma ocupación, no cambia toda la operación.
+
+**Realidad a tener presente:**
+- El motor depende de **Wompi**, hoy bloqueado del lado de Wompi (cuenta en revisión). El diferenciador estrella no está 100% operativo hasta destrabarlo → razón de peso para resolver Wompi.
+- El motor **suma** ocupación (capta al que reserva), no reemplaza al cliente que llega sin reserva.
+
+---
+
+## 1.bis Visión de portafolio: la familia SysPro **[DECISIÓN TOMADA — visión de empresa, NO se construye ahora]**
+
+La empresa es **SysPro**. El sistema actual no está limitado solo a moteles: como precios, horas y categorías son configurables, el mismo motor sirve de base para otros sectores de alojamiento. La estrategia es tener una **familia de productos hermanos**, todos derivados de la misma base de código:
+
+- **MotelSysPro** — moteles (el producto actual; cobro por HORA). ← foco hoy.
+- **HotelSysPro** — hoteles (cobro por NOCHE, registro de huéspedes, reservas multi-noche, channel manager).
+- **(futuro) AmobladoSysPro / StaySysPro** — apartamentos amoblados (por noche/mes, más simple que hotel).
+
+**Cómo se hace (cuando llegue el momento):** se **replica** la base de código y se le adapta lo que cambia por sector — principalmente la **unidad de cobro** (horas → noches), más lo propio de cada uno. Se reutiliza el 70-80%: gestión de habitaciones, cuadre, turnos, panel admin, superadmin, multi-tenant. Cada producto queda limpio para su nicho.
+
+**Por qué un producto hermano y NO todo dentro de MotelSys:** meter hoteles dentro de MotelSys lo complicaría y ensuciaría para ambos públicos. Productos separados con base común = cada uno hecho para su cliente, y un solo motor que mantener.
+
+**⚠️ Orden (decisión firme de Rubén):** esto es la **visión de crecimiento**, NO se construye ahora. Primero se termina y se vende MotelSysPro (moteles). Recién cuando (a) la base esté madura — idealmente después de la Fase 3, multi-tenant sólido — y (b) haya moteles pagando, se deriva el segundo producto. Derivar antes = dos productos a medio hacer y ninguno vendiendo (la trampa que Rubén mismo identificó: "si esperamos a terminar dos cosas, nunca terminamos"). El momento correcto de derivar es con la base probada, para que el "hijo" nazca sano.
+
+**Riesgo a vigilar:** la tentación de arrancar HotelSysPro antes de tiempo. Es el mayor riesgo para que MotelSysPro llegue a venderse.
 
 ---
 
