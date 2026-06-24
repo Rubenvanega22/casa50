@@ -373,6 +373,10 @@ module.exports = async function handler(req, res) {
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
       case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
+      case 'getCategorias':          return await apiGetCategorias(payload, res);
+      case 'createCategoria':        return await apiCreateCategoria(payload, res);
+      case 'editCategoria':          return await apiEditCategoria(payload, res);
+      case 'toggleCategoria':        return await apiToggleCategoria(payload, res);
       case 'saveMotelInfo':          return await apiSaveMotelInfo(payload, res);
       case 'deleteProduct':          return await apiDeleteProduct(payload, res);
       case 'addStock':               return await apiAddStock(payload, res);
@@ -4635,6 +4639,106 @@ async function apiSaveCategoriaPrecios(p, res) {
   invalidatePricingCache(MOTEL_ID);
   const masterPricing = await getPricing(MOTEL_ID, { force: true });
   return ok(res, { nombreDb, precios: out, masterPricing });
+}
+
+// Valida los 7 precios de una categoria. Devuelve {out} (normalizado) o {error}.
+function validarPreciosCat(precios) {
+  precios = precios || {};
+  const MONEY_KEYS = ['3h','6h','8h','12h','extraHour','extraPerson'];
+  const out = {};
+  for(const k of MONEY_KEYS){
+    const v = Number(precios[k]);
+    if(!Number.isInteger(v) || v <= 0) return { error: 'Valor invalido para '+k+' (entero > 0)' };
+    out[k] = v;
+  }
+  const inc = Number(precios.included);
+  if(!Number.isInteger(inc) || inc < 1 || inc > 10) return { error: 'included debe ser entero entre 1 y 10' };
+  out.included = inc;
+  return { out };
+}
+
+// Lista todas las categorias del motel (incluye inactivas) para el editor. ADMIN.
+async function apiGetCategorias(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const { data, error } = await supabase.from('app_categorias')
+    .select('id,nombre_ui,nombre_db,precios,orden,activo')
+    .eq('motel_id', MOTEL_ID).order('orden');
+  if(error) return err(res, error.message);
+  return ok(res, { categorias: data || [] });
+}
+
+// Crea categoria. ADMIN. Exige nombre + 7 precios > 0 (anti-$0). nombre_db se
+// genera del nombre (normalizado), unico por motel, INMUTABLE. activo=true.
+async function apiCreateCategoria(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const nombre = String(p.nombre||'').trim().replace(/\s+/g,' ');
+  if(!nombre) return err(res,'El nombre de la categoria es obligatorio');
+  const v = validarPreciosCat(p.precios);
+  if(v.error) return err(res, v.error);
+  const nombreDb = nombre; // clave de match con rooms.category, inmutable
+  // Unicidad por motel (incluye inactivas para no colisionar)
+  const { data: existe } = await supabase.from('app_categorias')
+    .select('id').eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb).maybeSingle();
+  if(existe) return err(res,'Ya existe una categoria con ese nombre');
+  // orden: el enviado, o el siguiente disponible
+  let orden = Number(p.orden||0);
+  if(!Number.isInteger(orden) || orden <= 0){
+    const { data: maxRow } = await supabase.from('app_categorias')
+      .select('orden').eq('motel_id', MOTEL_ID).order('orden',{ascending:false}).limit(1).maybeSingle();
+    orden = ((maxRow && Number(maxRow.orden)) || 0) + 1;
+  }
+  const { data: ins, error: insErr } = await supabase.from('app_categorias')
+    .insert({ motel_id: MOTEL_ID, nombre_ui: nombre, nombre_db: nombreDb, precios: v.out, orden, activo: true, creado: new Date().toISOString() })
+    .select('id,nombre_ui,nombre_db,orden,activo').single();
+  if(insErr) return err(res, insErr.message);
+  invalidatePricingCache(MOTEL_ID);
+  const masterPricing = await getPricing(MOTEL_ID, { force: true });
+  return ok(res, { categoria: ins, masterPricing });
+}
+
+// Edita SOLO nombre visible (nombre_ui) y orden. nombre_db NO se toca (inmutable). ADMIN.
+async function apiEditCategoria(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id = String(p.id||'').trim();
+  if(!id) return err(res,'id requerido');
+  const nombre = String(p.nombre||'').trim().replace(/\s+/g,' ');
+  if(!nombre) return err(res,'El nombre visible es obligatorio');
+  const upd = { nombre_ui: nombre };
+  const orden = Number(p.orden);
+  if(Number.isInteger(orden) && orden > 0) upd.orden = orden;
+  const { data, error } = await supabase.from('app_categorias')
+    .update(upd).eq('motel_id', MOTEL_ID).eq('id', id)
+    .select('id,nombre_ui,nombre_db,orden,activo').maybeSingle();
+  if(error) return err(res, error.message);
+  if(!data) return err(res,'Categoria no encontrada');
+  invalidatePricingCache(MOTEL_ID);
+  const masterPricing = await getPricing(MOTEL_ID, { force: true });
+  return ok(res, { categoria: data, masterPricing });
+}
+
+// Baja/alta logica (activo). Al desactivar, BLOQUEA si hay habitaciones apuntando.
+// Nunca DELETE. ADMIN.
+async function apiToggleCategoria(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const id = String(p.id||'').trim();
+  if(!id) return err(res,'id requerido');
+  const activo = p.activo === true;
+  const { data: cat } = await supabase.from('app_categorias')
+    .select('id,nombre_db').eq('motel_id', MOTEL_ID).eq('id', id).maybeSingle();
+  if(!cat) return err(res,'Categoria no encontrada');
+  if(!activo){
+    // Bloquear baja si hay habitaciones en esta categoria (rooms aun sin motel_id; Fase 3 agrega el filtro)
+    const { count } = await supabase.from('rooms')
+      .select('room_id', { count: 'exact', head: true }).eq('category', cat.nombre_db);
+    if(count && count > 0) return err(res,'No se puede desactivar: hay '+count+' habitacion(es) en esta categoria. Reasignalas primero.');
+  }
+  const { data, error } = await supabase.from('app_categorias')
+    .update({ activo }).eq('motel_id', MOTEL_ID).eq('id', id)
+    .select('id,nombre_ui,nombre_db,orden,activo').maybeSingle();
+  if(error) return err(res, error.message);
+  invalidatePricingCache(MOTEL_ID);
+  const masterPricing = await getPricing(MOTEL_ID, { force: true });
+  return ok(res, { categoria: data, masterPricing });
 }
 
 // Editor de datos del motel (Configuracion > Datos del motel). Valida ADMIN y
