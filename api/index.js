@@ -4680,7 +4680,7 @@ async function apiGetShiftFailures(p, res) {
 }
 // ==================== PRODUCTOS ====================
 async function apiGetProducts(p, res) {
-  const { data } = await supabase.from('products').select('*').order('categoria').order('nombre');
+  const { data } = await tSelect('products','*').order('categoria').order('nombre');
   return ok(res, { products: (data || []).map(r => ({
     id: r.id, nombre: r.nombre, codigoBarras: r.codigo_barras || '',
     precio: Number(r.precio || 0), categoria: r.categoria || '',
@@ -4702,12 +4702,12 @@ async function apiSaveProduct(p, res) {
   if(!precio) return err(res,'Precio requerido');
   if(id) {
     // Al EDITAR no se modifica stock_actual — para ajustar stock usar apiAjusteInventario
-    await supabase.from('products').update({
+    await tUpdate('products',{
       nombre, codigo_barras: codigo||null, precio, categoria,
       stock_minimo: stockMinimo
     }).eq('id', id);
   } else {
-    await supabase.from('products').insert({
+    await tInsert('products',{
       nombre, codigo_barras: codigo||null, precio, categoria,
       stock_actual: 0, stock_bodega: stockActual, stock_minimo: stockMinimo, activo: true
     });
@@ -4719,7 +4719,7 @@ async function apiDeleteProduct(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id = Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('products').update({ activo: false }).eq('id', id);
+  await tUpdate('products',{ activo: false }).eq('id', id);
   return ok(res, {});
 }
 
@@ -4888,12 +4888,12 @@ async function apiAddStock(p, res) {
   const cantidad = Number(p.cantidad||0);
   if(!id) return err(res,'id requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('*').eq('id', id).single();
+  const { data: prod } = await tSelect('products','*').eq('id', id).single();
   if(!prod) return err(res,'Producto no existe');
   const { data: nuevoStock, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: id, p_delta: cantidad });
   if(stockErr) return err(res, stockErr.message);
   const now = Date.now();
-  await supabase.from('stock_entries').insert({
+  await tInsert('stock_entries',{
     ts_ms: now, business_day: businessDay(now), shift_id: currentShiftId(now),
     product_id: id, product_name: prod.nombre||'',
     cantidad: cantidad, user_name: String(p.userName||'')
@@ -4932,7 +4932,7 @@ async function apiAddRoomProduct(p, res) {
   if(!roomId) return err(res,'roomId requerido');
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id', productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente. Quedan: '+prod.stock_actual);
   const total = isCortesia ? 0 : Number(prod.precio||0) * cantidad;
@@ -4947,7 +4947,7 @@ async function apiAddRoomProduct(p, res) {
   });
   const { data: stockRestante, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_name: userName, user_role: 'RECEPTION',
     product_id: productId, product_name: prod.nombre,
@@ -4976,7 +4976,7 @@ async function apiEditRoomProduct(p, res) {
   const { data: rp } = await tSelect('room_products','*').eq('id', id).single();
   if(!rp) return err(res,'Registro no existe');
   const diff = nuevaCantidad - Number(rp.cantidad||0);
-  const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', rp.product_id).single();
+  const { data: prod } = await tSelect('products','stock_actual').eq('id', rp.product_id).single();
   if(!prod) return err(res,'Producto no existe');
   if(diff > 0 && Number(prod.stock_actual||0) < diff) return err(res,'Stock insuficiente');
   const nuevoTotal = rp.is_cortesia ? 0 : Number(rp.precio_unit||0) * nuevaCantidad;
@@ -4986,7 +4986,7 @@ async function apiEditRoomProduct(p, res) {
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: -diff });
   if(stockErr) return err(res, stockErr.message);
   if(diff !== 0) {
-    await supabase.from('stock_movements').insert({
+    await tInsert('stock_movements',{
       ts_ms: Date.now(), business_day: rp.business_day, shift_id: rp.shift_id,
       user_name: String(p.userName||rp.user_name||''), user_role: String(p.userRole||'').toUpperCase() || 'RECEPTION',
       product_id: rp.product_id, product_name: rp.product_name,
@@ -5005,7 +5005,7 @@ async function apiDeleteRoomProduct(p, res) {
   if(!rp) return err(res,'Registro no existe');
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: Number(rp.cantidad||0) });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: Date.now(), business_day: rp.business_day, shift_id: rp.shift_id,
     user_name: String(p.userName||rp.user_name||''), user_role: String(p.userRole||'').toUpperCase() || 'RECEPTION',
     product_id: rp.product_id, product_name: rp.product_name,
@@ -5026,7 +5026,7 @@ async function apiSaveCortesia(p, res) {
   const userName = String(p.userName||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id', productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente');
   await tInsert('cortesias',{
@@ -5038,7 +5038,7 @@ async function apiSaveCortesia(p, res) {
   });
   const { data: stockRestante, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_name: userName, user_role: 'RECEPTION',
     product_id: productId, product_name: prod.nombre,
@@ -5055,18 +5055,18 @@ async function apiSaveObservacionTurno(p, res) {
   const shiftId=String(p.shiftId||'');
   const observacion=String(p.observacion||'');
   if(!shiftId) return err(res,'shiftId requerido');
-  const {data:existing}=await supabase.from('product_shift_obs').select('id').eq('business_day',bd).eq('shift_id',shiftId).maybeSingle();
+  const {data:existing}=await tSelect('product_shift_obs','id').eq('business_day',bd).eq('shift_id',shiftId).maybeSingle();
   if(existing){
-    await supabase.from('product_shift_obs').update({observacion,user_name:String(p.userName||''),ts_ms:now}).eq('id',existing.id);
+    await tUpdate('product_shift_obs',{observacion,user_name:String(p.userName||''),ts_ms:now}).eq('id',existing.id);
   } else {
-    await supabase.from('product_shift_obs').insert({business_day:bd,shift_id:shiftId,observacion,user_name:String(p.userName||''),ts_ms:now});
+    await tInsert('product_shift_obs',{business_day:bd,shift_id:shiftId,observacion,user_name:String(p.userName||''),ts_ms:now});
   }
   return ok(res,{saved:true});
 }
 
 async function apiGetObservacionesTurno(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
-  const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
+  const {data:obs}=await tSelect('product_shift_obs','*').eq('business_day',bd);
   return ok(res,{obs:obs||[]});
 }
 async function apiGetProductosMes(p, res) {
@@ -5074,7 +5074,7 @@ async function apiGetProductosMes(p, res) {
   if(!ym)return err(res,'yearMonth requerido');
   const {data:prods}=await tSelect('room_products','total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
   const {data:cors}=await tSelect('room_products','total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
-  const {data:prodsList}=await supabase.from('products').select('id,precio');
+  const {data:prodsList}=await tSelect('products','id,precio');
   const totalVentas=(prods||[]).reduce((a,r)=>a+Number(r.total||0),0);
   const totalEf=(prods||[]).filter(r=>r.pay_method==='EFECTIVO').reduce((a,r)=>a+Number(r.total||0),0);
   const totalTa=(prods||[]).filter(r=>r.pay_method==='TARJETA').reduce((a,r)=>a+Number(r.total||0),0);
@@ -5085,19 +5085,19 @@ async function apiGetProductosMes(p, res) {
 }
 async function apiGetInventarioByDay(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
-  const {data:products}=await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  const {data:products}=await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
   if(!products||!products.length) return ok(res,{rows:[],resumenTurnos:{},businessDay:bd});
-  const {data:entries}=await supabase.from('stock_entries').select('*').eq('business_day',bd);
+  const {data:entries}=await tSelect('stock_entries','*').eq('business_day',bd);
   const {data:sales}=await tSelect('room_products','*').eq('business_day',bd);
-  const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
-  const {data:movements}=await supabase.from('stock_movements').select('*').eq('business_day',bd);
+  const {data:obs}=await tSelect('product_shift_obs','*').eq('business_day',bd);
+  const {data:movements}=await tSelect('stock_movements','*').eq('business_day',bd);
   const {data:snapsRows}=await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps={};(snapsRows||[]).forEach(s=>{if(!snaps[s.shift_id])snaps[s.shift_id]={};snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial);});
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
  const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
   const ayerStr=ayer.getFullYear()+'-'+String(ayer.getMonth()+1).padStart(2,'0')+'-'+String(ayer.getDate()).padStart(2,'0');
   const {data:salesAyer}=await tSelect('room_products','product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
-  const {data:entriesAyer}=await supabase.from('stock_entries').select('product_id,cantidad').eq('business_day',ayerStr);
+  const {data:entriesAyer}=await tSelect('stock_entries','product_id,cantidad').eq('business_day',ayerStr);
   const rows=products.map(function(prod){
     const totalVentas=(sales||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const totalCortesias=(sales||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
@@ -5178,8 +5178,7 @@ async function capturarSnapshotInventarioInicial(bDay, shiftId, userName, now) {
         return;
       }
     }
-    const { data: products } = await supabase.from('products')
-      .select('id, stock_actual').eq('activo', true);
+    const { data: products } = await tSelect('products', 'id, stock_actual').eq('activo', true);
     if(!products || !products.length) return;
     const rows = products.map(p => ({
       business_day: bDay,
@@ -5206,11 +5205,11 @@ async function apiIngresoBodega(p, res) {
   const nota = String(p.nota||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  const {data:prod} = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
   const { data: nuevoBodega, error: stockErr } = await supabase.rpc('apply_stock_bodega_delta', { p_product_id: productId, p_delta: cantidad });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_name:String(p.userName||''), user_role:userRole,
     product_id:productId, product_name:prod.nombre,
@@ -5230,14 +5229,14 @@ async function apiDevolverABodega(p, res) {
   const nota = String(p.nota||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  const {data:prod} = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0)<cantidad) return err(res,'No hay suficiente en recepción. Hay: '+prod.stock_actual);
   const { data: nuevoRecepcion, error: stockErrA } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErrA) return err(res, stockErrA.message);
   const { data: nuevoBodega, error: stockErrB } = await supabase.rpc('apply_stock_bodega_delta', { p_product_id: productId, p_delta: cantidad });
   if(stockErrB) return err(res, stockErrB.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_name:String(p.userName||''), user_role:userRole,
     product_id:productId, product_name:prod.nombre,
@@ -5256,14 +5255,14 @@ async function apiTrasladoRecepcion(p, res) {
   const nota = String(p.nota||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  const {data:prod} = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_bodega||0)<cantidad) return err(res,'Stock en bodega insuficiente. Hay: '+prod.stock_bodega);
   const { data: nuevoBodega, error: stockErrA } = await supabase.rpc('apply_stock_bodega_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErrA) return err(res, stockErrA.message);
   const { data: nuevoRecepcion, error: stockErrB } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: cantidad });
   if(stockErrB) return err(res, stockErrB.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_name:String(p.userName||''), user_role:userRole,
     product_id:productId, product_name:prod.nombre,
@@ -5613,7 +5612,7 @@ async function apiAjusteInventario(p, res) {
     if(cantidad <= 0) return err(res,'Cantidad debe ser positiva en venta olvidada/faltante');
   }
 
-  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
 
   const vaDescontar = (cantidad > 0);
@@ -5624,7 +5623,7 @@ async function apiAjusteInventario(p, res) {
   const { data: nuevoStock, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
 
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
     user_name: adminName, user_role: 'ADMIN',
     product_id: productId, product_name: prod.nombre,
@@ -5659,12 +5658,12 @@ async function apiGetPrintTurno(p, res) {
   const sid = String(p.shiftId || '').trim();
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(sid)) return err(res,'Turno invalido');
 
-  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  const { data: products } = await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
   if(!products || !products.length) return ok(res,{rows:[],totals:{},cortesias:[],businessDay:bd,shiftId:sid});
 
   const { data: salesDay } = await tSelect('room_products','*').eq('business_day',bd);
-  const { data: movements } = await supabase.from('stock_movements').select('*').eq('business_day',bd);
-  const { data: entries } = await supabase.from('stock_entries').select('*').eq('business_day',bd);
+  const { data: movements } = await tSelect('stock_movements','*').eq('business_day',bd);
+  const { data: entries } = await tSelect('stock_entries','*').eq('business_day',bd);
   const { data: snapsRows } = await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps = {}; (snapsRows||[]).forEach(s=>{ if(!snaps[s.shift_id]) snaps[s.shift_id]={}; snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial); });
 
@@ -7491,7 +7490,7 @@ async function apiGetResumenMes(p, res) {
   const prevYear = month === 1 ? year - 1 : year;
   const prevMes = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
 
-  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  const { data: products } = await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
   if(!products || !products.length) return ok(res,{rows:[],totals:{},daysTotals:{},mes:mes});
 
   // Saldo inicial calculado al vuelo (sin depender de tabla cierre_mes).
@@ -7500,8 +7499,8 @@ async function apiGetResumenMes(p, res) {
   // desde stock_actual/stock_bodega hacia atras hasta el primer dia del mes.
   const todayBd = businessDay(Date.now());
   const salesPost = await fetchAll(() => tSelect('room_products','*').gt('business_day',lastDay).lte('business_day',todayBd));
-  const movementsPost = await fetchAll(() => supabase.from('stock_movements').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
-  const entriesPost = await fetchAll(() => supabase.from('stock_entries').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const movementsPost = await fetchAll(() => tSelect('stock_movements','*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const entriesPost = await fetchAll(() => tSelect('stock_entries','*').gt('business_day',lastDay).lte('business_day',todayBd));
 
   // Combinamos movimientos del mes + posteriores = todos los movs desde firstDay hasta hoy
   const salesAfter = (salesPost||[]);
@@ -7509,8 +7508,8 @@ async function apiGetResumenMes(p, res) {
   const entriesAfter = (entriesPost||[]);
 
   const salesMes = await fetchAll(() => tSelect('room_products','*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const movementsMes = await fetchAll(() => supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const entriesMes = await fetchAll(() => supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const movementsMes = await fetchAll(() => tSelect('stock_movements','*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const entriesMes = await fetchAll(() => tSelect('stock_entries','*').gte('business_day',firstDay).lte('business_day',lastDay));
 
 
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
@@ -7666,7 +7665,7 @@ async function apiUpdatePrecioCompra(p, res) {
   if(!productId) return err(res,'productId requerido');
   if(precioCompra < 0) return err(res,'Precio invalido');
 
-  await supabase.from('products').update({ precio_compra: precioCompra }).eq('id', productId);
+  await tUpdate('products',{ precio_compra: precioCompra }).eq('id', productId);
   return ok(res, { productId, precioCompra });
 }
 async function apiChangePaymentMethod(p, res) {
@@ -7883,7 +7882,7 @@ async function apiAjusteInventarioV2(p, res) {
   if(!productId) return err(res,'Producto requerido');
   if(motivo.length < 3) return err(res,'Motivo minimo 3 letras');
 
-  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
 
   const precio = Number(prod.precio||0);
@@ -7928,7 +7927,7 @@ async function apiAjusteInventarioV2(p, res) {
       nuevoStockBod = _newBod;
     }
 
-    await supabase.from('stock_movements').insert({
+    await tInsert('stock_movements',{
       ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
       user_name: adminName, user_role: 'ADMIN',
       product_id: productId, product_name: prod.nombre,
@@ -7969,7 +7968,7 @@ async function apiAjusteInventarioV2(p, res) {
         if(_err) return err(res, _err.message);
         nuevoStockBod = _newStock;
       }
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -7992,7 +7991,7 @@ async function apiAjusteInventarioV2(p, res) {
         nuevoStockBod = _newStock;
       }
 
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -8026,7 +8025,7 @@ async function apiAjusteInventarioV2(p, res) {
         nuevoStockBod = _newStock;
       }
 
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -8055,7 +8054,7 @@ async function apiAjusteInventarioV2(p, res) {
       if(!productoViejoId) return err(res,'Producto viejo requerido');
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
 
-      const { data: prodViejo } = await supabase.from('products').select('*').eq('id',productoViejoId).single();
+      const { data: prodViejo } = await tSelect('products','*').eq('id',productoViejoId).single();
       if(!prodViejo) return err(res,'Producto viejo no existe');
       const precioViejo = Number(prodViejo.precio||0);
 
@@ -8074,7 +8073,7 @@ async function apiAjusteInventarioV2(p, res) {
         nuevoStockBod = _newStock;
       }
 
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productoViejoId, product_name: prodViejo.nombre,
@@ -8082,7 +8081,7 @@ async function apiAjusteInventarioV2(p, res) {
         cantidad: cantidad,
         nota: 'AJUSTE cambio producto (admin '+adminName+'): '+motivo
       });
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
