@@ -1391,7 +1391,7 @@ async function apiTaxi(p, res) {
   const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
-  const { data } = await supabase.from('taxi_expenses').insert({
+  const { data } = await tInsert('taxi_expenses',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: String(p.userName || ''),
     amount: 3000, note: 'Taxi fijo', room_id: roomId
@@ -1408,12 +1408,12 @@ async function apiDeleteTaxi(p, res) {
   const userName = String(p.userName || '').trim();
   if(!id) return err(res, 'id requerido');
   if(!motivo || motivo.length < 5) return err(res, 'Motivo requerido (min 5 caracteres)');
-  const { data: taxi, error: errTaxi } = await supabase.from('taxi_expenses').select('*').eq('id', id).maybeSingle();
+  const { data: taxi, error: errTaxi } = await tSelect('taxi_expenses','*').eq('id', id).maybeSingle();
   if(errTaxi) return err(res, errTaxi.message);
   if(!taxi) return err(res, 'Taxi no encontrado');
   if(taxi.anulada) return err(res, 'Este taxi ya está anulado');
   const now = Date.now();
-  await supabase.from('taxi_expenses').update({
+  await tUpdate('taxi_expenses',{
     anulada: true,
     anulada_ms: now,
     anulada_por: userName,
@@ -1430,8 +1430,7 @@ async function apiListTaxisTurno(p, res) {
   const shiftId = String(p.shiftId || '').trim();
   if(!businessDay_) return err(res, 'businessDay requerido');
   if(!shiftId) return err(res, 'shiftId requerido');
-  const { data, error } = await supabase.from('taxi_expenses')
-    .select('*')
+  const { data, error } = await tSelect('taxi_expenses', '*')
     .eq('business_day', businessDay_)
     .eq('shift_id', shiftId)
     .order('ts_ms');
@@ -1448,13 +1447,13 @@ async function apiAddLoan(p, res) {
   const amount = Number(p.amount || 0);
   if (!borrowerName) return err(res, 'Nombre requerido');
   if (amount <= 0) return err(res, 'Monto invalido');
-  await supabase.from('loans').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_name: String(p.userName || ''), borrower_name: borrowerName, amount, note: String(p.note || '') });
+  await tInsert('loans',{ ts_ms: now, business_day: bDay, shift_id: shift, user_name: String(p.userName || ''), borrower_name: borrowerName, amount, note: String(p.note || '') });
   return ok(res, {});
 }
 
 async function apiGetLoans(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
+  const { data } = await tSelect('loans','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
   return ok(res, { loans: (data || []).map(r => ({ tsMs: Number(r.ts_ms), shiftId: r.shift_id, userName: r.user_name, borrowerName: r.borrower_name, amount: Number(r.amount), note: r.note })) });
 }
 
@@ -1740,8 +1739,8 @@ async function apiCloseShift(p, res) {
 
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
     supabase.from('sales').select('type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('taxi_expenses').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('loans').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('extra_staff').select('payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
@@ -1800,11 +1799,11 @@ async function apiMetrics(p, res) {
 
   const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes, shiftCloseRes] = await Promise.all([
     supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
-    supabase.from('taxi_expenses').select('*').eq('business_day', bDay).eq('anulada', false),
-    supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
+    tSelect('taxi_expenses','*').eq('business_day', bDay).eq('anulada', false),
+    tSelect('loans','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
     supabase.from('extra_staff').select('*').eq('business_day', bDay).eq('anulada', false),
     supabase.from('bar_sales').select('*').eq('business_day', bDay),
-    supabase.from('general_expenses').select('*').eq('business_day', bDay),
+    tSelect('general_expenses','*').eq('business_day', bDay),
     supabase.from('settings').select('key,value'),
     supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
     supabase.from('shift_close').select('shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
@@ -1966,8 +1965,8 @@ async function apiMonthMetrics(p, res) {
 
   // Queries pequeñas — se mantienen con Promise.all normal
   const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
-    supabase.from('taxi_expenses').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
-    supabase.from('loans').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
+    tSelect('taxi_expenses','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
+    tSelect('loans','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     supabase.from('extra_staff').select('business_day,shift_id,payment,anulada').like('business_day', ym+'%').gt('payment',0),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
@@ -2340,7 +2339,7 @@ async function apiRoomHistory(p, res) {
   const[stateRes,salesRes,taxiRes]=await Promise.all([
     supabase.from('state_history').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
     supabase.from('sales').select('*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
-    supabase.from('taxi_expenses').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
+    tSelect('taxi_expenses','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
   ]);
   return ok(res,{
     roomId,
@@ -2381,13 +2380,13 @@ async function apiAddGeneralExpense(p, res) {
   const desc=String(p.description||'').trim(),amount=Number(p.amount||0);
   if(desc.length<3)return err(res,'Descripcion requerida (min 3 caracteres)');
   if(amount<=0)return err(res,'Monto debe ser mayor a 0');
-  await supabase.from('general_expenses').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:desc,amount,category:String(p.category||'Otro').trim()});
+  await tInsert('general_expenses',{ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:desc,amount,category:String(p.category||'Otro').trim()});
   return ok(res,{tsMs:now,amount,shiftId:shift});
 }
 async function apiGetGeneralExpenses(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   const shiftFilter=String(p.shiftId||'');
-  let q=supabase.from('general_expenses').select('*').eq('business_day',bDay).order('ts_ms');
+  let q=tSelect('general_expenses','*').eq('business_day',bDay).order('ts_ms');
   if(shiftFilter)q=q.eq('shift_id',shiftFilter);
   const{data}=await q;
   const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amount:Number(r.amount||0),category:r.category||''}));
@@ -2401,10 +2400,10 @@ async function apiGetDailyCuadre(p, res) {
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
     supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
-    supabase.from('taxi_expenses').select('amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
+    tSelect('taxi_expenses','amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     supabase.from('extra_staff').select('payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
-    supabase.from('general_expenses').select('amount,shift_id').eq('business_day',bDay),
+    tSelect('general_expenses','amount,shift_id').eq('business_day',bDay),
     supabase.from('shift_log').select('shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
   ]);
 
@@ -5294,8 +5293,7 @@ async function apiListGastosTurno(p, res) {
   const shiftId = String(p.shiftId||'').trim();
   if(!businessDay_) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase.from('loans')
-    .select('*')
+  const { data, error } = await tSelect('loans', '*')
     .eq('business_day', businessDay_)
     .eq('shift_id', shiftId)
     .order('ts_ms', {ascending:true});
@@ -5318,7 +5316,7 @@ async function apiAgregarGastoManual(p, res) {
   if(amount<=0) return err(res,'Monto inválido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data, error } = await supabase.from('loans').insert({
+  const { data, error } = await tInsert('loans',{
     ts_ms: now,
     business_day: businessDay_,
     shift_id: shiftId,
@@ -5347,7 +5345,7 @@ async function apiEditarGastoModulo(p, res) {
   if(amount<=0) return err(res,'Monto inválido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gasto, error: errGasto } = await tSelect('loans','*').eq('id', gastoId).maybeSingle();
   if(errGasto) return err(res, errGasto.message);
   if(!gasto) return err(res,'Gasto no encontrado');
   if(gasto.anulada) return err(res,'No se puede editar un gasto anulado');
@@ -5355,7 +5353,7 @@ async function apiEditarGastoModulo(p, res) {
   const amountOriginal = gasto.amount_original!==null && gasto.amount_original!==undefined
     ? gasto.amount_original
     : gasto.amount;
-  await supabase.from('loans').update({
+  await tUpdate('loans',{
     borrower_name: borrowerName,
     amount: amount,
     note: note,
@@ -5376,11 +5374,11 @@ async function apiAnularGastoModulo(p, res) {
   if(!gastoId) return err(res,'gastoId requerido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gasto, error: errGasto } = await tSelect('loans','*').eq('id', gastoId).maybeSingle();
   if(errGasto) return err(res, errGasto.message);
   if(!gasto) return err(res,'Gasto no encontrado');
   if(gasto.anulada) return err(res,'Este gasto ya está anulado');
-  await supabase.from('loans').update({
+  await tUpdate('loans',{
     anulada: true,
     anulada_ms: now,
     anulada_por: userName,
@@ -5935,18 +5933,18 @@ async function apiGetGraficaDiaADia(p, res) {
   // 3b. GASTOS DEL CUADRE del mes actual (general + taxi + turnos + loans manuales)
   // Estos se descuentan del calculo automatico (no se suman como gastos_mes)
   const [gralAct, taxiAct, extraAct, loansAct] = await Promise.all([
-    supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('taxi_expenses').select('amount, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    tSelect('general_expenses','amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    tSelect('taxi_expenses','amount, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
     supabase.from('extra_staff').select('payment, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('loans').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
+    tSelect('loans','amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
   ]);
 
   // 3c. GASTOS DEL CUADRE del mes anterior
   const [gralAnt, taxiAnt, extraAnt, loansAnt] = await Promise.all([
-    supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('taxi_expenses').select('amount, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    tSelect('general_expenses','amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    tSelect('taxi_expenses','amount, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
     supabase.from('extra_staff').select('payment, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('loans').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
+    tSelect('loans','amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
   ]);
 
   // Agrupar gastos del cuadre POR DIA (mes actual)
@@ -6729,12 +6727,10 @@ async function apiGetGastosMesResumen(p, res) {
   // Estos gastos SE PAGAN EN EFECTIVO durante el turno y nunca entran a caja
   // Se descuentan de "Ventas en efectivo" para mostrar la plata REAL disponible
   const [gralRes, taxiRes, extraRes, loansRes] = await Promise.all([
-    supabase.from('general_expenses')
-      .select('amount')
+    tSelect('general_expenses', 'amount')
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
-    supabase.from('taxi_expenses')
-      .select('amount')
+    tSelect('taxi_expenses', 'amount')
       .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
@@ -6743,8 +6739,7 @@ async function apiGetGastosMesResumen(p, res) {
       .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
-    supabase.from('loans')
-      .select('amount')
+    tSelect('loans', 'amount')
       .gte('business_day', firstDay)
       .lte('business_day', lastDay)
       .eq('manual', true)
@@ -7282,10 +7277,10 @@ async function apiGetCajaPaolaResumen(p, res) {
   // Gastos del cuadre (los que paga la recepcionista en cada turno - ya salieron de caja)
   // Mismo calculo que apiGetGastosMesResumen para que las dos pantallas coincidan
   const [gralResCP, taxiResCP, extraResCP, loansResCP] = await Promise.all([
-    supabase.from('general_expenses').select('amount').gte('business_day', firstDay).lte('business_day', lastDay),
-    supabase.from('taxi_expenses').select('amount').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
+    tSelect('general_expenses','amount').gte('business_day', firstDay).lte('business_day', lastDay),
+    tSelect('taxi_expenses','amount').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
     supabase.from('extra_staff').select('payment').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
-    supabase.from('loans').select('amount').gte('business_day', firstDay).lte('business_day', lastDay).eq('manual', true).eq('anulada', false)
+    tSelect('loans','amount').gte('business_day', firstDay).lte('business_day', lastDay).eq('manual', true).eq('anulada', false)
   ]);
   let gastosCuadreCP = 0;
   (gralResCP.data||[]).forEach(r => gastosCuadreCP += Number(r.amount||0));
