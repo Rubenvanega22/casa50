@@ -506,8 +506,7 @@ function motelInfoFallback() {
 }
 async function getMotelInfo() {
   try {
-    const { data, error } = await supabase.from('motel_info')
-      .select(MOTEL_INFO_FIELDS).eq('motel_id', MOTEL_ID).maybeSingle();
+    const { data, error } = await tSelect('motel_info', MOTEL_INFO_FIELDS).maybeSingle();
     if (error) throw error;
     if (!data) throw new Error('motel_info sin fila para ' + MOTEL_ID);
     return data;
@@ -661,8 +660,7 @@ async function apiLogin(p, res) {
   if (!userName && userRole !== 'MAINTENANCE') return err(res, 'Nombre requerido');
 
   const tenMinsAgo = now - 10 * 60 * 1000;
-  const { data: fails } = await supabase.from('login_failures')
-    .select('ts_ms').eq('user_name', userName.toLowerCase()).eq('user_role', userRole)
+  const { data: fails } = await tSelect('login_failures', 'ts_ms').eq('user_name', userName.toLowerCase()).eq('user_role', userRole)
     .gt('ts_ms', tenMinsAgo).order('ts_ms', { ascending: false });
   if (fails && fails.length >= 3) {
     const wait = Math.ceil((Number(fails[0].ts_ms) + 5 * 60 * 1000 - now) / 60000);
@@ -686,7 +684,7 @@ async function apiLogin(p, res) {
       const settings = await getSettings();
       const expected = String(settings.ADMIN_CODE || '2206');
       if (String(p.adminCode || '') !== expected) {
-        await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
+        await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
         return err(res, 'PIN de administrador incorrecto.');
       }
       adminName = userName;
@@ -699,11 +697,11 @@ async function apiLogin(p, res) {
   if (userRole === 'RECEPTION') {
     const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
     if (!pinRow) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
+      await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'Recepcionista no autorizada. Contacte al administrador.');
     }
     if (String(p.userPin || '') !== String(pinRow.pin || '')) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
+      await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
 
@@ -777,7 +775,7 @@ async function apiLogin(p, res) {
     const { data: pinRows } = await supabase.from('maintenance_pins').select('user_name, active').eq('pin', userPin).limit(1);
     const pinRow = (pinRows && pinRows.length) ? pinRows[0] : null;
     if (!pinRow) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: 'maintenance', user_role: 'MAINTENANCE', ip: '' });
+      await tInsert('login_failures',{ ts_ms: now, user_name: 'maintenance', user_role: 'MAINTENANCE', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
     if (pinRow.active === false) return err(res, 'Mantenedor inactivo.');
@@ -4822,8 +4820,7 @@ async function apiSaveMotelInfo(p, res) {
     resolucion_dian: String(p.resolucionDian||'').trim(),
     actualizado: new Date().toISOString()
   };
-  const { data, error } = await supabase.from('motel_info')
-    .update(upd).eq('motel_id', MOTEL_ID)
+  const { data, error } = await tUpdate('motel_info', upd)
     .select(MOTEL_INFO_FIELDS).maybeSingle();
   if(error) return err(res, error.message);
   if(!data) return err(res,'No existe motel_info para este motel');
@@ -8887,9 +8884,7 @@ async function apiLucianaChat(p, res) {
   // re-fetchean. Si falla, seguimos sin historial.
   let historial = [];
   try {
-    const { data: prevs } = await supabase
-      .from('luciana_chats')
-      .select('pregunta, respuesta')
+    const { data: prevs } = await tSelect('luciana_chats', 'pregunta, respuesta')
       .eq('business_day', bDay)
       .order('ts_ms', { ascending: false })
       .limit(10);
@@ -9037,7 +9032,7 @@ async function apiLucianaChat(p, res) {
 
   // Guardar en BD (best-effort: si falla, igual devolvemos la respuesta)
   try {
-    await supabase.from('luciana_chats').insert({
+    await tInsert('luciana_chats',{
       ts_ms: now,
       user_name: userName,
       business_day: bDay,
@@ -9078,9 +9073,7 @@ async function apiLucianaGastoMes(p, res) {
   const yyyymm = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
 
   // luciana_chats.business_day es 'YYYY-MM-DD' -> LIKE 'YYYY-MM%'
-  const { data, error } = await supabase
-    .from('luciana_chats')
-    .select('costo_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write')
+  const { data, error } = await tSelect('luciana_chats', 'costo_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write')
     .like('business_day', yyyymm + '%');
 
   if (error) {
