@@ -1282,7 +1282,7 @@ async function apiSetDisabled(p, res) {
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
   await tUpdate('rooms',{ disabled: disableFlag, disabled_date_ms: disableFlag ? now : 0, disabled_reason: disableFlag ? reason : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('maintenance').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: userRole, user_name: String(p.userName || 'ADMIN'), room_id: roomId, type: disableFlag ? 'DISABLE' : 'ENABLE', text: disableFlag ? reason : 'HABILITADA', repair_desc: String(p.repairDesc||''), repair_cost: Number(p.repairCost||0) });
+  await tInsert('maintenance',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: userRole, user_name: String(p.userName || 'ADMIN'), room_id: roomId, type: disableFlag ? 'DISABLE' : 'ENABLE', text: disableFlag ? reason : 'HABILITADA', repair_desc: String(p.repairDesc||''), repair_cost: Number(p.repairCost||0) });
   return ok(res, { roomId, disabled: disableFlag });
 }
 
@@ -2927,7 +2927,7 @@ async function apiGetMaintHistory(p, res) {
   const from=String(p.from||'');
   const to=String(p.to||'');
   if(!from||!to) return err(res,'Fechas requeridas');
-  const{data}=await supabase.from('maintenance').select('*').gte('business_day',from).lte('business_day',to).order('ts_ms',{ascending:false});
+  const{data}=await tSelect('maintenance','*').gte('business_day',from).lte('business_day',to).order('ts_ms',{ascending:false});
   return ok(res,{logs:(data||[]).map(r=>({
     id:r.id, tsMs:Number(r.ts_ms), businessDay:r.business_day, shiftId:r.shift_id,
     roomId:r.room_id, type:r.type, text:r.text||'',
@@ -2940,7 +2940,7 @@ async function apiClearMaintHistory(p, res) {
   const from=String(p.from||'');
   const to=String(p.to||'');
   if(!from||!to) return err(res,'Fechas requeridas');
-  await supabase.from('maintenance').delete().gte('business_day',from).lte('business_day',to);
+  await tDelete('maintenance').gte('business_day',from).lte('business_day',to);
   return ok(res,{});
 }
 
@@ -3027,7 +3027,7 @@ async function bloquearPorDanoUrgenteSiCorresponde(roomId, descDano, userName) {
     }).eq('room_id', roomId);
 
     // Registro en historial de mantenimiento (mismo formato que apiSetDisabled)
-    await supabase.from('maintenance').insert({
+    await tInsert('maintenance',{
       ts_ms: now, business_day: bDay, shift_id: shift,
       user_role: 'AUTO', user_name: userName || 'sistema',
       room_id: roomId, type: 'DISABLE',
@@ -3588,8 +3588,7 @@ async function apiGetBitacoraMantenedor(p, res) {
     };
   }).filter(Boolean);
 
-  const { data: bitRow } = await supabase.from('maintenance_bitacora')
-    .select('nota_libre').eq('fecha', fecha).eq('mantenedor', mantenedor).maybeSingle();
+  const { data: bitRow } = await tSelect('maintenance_bitacora', 'nota_libre').eq('fecha', fecha).eq('mantenedor', mantenedor).maybeSingle();
 
   return ok(res, {
     fecha, mantenedor,
@@ -3616,7 +3615,7 @@ async function apiSaveBitacoraMantenedor(p, res) {
   if(!fecha) return err(res, 'Fecha requerida');
 
   const { error } = await supabase.from('maintenance_bitacora').upsert({
-    fecha, mantenedor, nota_libre: notaLibre, ts_ms: Date.now()
+    motel_id: MOTEL_ID, fecha, mantenedor, nota_libre: notaLibre, ts_ms: Date.now()
   }, { onConflict: 'fecha,mantenedor' });
   if(error) return err(res, 'Error guardando: ' + error.message);
 
@@ -3654,7 +3653,7 @@ async function apiCrearTareaMant(p, res) {
   }
 
   const now = Date.now();
-  const { data: inserted, error } = await supabase.from('mantenimiento_tareas').insert({
+  const { data: inserted, error } = await tInsert('mantenimiento_tareas',{
     descripcion: descripcion,
     prioridad: prioridad,
     asignado_a: asignadoA,
@@ -3675,7 +3674,7 @@ async function apiGetTareasMant(p, res) {
   if(!['MAINTENANCE','ADMIN'].includes(userRole)) return err(res, 'Sin permiso');
   const userName = String(p.userName||'').trim();
 
-  let query = supabase.from('mantenimiento_tareas').select('*');
+  let query = tSelect('mantenimiento_tareas','*');
   if(userRole === 'MAINTENANCE'){
     if(!userName) return err(res, 'Usuario requerido');
     query = query.eq('asignado_a', userName);
@@ -3740,13 +3739,13 @@ async function apiCompletarTareaMant(p, res) {
 
   const fotoUrl = String(p.fotoCompletadoUrl || '').trim() || null;
 
-  const { data: tarea } = await supabase.from('mantenimiento_tareas').select('*').eq('id', tareaId).single();
+  const { data: tarea } = await tSelect('mantenimiento_tareas','*').eq('id', tareaId).single();
   if(!tarea) return err(res, 'Tarea no existe');
   if(tarea.estado !== 'pendiente') return err(res, 'Tarea no esta pendiente (estado: '+tarea.estado+')');
   if(tarea.asignado_a !== userName) return err(res, 'Esta tarea no esta asignada a vos');
 
   const now = Date.now();
-  await supabase.from('mantenimiento_tareas').update({
+  await tUpdate('mantenimiento_tareas',{
     estado: 'hecha',
     completado_por: userName,
     completado_ms: now,
@@ -3769,12 +3768,12 @@ async function apiAnularTareaMant(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo de anulacion minimo 3 caracteres');
 
-  const { data: tarea } = await supabase.from('mantenimiento_tareas').select('estado').eq('id', tareaId).single();
+  const { data: tarea } = await tSelect('mantenimiento_tareas','estado').eq('id', tareaId).single();
   if(!tarea) return err(res, 'Tarea no existe');
   if(tarea.estado === 'anulada') return err(res, 'Tarea ya estaba anulada');
 
   const now = Date.now();
-  await supabase.from('mantenimiento_tareas').update({
+  await tUpdate('mantenimiento_tareas',{
     estado: 'anulada',
     anulada_por: userName,
     anulada_ms: now,
@@ -3852,7 +3851,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 2) TAREAS COMPLETADAS
   if(tipo === 'todos' || tipo === 'tareas'){
-    let q2 = supabase.from('mantenimiento_tareas').select('*')
+    let q2 = tSelect('mantenimiento_tareas','*')
       .eq('estado', 'hecha')
       .gte('completado_ms', desdeMs)
       .lt('completado_ms', hastaMs);
@@ -3913,7 +3912,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 4) BITACORAS LIBRES — una por dia/mantenedor (si tiene texto)
   if(tipo === 'todos' && !ubicacionFilter){
-    let q4 = supabase.from('maintenance_bitacora').select('*')
+    let q4 = tSelect('maintenance_bitacora', '*')
       .gte('fecha', desde).lte('fecha', hasta);
     if(mantenedorFilter) q4 = q4.eq('mantenedor', mantenedorFilter);
     const { data: bits } = await q4;
@@ -3979,8 +3978,7 @@ async function apiGetResumenMantHoy(p, res) {
     .lt('verificado_ms', finHoyMs);
 
   // 4) Tareas completadas hoy
-  const { data: tareasHoyData } = await supabase.from('mantenimiento_tareas')
-    .select('id')
+  const { data: tareasHoyData } = await tSelect('mantenimiento_tareas', 'id')
     .eq('estado', 'hecha')
     .gte('completado_ms', inicioHoyMs)
     .lt('completado_ms', finHoyMs);
@@ -4260,7 +4258,7 @@ async function apiCrearSolicitudMant(p, res) {
   const fotoUrl = String(p.fotoUrl||'').trim() || null;
   const now = Date.now();
 
-  const { data: inserted, error } = await supabase.from('mantenimiento_solicitudes').insert({
+  const { data: inserted, error } = await tInsert('mantenimiento_solicitudes',{
     tipo_solicitud: tipo,
     ubicacion_tipo: ubicacionTipo,
     ubicacion_id: ubicacionId,
@@ -4280,7 +4278,7 @@ async function apiGetSolicitudesMant(p, res) {
   if(!['MAINTENANCE','ADMIN'].includes(userRole)) return err(res, 'Sin permiso');
   const userName = String(p.userName||'').trim();
 
-  let query = supabase.from('mantenimiento_solicitudes').select('*');
+  let query = tSelect('mantenimiento_solicitudes','*');
 
   if(userRole === 'MAINTENANCE'){
     if(!userName) return err(res, 'Usuario requerido');
@@ -4343,8 +4341,7 @@ async function apiGetHistorialSolicitudesGeo(p, res) {
   const userName = String(p.userName||'').trim();
   if(!userName) return err(res, 'Usuario requerido');
 
-  const { data, error } = await supabase.from('mantenimiento_solicitudes')
-    .select('*')
+  const { data, error } = await tSelect('mantenimiento_solicitudes', '*')
     .eq('solicitado_por', userName)
     .order('solicitado_ms', {ascending: false})
     .limit(200);
@@ -4383,7 +4380,7 @@ async function apiAprobarSolicitudMant(p, res) {
   const solicitudId = Number(p.solicitudId || 0);
   if(!solicitudId) return err(res, 'solicitudId requerido');
 
-  const { data: sol } = await supabase.from('mantenimiento_solicitudes').select('*').eq('id', solicitudId).single();
+  const { data: sol } = await tSelect('mantenimiento_solicitudes','*').eq('id', solicitudId).single();
   if(!sol) return err(res, 'Solicitud no existe');
   if(sol.estado !== 'pendiente') return err(res, 'Solicitud no esta pendiente (estado: '+sol.estado+')');
 
@@ -4437,7 +4434,7 @@ async function apiAprobarSolicitudMant(p, res) {
       await bloquearPorDanoUrgenteSiCorresponde(sol.ubicacion_id, sol.descripcion, userName);
     }
 
-    await supabase.from('mantenimiento_solicitudes').update({
+    await tUpdate('mantenimiento_solicitudes',{
       estado: 'aprobada',
       resuelto_por: userName,
       resuelto_ms: now,
@@ -4449,7 +4446,7 @@ async function apiAprobarSolicitudMant(p, res) {
     return ok(res, { id: solicitudId, estado: 'aprobada', roomIssueId: insertedDano.id });
   } else {
     // Aprobar permiso: solo update solicitud
-    await supabase.from('mantenimiento_solicitudes').update({
+    await tUpdate('mantenimiento_solicitudes',{
       estado: 'aprobada',
       resuelto_por: userName,
       resuelto_ms: now,
@@ -4471,12 +4468,12 @@ async function apiRechazarSolicitudMant(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
 
-  const { data: sol } = await supabase.from('mantenimiento_solicitudes').select('estado').eq('id', solicitudId).single();
+  const { data: sol } = await tSelect('mantenimiento_solicitudes','estado').eq('id', solicitudId).single();
   if(!sol) return err(res, 'Solicitud no existe');
   if(sol.estado !== 'pendiente') return err(res, 'Solicitud no esta pendiente (estado: '+sol.estado+')');
 
   const now = Date.now();
-  await supabase.from('mantenimiento_solicitudes').update({
+  await tUpdate('mantenimiento_solicitudes',{
     estado: 'rechazada',
     resuelto_por: userName,
     resuelto_ms: now,
