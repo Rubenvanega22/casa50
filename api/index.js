@@ -5727,8 +5727,7 @@ async function apiGetAnoAnterior(p, res) {
   if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
   const ano = Number(p.ano||0);
   if(!ano || ano < 2020 || ano > 2100) return err(res,'Ano invalido');
-  const { data, error } = await supabase.from('ventas_gastos_anuales')
-    .select('*')
+  const { data, error } = await tSelect('ventas_gastos_anuales', '*')
     .eq('ano', ano)
     .maybeSingle();
   if(error) return err(res, error.message);
@@ -5762,21 +5761,18 @@ async function apiSaveAnoAnterior(p, res) {
   });
 
   // Verificar si ya existe el ano
-  const { data: existe } = await supabase.from('ventas_gastos_anuales')
-    .select('id')
+  const { data: existe } = await tSelect('ventas_gastos_anuales', 'id')
     .eq('ano', ano)
     .maybeSingle();
 
   let result;
   if(existe){
     // Actualizar
-    result = await supabase.from('ventas_gastos_anuales')
-      .update(datos)
+    result = await tUpdate('ventas_gastos_anuales', datos)
       .eq('ano', ano);
   } else {
     // Crear nuevo
-    result = await supabase.from('ventas_gastos_anuales')
-      .insert(datos);
+    result = await tInsert('ventas_gastos_anuales', datos);
   }
   if(result.error) return err(res, result.error.message);
   return ok(res, { ano: ano, guardado: true });
@@ -5842,13 +5838,11 @@ async function apiGetGraficaDiaADia(p, res) {
     .lte('business_day', lastDayAnterior));
 
   // 2c. Ventas diarias MANUALES del mes actual (override)
-  const { data: manualActual } = await supabase.from('ventas_diarias_manuales')
-    .select('fecha, total_ventas')
+  const { data: manualActual } = await tSelect('ventas_diarias_manuales', 'fecha, total_ventas')
     .eq('mes', mes);
 
   // 2d. Ventas diarias MANUALES del mes anterior (override)
-  const { data: manualAnterior } = await supabase.from('ventas_diarias_manuales')
-    .select('fecha, total_ventas')
+  const { data: manualAnterior } = await tSelect('ventas_diarias_manuales', 'fecha, total_ventas')
     .eq('mes', mesAnterior);
 
 // 3. Gastos del mes actual (de gastos_mes)
@@ -6167,20 +6161,17 @@ async function apiGetGraficaAnoAno(p, res) {
   const ultimoMes = (ano === hoyYear) ? hoyMonth : 12;
 
   // 2. Año anterior (de la tabla ventas_gastos_anuales)
-  const { data: anoAnt } = await supabase.from('ventas_gastos_anuales')
-    .select('*')
+  const { data: anoAnt } = await tSelect('ventas_gastos_anuales', '*')
     .eq('ano', anoAnterior)
     .maybeSingle();
 
   // 2b. Año actual MANUAL (override de meses pasados — totales mensuales)
-  const { data: anoActualManual } = await supabase.from('ventas_gastos_anuales')
-    .select('*')
+  const { data: anoActualManual } = await tSelect('ventas_gastos_anuales', '*')
     .eq('ano', ano)
     .maybeSingle();
 
   // 2c. Ventas diarias MANUALES del año actual (override mas preciso)
-  const { data: ventasDiariasManuales } = await supabase.from('ventas_diarias_manuales')
-    .select('mes, total_ventas')
+  const { data: ventasDiariasManuales } = await tSelect('ventas_diarias_manuales', 'mes, total_ventas')
     .gte('mes', `${ano}-01`)
     .lte('mes', `${ano}-12`);
 
