@@ -541,8 +541,7 @@ async function apiGetRooms(req, res) {
   // Cargar danos activos por habitacion (Fase 3 mantenimiento)
   // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
   const estadosBombillito = ['NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
-  const { data: danos } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url, revisiones')
+  const { data: danos } = await tSelect('room_issues', 'id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url, revisiones')
     .eq('anulada', false)
     .eq('ubicacion_tipo', 'habitacion')
     .in('estado', estadosBombillito);
@@ -943,8 +942,7 @@ async function apiCheckOut(p, res) {
   // así que el helper bloqueará sin problema (no rechaza por OCCUPIED). Cualquier
   // error acá se loggea pero NO se propaga — el checkout no debe fallar por esto.
   try {
-    const { data: urgentes } = await supabase.from('room_issues')
-      .select('id, description')
+    const { data: urgentes } = await tSelect('room_issues', 'id, description')
       .eq('anulada', false)
       .eq('ubicacion_tipo', 'habitacion')
       .eq('ubicacion_id', roomId)
@@ -2946,7 +2944,7 @@ async function apiClearMaintHistory(p, res) {
 // ==================== ROOM ISSUES ====================
 async function apiGetRoomIssues(p, res) {
   const roomId=String(p.roomId||'').trim();
-  const{data}=await supabase.from('room_issues').select('*').eq('room_id',roomId).order('created_at',{ascending:false});
+  const{data}=await tSelect('room_issues','*').eq('room_id',roomId).order('created_at',{ascending:false});
   return ok(res,{issues:(data||[]).map(r=>({id:r.id,roomId:r.room_id,type:r.type,description:r.description,resolved:!!r.resolved,resolvedAt:r.resolved_at||'',resolvedBy:r.resolved_by||'',createdAt:r.created_at||'',createdBy:r.created_by||''}))});
 }
 async function apiAddRoomIssue(p, res) {
@@ -2956,7 +2954,7 @@ async function apiAddRoomIssue(p, res) {
   const description=String(p.description||'').trim();
   if(!roomId)return err(res,'roomId requerido');
   if(!description)return err(res,'Descripcion requerida');
-  await supabase.from('room_issues').insert({room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
+  await tInsert('room_issues',{room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
   return ok(res,{});
 }
 async function apiEditRoomIssue(p, res) {
@@ -2965,7 +2963,7 @@ async function apiEditRoomIssue(p, res) {
   const description=String(p.description||'').trim();
   if(!id)return err(res,'id requerido');
   if(!description)return err(res,'Descripcion requerida');
-  await supabase.from('room_issues').update({description}).eq('id',id);
+  await tUpdate('room_issues',{description}).eq('id',id);
   return ok(res,{});
 }
 async function apiResolveRoomIssue(p, res) {
@@ -2973,14 +2971,14 @@ async function apiResolveRoomIssue(p, res) {
   const id=Number(p.id||0);
   if(!id)return err(res,'id requerido');
   const hoy=new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
+  await tUpdate('room_issues',{resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
   return ok(res,{});
 }
 async function apiDeleteRoomIssue(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id)return err(res,'id requerido');
-  await supabase.from('room_issues').delete().eq('id',id);
+  await tDelete('room_issues').eq('id',id);
   return ok(res,{});
 }
 
@@ -3062,8 +3060,7 @@ async function apiGetReportesActivos(p, res) {
     estadosFiltro = ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'];
   }
 
-  let query = supabase.from('room_issues')
-    .select('*')
+  let query = tSelect('room_issues', '*')
     .eq('anulada', false)
     .in('estado', estadosFiltro)
     .order('reportado_ms', {ascending: false});
@@ -3139,8 +3136,7 @@ async function apiCrearReporteMant(p, res) {
     'PENDIENTE_RECEPCION','NOTA_ACTIVA',
     'ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'
   ];
-  const {data: existentes} = await supabase.from('room_issues')
-    .select('id, estado')
+  const {data: existentes} = await tSelect('room_issues', 'id, estado')
     .eq('anulada', false)
     .eq('ubicacion_tipo', ubicacionTipo)
     .eq('ubicacion_id', ubicacionId)
@@ -3178,7 +3174,7 @@ async function apiCrearReporteMant(p, res) {
     aprobadoMs = now;
   }
 
-  const {data: inserted, error} = await supabase.from('room_issues').insert({
+  const {data: inserted, error} = await tInsert('room_issues',{
     // Campos originales (compat con apiAddRoomIssue + ranking existente)
     room_id: (ubicacionTipo === 'habitacion') ? ubicacionId : '',
     type: 'dano',
@@ -3225,8 +3221,7 @@ async function apiGetMisDanos(p, res) {
   if(!userName) return err(res, 'Usuario requerido');
 
   // Danos activos para el mantenedor
-  const { data: activos } = await supabase.from('room_issues')
-    .select('*')
+  const { data: activos } = await tSelect('room_issues', '*')
     .eq('anulada', false)
     .in('estado', ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'])
     .order('reportado_ms', { ascending: false });
@@ -3235,8 +3230,7 @@ async function apiGetMisDanos(p, res) {
   const today = businessDay(Date.now());
   const inicioHoy = new Date(today + 'T00:00:00').getTime();
   const finHoy = inicioHoy + 86400000;
-  const { data: terminados } = await supabase.from('room_issues')
-    .select('id, estado')
+  const { data: terminados } = await tSelect('room_issues', 'id, estado')
     .eq('anulada', false)
     .eq('arreglado_por', userName)
     .gte('arreglado_ms', inicioHoy)
@@ -3284,7 +3278,7 @@ async function apiMarcarArreglo(p, res) {
   const fotoUrl = String(p.fotoArregloUrl || '').trim() || null;
 
   // Buscar el reporte y validar estado
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
@@ -3293,7 +3287,7 @@ async function apiMarcarArreglo(p, res) {
 
   // Marcar como arreglado, listo para verificar
   const now = Date.now();
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'ESPERA_VERIFICACION',
     arreglado_por: userName,
     arreglado_ms: now,
@@ -3315,7 +3309,7 @@ async function apiVerificarArreglo(p, res) {
   const reporteId = Number(p.reporteId || 0);
   if(!reporteId) return err(res, 'reporteId requerido');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.estado !== 'ESPERA_VERIFICACION') {
@@ -3324,7 +3318,7 @@ async function apiVerificarArreglo(p, res) {
 
   const now = Date.now();
   const todayDate = new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'VERIFICADO',
     verificado_por: userName,
     verificado_ms: now,
@@ -3349,7 +3343,7 @@ async function apiRechazarArreglo(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo de rechazo minimo 3 caracteres');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.estado !== 'ESPERA_VERIFICACION') {
@@ -3359,7 +3353,7 @@ async function apiRechazarArreglo(p, res) {
   // Vuelve a estado activo para el mantenedor.
   // arreglado_por / arreglado_ms / arreglo_nota / foto_arreglo_url se mantienen
   // como historial del intento previo. apiMarcarArreglo los sobreescribe en el proximo intento.
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'RECHAZADO_VERIFICACION',
     motivo_rechazo: motivo
   }).eq('id', reporteId);
@@ -3385,7 +3379,7 @@ async function apiAprobarReporteMant(p, res) {
     return err(res,'Prioridad requerida (urgente, normal o baja)');
   }
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.estado !== 'PENDIENTE_RECEPCION') {
@@ -3394,7 +3388,7 @@ async function apiAprobarReporteMant(p, res) {
 
   const now = Date.now();
   const comentario = String(p.comentario||'').trim() || null;
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'NOTA_ACTIVA',
     prioridad: prioridadInput,
     aprobado_por: userName,
@@ -3425,7 +3419,7 @@ async function apiAnularReporteMant(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte ya anulado');
   if(reporte.estado !== 'PENDIENTE_RECEPCION') {
@@ -3433,7 +3427,7 @@ async function apiAnularReporteMant(p, res) {
   }
 
   const now = Date.now();
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     anulada: true,
     anulada_por: userName,
     anulada_ms: now,
@@ -3456,7 +3450,7 @@ async function apiResolverDanoZonaComun(p, res) {
   const reporteId = Number(p.reporteId || 0);
   if(!reporteId) return err(res, 'reporteId requerido');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.ubicacion_tipo !== 'zona_comun') return err(res, 'Solo aplica a zonas comunes. Las habitaciones requieren flujo de mantenedor.');
@@ -3466,7 +3460,7 @@ async function apiResolverDanoZonaComun(p, res) {
 
   const now = Date.now();
   const todayDate = new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'VERIFICADO',
     verificado_por: userName,
     verificado_ms: now,
@@ -3500,8 +3494,7 @@ async function apiMarcarRevision(p, res) {
 
   const fotoUrl = String(p.fotoUrl || '').trim() || null;
 
-  const { data: reporte } = await supabase.from('room_issues')
-    .select('id, estado, anulada, revisiones').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues', 'id, estado, anulada, revisiones').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
@@ -3513,7 +3506,7 @@ async function apiMarcarRevision(p, res) {
   if(p.tecnicoExterno === true) nueva.tecnicoExterno = true;
   const nuevas = prev.concat([nueva]);
 
-  await supabase.from('room_issues').update({ revisiones: nuevas }).eq('id', reporteId);
+  await tUpdate('room_issues',{ revisiones: nuevas }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, revisiones: nuevas });
 }
@@ -3532,13 +3525,12 @@ async function apiMarcarDanioVisto(p, res) {
   const reporteId = Number(p.reporteId || 0);
   if(!reporteId) return err(res, 'reporteId requerido');
 
-  const { data: reporte } = await supabase.from('room_issues')
-    .select('id, anulada, visto_por_admin').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues', 'id, anulada, visto_por_admin').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.visto_por_admin) return ok(res, { id: reporteId, yaVisto: true });
 
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     visto_por_admin: true,
     visto_por_admin_ms: Date.now()
   }).eq('id', reporteId);
@@ -3557,8 +3549,7 @@ async function apiGetBitacoraMantenedor(p, res) {
   const inicio = new Date(fecha + 'T00:00:00').getTime();
   const fin = inicio + 86400000;
 
-  const { data: arreglados } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, ubicacion_tipo, description, estado, arreglo_nota, arreglado_ms')
+  const { data: arreglados } = await tSelect('room_issues', 'id, ubicacion_id, ubicacion_tipo, description, estado, arreglo_nota, arreglado_ms')
     .eq('arreglado_por', mantenedor)
     .eq('anulada', false)
     .gte('arreglado_ms', inicio)
@@ -3566,8 +3557,7 @@ async function apiGetBitacoraMantenedor(p, res) {
     .order('arreglado_ms', { ascending: true });
 
   // Filtro del array revisiones en JS (jsonb-por-elemento no es queryable directo aqui)
-  const { data: conRevs } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, ubicacion_tipo, description, revisiones')
+  const { data: conRevs } = await tSelect('room_issues', 'id, ubicacion_id, ubicacion_tipo, description, revisiones')
     .not('revisiones', 'is', null);
 
   const mantLower = mantenedor.toLowerCase();
@@ -3812,7 +3802,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 1) DAÑOS VERIFICADOS
   if(tipo === 'todos' || tipo === 'danos'){
-    let q1 = supabase.from('room_issues').select('*')
+    let q1 = tSelect('room_issues','*')
       .eq('anulada', false)
       .eq('estado', 'VERIFICADO')
       .gte('verificado_ms', desdeMs)
@@ -3878,8 +3868,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 3) REVISIONES (G1) — explotar array revisiones como items individuales
   if(tipo === 'todos' || tipo === 'danos'){
-    let q3 = supabase.from('room_issues')
-      .select('id, ubicacion_id, ubicacion_tipo, description, revisiones')
+    let q3 = tSelect('room_issues', 'id, ubicacion_id, ubicacion_tipo, description, revisiones')
       .eq('anulada', false)
       .not('revisiones', 'is', null);
     if(ubicacionFilter) q3 = q3.ilike('ubicacion_id', '%'+ubicacionFilter+'%');
@@ -3957,20 +3946,17 @@ async function apiGetResumenMantHoy(p, res) {
   const finHoyMs = inicioHoyMs + 86400000;
 
   // 1) Nuevos hoy: danos creados hoy (cualquier estado, sin anulados)
-  const { data: nuevosData } = await supabase.from('room_issues')
-    .select('id')
+  const { data: nuevosData } = await tSelect('room_issues', 'id')
     .eq('anulada', false)
     .eq('business_day', today);
 
   // 2) Activos: no verificados ni anulados
-  const { data: activosData } = await supabase.from('room_issues')
-    .select('estado')
+  const { data: activosData } = await tSelect('room_issues', 'estado')
     .eq('anulada', false)
     .in('estado', ['PENDIENTE_RECEPCION','NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION']);
 
   // 3) Verificados hoy
-  const { data: verifHoyData } = await supabase.from('room_issues')
-    .select('id')
+  const { data: verifHoyData } = await tSelect('room_issues', 'id')
     .eq('anulada', false)
     .eq('estado', 'VERIFICADO')
     .gte('verificado_ms', inicioHoyMs)
@@ -4383,8 +4369,7 @@ async function apiAprobarSolicitudMant(p, res) {
 
     // 1 reporte activo por ubicacion (regla del modulo)
     const estadosActivos = ['PENDIENTE_RECEPCION','NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
-    const { data: existentes } = await supabase.from('room_issues')
-      .select('id, estado')
+    const { data: existentes } = await tSelect('room_issues', 'id, estado')
       .eq('anulada', false)
       .eq('ubicacion_tipo', sol.ubicacion_tipo)
       .eq('ubicacion_id', sol.ubicacion_id)
@@ -4396,7 +4381,7 @@ async function apiAprobarSolicitudMant(p, res) {
     const bDay = businessDay(now);
     const shift = currentShiftId(now);
 
-    const { data: insertedDano, error: errDano } = await supabase.from('room_issues').insert({
+    const { data: insertedDano, error: errDano } = await tInsert('room_issues',{
       room_id: (sol.ubicacion_tipo === 'habitacion') ? sol.ubicacion_id : '',
       type: 'dano',
       description: sol.descripcion,
@@ -6443,8 +6428,7 @@ async function apiGetMetricasMes(p, res) {
   // 5. Habitaciones mas danadas (filtrar por created_at del mes en curso)
   const firstDayTs = `${firstDay}T00:00:00`;
   const lastDayTs = `${lastDay}T23:59:59`;
-  const { data: roomIssues } = await supabase.from('room_issues')
-    .select('room_id, type, description, resolved, created_at')
+  const { data: roomIssues } = await tSelect('room_issues', 'room_id, type, description, resolved, created_at')
     .gte('created_at', firstDayTs)
     .lte('created_at', lastDayTs);
   const roomMap = {};
