@@ -606,7 +606,7 @@ async function apiLogin(p, res) {
     const nowHour = new Date(now + (-5*3600000)).getUTCHours();
     // Solo verificar si estamos en la madrugada (0am-6am)
     if(nowHour >= 0 && nowHour < 6){
-      const{data:logoutT3}=await supabase.from('shift_log').select('id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+      const{data:logoutT3}=await tSelect('shift_log','id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
       if(logoutT3&&logoutT3.length){
         const logoutHour = new Date(Number(logoutT3[0].ts_ms) + (-5*3600000)).getUTCHours();
         // Solo cambia a SHIFT_1 si el logout fue tambien en la madrugada
@@ -625,12 +625,10 @@ async function apiLogin(p, res) {
     // snapshot con el stock de la mañana (bug del agua del 29-may).
     else if(nowHour >= 6 && nowHour < 17){
       const prevBDay = previousBusinessDay(bDay);
-      const { data: prevT3Login } = await supabase.from('shift_log')
-        .select('id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
+      const { data: prevT3Login } = await tSelect('shift_log', 'id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
         .in('action',['LOGIN','RELOGIN']).limit(1);
       if(prevT3Login && prevT3Login.length){
-        const { data: prevT3Logout } = await supabase.from('shift_log')
-          .select('id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
+        const { data: prevT3Logout } = await tSelect('shift_log', 'id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
           .eq('action','LOGOUT').limit(1);
         if(!prevT3Logout || !prevT3Logout.length){
           // El turno noche de ayer sigue abierto → este login lo continúa.
@@ -647,7 +645,7 @@ async function apiLogin(p, res) {
   if(shift==='SHIFT_1'){
     const nowHour = new Date(now + (-5*3600000)).getUTCHours();
     if(nowHour >= 0 && nowHour < 6){
-      const{data:logoutT3b}=await supabase.from('shift_log').select('id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+      const{data:logoutT3b}=await tSelect('shift_log','id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
       if(logoutT3b && logoutT3b.length){
         const logoutHourB = new Date(Number(logoutT3b[0].ts_ms) + (-5*3600000)).getUTCHours();
         if(logoutHourB >= 0 && logoutHourB < 6){
@@ -695,7 +693,7 @@ async function apiLogin(p, res) {
       adminName = userName;
       verLuciana = true;
     }
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: adminName, action: 'LOGIN' });
+    await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: adminName, action: 'LOGIN' });
     return ok(res, { session: { userName: adminName, userRole: 'ADMIN', verLuciana: verLuciana, shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
@@ -720,8 +718,7 @@ async function apiLogin(p, res) {
       const prevBDay = shift === 'SHIFT_1' ? businessDay(now - 86400000) : bDay;
 
       // Ver si el turno anterior tuvo login (hubo recepcionista)
-      const { data: prevLogin } = await supabase.from('shift_log')
-        .select('user_name')
+      const { data: prevLogin } = await tSelect('shift_log', 'user_name')
         .eq('business_day', prevBDay)
         .eq('shift_id', prevShiftId)
         .eq('user_role', 'RECEPTION')
@@ -730,8 +727,7 @@ async function apiLogin(p, res) {
         .limit(1);
 
       if(prevLogin && prevLogin.length) {
-        const { data: prevReleased } = await supabase.from('shift_log')
-          .select('id')
+        const { data: prevReleased } = await tSelect('shift_log', 'id')
           .eq('business_day', prevBDay)
           .eq('shift_id', prevShiftId)
           .eq('action', 'LOGOUT')
@@ -741,8 +737,7 @@ async function apiLogin(p, res) {
         if(!prevReleased || !prevReleased.length) {
           if(userName.toLowerCase() !== prevLogin[0].user_name.toLowerCase()) {
             // Verificar si el nuevo turno ya fue abierto (nueva logica)
-            const { data: newShiftOpen } = await supabase.from('shift_log')
-              .select('id')
+            const { data: newShiftOpen } = await tSelect('shift_log', 'id')
               .eq('business_day', bDay)
               .eq('shift_id', shift)
               .eq('user_role', 'RECEPTION')
@@ -758,19 +753,19 @@ async function apiLogin(p, res) {
       }
     }
 
-    const { data: existing } = await supabase.from('shift_log').select('user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
+    const { data: existing } = await tSelect('shift_log','user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
     if (existing && existing.user_name.toLowerCase() !== userName.toLowerCase()) {
-      const { data: logout } = await supabase.from('shift_log').select('id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
+      const { data: logout } = await tSelect('shift_log','id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
     if (!logout || !logout.length) {
         // No bloquear — permitir reingreso
       }
     }
- await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
+ await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     if(!existing) {
       // Primer login del turno → congelar snapshot de inventario inicial (inmutable).
       await capturarSnapshotInventarioInicial(bDay, shift, userName, now);
     }
-    const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
+    const { data: lastLogout } = await tSelect('shift_log','logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now, fromMs } });
   }
@@ -789,12 +784,12 @@ async function apiLogin(p, res) {
     if (pinRow.active === false) return err(res, 'Mantenedor inactivo.');
     const canonicalName = pinRow.user_name;
     // Sin verificacion de turno (mantenedor no tiene turnos)
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: canonicalName, action: 'LOGIN' });
+    await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: canonicalName, action: 'LOGIN' });
     return ok(res, { session: { userName: canonicalName, userRole: 'MAINTENANCE', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'MAID') {
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAID', user_name: userName, action: 'LOGIN' });
+    await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAID', user_name: userName, action: 'LOGIN' });
     return ok(res, { session: { userName, userRole: 'MAID', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
@@ -1721,15 +1716,14 @@ async function apiCloseShift(p, res) {
   const userName = String(p.userName || '');
 
   // Marcar turno como cerrado Y liberado (released=true)
-  await supabase.from('shift_log').insert({
+  await tInsert('shift_log',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName,
     action: 'LOGOUT', logout_ms: now,
     released: true // NUEVO: libera el turno siguiente
   });
 
-  const { data: loginLog } = await supabase.from('shift_log')
-    .select('ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
+  const { data: loginLog } = await tSelect('shift_log', 'ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
     .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
     .order('ts_ms', { ascending: false }).limit(1);
   const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
@@ -1802,7 +1796,7 @@ async function apiMetrics(p, res) {
     tSelect('bar_sales','*').eq('business_day', bDay),
     tSelect('general_expenses','*').eq('business_day', bDay),
     supabase.from('settings').select('key,value'),
-    supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
+    tSelect('shift_log','user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
     tSelect('shift_close','shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
   ]);
 
@@ -1961,8 +1955,8 @@ async function apiMonthMetrics(p, res) {
     tSelect('taxi_expenses','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     tSelect('loans','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     tSelect('extra_staff','business_day,shift_id,payment,anulada').like('business_day', ym+'%').gt('payment',0),
-    supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
-    supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
+    tSelect('shift_failures','*').like('business_day', ym+'%'),
+    tSelect('shift_log','business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
     tSelect('bar_sales','business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
   ]);
 
@@ -2135,7 +2129,7 @@ async function apiMaidPanel(p, res) {
     supabase.from('rooms').select('*').eq('archived', false).order('room_id'),
     supabase.from('state_history').select('*').eq('business_day', bDay),
     supabase.from('maid_log').select('*').eq('business_day', bDay).order('ts_ms'),
-    supabase.from('shift_log').select('*').eq('business_day', bDay).eq('user_role', 'MAID').in('action', ['LOGIN', 'RELOGIN'])
+    tSelect('shift_log','*').eq('business_day', bDay).eq('user_role', 'MAID').in('action', ['LOGIN', 'RELOGIN'])
   ]);
 
   const rooms = (roomsRes.data||[]).map(mapRoom);
@@ -2396,7 +2390,7 @@ async function apiGetDailyCuadre(p, res) {
     tSelect('extra_staff','payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     tSelect('bar_sales','amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
     tSelect('general_expenses','amount,shift_id').eq('business_day',bDay),
-    supabase.from('shift_log').select('shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
+    tSelect('shift_log','shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
   ]);
 
   const responsables={SHIFT_1:'—',SHIFT_2:'—',SHIFT_3:'—'};
@@ -4651,7 +4645,7 @@ async function apiSaveShiftFailure(p, res) {
   const failures=p.failures||[];
   if(!userName) return err(res,'userName requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  await supabase.from('shift_failures').insert({
+  await tInsert('shift_failures',{
     ts_ms:now, business_day:bDay, shift_id:shiftId,
     user_name:userName, failures:JSON.stringify(failures),
     created_by:String(p.createdBy||'ADMIN')
@@ -4662,7 +4656,7 @@ async function apiGetShiftFailures(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const yearMonth=String(p.yearMonth||'');
   const filterUserName=String(p.filterUserName||'').trim();
-  let query=supabase.from('shift_failures').select('*').order('ts_ms',{ascending:false});
+  let query=tSelect('shift_failures','*').order('ts_ms',{ascending:false});
   if(yearMonth) query=query.like('business_day',yearMonth+'%');
   if(filterUserName) query=query.eq('user_name',filterUserName);
   const{data}=await query.limit(filterUserName?1000:200);
@@ -5091,7 +5085,7 @@ async function apiGetInventarioByDay(p, res) {
   const {data:sales}=await tSelect('room_products','*').eq('business_day',bd);
   const {data:obs}=await tSelect('product_shift_obs','*').eq('business_day',bd);
   const {data:movements}=await tSelect('stock_movements','*').eq('business_day',bd);
-  const {data:snapsRows}=await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
+  const {data:snapsRows}=await tSelect('shift_inventory_start','shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps={};(snapsRows||[]).forEach(s=>{if(!snaps[s.shift_id])snaps[s.shift_id]={};snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial);});
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
  const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
@@ -5181,6 +5175,7 @@ async function capturarSnapshotInventarioInicial(bDay, shiftId, userName, now) {
     const { data: products } = await tSelect('products', 'id, stock_actual').eq('activo', true);
     if(!products || !products.length) return;
     const rows = products.map(p => ({
+      motel_id: MOTEL_ID,
       business_day: bDay,
       shift_id: shiftId,
       product_id: p.id,
@@ -5664,13 +5659,12 @@ async function apiGetPrintTurno(p, res) {
   const { data: salesDay } = await tSelect('room_products','*').eq('business_day',bd);
   const { data: movements } = await tSelect('stock_movements','*').eq('business_day',bd);
   const { data: entries } = await tSelect('stock_entries','*').eq('business_day',bd);
-  const { data: snapsRows } = await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
+  const { data: snapsRows } = await tSelect('shift_inventory_start','shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps = {}; (snapsRows||[]).forEach(s=>{ if(!snaps[s.shift_id]) snaps[s.shift_id]={}; snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial); });
 
   const salesShift = (salesDay||[]).filter(s => s.shift_id === sid);
 
-  const { data: shiftLog } = await supabase.from('shift_log')
-    .select('user_name').eq('business_day',bd).eq('shift_id',sid)
+  const { data: shiftLog } = await tSelect('shift_log', 'user_name').eq('business_day',bd).eq('shift_id',sid)
     .eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN'])
     .order('ts_ms').limit(1);
   const recepName = shiftLog && shiftLog.length ? shiftLog[0].user_name : '—';
@@ -6424,8 +6418,7 @@ async function apiGetMetricasMes(p, res) {
   });
 
   // Contar turnos trabajados y fallas (de tabla shift_log y shift_failures)
-  const { data: shiftLogs } = await supabase.from('shift_log')
-    .select('user_name, business_day')
+  const { data: shiftLogs } = await tSelect('shift_log', 'user_name, business_day')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay);
   const turnosPorRecep = {};
@@ -6435,8 +6428,7 @@ async function apiGetMetricasMes(p, res) {
     turnosPorRecep[nm]++;
   });
 
-  const { data: failures } = await supabase.from('shift_failures')
-    .select('user_name, business_day')
+  const { data: failures } = await tSelect('shift_failures', 'user_name, business_day')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay);
   const fallasPorRecep = {};
