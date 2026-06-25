@@ -1295,8 +1295,7 @@ async function apiGetRoomsAdmin(p, res) {
 }
 // Valida que la categoria exista y este activa en este motel. Devuelve true/false.
 async function categoriaActiva(nombreDb) {
-  const { data } = await supabase.from('app_categorias')
-    .select('id').eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb).eq('activo', true).maybeSingle();
+  const { data } = await tSelect('app_categorias', 'id').eq('nombre_db', nombreDb).eq('activo', true).maybeSingle();
   return !!data;
 }
 // Alta de habitacion. ADMIN. room_id unico + floor entero>0 + categoria activa.
@@ -4703,9 +4702,8 @@ async function apiSaveCategoriaPrecios(p, res) {
   if(!Number.isInteger(inc) || inc < 1 || inc > 10) return err(res,'included debe ser entero entre 1 y 10');
   out.included = inc;
   // Update scopeado por motel + categoria; .select confirma que la fila existia
-  const { data: upd, error: updErr } = await supabase.from('app_categorias')
-    .update({ precios: out })
-    .eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb)
+  const { data: upd, error: updErr } = await tUpdate('app_categorias', { precios: out })
+    .eq('nombre_db', nombreDb)
     .select('nombre_db');
   if(updErr) return err(res, updErr.message);
   if(!upd || !upd.length) return err(res,'Categoria no encontrada para este motel: '+nombreDb);
@@ -4734,9 +4732,8 @@ function validarPreciosCat(precios) {
 // Lista todas las categorias del motel (incluye inactivas) para el editor. ADMIN.
 async function apiGetCategorias(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const { data, error } = await supabase.from('app_categorias')
-    .select('id,nombre_ui,nombre_db,precios,orden,activo')
-    .eq('motel_id', MOTEL_ID).order('orden');
+  const { data, error } = await tSelect('app_categorias', 'id,nombre_ui,nombre_db,precios,orden,activo')
+    .order('orden');
   if(error) return err(res, error.message);
   return ok(res, { categorias: data || [] });
 }
@@ -4751,18 +4748,15 @@ async function apiCreateCategoria(p, res) {
   if(v.error) return err(res, v.error);
   const nombreDb = nombre; // clave de match con rooms.category, inmutable
   // Unicidad por motel (incluye inactivas para no colisionar)
-  const { data: existe } = await supabase.from('app_categorias')
-    .select('id').eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb).maybeSingle();
+  const { data: existe } = await tSelect('app_categorias', 'id').eq('nombre_db', nombreDb).maybeSingle();
   if(existe) return err(res,'Ya existe una categoria con ese nombre');
   // orden: el enviado, o el siguiente disponible
   let orden = Number(p.orden||0);
   if(!Number.isInteger(orden) || orden <= 0){
-    const { data: maxRow } = await supabase.from('app_categorias')
-      .select('orden').eq('motel_id', MOTEL_ID).order('orden',{ascending:false}).limit(1).maybeSingle();
+    const { data: maxRow } = await tSelect('app_categorias', 'orden').order('orden',{ascending:false}).limit(1).maybeSingle();
     orden = ((maxRow && Number(maxRow.orden)) || 0) + 1;
   }
-  const { data: ins, error: insErr } = await supabase.from('app_categorias')
-    .insert({ motel_id: MOTEL_ID, nombre_ui: nombre, nombre_db: nombreDb, precios: v.out, orden, activo: true, creado: new Date().toISOString() })
+  const { data: ins, error: insErr } = await tInsert('app_categorias', { nombre_ui: nombre, nombre_db: nombreDb, precios: v.out, orden, activo: true, creado: new Date().toISOString() })
     .select('id,nombre_ui,nombre_db,orden,activo').single();
   if(insErr) return err(res, insErr.message);
   invalidatePricingCache(MOTEL_ID);
@@ -4780,8 +4774,7 @@ async function apiEditCategoria(p, res) {
   const upd = { nombre_ui: nombre };
   const orden = Number(p.orden);
   if(Number.isInteger(orden) && orden > 0) upd.orden = orden;
-  const { data, error } = await supabase.from('app_categorias')
-    .update(upd).eq('motel_id', MOTEL_ID).eq('id', id)
+  const { data, error } = await tUpdate('app_categorias', upd).eq('id', id)
     .select('id,nombre_ui,nombre_db,orden,activo').maybeSingle();
   if(error) return err(res, error.message);
   if(!data) return err(res,'Categoria no encontrada');
@@ -4797,16 +4790,14 @@ async function apiToggleCategoria(p, res) {
   const id = String(p.id||'').trim();
   if(!id) return err(res,'id requerido');
   const activo = p.activo === true;
-  const { data: cat } = await supabase.from('app_categorias')
-    .select('id,nombre_db').eq('motel_id', MOTEL_ID).eq('id', id).maybeSingle();
+  const { data: cat } = await tSelect('app_categorias', 'id,nombre_db').eq('id', id).maybeSingle();
   if(!cat) return err(res,'Categoria no encontrada');
   if(!activo){
     // Bloquear baja si hay habitaciones en esta categoria (filtra por motel via tSelect)
     const { count } = await tSelect('rooms', 'room_id', { count: 'exact', head: true }).eq('category', cat.nombre_db);
     if(count && count > 0) return err(res,'No se puede desactivar: hay '+count+' habitacion(es) en esta categoria. Reasignalas primero.');
   }
-  const { data, error } = await supabase.from('app_categorias')
-    .update({ activo }).eq('motel_id', MOTEL_ID).eq('id', id)
+  const { data, error } = await tUpdate('app_categorias', { activo }).eq('id', id)
     .select('id,nombre_ui,nombre_db,orden,activo').maybeSingle();
   if(error) return err(res, error.message);
   invalidatePricingCache(MOTEL_ID);
