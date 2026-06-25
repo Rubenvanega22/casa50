@@ -5861,8 +5861,7 @@ async function apiGetGraficaDiaADia(p, res) {
     .eq('mes', mesAnterior);
 
 // 3. Gastos del mes actual (de gastos_mes)
-  const { data: gastosActual } = await supabase.from('gastos_mes')
-    .select('fecha, monto, anulada')
+  const { data: gastosActual } = await tSelect('gastos_mes', 'fecha, monto, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
 
@@ -6051,8 +6050,7 @@ async function apiGetGraficaDiaADia(p, res) {
   }
 
   // Gastos mes anterior hasta misma fecha
-  const { data: gastosAnteriorRaw } = await supabase.from('gastos_mes')
-    .select('fecha, monto, anulada')
+  const { data: gastosAnteriorRaw } = await tSelect('gastos_mes', 'fecha, monto, anulada')
     .eq('mes', mesAnterior)
     .neq('anulada', true);
   (gastosAnteriorRaw||[]).forEach(g => {
@@ -6130,8 +6128,7 @@ async function apiGetGraficaAnoAno(p, res) {
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
 
-  const { data: gastosActual } = await supabase.from('gastos_mes')
-    .select('mes, monto, anulada')
+  const { data: gastosActual } = await tSelect('gastos_mes', 'mes, monto, anulada')
     .gte('mes', `${ano}-01`)
     .lte('mes', `${ano}-12`)
     .neq('anulada', true);
@@ -6612,8 +6609,7 @@ async function apiGetGastosMesResumen(p, res) {
   cantVentas += cantVentasBar;
 
   // 2. Gastos del mes desde la nueva tabla "gastos_mes"
-  const { data: gastosMes, error: errG } = await supabase.from('gastos_mes')
-    .select('*')
+  const { data: gastosMes, error: errG } = await tSelect('gastos_mes', '*')
     .eq('mes', mes)
     .order('fecha', { ascending: true })
     .order('ts_ms', { ascending: true });
@@ -6745,7 +6741,7 @@ async function apiAddGastoMes(p, res) {
   if(!['EFECTIVO','TARJETA'].includes(payMethod)) return err(res,'Metodo de pago invalido (solo EFECTIVO o TARJETA)');
   const mes = fecha.substring(0,7);
   const now = Date.now();
-  const { data, error } = await supabase.from('gastos_mes').insert({
+  const { data, error } = await tInsert('gastos_mes',{
     ts_ms: now,
     fecha: fecha,
     mes: mes,
@@ -6963,7 +6959,7 @@ async function apiEditGastoMes(p, res) {
   if(!gastoId) return err(res,'gastoId requerido');
   const motivo = String(p.motivo||'').trim();
   if(motivo.length<5) return err(res,'Motivo de edicion requerido (min 5 caracteres)');
-  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('gastos_mes','*').eq('id', gastoId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Gasto no encontrado');
   if(gastoActual.anulada) return err(res,'No se puede editar un gasto anulado');
@@ -7000,7 +6996,7 @@ async function apiEditGastoMes(p, res) {
     updates.fecha = fecha;
     updates.mes = fecha.substring(0,7);
   }
-  const { error } = await supabase.from('gastos_mes').update(updates).eq('id', gastoId);
+  const { error } = await tUpdate('gastos_mes',updates).eq('id', gastoId);
   if(error) return err(res, error.message);
   return ok(res, { gastoId: gastoId });
 }
@@ -7061,11 +7057,11 @@ async function apiAnularGastoMes(p, res) {
   if(!gastoId) return err(res,'gastoId requerido');
   const motivo = String(p.motivo||'').trim();
   if(motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('gastos_mes','*').eq('id', gastoId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Gasto no encontrado');
   if(gastoActual.anulada) return err(res,'Este gasto ya esta anulado');
-  const { error } = await supabase.from('gastos_mes').update({
+  const { error } = await tUpdate('gastos_mes',{
     anulada: true,
     anulada_ms: Date.now(),
     anulada_por: userName,
@@ -7173,8 +7169,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Gastos publicos en efectivo (gastos_mes con pay_method=EFECTIVO)
-  const { data: gastosPublic } = await supabase.from('gastos_mes')
-    .select('monto, pay_method, anulada')
+  const { data: gastosPublic } = await tSelect('gastos_mes', 'monto, pay_method, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
   let gastosPublicEfectivo = 0;
