@@ -2235,7 +2235,7 @@ async function apiSaveVacacionesEvent(p, res) {
 
 async function apiGetSchedule(p, res) {
   const ws=String(p.weekStart||'').trim();
-  let query=supabase.from('schedule').select('*');
+  let query=tSelect('schedule','*');
   if(ws)query=query.eq('week_start',ws);
   const{data}=await query.order('shift_id').order('area');
   return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',extraNombre:r.extra_nombre||'',extraTurno:r.extra_turno||''}))});
@@ -2246,7 +2246,7 @@ async function apiSaveSchedule(p, res) {
   const ws=String(p.weekStart||'').trim(),entries=p.entries||[];
   if(!ws)return err(res,'Semana requerida');
   const mesPrefix=ws.substring(0,7);
-  const existingRes=await supabase.from('schedule').select('id,area,person_name,day_of_week,type');
+  const existingRes=await tSelect('schedule','id,area,person_name,day_of_week,type');
   const existing=existingRes.data||[];
   const personasEnEntradas=[...new Set(entries.map(function(e){return e.area+'|'+e.personName;}))];
   const toDelete=(existing||[]).filter(function(r){
@@ -2254,10 +2254,10 @@ async function apiSaveSchedule(p, res) {
     if(String(r.type||'').startsWith('extra')||String(r.type||'')==='extra_day')return false;
     return personasEnEntradas.indexOf(r.area+'|'+r.person_name)>=0;
   }).map(function(r){return r.id;});
-  if(toDelete.length>0){await supabase.from('schedule').delete().in('id',toDelete);}
+  if(toDelete.length>0){await tDelete('schedule').in('id',toDelete);}
   if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal'),hora_entrada:String(e.horaEntrada||''),hora_salida:String(e.horaSalida||''),extra_nombre:String(e.extraNombre||''),extra_turno:String(e.extraTurno||'')}));
-    await supabase.from('schedule').insert(rows);
+    await tInsert('schedule',rows);
   }
   return ok(res,{saved:entries.length,weekStart:ws});
 }
@@ -4556,7 +4556,7 @@ function ncalMapAreaExtra(a){
 async function apiGetExtras(p, res) {
   const mes=String(p.mes||'').trim();
   if(!mes) return err(res,'mes requerido');
-  const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
+  const{data}=await tSelect('schedule_extras','*').like('fecha',mes+'%').order('fecha');
   const manual=(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||'',origen:'manual'}));
   const SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
   const{data:reales}=await tSelect('extra_staff','id,person_name,area,shift_id,business_day,entry_ms,exit_ms,payment,registered_by').like('business_day',mes+'%').eq('anulada',false);
@@ -4581,13 +4581,13 @@ async function apiSaveExtra(p, res) {
   if(!fecha||!area||!nombre) return err(res,'Datos incompletos');
   if(!id){
     const limite=area==='Camareria'?4:area==='Patio'?2:10;
-    const{data:existing}=await supabase.from('schedule_extras').select('id').eq('fecha',fecha).eq('area',area);
+    const{data:existing}=await tSelect('schedule_extras','id').eq('fecha',fecha).eq('area',area);
     if(existing&&existing.length>=limite) return err(res,'Limite de extras alcanzado para este dia ('+limite+')');
   }
   if(id){
-    await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
+    await tUpdate('schedule_extras',{nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
   } else {
-    await supabase.from('schedule_extras').insert({fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')});
+    await tInsert('schedule_extras',{fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')});
   }
   return ok(res,{ok:true});
 }
@@ -4595,7 +4595,7 @@ async function apiDeleteScheduleExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('schedule_extras').delete().eq('id',id);
+  await tDelete('schedule_extras').eq('id',id);
   return ok(res,{ok:true});
 }
 
