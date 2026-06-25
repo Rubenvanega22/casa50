@@ -11948,25 +11948,129 @@ function updNoteBadge(notes){
   h+='<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
   h+='<button id="cfgTabUsuarios" class="btn ba sm" onclick="cfgTab(\'usuarios\')">👤 Usuarios</button>';
   h+='<button id="cfgTabPrecios" class="btn bk sm" onclick="cfgTab(\'precios\')">💲 Categorías y precios</button>';
+  h+='<button id="cfgTabHab" class="btn bk sm" onclick="cfgTab(\'habitaciones\')">🚪 Habitaciones</button>';
   h+='<button id="cfgTabMotel" class="btn bk sm" onclick="cfgTab(\'motel\')">🏨 Datos del motel</button>';
   h+='<button id="cfgTabOperacion" class="btn bk sm" onclick="cfgTab(\'operacion\')">⚙️ Operación</button>';
   h+='</div>';
   h+='<div id="cfgUsuarios"><p style="color:#9ca3af">Cargando...</p></div>';
   h+='<div id="cfgPrecios" style="display:none"></div>';
+  h+='<div id="cfgHabitaciones" style="display:none"></div>';
   h+='<div id="cfgMotel" style="display:none"></div>';
   h+='<div id="cfgOperacion" style="display:none"></div>';
   document.getElementById('cfgCont').innerHTML=h;
   cfgTab('usuarios');
   loadCfgUsuarios();
   renderPreciosEditor();
+  renderHabitacionesEditor();
   renderMotelEditor();
   renderOperacionEditor();
 }
 function cfgTab(t){
-  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',motel:'cfgMotel',operacion:'cfgOperacion'};
+  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',habitaciones:'cfgHabitaciones',motel:'cfgMotel',operacion:'cfgOperacion'};
   for(var k in ids){var el=document.getElementById(ids[k]); if(el)el.style.display=(k===t)?'':'none';}
-  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',motel:'cfgTabMotel',operacion:'cfgTabOperacion'};
+  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',habitaciones:'cfgTabHab',motel:'cfgTabMotel',operacion:'cfgTabOperacion'};
   for(var b in btns){var bt=document.getElementById(btns[b]); if(bt)bt.className='btn '+(b===t?'ba':'bk')+' sm';}
+}
+// ---- Editor de Habitaciones (Configuracion > Habitaciones) ----
+// Lee todas las habitaciones (incl. archivadas) via getRoomsAdmin + categorias
+// activas via getCategorias. Alta, editar piso/categoria, archivar/reactivar.
+// El numero (room_id) es INMUTABLE.
+var HAB_ROOMS={}; // slug -> roomId
+var HAB_CATS=[];  // [{db, ui}] categorias activas
+function renderHabitacionesEditor(){
+  var cont=document.getElementById('cfgHabitaciones');
+  if(!cont)return;
+  cont.innerHTML='<div class="cfg"><h3>Habitaciones</h3><p style="color:#9ca3af;font-size:12px">Cargando...</p></div>';
+  rpc('getCategorias',{userRole:sess.userRole},function(dc){
+    HAB_CATS=(dc.categorias||[]).filter(function(c){return c.activo;}).map(function(c){return {db:c.nombre_db,ui:c.nombre_ui||c.nombre_db};});
+    rpc('getRoomsAdmin',{userRole:sess.userRole},function(dr){
+      renderHabitacionesUI(dr.rooms||[]);
+    },function(e){cont.innerHTML='<div class="cfg"><h3>Habitaciones</h3><p style="color:#ef4444">'+esc(e.message||String(e))+'</p></div>';});
+  },function(e){cont.innerHTML='<div class="cfg"><h3>Habitaciones</h3><p style="color:#ef4444">'+esc(e.message||String(e))+'</p></div>';});
+}
+function _catSelectHtml(id,sel){
+  var h='<select id="'+id+'" style="width:100%;box-sizing:border-box">';
+  if(!HAB_CATS.length) h+='<option value="">(sin categorías activas)</option>';
+  HAB_CATS.forEach(function(c){ h+='<option value="'+esc(c.db)+'"'+(c.db===sel?' selected':'')+'>'+esc(c.ui)+'</option>'; });
+  return h+'</select>';
+}
+function _habRowHtml(r){
+  var slug=String(r.roomId).replace(/[^A-Za-z0-9]/g,'_');
+  HAB_ROOMS[slug]=r.roomId;
+  var arch=r.archived;
+  var h='<div style="display:flex;gap:6px;align-items:flex-end;padding:6px 0;border-bottom:1px solid rgba(46,46,58,.4)'+(arch?';opacity:.6':'')+'">';
+  h+='<div style="width:52px"><div style="font-size:10px;color:#9ca3af">Hab</div><b>'+esc(r.roomId)+'</b></div>';
+  h+='<div style="width:60px"><label style="font-size:10px;color:#9ca3af;display:block">Piso</label><input type="number" id="hpiso_'+slug+'" value="'+Number(r.floor||0)+'" min="1" step="1" style="width:100%;box-sizing:border-box"></div>';
+  h+='<div style="flex:1"><label style="font-size:10px;color:#9ca3af;display:block">Categoría</label>'+_catSelectHtml('hcat_'+slug,r.category)+'</div>';
+  if(!arch){
+    h+='<button class="btn bk sm" onclick="guardarHab(\''+slug+'\')">Guardar</button>';
+    h+='<button class="btn br sm" onclick="archivarHab(\''+slug+'\',true)">Archivar</button>';
+  } else {
+    h+='<button class="btn bg sm" onclick="archivarHab(\''+slug+'\',false)">Reactivar</button>';
+  }
+  return h+'</div>';
+}
+function renderHabitacionesUI(rooms){
+  var cont=document.getElementById('cfgHabitaciones');
+  if(!cont)return;
+  HAB_ROOMS={};
+  var activas=rooms.filter(function(r){return !r.archived;});
+  var archivadas=rooms.filter(function(r){return r.archived;});
+  var h='<div class="cfg"><h3>Habitaciones</h3>';
+  h+='<p style="font-size:11px;color:#9ca3af">El número de habitación no se puede cambiar (es la clave del historial). Editá piso o categoría, o archivá.</p>';
+  h+='<button class="btn ba sm" onclick="togNuevaHab()">+ Nueva habitación</button>';
+  h+='<div id="nuevaHabForm" style="display:none;margin-top:10px;border-top:1px solid #2e2e3a;padding-top:10px">';
+  h+='<div style="display:flex;gap:8px;align-items:flex-end">';
+  h+='<div style="flex:1"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">Número</label><input type="text" id="nhab_num" placeholder="Ej: 215" style="width:100%;box-sizing:border-box"></div>';
+  h+='<div style="width:70px"><label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:2px">Piso</label><input type="number" id="nhab_piso" min="1" step="1" style="width:100%;box-sizing:border-box"></div>';
+  h+='</div>';
+  h+='<label style="font-size:11px;color:#9ca3af;display:block;margin:6px 0 2px">Categoría</label>'+_catSelectHtml('nhab_cat','');
+  h+='<button class="btn ba sm" style="margin-top:8px" onclick="crearHab()">Crear habitación</button>';
+  h+='</div></div>';
+  if(!activas.length){ h+='<div class="cfg"><p style="color:#9ca3af">Sin habitaciones activas. Creá la primera arriba.</p></div>'; }
+  var pisos={};
+  activas.forEach(function(r){ (pisos[r.floor]=pisos[r.floor]||[]).push(r); });
+  Object.keys(pisos).map(Number).sort(function(a,b){return a-b;}).forEach(function(piso){
+    h+='<div class="cfg"><h3>Piso '+piso+'</h3>';
+    pisos[piso].forEach(function(r){ h+=_habRowHtml(r); });
+    h+='</div>';
+  });
+  if(archivadas.length){
+    h+='<div class="cfg"><h3 style="color:#ef4444">Archivadas</h3>';
+    archivadas.forEach(function(r){ h+=_habRowHtml(r); });
+    h+='</div>';
+  }
+  cont.innerHTML=h;
+}
+function togNuevaHab(){var el=document.getElementById('nuevaHabForm');if(el)el.style.display=(el.style.display==='none')?'block':'none';}
+function crearHab(){
+  var num=((document.getElementById('nhab_num')||{}).value||'').trim();
+  var piso=Number((document.getElementById('nhab_piso')||{}).value||0);
+  var cat=((document.getElementById('nhab_cat')||{}).value||'').trim();
+  if(!num){toast('El número de habitación es obligatorio','err');return;}
+  if(!Number.isInteger(piso)||piso<=0){toast('Piso inválido (entero > 0)','err');return;}
+  if(!cat){toast('Elegí una categoría','err');return;}
+  rpc('createRoom',{roomId:num,floor:piso,category:cat,userRole:sess.userRole},function(){
+    toast('Habitación '+num+' creada.','ok'); renderHabitacionesEditor();
+  },function(e){toast(e.message||String(e),'err');});
+}
+function guardarHab(slug){
+  var roomId=HAB_ROOMS[slug]; if(!roomId){toast('Habitación no encontrada','err');return;}
+  var piso=Number((document.getElementById('hpiso_'+slug)||{}).value||0);
+  var cat=((document.getElementById('hcat_'+slug)||{}).value||'').trim();
+  if(!Number.isInteger(piso)||piso<=0){toast('Piso inválido (entero > 0)','err');return;}
+  if(!cat){toast('Elegí una categoría','err');return;}
+  rpc('editRoom',{roomId:roomId,floor:piso,category:cat,userRole:sess.userRole},function(){
+    toast('Habitación '+roomId+' actualizada.','ok'); renderHabitacionesEditor();
+  },function(e){toast(e.message||String(e),'err');});
+}
+function archivarHab(slug,arch){
+  var roomId=HAB_ROOMS[slug]; if(!roomId){toast('Habitación no encontrada','err');return;}
+  conf((arch?'¿Archivar':'¿Reactivar')+' la habitación '+roomId+'?',function(){
+    rpc('archiveRoom',{roomId:roomId,archived:arch,userRole:sess.userRole},function(){
+      toast('Habitación '+(arch?'archivada':'reactivada')+'.','ok'); renderHabitacionesEditor();
+    },function(e){toast(e.message||String(e),'err');});
+  });
 }
 // ---- Operación (Configuracion > Operación): toggle modo multi-camarera ----
 function renderOperacionEditor(){
