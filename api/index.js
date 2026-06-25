@@ -2161,9 +2161,8 @@ async function apiMaidPanel(p, res) {
 
 // ==================== PERSONAL / CALENDARIO ====================
 async function apiGetStaff(p, res) {
-  const { data } = await supabase.from('staff').select('*').order('area').order('name');
-  const { data: hist } = await supabase.from('staff_vacaciones_historial')
-    .select('*').order('created_at', { ascending: false });
+  const { data } = await tSelect('staff','*').order('area').order('name');
+  const { data: hist } = await tSelect('staff_vacaciones_historial', '*').order('created_at', { ascending: false });
   const histByStaff = {};
   (hist||[]).forEach(h => {
     if(!histByStaff[h.staff_id]) histByStaff[h.staff_id] = [];
@@ -2193,8 +2192,8 @@ async function apiSaveStaff(p, res) {
     direccion:String(p.direccion||'').trim(), contacto_emergencia:String(p.contactoEmergencia||'').trim(),
     fecha_nacimiento:p.fechaNacimiento||null, fecha_ingreso:p.fechaIngreso||null, fecha_vacaciones:p.fechaVacaciones||null
   };
-  if(id){await supabase.from('staff').update({name,area,active,...extra}).eq('id',id);}
-  else{await supabase.from('staff').insert({id:'S'+Date.now(),name,area,type:'nomina',active,created_ms:Date.now(),...extra});}
+  if(id){await tUpdate('staff',{name,area,active,...extra}).eq('id',id);}
+  else{await tInsert('staff',{id:'S'+Date.now(),name,area,type:'nomina',active,created_ms:Date.now(),...extra});}
   return ok(res,{});
 }
 
@@ -2209,7 +2208,7 @@ async function apiSaveVacacionesEvent(p, res) {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaReingreso)) return err(res, 'Fecha reingreso invalida (YYYY-MM-DD)');
   if(fechaReingreso < fechaSalida) return err(res, 'Reingreso no puede ser antes de salida');
 
-  const { data: staffRow } = await supabase.from('staff').select('fecha_ingreso').eq('id', staffId).single();
+  const { data: staffRow } = await tSelect('staff','fecha_ingreso').eq('id', staffId).single();
   if(!staffRow) return err(res, 'Staff no existe');
 
   // Proxima fecha tentativa = re-ingreso + 1 año
@@ -2219,13 +2218,13 @@ async function apiSaveVacacionesEvent(p, res) {
     String(proxima.getMonth()+1).padStart(2,'0') + '-' +
     String(proxima.getDate()).padStart(2,'0');
 
-  await supabase.from('staff_vacaciones_historial').insert({
+  await tInsert('staff_vacaciones_historial',{
     staff_id: staffId,
     fecha_ingreso: staffRow.fecha_ingreso,
     fecha_salida_vacaciones: fechaSalida,
     fecha_reingreso: fechaReingreso
   });
-  await supabase.from('staff').update({
+  await tUpdate('staff',{
     fecha_ingreso: fechaReingreso,
     fecha_vacaciones: proximaStr
   }).eq('id', staffId);
