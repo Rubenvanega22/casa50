@@ -1468,7 +1468,7 @@ async function apiRegisterExtra(p, res) {
   const scheduledExitMs = Number(p.scheduledExitMs || 0);
   const workHours = Number(p.workHours || 0);
   if (!personName) return err(res, 'Nombre requerido');
-  await supabase.from('extra_staff').insert({
+  await tInsert('extra_staff',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     registered_by: String(p.userName || ''),
     person_name: personName, entry_ms: entryMs,
@@ -1488,7 +1488,7 @@ async function apiUpdateExtra(p, res) {
   const workHours = Number(p.workHours || 0);
   const shift = String(p.shiftId || '');
   if (!personName) return err(res, 'Nombre requerido');
-  await supabase.from('extra_staff').update({
+  await tUpdate('extra_staff',{
     person_name: personName, area, entry_ms: entryMs,
     scheduled_exit_ms: scheduledExitMs, work_hours: workHours,
     shift_id: shift
@@ -1504,12 +1504,12 @@ async function apiDeleteExtra(p, res) {
   const userName = String(p.userName || '').trim();
   if(!id) return err(res, 'ID requerido');
   if(!motivo || motivo.length < 5) return err(res, 'Motivo requerido (min 5 caracteres)');
-  const { data: extra, error: errExtra } = await supabase.from('extra_staff').select('*').eq('id', id).maybeSingle();
+  const { data: extra, error: errExtra } = await tSelect('extra_staff','*').eq('id', id).maybeSingle();
   if(errExtra) return err(res, errExtra.message);
   if(!extra) return err(res, 'Personal extra no encontrado');
   if(extra.anulada) return err(res, 'Este personal extra ya está anulado');
   const now = Date.now();
-  await supabase.from('extra_staff').update({
+  await tUpdate('extra_staff',{
     anulada: true,
     anulada_ms: now,
     anulada_por: userName,
@@ -1526,8 +1526,7 @@ async function apiListExtrasTurno(p, res) {
   const shiftId = String(p.shiftId || '').trim();
   if(!businessDay_) return err(res, 'businessDay requerido');
   if(!shiftId) return err(res, 'shiftId requerido');
-  const { data, error } = await supabase.from('extra_staff')
-    .select('*')
+  const { data, error } = await tSelect('extra_staff', '*')
     .eq('business_day', businessDay_)
     .eq('shift_id', shiftId)
     .order('ts_ms');
@@ -1544,16 +1543,16 @@ async function apiCheckoutExtra(p, res) {
   if (!personName) return err(res, 'Nombre requerido');
   if (payment <= 0) return err(res, 'Pago requerido');
 
-  const { data } = await supabase.from('extra_staff').select('id').eq('person_name', personName).eq('active', true).order('ts_ms', { ascending: false }).limit(1);
+  const { data } = await tSelect('extra_staff','id').eq('person_name', personName).eq('active', true).order('ts_ms', { ascending: false }).limit(1);
   if (!data || !data.length) return err(res, `No se encontro "${personName}" activo`);
 
-  await supabase.from('extra_staff').update({ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy }).eq('id', data[0].id);
+  await tUpdate('extra_staff',{ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy }).eq('id', data[0].id);
   return ok(res, { personName, payment, paidBy });
 }
 
 async function apiGetExtra(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('extra_staff').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
+  const { data } = await tSelect('extra_staff','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
   return ok(res, {
     extraStaff: (data || []).map(r => ({
       id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id,
@@ -1741,7 +1740,7 @@ async function apiCloseShift(p, res) {
     supabase.from('sales').select('type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('extra_staff').select('payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('extra_staff','payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
 
@@ -1773,7 +1772,7 @@ async function apiCloseShift(p, res) {
 
   const net = totalSales + totalRefunds - totalTaxi - totalLoans - totalExtraStaff;
 
-  await supabase.from('shift_close').insert({
+  await tInsert('shift_close',{
     ts_ms: now, business_day: bDay, shift_id: shift, user_name: userName,
     total_sales: totalSales, total_refunds: totalRefunds, total_taxi: totalTaxi,
     total_loans: totalLoans, total_extra_staff: totalExtraStaff, net,
@@ -1801,12 +1800,12 @@ async function apiMetrics(p, res) {
     supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
     tSelect('taxi_expenses','*').eq('business_day', bDay).eq('anulada', false),
     tSelect('loans','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
-    supabase.from('extra_staff').select('*').eq('business_day', bDay).eq('anulada', false),
-    supabase.from('bar_sales').select('*').eq('business_day', bDay),
+    tSelect('extra_staff','*').eq('business_day', bDay).eq('anulada', false),
+    tSelect('bar_sales','*').eq('business_day', bDay),
     tSelect('general_expenses','*').eq('business_day', bDay),
     supabase.from('settings').select('key,value'),
     supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
-    supabase.from('shift_close').select('shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
+    tSelect('shift_close','shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
   ]);
 
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
@@ -1877,8 +1876,7 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del dia origen del cuadre del dia
   // Los retiros se descuentan de las ventas del dia origen y metodo correspondiente
-  const { data: retirosDia } = await supabase.from('retiros_dueno')
-    .select('monto, pay_method, anulado')
+  const { data: retirosDia } = await tSelect('retiros_dueno', 'monto, pay_method, anulado')
     .eq('dia_origen', bDay)
     .eq('anulado', false);
   let dayRetirosEfe = 0;
@@ -1967,10 +1965,10 @@ async function apiMonthMetrics(p, res) {
   const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
     tSelect('taxi_expenses','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
     tSelect('loans','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
-    supabase.from('extra_staff').select('business_day,shift_id,payment,anulada').like('business_day', ym+'%').gt('payment',0),
+    tSelect('extra_staff','business_day,shift_id,payment,anulada').like('business_day', ym+'%').gt('payment',0),
     supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
     supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-    supabase.from('bar_sales').select('business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
+    tSelect('bar_sales','business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
   ]);
 
   // Envolver los arrays paginados en {data: ...} para compatibilidad con el código existente
@@ -2071,8 +2069,7 @@ async function apiMonthMetrics(p, res) {
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos de las ventas del dia origen y metodo correspondiente
   // Esto cumple la regla de oro: el retiro se ve reflejado en el Mes
-  const { data: retirosMes } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, pay_method, anulado')
+  const { data: retirosMes } = await tSelect('retiros_dueno', 'dia_origen, monto, pay_method, anulado')
     .like('dia_origen', ym+'%')
     .eq('anulado', false);
   (retirosMes||[]).forEach(r=>{
@@ -2358,13 +2355,13 @@ async function apiAddBarSale(p, res) {
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
   const cash=Number(p.amountCash||0),card=Number(p.amountCard||0),nequi=Number(p.amountNequi||0);
   if(cash+card+nequi<=0)return err(res,'Monto total debe ser mayor a 0');
-  await supabase.from('bar_sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,amount_nequi:nequi,total:cash+card+nequi});
+  await tInsert('bar_sales',{ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,amount_nequi:nequi,total:cash+card+nequi});
   return ok(res,{tsMs:now,total:cash+card+nequi,shiftId:shift});
 }
 async function apiGetBarSales(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   const shiftFilter=String(p.shiftId||'');
-  let q=supabase.from('bar_sales').select('*').eq('business_day',bDay).order('ts_ms');
+  let q=tSelect('bar_sales','*').eq('business_day',bDay).order('ts_ms');
   if(shiftFilter)q=q.eq('shift_id',shiftFilter);
   const{data}=await q;
   const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amountCash:Number(r.amount_cash||0),amountCard:Number(r.amount_card||0),amountNequi:Number(r.amount_nequi||0),total:Number(r.total||0)}));
@@ -2401,8 +2398,8 @@ async function apiGetDailyCuadre(p, res) {
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
     supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
     tSelect('taxi_expenses','amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
-    supabase.from('extra_staff').select('payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
-    supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
+    tSelect('extra_staff','payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
+    tSelect('bar_sales','amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
     tSelect('general_expenses','amount,shift_id').eq('business_day',bDay),
     supabase.from('shift_log').select('shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
   ]);
@@ -4617,7 +4614,7 @@ async function apiGetExtras(p, res) {
   const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
   const manual=(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||'',origen:'manual'}));
   const SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-  const{data:reales}=await supabase.from('extra_staff').select('id,person_name,area,shift_id,business_day,entry_ms,exit_ms,payment,registered_by').like('business_day',mes+'%').eq('anulada',false);
+  const{data:reales}=await tSelect('extra_staff','id,person_name,area,shift_id,business_day,entry_ms,exit_ms,payment,registered_by').like('business_day',mes+'%').eq('anulada',false);
   const realesMap=(reales||[]).map(r=>{
     const area=ncalMapAreaExtra(r.area);
     if(!area)return null;
@@ -4972,7 +4969,7 @@ async function apiAddRoomProduct(p, res) {
     nota: roomId ? ('Hab '+roomId) : ''
   });
   if(isCortesia) {
-    await supabase.from('cortesias').insert({
+    await tInsert('cortesias',{
       ts_ms: now, business_day: bDay, shift_id: shift,
       product_id: productId, product_name: prod.nombre,
       cantidad, precio_unit: Number(prod.precio||0),
@@ -5045,7 +5042,7 @@ async function apiSaveCortesia(p, res) {
   const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente');
-  await supabase.from('cortesias').insert({
+  await tInsert('cortesias',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     product_id: productId, product_name: prod.nombre,
     cantidad, precio_unit: Number(prod.precio||0),
@@ -5935,7 +5932,7 @@ async function apiGetGraficaDiaADia(p, res) {
   const [gralAct, taxiAct, extraAct, loansAct] = await Promise.all([
     tSelect('general_expenses','amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
     tSelect('taxi_expenses','amount, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('extra_staff').select('payment, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    tSelect('extra_staff','payment, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
     tSelect('loans','amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
   ]);
 
@@ -5943,7 +5940,7 @@ async function apiGetGraficaDiaADia(p, res) {
   const [gralAnt, taxiAnt, extraAnt, loansAnt] = await Promise.all([
     tSelect('general_expenses','amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
     tSelect('taxi_expenses','amount, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('extra_staff').select('payment, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    tSelect('extra_staff','payment, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
     tSelect('loans','amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
   ]);
 
@@ -6017,8 +6014,7 @@ async function apiGetGraficaDiaADia(p, res) {
 
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del mes actual (regla de oro - grafica dia a dia)
-  const { data: retirosGDDActual } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosGDDActual } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDayActual)
     .lte('dia_origen', lastDayActual)
     .eq('anulado', false);
@@ -6031,8 +6027,7 @@ async function apiGetGraficaDiaADia(p, res) {
   });
 
   // Restar retiros activos del mes anterior tambien (para comparacion justa)
-  const { data: retirosGDDAnterior } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosGDDAnterior } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDayAnterior)
     .lte('dia_origen', lastDayAnterior)
     .eq('anulado', false);
@@ -6224,8 +6219,7 @@ async function apiGetGraficaAnoAno(p, res) {
 
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del año (regla de oro - grafica año a año)
-  const { data: retirosGAA } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosGAA } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDay)
     .lte('dia_origen', lastDay)
     .eq('anulado', false);
@@ -6414,8 +6408,7 @@ async function apiGetMetricasMes(p, res) {
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del totalVentas y de las ventas por dia (regla de oro)
   // Esto cumple la regla de oro: el retiro se ve reflejado en Metricas
-  const { data: retirosMM } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosMM } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDay)
     .lte('dia_origen', lastDay)
     .eq('anulado', false);
@@ -6672,8 +6665,7 @@ async function apiGetGastosMesResumen(p, res) {
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del mes de las ventas (regla de oro)
   // El retiro se ve reflejado en la pantalla "Gastos Mes" como menos ventas
-  const retirosMesGM = await fetchAll(() => supabase.from('retiros_dueno')
-    .select('monto, pay_method, anulado')
+  const retirosMesGM = await fetchAll(() => tSelect('retiros_dueno', 'monto, pay_method, anulado')
     .gte('dia_origen', firstDay)
     .lte('dia_origen', lastDay)
     .eq('anulado', false));
@@ -6734,8 +6726,7 @@ async function apiGetGastosMesResumen(p, res) {
       .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
-    supabase.from('extra_staff')
-      .select('payment')
+    tSelect('extra_staff', 'payment')
       .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
@@ -6855,8 +6846,7 @@ async function apiAnularRetiro(p, res) {
   if(motivo.length < 5) return err(res, 'Motivo de anulacion obligatorio (minimo 5 caracteres)');
   
   // Verificar que el retiro existe y no esta ya anulado
-  const { data: retiroExistente, error: errBusqueda } = await supabase.from('retiros_dueno')
-    .select('*')
+  const { data: retiroExistente, error: errBusqueda } = await tSelect('retiros_dueno', '*')
     .eq('id', retiroId)
     .single();
   
@@ -6865,7 +6855,7 @@ async function apiAnularRetiro(p, res) {
   
   // Anular el retiro (NO se borra, queda en historial)
   const now = Date.now();
-  const { error: errUpdate } = await supabase.from('retiros_dueno').update({
+  const { error: errUpdate } = await tUpdate('retiros_dueno',{
     anulado: true,
     anulado_ms: now,
     anulado_por: userName,
@@ -6890,7 +6880,7 @@ async function apiGetRetiros(p, res) {
   const mes = String(p.mes||'').trim(); // formato YYYY-MM (opcional)
   
   // Construir query base
-  let query = supabase.from('retiros_dueno').select('*');
+  let query = tSelect('retiros_dueno','*');
   
   // Filtrar por mes si se proporciona
   if(mes && mes.match(/^\d{4}-\d{2}$/)) {
@@ -6991,8 +6981,7 @@ async function apiCreateRetiro(p, res) {
   });
   
   // Restar retiros previos del mismo dia y metodo (no anulados)
-  const { data: retirosPrev } = await supabase.from('retiros_dueno')
-    .select('monto')
+  const { data: retirosPrev } = await tSelect('retiros_dueno', 'monto')
     .eq('dia_origen', diaOrigen)
     .eq('pay_method', payMethod)
     .eq('anulado', false);
@@ -7013,7 +7002,7 @@ async function apiCreateRetiro(p, res) {
   if(hour >= 14 && hour < 21) shiftId = 'SHIFT_2';
   else if(hour >= 21 || hour < 6) shiftId = 'SHIFT_3';
   
-  const { data, error } = await supabase.from('retiros_dueno').insert({
+  const { data, error } = await tInsert('retiros_dueno',{
     ts_ms: now,
     business_day: today,
     dia_origen: diaOrigen,
@@ -7279,7 +7268,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   const [gralResCP, taxiResCP, extraResCP, loansResCP] = await Promise.all([
     tSelect('general_expenses','amount').gte('business_day', firstDay).lte('business_day', lastDay),
     tSelect('taxi_expenses','amount').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
-    supabase.from('extra_staff').select('payment').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
+    tSelect('extra_staff','payment').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
     tSelect('loans','amount').gte('business_day', firstDay).lte('business_day', lastDay).eq('manual', true).eq('anulada', false)
   ]);
   let gastosCuadreCP = 0;
@@ -7737,7 +7726,7 @@ async function apiChangePaymentMethod(p, res) {
       if (newPm === 'NEQUI'    && Math.round(newA3) !== Math.round(total)) return err(res, 'amount_3 debe igualar al total');
     }
     const nowMs = Date.now();
-    const { error: insErr } = await supabase.from('payment_method_changes').insert({
+    const { error: insErr } = await tInsert('payment_method_changes',{
       sale_id: saleId,
       changed_at_ms: nowMs,
       business_day: saleData.business_day,
@@ -7794,7 +7783,7 @@ async function apiChangePaymentMethodBar(p, res) {
     const oldPm = String(rp.pay_method||'').toUpperCase();
     if(oldPm === newPm) return err(res,'El metodo de pago ya es '+newPm);
     const nowMs = Date.now();
-    const { error: insErr } = await supabase.from('payment_method_changes').insert({
+    const { error: insErr } = await tInsert('payment_method_changes',{
       sale_id: null,
       room_product_id: roomProductId,
       changed_at_ms: nowMs,
