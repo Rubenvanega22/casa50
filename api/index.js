@@ -274,7 +274,7 @@ function mapRoom(r) {
 // Se usa para consultas de rangos largos (ej: mes completo) donde Supabase
 // corta por defecto a 1000 filas aunque pidas mas con .range().
 //
-// Uso: const sales = await fetchAll(() => supabase.from('sales').select('...').like('business_day', '2026-04%'));
+// Uso: const sales = await fetchAll(() => tSelect('sales','...').like('business_day', '2026-04%'));
 async function fetchAll(queryBuilder, batchSize = 1000) {
   const all = [];
   let from = 0;
@@ -870,7 +870,7 @@ async function apiCheckIn(p, res) {
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'SALE',
     room_id: roomId, category: room.category, duration_hrs: durationHrs,
@@ -937,8 +937,7 @@ async function apiCheckOut(p, res) {
 
   const checkInMs = Number(room.check_in_ms || 0);
   if (checkInMs > 0) {
-    await supabase.from('sales')
-      .update({ checkout_ms: now })
+    await tUpdate('sales', { checkout_ms: now })
       .eq('room_id', roomId)
       .eq('type', 'SALE')
       .eq('check_in_ms', checkInMs);
@@ -992,7 +991,7 @@ async function apiExtendTime(p, res) {
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
   const note = noteIn;
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'EXTENSION',
     room_id: roomId, category: room.category, duration_hrs: extraHrs,
@@ -1012,8 +1011,7 @@ async function apiHoraGratis(p, res) {
   if(!room) return err(res, 'Habitacion no existe');
   if(room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
   const checkInMs = Number(room.check_in_ms || 0);
-  const { data: existing } = await supabase.from('sales')
-    .select('id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
+  const { data: existing } = await tSelect('sales', 'id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
     .gte('check_in_ms', checkInMs).limit(1);
   if(existing && existing.length) return err(res, 'Ya se obsequio la hora gratis para esta habitacion');
   const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
@@ -1021,7 +1019,7 @@ async function apiHoraGratis(p, res) {
   const userName = String(p.userName || '').trim();
   const newDueMs = Number(room.due_ms || now) + 3600000;
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
+  await tInsert('sales',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
   return ok(res, { roomId, newDueMs });
 }
 
@@ -1048,7 +1046,7 @@ async function apiRenewTime(p, res) {
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
 
   await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'RENEWAL',
     room_id: roomId, category: room.category, duration_hrs: durationHrs,
@@ -1374,7 +1372,7 @@ async function apiRefund(p, res) {
   if (reason.length < 3) return err(res, 'Motivo obligatorio');
   const room = await getRoom(roomId);
   // Insertar devolucion como venta negativa - se descuenta del cuadre automaticamente
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
     room_id: roomId, category: room ? room.category : '',
@@ -1737,7 +1735,7 @@ async function apiCloseShift(p, res) {
   const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
 
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('sales','type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('extra_staff','payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
@@ -1797,7 +1795,7 @@ async function apiMetrics(p, res) {
   const shiftFilter = String(p.shiftId || '');
 
   const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes, shiftCloseRes] = await Promise.all([
-    supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
+    tSelect('sales','*').eq('business_day', bDay).order('ts_ms'),
     tSelect('taxi_expenses','*').eq('business_day', bDay).eq('anulada', false),
     tSelect('loans','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
     tSelect('extra_staff','*').eq('business_day', bDay).eq('anulada', false),
@@ -1920,8 +1918,7 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
 async function apiMetricsHourly(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const { start, end } = businessDayRange(bDay);
-  const { data } = await supabase.from('sales')
-    .select('ts_ms, total, type')
+  const { data } = await tSelect('sales', 'ts_ms, total, type')
     .eq('business_day', bDay)
     .in('type', ['SALE', 'EXTENSION', 'RENEWAL'])
     .order('ts_ms');
@@ -1951,8 +1948,7 @@ async function apiMonthMetrics(p, res) {
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
 
   // Queries que pueden superar 1000 filas — usan el helper fetchAll
-  const salesData = await fetchAll(() => supabase.from('sales')
-    .select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada,devolucion_efectivo,devolucion_metodo_original')
+  const salesData = await fetchAll(() => tSelect('sales', 'business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada,devolucion_efectivo,devolucion_metodo_original')
     .like('business_day', ym+'%'));
   const maidLogsData = await fetchAll(() => supabase.from('maid_log')
     .select('maid_name,finished_ms,started_ms,state_to')
@@ -2335,7 +2331,7 @@ async function apiRoomHistory(p, res) {
   const limit=Number(p.limit||30);
   const[stateRes,salesRes,taxiRes]=await Promise.all([
     supabase.from('state_history').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
-    supabase.from('sales').select('*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
+    tSelect('sales','*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
     tSelect('taxi_expenses','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
   ]);
   return ok(res,{
@@ -2396,7 +2392,7 @@ async function apiGetDailyCuadre(p, res) {
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
+    tSelect('sales','type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
     tSelect('taxi_expenses','amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     tSelect('extra_staff','payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     tSelect('bar_sales','amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
@@ -2474,9 +2470,7 @@ async function apiGetPersonasHabitacion(p, res) {
   if(!businessDayParam) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
   if(!roomId) return err(res,'roomId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price, editada, editada_por, editada_ms, motivo_edicion')
+  const { data, error } = await tSelect('sales', 'id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price, editada, editada_por, editada_ms, motivo_edicion')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
@@ -2519,7 +2513,7 @@ async function apiAgregarHoraExtraManual(p, res) {
     if((amount_1+amount_2+amount_3)!==total) return err(res,'Suma del mixto debe ser igual al total');
     pay_method_2='MIXTO';
   }
-  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
+  const { data: inserted, error: errIns } = await tInsert('sales',{
     ts_ms: now,
     business_day: businessDayParam,
     shift_id: shiftId,
@@ -2573,9 +2567,7 @@ async function apiGetExtrasHabitacion(p, res) {
   if(!businessDayParam) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
   if(!roomId) return err(res,'roomId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note')
+  const { data, error } = await tSelect('sales', 'id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
@@ -2592,9 +2584,7 @@ async function apiGetHabitacionesTurno(p, res) {
   const shiftId = String(p.shiftId||'').trim();
   if(!businessDayParam) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('room_id, category, type, anulada, duration_hrs, base_price, extra_people_value')
+  const { data, error } = await tSelect('sales', 'room_id, category, type, anulada, duration_hrs, base_price, extra_people_value')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .in('type', ['SALE', 'RENEWAL', 'EXTENSION']);
@@ -2635,7 +2625,7 @@ async function apiAgregarPersonaManual(p, res) {
   const cfg = cfgFor(PRICING, room.category);
   const costPerPerson = Number(cfg.extraPerson||0);
   const totalCost = costPerPerson * cantidad;
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms:now, business_day:businessDayParam, shift_id:shiftId,
     user_role:'ADMIN', user_name:userName, type:'SALE',
     room_id:roomId, category:room.category, duration_hrs:0,
@@ -2657,7 +2647,7 @@ async function apiEditarPersonasCheckIn(p, res) {
   if(!saleId) return err(res,'saleId requerido');
   if(!Number.isFinite(nuevaCantidad) || nuevaCantidad < 0) return err(res,'Cantidad inválida (debe ser >= 0)');
   if(!motivo || motivo.length < 5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
-  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
+  const { data: sale, error: errSale } = await tSelect('sales','*').eq('id', saleId).maybeSingle();
   if(errSale) return err(res, errSale.message);
   if(!sale) return err(res,'Venta no encontrada');
   if(sale.anulada) return err(res,'Esta venta está anulada, no se puede editar');
@@ -2669,8 +2659,7 @@ async function apiEditarPersonasCheckIn(p, res) {
   if(nuevaCantidad === personasOriginales) return err(res,'La cantidad no cambia, nada que actualizar');
   const esCheckIn = Number(sale.duration_hrs||0) > 0 || Number(sale.base_price||0) > 0;
   if(!esCheckIn) return err(res,'Esta fila no es de check-in. Usá Anular en su lugar.');
-  const { data: refunds } = await supabase.from('sales')
-    .select('id').eq('room_id', sale.room_id).eq('check_in_ms', Number(sale.check_in_ms||0))
+  const { data: refunds } = await tSelect('sales', 'id').eq('room_id', sale.room_id).eq('check_in_ms', Number(sale.check_in_ms||0))
     .eq('type','REFUND').limit(1);
   if(refunds && refunds.length) return err(res,'Esta venta tiene una devolución asociada, no se puede editar');
   const PRICING = await getPricing(MOTEL_ID);
@@ -2709,7 +2698,7 @@ async function apiEditarPersonasCheckIn(p, res) {
   }
   const now = Date.now();
   const noteFinal = String(sale.note||'') + ' | EDITADO: ' + motivo;
-  const { error: errUpd } = await supabase.from('sales').update({
+  const { error: errUpd } = await tUpdate('sales',{
     extra_people: nuevaCantidad,
     extra_people_value: extraPeopleValueNuevo,
     total: totalNuevo,
@@ -2765,7 +2754,7 @@ async function apiAddExtraPerson(p, res) {
   const cfg = cfgFor(PRICING, room.category);
   const cost=Number(cfg.extraPerson||0),newPeople=currentPeople+1;
   await supabase.from('rooms').update({people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
-  await supabase.from('sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
+  await tInsert('sales',{ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
   return ok(res,{roomId,newPeople,extraPersonCost:cost});
 }
 
@@ -2834,8 +2823,7 @@ async function apiRoomChange(p, res) {
 
   // ITEM 8: Transferir la venta original de fromRoom a toRoom
   // Buscar la venta original de esta estadia
-  const { data: originalSale } = await supabase.from('sales')
-    .select('id, total, pay_method')
+  const { data: originalSale } = await tSelect('sales', 'id, total, pay_method')
     .eq('room_id', fromRoomId)
     .eq('type', 'SALE')
     .eq('check_in_ms', originalCheckInMs)
@@ -2851,7 +2839,7 @@ async function apiRoomChange(p, res) {
     // Cierre = Resumen = Cuadre (REGLA DE ORO). La traza queda en la nota.
     caso = 'A_CORTESIA';
     if(saleId){
-      await supabase.from('sales').update({
+      await tUpdate('sales',{
         room_id: '304', category: toRoom.category,
         total: 0, amount_1: 0, amount_2: 0, amount_3: 0, pay_method_2: '',
         note: 'Cambio a 304 (cortesia): cobrado y devuelto $'+saleTotalOriginal+' al cliente. Origen hab '+fromRoomId
@@ -2866,7 +2854,7 @@ async function apiRoomChange(p, res) {
       return err(res, 'Los montos MIXTO deben sumar '+toPrice);
     }
     if(saleId){
-      await supabase.from('sales').update({
+      await tUpdate('sales',{
         room_id: toRoomId, category: toRoom.category,
         total: toPrice, pay_method: payMethod,
         pay_method_2: payMethod==='MIXTO'?'MIXTO_EF_TJ_NQ':'',
@@ -2879,10 +2867,10 @@ async function apiRoomChange(p, res) {
   } else {
     // ===== Caso NORMAL (igual que hoy): mover venta + fila diff =====
     if(saleId){
-      await supabase.from('sales').update({ room_id: toRoomId, category: toRoom.category }).eq('id', saleId);
+      await tUpdate('sales',{ room_id: toRoomId, category: toRoom.category }).eq('id', saleId);
     }
     if(diff > 0) {
-      await supabase.from('sales').insert({
+      await tInsert('sales',{
         ts_ms: now, business_day: bDay, shift_id: shift,
         user_role: 'RECEPTION', user_name: userName, type: 'SALE',
         room_id: toRoomId, category: toRoom.category, duration_hrs: durationHrs,
@@ -2891,7 +2879,7 @@ async function apiRoomChange(p, res) {
         arrival_type: fromRoom.arrival_type||'WALK'
       });
     } else if(diff < 0) {
-      await supabase.from('sales').insert({
+      await tInsert('sales',{
         ts_ms: now, business_day: bDay, shift_id: shift,
         user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
         room_id: toRoomId, category: fromRoom.category, total: diff,
@@ -2926,7 +2914,7 @@ async function apiUpdatePayMethod(p, res) {
   const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const checkInMs=Number(room.check_in_ms||0);
-  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
+  await tUpdate('sales',{pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
   await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,payMethod});
 }
@@ -5426,7 +5414,7 @@ async function apiAgregarVentaManual(p, res) {
   const extraPeople = Math.max(0,people-included);
   const extraPeopleValue = extraPeople*20000;
   const noteFinal = '[MANUAL] '+motivo;
-  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
+  const { data: inserted, error: errIns } = await tInsert('sales',{
     ts_ms: now,
     business_day: businessDay_,
     shift_id: shiftId,
@@ -5492,12 +5480,12 @@ async function apiAnularVentaModulo(p, res) {
   if(!saleId) return err(res,'saleId requerido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
+  const { data: sale, error: errSale } = await tSelect('sales','*').eq('id', saleId).maybeSingle();
   if(errSale) return err(res, errSale.message);
   if(!sale) return err(res,'Venta no encontrada');
   if(sale.anulada) return err(res,'Esta venta ya está anulada');
   const motivoFinal = '[AJUSTE-ANULACION] ' + motivo;
-  await supabase.from('sales').update({
+  await tUpdate('sales',{
     type:'ANULADA',
     note: motivoFinal,
     anulada: true,
@@ -5545,8 +5533,7 @@ async function apiAnularVenta(p, res) {
   // Si es devolucion en efectivo, leer el metodo de pago original de la venta
   let metodoOriginal = null;
   if(devolucionEfectivo){
-    const { data: ventaOriginal } = await supabase.from('sales')
-      .select('pay_method')
+    const { data: ventaOriginal } = await tSelect('sales', 'pay_method')
       .eq('room_id',roomId)
       .eq('check_in_ms',checkInMs)
       .eq('type','SALE')
@@ -5566,7 +5553,7 @@ async function apiAnularVenta(p, res) {
     devolucion_efectivo: devolucionEfectivo,
     devolucion_metodo_original: metodoOriginal
   };
-  await supabase.from('sales').update(updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  await tUpdate('sales',updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
   // Devolver habitacion a disponible
   await supabase.from('rooms').update({
     state:'AVAILABLE', state_since_ms:now, people:0,
@@ -5884,8 +5871,7 @@ async function apiGetGraficaDiaADia(p, res) {
   const ultimoDiaActual = esActualMes ? hoyDay : diasActual;
 
   // 1. Ventas mes actual
-  const ventasActual = await fetchAll(() => supabase.from('sales')
-    .select('business_day, total, type, anulada')
+  const ventasActual = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDayActual)
     .lte('business_day', lastDayActual)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -5898,8 +5884,7 @@ async function apiGetGraficaDiaADia(p, res) {
     .lte('business_day', lastDayActual));
 
   // 2. Ventas mes anterior
-  const ventasAnterior = await fetchAll(() => supabase.from('sales')
-    .select('business_day, total, type, anulada')
+  const ventasAnterior = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDayAnterior)
     .lte('business_day', lastDayAnterior)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -6180,8 +6165,7 @@ async function apiGetGraficaAnoAno(p, res) {
   const firstDay = `${ano}-01-01`;
   const lastDay = `${ano}-12-31`;
 // 1. Ventas y gastos del año actual (calculados desde sales, room_products y gastos_mes)
-  const ventasActual = await fetchAll(() => supabase.from('sales')
-    .select('business_day, total, type, anulada')
+  const ventasActual = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -6355,8 +6339,7 @@ async function apiGetMetricasMes(p, res) {
   const daysInMonth = lastDayDate.getDate();
 
 // 1. Ventas del mes (de la tabla sales)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
+  const ventasMes = await fetchAll(() => tSelect('sales', 'id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -6586,8 +6569,7 @@ async function apiGetGastosMesResumen(p, res) {
   const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
 
   // 1. Ventas del mes desde la tabla "sales" (habitaciones + extensiones)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type, devolucion_efectivo, devolucion_metodo_original')
+  const ventasMes = await fetchAll(() => tSelect('sales', 'id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type, devolucion_efectivo, devolucion_metodo_original')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -6619,8 +6601,7 @@ async function apiGetGastosMesResumen(p, res) {
 
   // Devoluciones cruzadas: ventas anuladas con devolucion en efectivo
   // El banco/Nequi tiene la plata (suma a tarjeta/nequi) pero la caja entrego (resta del efectivo)
-  const ventasCruzadas = await fetchAll(() => supabase.from('sales')
-    .select('total, devolucion_metodo_original')
+  const ventasCruzadas = await fetchAll(() => tSelect('sales', 'total, devolucion_metodo_original')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .eq('anulada', true)
@@ -6951,8 +6932,7 @@ async function apiCreateRetiro(p, res) {
   
   // VALIDACION ESTRICTA: verificar disponibilidad del dia origen
   // Sumar ventas de ese dia y metodo (solo SALE/RENEWAL/EXTENSION, no anuladas, no devolucion cruzada)
-  const { data: ventasDia } = await supabase.from('sales')
-    .select('total, pay_method, pay_method_2, amount_1, amount_2, amount_3, type, anulada, devolucion_efectivo')
+  const { data: ventasDia } = await tSelect('sales', 'total, pay_method, pay_method_2, amount_1, amount_2, amount_3, type, anulada, devolucion_efectivo')
     .eq('business_day', diaOrigen)
     .in('type', ['SALE','RENEWAL','EXTENSION']);
   
@@ -7196,8 +7176,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
 
   // Ventas en efectivo (sales)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
+  const ventasMes = await fetchAll(() => tSelect('sales', 'total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -7215,8 +7194,7 @@ async function apiGetCajaPaolaResumen(p, res) {
 
   // Devoluciones cruzadas: ventas anuladas con devolucion en efectivo
   // La caja entrego esa plata al cliente, asi que se resta del efectivo del mes
-  const ventasCruzadasCP = await fetchAll(() => supabase.from('sales')
-    .select('total')
+  const ventasCruzadasCP = await fetchAll(() => tSelect('sales', 'total')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .eq('anulada', true)
@@ -7714,7 +7692,7 @@ async function apiChangePaymentMethod(p, res) {
     if (!['EFECTIVO','TARJETA','NEQUI','MIXTO'].includes(newPm)) return err(res, 'Metodo invalido');
     if (!reason) return err(res, 'Falta motivo');
     if (!userName) return err(res, 'Falta usuario');
-    const { data: saleData, error: saleErr } = await supabase.from('sales').select('*').eq('id', saleId).single();
+    const { data: saleData, error: saleErr } = await tSelect('sales','*').eq('id', saleId).single();
     if (saleErr || !saleData) return err(res, 'Venta no encontrada');
     if (saleData.anulada) return err(res, 'No se puede modificar una venta anulada');
     const total = Number(saleData.total || 0);
@@ -7747,7 +7725,7 @@ async function apiChangePaymentMethod(p, res) {
       reason: reason
     });
     if (insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
-    const { error: updErr } = await supabase.from('sales').update({
+    const { error: updErr } = await tUpdate('sales',{
       pay_method: newPm,
       pay_method_2: newPm2,
       amount_1: newA1,
