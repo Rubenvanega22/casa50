@@ -4012,11 +4012,9 @@ function aireAddMonthsMs(ms, months){
 
 // Devuelve la ronda ABIERTA (o null) y la ultima CERRADA (o null).
 async function aireGetRondas(){
-  const { data: abiertaArr } = await supabase.from('aire_rondas')
-    .select('*').eq('estado','ABIERTA').limit(1);
+  const { data: abiertaArr } = await tSelect('aire_rondas', '*').eq('estado','ABIERTA').limit(1);
   const rondaAbierta = (abiertaArr && abiertaArr[0]) || null;
-  const { data: cerradaArr } = await supabase.from('aire_rondas')
-    .select('*').eq('estado','CERRADA').order('cerrada_ms',{ascending:false}).limit(1);
+  const { data: cerradaArr } = await tSelect('aire_rondas', '*').eq('estado','CERRADA').order('cerrada_ms',{ascending:false}).limit(1);
   const ultimaCerrada = (cerradaArr && cerradaArr[0]) || null;
   return { rondaAbierta, ultimaCerrada };
 }
@@ -4028,8 +4026,7 @@ async function apiGetAireGrid(p, res){
 
   const now = Date.now();
 
-  const { data: unidades, error: eu } = await supabase.from('aire_unidades')
-    .select('*').eq('activo', true).order('orden', {ascending:true});
+  const { data: unidades, error: eu } = await tSelect('aire_unidades', '*').eq('activo', true).order('orden', {ascending:true});
   if(eu) return err(res, 'Error consultando unidades: '+eu.message);
 
   const { rondaAbierta, ultimaCerrada } = await aireGetRondas();
@@ -4038,8 +4035,7 @@ async function apiGetAireGrid(p, res){
   const rondaRef = rondaAbierta || ultimaCerrada || null;
   let regsPorUnidad = {};
   if(rondaRef){
-    const { data: regs } = await supabase.from('aire_mantenimiento')
-      .select('*').eq('ronda_id', rondaRef.id);
+    const { data: regs } = await tSelect('aire_mantenimiento', '*').eq('ronda_id', rondaRef.id);
     (regs||[]).forEach(function(r){ regsPorUnidad[r.unidad_id] = r; });
   }
 
@@ -4101,8 +4097,7 @@ async function apiRegistrarAire(p, res){
   const resultado = String(p.resultado||'').toUpperCase();
   if(!['VERDE','AMARILLO'].includes(resultado)) return err(res, 'resultado invalido (VERDE o AMARILLO)');
 
-  const { data: unidad } = await supabase.from('aire_unidades')
-    .select('id').eq('id', unidadId).eq('activo', true).single();
+  const { data: unidad } = await tSelect('aire_unidades', 'id').eq('id', unidadId).eq('activo', true).single();
   if(!unidad) return err(res, 'Unidad no encontrada');
 
   // Normalizar las 8 tareas a booleanos estrictos.
@@ -4116,10 +4111,9 @@ async function apiRegistrarAire(p, res){
   // Apertura automatica de ronda.
   let { rondaAbierta } = await aireGetRondas();
   if(!rondaAbierta){
-    const { data: ultArr } = await supabase.from('aire_rondas')
-      .select('numero').order('numero',{ascending:false}).limit(1);
+    const { data: ultArr } = await tSelect('aire_rondas', 'numero').order('numero',{ascending:false}).limit(1);
     const siguiente = ((ultArr && ultArr[0] && ultArr[0].numero) || 0) + 1;
-    const { data: nueva, error: ec } = await supabase.from('aire_rondas').insert({
+    const { data: nueva, error: ec } = await tInsert('aire_rondas',{
       numero: siguiente,
       estado: 'ABIERTA',
       abierta_ms: now,
@@ -4130,6 +4124,7 @@ async function apiRegistrarAire(p, res){
   }
 
   const { error: em } = await supabase.from('aire_mantenimiento').upsert({
+    motel_id: MOTEL_ID,
     ronda_id: rondaAbierta.id,
     unidad_id: unidadId,
     tareas: tareas,
@@ -4154,12 +4149,10 @@ async function apiCerrarRondaAire(p, res){
   const { rondaAbierta } = await aireGetRondas();
   if(!rondaAbierta) return err(res, 'No hay ronda abierta para cerrar');
 
-  const { data: unidades } = await supabase.from('aire_unidades')
-    .select('id').eq('activo', true);
+  const { data: unidades } = await tSelect('aire_unidades', 'id').eq('activo', true);
   const totalUnidades = (unidades||[]).length;
 
-  const { data: regs } = await supabase.from('aire_mantenimiento')
-    .select('unidad_id').eq('ronda_id', rondaAbierta.id);
+  const { data: regs } = await tSelect('aire_mantenimiento', 'unidad_id').eq('ronda_id', rondaAbierta.id);
   const totalReg = (regs||[]).length;
 
   if(totalReg < totalUnidades){
@@ -4169,7 +4162,7 @@ async function apiCerrarRondaAire(p, res){
   const now = Date.now();
   const venceMs = aireAddMonthsMs(now, AIRE_CICLO_MESES);
 
-  const { error } = await supabase.from('aire_rondas').update({
+  const { error } = await tUpdate('aire_rondas',{
     estado: 'CERRADA',
     cerrada_ms: now,
     cerrada_por: userName,
@@ -4188,20 +4181,17 @@ async function apiGetAireHistorial(p, res){
   const unidadId = Number(p.unidadId||0);
   if(!unidadId) return err(res, 'unidadId requerido');
 
-  const { data: unidad } = await supabase.from('aire_unidades')
-    .select('*').eq('id', unidadId).single();
+  const { data: unidad } = await tSelect('aire_unidades', '*').eq('id', unidadId).single();
   if(!unidad) return err(res, 'Unidad no encontrada');
 
-  const { data: regs, error } = await supabase.from('aire_mantenimiento')
-    .select('*').eq('unidad_id', unidadId).order('registrado_ms',{ascending:false});
+  const { data: regs, error } = await tSelect('aire_mantenimiento', '*').eq('unidad_id', unidadId).order('registrado_ms',{ascending:false});
   if(error) return err(res, 'Error consultando historial: '+error.message);
 
   // Enriquecer con datos de cada ronda.
   const rondaIds = [...new Set((regs||[]).map(function(r){ return r.ronda_id; }))];
   let rondasMap = {};
   if(rondaIds.length){
-    const { data: rondas } = await supabase.from('aire_rondas')
-      .select('*').in('id', rondaIds);
+    const { data: rondas } = await tSelect('aire_rondas', '*').in('id', rondaIds);
     (rondas||[]).forEach(function(r){ rondasMap[r.id] = r; });
   }
 
