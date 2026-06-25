@@ -60,7 +60,7 @@ const TENANT_TABLES = new Set([
   'motel_info','payment_method_changes','product_shift_obs','products','proyeccion_meses',
   'proyeccion_tareas','retiros_dueno','room_issues','room_products','rooms','sales',
   'schedule','schedule_extras','shift_close','shift_failures','shift_inventory_start',
-  'shift_log','staff','staff_vacaciones_historial','state_history','stock_entries',
+  'shift_log','shift_notes','staff','staff_vacaciones_historial','state_history','stock_entries',
   'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales'
 ]);
 
@@ -1567,7 +1567,7 @@ async function apiReviewNote(p, res) {
       await supabase.storage.from('maid-photos').remove([fileName]);
     } catch(e) { console.error('Error borrando foto:', e); }
   }
-  await supabase.from('shift_notes').update({photo_url: null}).eq('id', noteId);
+  await tUpdate('shift_notes',{photo_url: null}).eq('id', noteId);
   return ok(res, {});
 }
 
@@ -1578,7 +1578,7 @@ async function apiAddNote(p, res) {
   const target = String(p.target || 'ALL').toUpperCase();
   let photoUrl = null;
   if(p.photoUrl){ photoUrl = String(p.photoUrl); }
-  await supabase.from('shift_notes').insert({
+  await tInsert('shift_notes',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: String(p.userRole || ''), user_name: String(p.userName || ''),
     note: String(p.note || ''), target,
@@ -1605,8 +1605,7 @@ async function apiAddNoteReply(p, res) {
 
   const fotoUrl = String(p.fotoUrl || '').trim() || null;
 
-  const { data: note } = await supabase.from('shift_notes')
-    .select('id, is_deleted, respuestas').eq('id', noteId).single();
+  const { data: note } = await tSelect('shift_notes', 'id, is_deleted, respuestas').eq('id', noteId).single();
   if(!note) return err(res, 'Nota no encontrada');
   if(note.is_deleted) return err(res, 'Nota borrada');
 
@@ -1614,13 +1613,13 @@ async function apiAddNoteReply(p, res) {
   const nueva = { ts: Date.now(), por: userName, rol: userRole, texto: texto, fotoUrl: fotoUrl };
   const nuevas = prev.concat([nueva]);
 
-  await supabase.from('shift_notes').update({ respuestas: nuevas }).eq('id', noteId);
+  await tUpdate('shift_notes',{ respuestas: nuevas }).eq('id', noteId);
   return ok(res, { noteId: noteId, respuestas: nuevas });
 }
 
 async function apiGetNotes(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('shift_notes').select('*')
+  const { data } = await tSelect('shift_notes','*')
     .eq('business_day', bDay).eq('is_deleted', false).eq('pasado_a_mantenimiento', false)
     .order('ts_ms', { ascending: false }).limit(100);
   return ok(res, { notes: (data || []).map(r => ({
@@ -1636,12 +1635,12 @@ async function apiMarkNoteSeen(p, res) {
   const noteId = Number(p.noteId || 0);
   const userRole = String(p.userRole || '').toUpperCase();
   if (!noteId) return err(res, 'noteId requerido');
-  const { data } = await supabase.from('shift_notes').select('seen_by').eq('id', noteId).single();
+  const { data } = await tSelect('shift_notes','seen_by').eq('id', noteId).single();
   if (!data) return err(res, 'Nota no encontrada');
   let seenBy = [];
   try { seenBy = JSON.parse(data.seen_by || '[]'); } catch(e) {}
   if (!seenBy.includes(userRole)) seenBy.push(userRole);
-  await supabase.from('shift_notes').update({ seen_by: JSON.stringify(seenBy) }).eq('id', noteId);
+  await tUpdate('shift_notes',{ seen_by: JSON.stringify(seenBy) }).eq('id', noteId);
   return ok(res, { noteId, seenBy });
 }
 
@@ -1652,11 +1651,11 @@ async function apiMarkNotePasado(p, res) {
   if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
   const noteId = Number(p.noteId || 0);
   if(!noteId) return err(res, 'noteId requerido');
-  const { data: note } = await supabase.from('shift_notes').select('id, is_deleted, pasado_a_mantenimiento').eq('id', noteId).single();
+  const { data: note } = await tSelect('shift_notes','id, is_deleted, pasado_a_mantenimiento').eq('id', noteId).single();
   if(!note) return err(res, 'Nota no encontrada');
   if(note.is_deleted) return err(res, 'Nota ya borrada');
   if(note.pasado_a_mantenimiento) return err(res, 'Nota ya estaba pasada a mantenimiento');
-  await supabase.from('shift_notes').update({ pasado_a_mantenimiento: true }).eq('id', noteId);
+  await tUpdate('shift_notes',{ pasado_a_mantenimiento: true }).eq('id', noteId);
   return ok(res, { noteId });
 }
 
@@ -1666,7 +1665,7 @@ async function apiDeleteNote(p, res) {
   if (!noteId) return err(res, 'noteId requerido');
   // Leer la foto real de la BD (no confiar en el cliente) y borrarla del storage
   // para liberar espacio. Si falla el storage, no abortar el borrado de la nota.
-  const { data: note } = await supabase.from('shift_notes').select('photo_url').eq('id', noteId).single();
+  const { data: note } = await tSelect('shift_notes','photo_url').eq('id', noteId).single();
   const photoUrl = note && note.photo_url ? String(note.photo_url) : '';
   if (photoUrl) {
     try {
@@ -1675,14 +1674,14 @@ async function apiDeleteNote(p, res) {
     } catch (e) { console.error('Error borrando foto de nota:', e); }
   }
   // Soft delete (conserva historial) + limpiar la URL muerta.
-  await supabase.from('shift_notes').update({ is_deleted: true, photo_url: null }).eq('id', noteId);
+  await tUpdate('shift_notes',{ is_deleted: true, photo_url: null }).eq('id', noteId);
   return ok(res, { noteId });
 }
 
 async function apiGetAllNotes(p, res) {
   const limit = Math.min(200, Number(p.limit || 100));
   const fromDate = String(p.fromDate || '');
-  let query = supabase.from('shift_notes').select('*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
+  let query = tSelect('shift_notes','*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
   if (fromDate) query = query.gte('business_day', fromDate);
   const { data } = await query;
   return ok(res, { notes: (data || []).map(r => ({
@@ -1697,7 +1696,7 @@ async function apiGetAllNotes(p, res) {
 async function apiGetNoteHistory(p, res) {
   const limit = Math.min(200, Number(p.limit || 100));
   const fromDate = String(p.fromDate || '');
-  let query = supabase.from('shift_notes').select('*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
+  let query = tSelect('shift_notes','*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
   if (fromDate) query = query.gte('business_day', fromDate);
   const { data } = await query;
   return ok(res, { notes: (data || []).map(r => ({ id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id, userRole: r.user_role, userName: r.user_name, note: r.note })) });
