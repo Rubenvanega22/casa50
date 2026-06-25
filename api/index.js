@@ -7087,8 +7087,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
 
   // Leer todos los movimientos del mes (excepto anulados)
-  const { data: movs, error: errM } = await supabase.from('caja_paola')
-    .select('*')
+  const { data: movs, error: errM } = await tSelect('caja_paola', '*')
     .eq('mes', mes)
     .order('ts_ms', { ascending: false });
   if(errM) return err(res, errM.message);
@@ -7251,7 +7250,7 @@ async function apiAddCajaEntrega(p, res) {
   const fecha = new Date(now).toISOString().slice(0,10); // YYYY-MM-DD UTC
   const mes = fecha.substring(0,7);
 
-  const { data, error } = await supabase.from('caja_paola').insert({
+  const { data, error } = await tInsert('caja_paola',{
     ts_ms: now,
     fecha: fecha,
     mes: mes,
@@ -7279,7 +7278,7 @@ async function apiAddCajaGasto(p, res) {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
   const mes = fecha.substring(0,7);
 
-  const { data, error } = await supabase.from('caja_paola').insert({
+  const { data, error } = await tInsert('caja_paola',{
     ts_ms: Date.now(),
     fecha: fecha,
     mes: mes,
@@ -7302,7 +7301,7 @@ async function apiEditCajaGasto(p, res) {
   const movId = Number(p.movId||0);
   if(!movId) return err(res,'movId requerido');
 
-  const { data: gastoActual, error: errG } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Movimiento no encontrado');
   if(gastoActual.tipo !== 'gasto') return err(res,'Solo se editan gastos, no entregas');
@@ -7329,7 +7328,7 @@ async function apiEditCajaGasto(p, res) {
     updates.mes = fecha.substring(0,7);
   }
 
-  const { error } = await supabase.from('caja_paola').update(updates).eq('id', movId);
+  const { error } = await tUpdate('caja_paola',updates).eq('id', movId);
   if(error) return err(res, error.message);
   return ok(res, { movId: movId });
 }
@@ -7343,13 +7342,13 @@ async function apiDeleteCajaGasto(p, res) {
   const movId = Number(p.movId||0);
   if(!movId) return err(res,'movId requerido');
 
-  const { data: gastoActual, error: errG } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Movimiento no encontrado');
   if(gastoActual.tipo !== 'gasto') return err(res,'Solo se eliminan gastos, no entregas');
   if(gastoActual.anulada) return err(res,'Este gasto ya fue eliminado');
 
-  const { error } = await supabase.from('caja_paola').update({
+  const { error } = await tUpdate('caja_paola',{
     anulada: true,
     anulada_ms: Date.now(),
     anulada_por: userName
@@ -7379,7 +7378,7 @@ async function apiAprobarCajaEntrega(p, res) {
   if(String(cfg.value).trim() !== pin) return err(res,'PIN incorrecto');
 
   // Validar la entrega
-  const { data: entrega, error: errE } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: entrega, error: errE } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errE) return err(res, errE.message);
   if(!entrega) return err(res,'Entrega no encontrada');
   if(entrega.tipo !== 'entrega') return err(res,'Solo se aprueban entregas');
@@ -7388,7 +7387,7 @@ async function apiAprobarCajaEntrega(p, res) {
 
   // Aprobar
   const now = Date.now();
-  const { error } = await supabase.from('caja_paola').update({
+  const { error } = await tUpdate('caja_paola',{
     estado: 'aprobada',
     approved_ms: now,
     approved_by: userName
@@ -7406,7 +7405,7 @@ async function apiAnularCajaEntrega(p, res) {
   const movId = Number(p.movId||0);
   if(!movId) return err(res,'movId requerido');
 
-  const { data: entrega, error: errE } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: entrega, error: errE } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errE) return err(res, errE.message);
   if(!entrega) return err(res,'Entrega no encontrada');
   if(entrega.tipo !== 'entrega') return err(res,'Solo se anulan entregas');
@@ -7415,7 +7414,7 @@ async function apiAnularCajaEntrega(p, res) {
 
   const motivo = String(p.motivo||'').trim() || 'Anulada por el creador';
 
-  const { error } = await supabase.from('caja_paola').update({
+  const { error } = await tUpdate('caja_paola',{
     anulada: true,
     estado: 'anulada',
     anulada_ms: Date.now(),
