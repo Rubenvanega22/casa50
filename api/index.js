@@ -1739,7 +1739,7 @@ async function apiCloseShift(p, res) {
     tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
     tSelect('extra_staff','payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
+    tSelect('room_products','total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
 
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
@@ -1850,7 +1850,7 @@ async function apiMetrics(p, res) {
     }
     if(type==='REFUND'){dayRefunds+=t;if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else dayEfe+=t;if(!shiftFilter||sid===shiftFilter){shiftSales+=t;if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else shiftEfe+=t;}allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
   });
-const {data:prodSales}=await supabase.from('room_products').select('*').eq('business_day',bDay);
+const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay);
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
   const totalProductos=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
   const totalCortesiasProds=prodSalesFilt.filter(s=>s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
@@ -1867,7 +1867,7 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
 
  let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=a;shiftBarEfe+=Number(r.amount_cash||0);shiftBarTar+=Number(r.amount_card||0);shiftBarNeq+=Number(r.amount_nequi||0);}});
-  const{data:roomProdsBar}=await supabase.from('room_products').select('shift_id,pay_method,total,is_cortesia').eq('business_day',bDay).eq('is_cortesia',false);
+  const{data:roomProdsBar}=await tSelect('room_products','shift_id,pay_method,total,is_cortesia').eq('business_day',bDay).eq('is_cortesia',false);
   (roomProdsBar||[]).forEach(r=>{const t=Number(r.total||0),pm=String(r.pay_method||'EFECTIVO').toUpperCase();dayBar+=t;if(pm==='TARJETA'){dayBarTar+=t;}else if(pm==='NEQUI'){dayBarNeq+=t;}else{dayBarEfe+=t;}if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=t;if(pm==='TARJETA'){shiftBarTar+=t;}else if(pm==='NEQUI'){shiftBarNeq+=t;}else{shiftBarEfe+=t;}}});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
 
@@ -1953,8 +1953,7 @@ async function apiMonthMetrics(p, res) {
   const maidLogsData = await fetchAll(() => supabase.from('maid_log')
     .select('maid_name,finished_ms,started_ms,state_to')
     .like('business_day', ym+'%'));
-  const roomProdsData = await fetchAll(() => supabase.from('room_products')
-    .select('business_day,shift_id,pay_method,total,is_cortesia')
+  const roomProdsData = await fetchAll(() => tSelect('room_products', 'business_day,shift_id,pay_method,total,is_cortesia')
     .like('business_day', ym+'%'));
 
   // Queries pequeñas — se mantienen con Promise.all normal
@@ -4906,7 +4905,7 @@ async function apiGetRoomProducts(p, res) {
   const roomId = String(p.roomId||'').trim();
   const checkInMs = Number(p.checkInMs||0);
   if(!roomId) return err(res,'roomId requerido');
-  let query = supabase.from('room_products').select('*').eq('room_id', roomId);
+  let query = tSelect('room_products','*').eq('room_id', roomId);
   if(checkInMs) query = query.eq('check_in_ms', checkInMs);
   const { data } = await query.order('ts_ms');
   return ok(res, { products: (data||[]).map(r => ({
@@ -4937,7 +4936,7 @@ async function apiAddRoomProduct(p, res) {
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente. Quedan: '+prod.stock_actual);
   const total = isCortesia ? 0 : Number(prod.precio||0) * cantidad;
-  await supabase.from('room_products').insert({
+  await tInsert('room_products',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     room_id: roomId, check_in_ms: checkInMs,
     product_id: productId, product_name: prod.nombre,
@@ -4974,14 +4973,14 @@ async function apiEditRoomProduct(p, res) {
   const nuevaCantidad = Number(p.cantidad||0);
   if(!id) return err(res,'id requerido');
   if(nuevaCantidad<=0) return err(res,'Cantidad invalida');
-  const { data: rp } = await supabase.from('room_products').select('*').eq('id', id).single();
+  const { data: rp } = await tSelect('room_products','*').eq('id', id).single();
   if(!rp) return err(res,'Registro no existe');
   const diff = nuevaCantidad - Number(rp.cantidad||0);
   const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', rp.product_id).single();
   if(!prod) return err(res,'Producto no existe');
   if(diff > 0 && Number(prod.stock_actual||0) < diff) return err(res,'Stock insuficiente');
   const nuevoTotal = rp.is_cortesia ? 0 : Number(rp.precio_unit||0) * nuevaCantidad;
-  await supabase.from('room_products').update({
+  await tUpdate('room_products',{
     cantidad: nuevaCantidad, total: nuevoTotal
   }).eq('id', id);
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: -diff });
@@ -5002,7 +5001,7 @@ async function apiEditRoomProduct(p, res) {
 async function apiDeleteRoomProduct(p, res) {
   const id = Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  const { data: rp } = await supabase.from('room_products').select('*').eq('id', id).single();
+  const { data: rp } = await tSelect('room_products','*').eq('id', id).single();
   if(!rp) return err(res,'Registro no existe');
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: Number(rp.cantidad||0) });
   if(stockErr) return err(res, stockErr.message);
@@ -5014,7 +5013,7 @@ async function apiDeleteRoomProduct(p, res) {
     cantidad: Number(rp.cantidad||0),
     nota: 'Hab '+rp.room_id+' — delete'
   });
-  await supabase.from('room_products').delete().eq('id', id);
+  await tDelete('room_products').eq('id', id);
   return ok(res, {});
 }
 
@@ -5073,8 +5072,8 @@ async function apiGetObservacionesTurno(p, res) {
 async function apiGetProductosMes(p, res) {
   const ym=String(p.yearMonth||'');
   if(!ym)return err(res,'yearMonth requerido');
-  const {data:prods}=await supabase.from('room_products').select('total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
-  const {data:cors}=await supabase.from('room_products').select('total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
+  const {data:prods}=await tSelect('room_products','total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
+  const {data:cors}=await tSelect('room_products','total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
   const {data:prodsList}=await supabase.from('products').select('id,precio');
   const totalVentas=(prods||[]).reduce((a,r)=>a+Number(r.total||0),0);
   const totalEf=(prods||[]).filter(r=>r.pay_method==='EFECTIVO').reduce((a,r)=>a+Number(r.total||0),0);
@@ -5089,7 +5088,7 @@ async function apiGetInventarioByDay(p, res) {
   const {data:products}=await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
   if(!products||!products.length) return ok(res,{rows:[],resumenTurnos:{},businessDay:bd});
   const {data:entries}=await supabase.from('stock_entries').select('*').eq('business_day',bd);
-  const {data:sales}=await supabase.from('room_products').select('*').eq('business_day',bd);
+  const {data:sales}=await tSelect('room_products','*').eq('business_day',bd);
   const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
   const {data:movements}=await supabase.from('stock_movements').select('*').eq('business_day',bd);
   const {data:snapsRows}=await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
@@ -5097,7 +5096,7 @@ async function apiGetInventarioByDay(p, res) {
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
  const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
   const ayerStr=ayer.getFullYear()+'-'+String(ayer.getMonth()+1).padStart(2,'0')+'-'+String(ayer.getDate()).padStart(2,'0');
-  const {data:salesAyer}=await supabase.from('room_products').select('product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
+  const {data:salesAyer}=await tSelect('room_products','product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
   const {data:entriesAyer}=await supabase.from('stock_entries').select('product_id,cantidad').eq('business_day',ayerStr);
   const rows=products.map(function(prod){
     const totalVentas=(sales||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
@@ -5637,7 +5636,7 @@ async function apiAjusteInventario(p, res) {
   if(afectaCuadre) {
     const precioUnit = Number(prod.precio||0);
     const total = precioUnit * cantidad;
-    await supabase.from('room_products').insert({
+    await tInsert('room_products',{
       ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
       room_id: 'AJUSTE', check_in_ms: 0,
       product_id: productId, product_name: prod.nombre,
@@ -5663,7 +5662,7 @@ async function apiGetPrintTurno(p, res) {
   const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
   if(!products || !products.length) return ok(res,{rows:[],totals:{},cortesias:[],businessDay:bd,shiftId:sid});
 
-  const { data: salesDay } = await supabase.from('room_products').select('*').eq('business_day',bd);
+  const { data: salesDay } = await tSelect('room_products','*').eq('business_day',bd);
   const { data: movements } = await supabase.from('stock_movements').select('*').eq('business_day',bd);
   const { data: entries } = await supabase.from('stock_entries').select('*').eq('business_day',bd);
   const { data: snapsRows } = await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
@@ -5878,8 +5877,7 @@ async function apiGetGraficaDiaADia(p, res) {
     .neq('anulada', true));
 
   // 1b. Ventas del bar mes actual
-  const ventasBarActual = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBarActual = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDayActual)
     .lte('business_day', lastDayActual));
 
@@ -5891,8 +5889,7 @@ async function apiGetGraficaDiaADia(p, res) {
     .neq('anulada', true));
 
   // 2b. Ventas del bar mes anterior
-  const ventasBarAnterior = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBarAnterior = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDayAnterior)
     .lte('business_day', lastDayAnterior));
 
@@ -6172,8 +6169,7 @@ async function apiGetGraficaAnoAno(p, res) {
     .neq('anulada', true));
 
   // 1b. Ventas del bar (room_products) del año actual
-  const ventasBarActual = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBarActual = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
 
@@ -6346,8 +6342,7 @@ async function apiGetMetricasMes(p, res) {
     .neq('anulada', true));
 
   // 1b. Ventas del bar (de la tabla room_products)
-  const ventasBar = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
 
@@ -6615,8 +6610,7 @@ async function apiGetGastosMesResumen(p, res) {
   });
 
   // 1b. Ventas del bar desde la tabla "room_products" (productos consumidos en habitaciones)
-  const ventasBar = await fetchAll(() => supabase.from('room_products')
-    .select('total, pay_method, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
   
@@ -6951,8 +6945,7 @@ async function apiCreateRetiro(p, res) {
   });
   
   // Restar bar productos del dia con ese metodo (tambien cuenta como ventas)
-  const { data: barDia } = await supabase.from('room_products')
-    .select('total, pay_method, is_cortesia')
+  const { data: barDia } = await tSelect('room_products', 'total, pay_method, is_cortesia')
     .eq('business_day', diaOrigen);
   (barDia||[]).forEach(b => {
     if(b.is_cortesia) return;
@@ -7204,8 +7197,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Ventas del bar en efectivo
-  const ventasBar = await fetchAll(() => supabase.from('room_products')
-    .select('total, pay_method, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
   (ventasBar||[]).forEach(v => {
@@ -7507,7 +7499,7 @@ async function apiGetResumenMes(p, res) {
   // a lastDay hasta hoy) para combinarlos con los del mes y poder deshacer todo
   // desde stock_actual/stock_bodega hacia atras hasta el primer dia del mes.
   const todayBd = businessDay(Date.now());
-  const salesPost = await fetchAll(() => supabase.from('room_products').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const salesPost = await fetchAll(() => tSelect('room_products','*').gt('business_day',lastDay).lte('business_day',todayBd));
   const movementsPost = await fetchAll(() => supabase.from('stock_movements').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
   const entriesPost = await fetchAll(() => supabase.from('stock_entries').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
 
@@ -7516,7 +7508,7 @@ async function apiGetResumenMes(p, res) {
   const movementsAfter = (movementsPost||[]);
   const entriesAfter = (entriesPost||[]);
 
-  const salesMes = await fetchAll(() => supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const salesMes = await fetchAll(() => tSelect('room_products','*').gte('business_day',firstDay).lte('business_day',lastDay));
   const movementsMes = await fetchAll(() => supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
   const entriesMes = await fetchAll(() => supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
 
@@ -7754,7 +7746,7 @@ async function apiChangePaymentMethodBar(p, res) {
     if(!['EFECTIVO','TARJETA','NEQUI'].includes(newPm)) return err(res,'Metodo invalido (EFECTIVO/TARJETA/NEQUI)');
     if(!reason || reason.length < 5) return err(res,'Motivo requerido (min 5 caracteres)');
     if(!userName) return err(res,'Falta usuario');
-    const { data: rp, error: rpErr } = await supabase.from('room_products').select('*').eq('id', roomProductId).maybeSingle();
+    const { data: rp, error: rpErr } = await tSelect('room_products','*').eq('id', roomProductId).maybeSingle();
     if(rpErr) return err(res, rpErr.message);
     if(!rp) return err(res,'Venta de bar no encontrada');
     if(rp.is_cortesia) return err(res,'Las cortesias no tienen metodo de pago');
@@ -7775,7 +7767,7 @@ async function apiChangePaymentMethodBar(p, res) {
       reason: reason
     });
     if(insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
-    const { error: updErr } = await supabase.from('room_products').update({ pay_method: newPm }).eq('id', roomProductId);
+    const { error: updErr } = await tUpdate('room_products',{ pay_method: newPm }).eq('id', roomProductId);
     if(updErr) return err(res, 'Error actualizando venta: ' + updErr.message);
     return ok(res, { changed: true, roomProductId, oldPayMethod: oldPm, newPayMethod: newPm });
   } catch (e) {
@@ -7791,8 +7783,7 @@ async function apiListRoomProductsTurno(p, res) {
   const shiftId = String(p.shiftId||'').trim();
   if(!bDay) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase.from('room_products')
-    .select('id, ts_ms, room_id, product_id, product_name, cantidad, precio_unit, total, pay_method, user_name, is_cortesia, created_by_admin')
+  const { data, error } = await tSelect('room_products', 'id, ts_ms, room_id, product_id, product_name, cantidad, precio_unit, total, pay_method, user_name, is_cortesia, created_by_admin')
     .eq('business_day', bDay)
     .eq('shift_id', shiftId)
     .eq('is_cortesia', false)
@@ -8010,7 +8001,7 @@ async function apiAjusteInventarioV2(p, res) {
         nota: 'AJUSTE (admin '+adminName+'): '+motivo
       });
 
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
@@ -8044,7 +8035,7 @@ async function apiAjusteInventarioV2(p, res) {
         nota: 'AJUSTE (admin '+adminName+'): '+motivo
       });
 
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
@@ -8100,7 +8091,7 @@ async function apiAjusteInventarioV2(p, res) {
         nota: 'AJUSTE cambio producto (admin '+adminName+'): '+motivo
       });
 
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productoViejoId, product_name: prodViejo.nombre,
@@ -8112,7 +8103,7 @@ async function apiAjusteInventarioV2(p, res) {
         tipo_ajuste: 'producto_resta',
         motivo_ajuste: motivo
       });
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
