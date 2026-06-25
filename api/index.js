@@ -42,6 +42,55 @@ const MASTER_PRICING = {
 // bootstrap llama con {force:true} para reflejar cambios sin redeploy. Si la
 // tabla falla -> fallback global a MASTER_PRICING.
 const MOTEL_ID = process.env.MOTEL_ID || '24992a8a-48d8-4444-a50f-2d6c7d949828';
+
+// ==================== ACCESO MULTI-TENANT (Fase 3) ====================
+// Helpers que inyectan MOTEL_ID automaticamente en las tablas TENANT (las que
+// tienen columna motel_id). Garantizan el aislamiento sin depender de recordar
+// el filtro en cada query. Las tablas NO tenant (app_moteles, app_reservas,
+// app_usuarios, admin_pins/reception_pins/maintenance_pins, settings) pasan sin
+// tocar. Devuelven el query builder para seguir encadenando (.eq/.order/.single/etc.).
+// NOTA: la migracion de call-sites a estos helpers se hace por tandas (Fase 3);
+// hasta que un call-site se migre, sigue usando supabase.from(...) directo.
+const TENANT_TABLES = new Set([
+  'aire_mantenimiento','aire_rondas','aire_unidades','ajustes','app_categorias',
+  'app_fotos','app_motel_admins','bar_sales','caja_paola','cierre_mes','config_caja',
+  'cortesias','descargos_nequi','extra_staff','gastos_mes','general_expenses','loans',
+  'login_failures','luciana_chats','maid_log','maintenance','maintenance_bitacora',
+  'mantenimiento_solicitudes','mantenimiento_tareas','mantenimiento_zonas_comunes',
+  'motel_info','payment_method_changes','product_shift_obs','products','proyeccion_meses',
+  'proyeccion_tareas','retiros_dueno','room_issues','room_products','rooms','sales',
+  'schedule','schedule_extras','shift_close','shift_failures','shift_inventory_start',
+  'shift_log','staff','staff_vacaciones_historial','state_history','stock_entries',
+  'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales'
+]);
+
+// SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
+function tSelect(table, cols, opts){
+  let q = supabase.from(table).select(cols, opts);
+  if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
+  return q;
+}
+// INSERT scopeado: fuerza motel_id=MOTEL_ID en cada fila de tablas tenant.
+function tInsert(table, rows){
+  if (TENANT_TABLES.has(table)) {
+    rows = Array.isArray(rows) ? rows.map(r => ({ ...r, motel_id: MOTEL_ID }))
+                               : { ...rows, motel_id: MOTEL_ID };
+  }
+  return supabase.from(table).insert(rows);
+}
+// UPDATE scopeado por motel. El caller sigue encadenando .eq(...).
+function tUpdate(table, patch){
+  let q = supabase.from(table).update(patch);
+  if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
+  return q;
+}
+// DELETE scopeado por motel. El caller sigue encadenando .eq(...).
+function tDelete(table){
+  let q = supabase.from(table).delete();
+  if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
+  return q;
+}
+
 const PRICING_CACHE = {}; // { [motelId]: { data, ms } }
 const PRICING_TTL_MS = 5 * 60 * 1000;
 const PRECIO_KEYS = { '3h': 'h3', '6h': 'h6', '8h': 'h8', '12h': 'h12' };
