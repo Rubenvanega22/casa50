@@ -4462,8 +4462,8 @@ async function apiGetProyeccion(p, res) {
     if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
     const anio=Number(p.anio||new Date().getFullYear());
     const[tareasRes,mesesRes]=await Promise.all([
-      supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes',{ascending:true}),
-      supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
+      tSelect('proyeccion_tareas','*').eq('anio',anio).order('mes',{ascending:true}),
+      tSelect('proyeccion_meses','*').eq('anio',anio).order('mes')
     ]);
     return ok(res,{
       tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||'',fechaEstado:r.fecha_estado||''})),
@@ -4474,7 +4474,7 @@ async function apiGetProyeccion(p, res) {
 async function apiSaveTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const anio=Number(p.anio||new Date().getFullYear());
-  const{data}=await supabase.from('proyeccion_tareas').insert({
+  const{data}=await tInsert('proyeccion_tareas',{
     anio,nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
     area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
     prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
@@ -4486,7 +4486,7 @@ async function apiUpdateTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('proyeccion_tareas').update({
+  await tUpdate('proyeccion_tareas',{
     nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
     area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
     prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
@@ -4500,13 +4500,14 @@ async function apiDeleteTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('proyeccion_tareas').delete().eq('id',id);
+  await tDelete('proyeccion_tareas').eq('id',id);
   return ok(res,{id});
 }
 async function apiSaveMesProyeccion(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const anio=Number(p.anio||new Date().getFullYear()),mes=Number(p.mes||1);
   await supabase.from('proyeccion_meses').upsert({
+    motel_id: MOTEL_ID,
     anio,mes,meta:Number(p.meta||0),presupuesto:Number(p.presupuesto||0),
     observaciones:String(p.observaciones||'').trim(),
     ventas_anterior:Number(p.ventasAnterior||0),
@@ -6420,8 +6421,7 @@ async function apiGetMetricasMes(p, res) {
   const habsDanadas = Object.values(roomMap).sort((a,b) => b.count - a.count).slice(0,5);
 
   // 6. Proyeccion del mes (mes y anio son numericos en la tabla)
-  const { data: proyTareas } = await supabase.from('proyeccion_tareas')
-    .select('id, anio, mes, nombre, descripcion, area, responsable, prioridad, estado, fecha_estado')
+  const { data: proyTareas } = await tSelect('proyeccion_tareas', 'id, anio, mes, nombre, descripcion, area, responsable, prioridad, estado, fecha_estado')
     .eq('anio', year)
     .eq('mes', month);
   let totalTareas = 0;
