@@ -11933,6 +11933,17 @@ function reviewedNote(id,photoUrl,btn){
     function(e){toast(e.message||String(e),'err');}
  );
 }
+// Elimina un informe (soft delete) + su imagen del storage. Solo ADMIN (el boton X
+// solo se renderiza para ADMIN; el backend tambien valida). Refresca la vista activa.
+function deleteNote(id,btn){
+  conf('Se elimina el informe y su imagen. No se puede deshacer. ¿Continuar?',function(){
+    if(btn)btn.disabled=true;
+    rpc('deleteNote',{noteId:id,userRole:sess.userRole},
+      function(){toast('Informe eliminado.','ok'); if(historyOpen) loadAllNotes(); else loadNotes(); updNoteBadge();},
+      function(e){ if(btn)btn.disabled=false; toast(e.message||String(e),'err'); }
+    );
+  });
+}
 function updNoteBadge(notes){
   if(!sess)return;
   var tab=document.querySelector('[data-tab="notes"]');
