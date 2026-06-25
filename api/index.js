@@ -243,7 +243,7 @@ async function getSettings() {
   return map;
 }
 async function getRoom(roomId) {
-  const { data } = await supabase.from('rooms').select('*').eq('room_id', roomId).single();
+  const { data } = await tSelect('rooms','*').eq('room_id', roomId).single();
   return data;
 }
 
@@ -521,7 +521,7 @@ async function getMotelInfo() {
 async function apiBootstrap(req, res) {
   const now = Date.now();
   const settings = await getSettings();
-  const { data: rooms } = await supabase.from('rooms').select('*').eq('archived', false).order('floor').order('room_id');
+  const { data: rooms } = await tSelect('rooms','*').eq('archived', false).order('floor').order('room_id');
   return ok(res, {
     settings, rooms: (rooms || []).map(mapRoom),
     motelInfo: await getMotelInfo(),
@@ -536,7 +536,7 @@ async function apiBootstrap(req, res) {
 }
 
 async function apiGetRooms(req, res) {
-  const { data: rooms } = await supabase.from('rooms').select('*').eq('archived', false).order('floor').order('room_id');
+  const { data: rooms } = await tSelect('rooms','*').eq('archived', false).order('floor').order('room_id');
 
   // Cargar danos activos por habitacion (Fase 3 mantenimiento)
   // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
@@ -855,7 +855,7 @@ async function apiCheckIn(p, res) {
   const mixtoTj = Number(p.mixtoTj || 0);
   const mixtoNq = Number(p.mixtoNq || 0);
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: now, due_ms: dueMs,
     arrival_type: arrivalType, arrival_plate: arrivalPlate,
@@ -881,7 +881,7 @@ async function apiCheckIn(p, res) {
     check_in_ms: now, due_ms: dueMs
   });
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, room_id: roomId,
     from_state: 'AVAILABLE', to_state: 'OCCUPIED', people,
@@ -913,7 +913,7 @@ async function apiCheckOut(p, res) {
     return res.status(200).json({ ok: false, warning: true, minsLeft, message: `Hay ${minsLeft} min pagados aun. Confirmar checkout?` });
   }
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'DIRTY', state_since_ms: now, people: 0,
     due_ms: 0, last_checkout_ms: now,
     arrival_type: '', arrival_plate: '',
@@ -923,7 +923,7 @@ async function apiCheckOut(p, res) {
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, room_id: roomId,
     from_state: 'OCCUPIED', to_state: 'DIRTY', people: 0,
@@ -985,7 +985,7 @@ async function apiExtendTime(p, res) {
   const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
   const note = noteIn;
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tUpdate('rooms',{ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'EXTENSION',
@@ -1013,7 +1013,7 @@ async function apiHoraGratis(p, res) {
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const newDueMs = Number(room.due_ms || now) + 3600000;
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tUpdate('rooms',{ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await tInsert('sales',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
   return ok(res, { roomId, newDueMs });
 }
@@ -1040,7 +1040,7 @@ async function apiRenewTime(p, res) {
   const newDueMs = Number(room.due_ms || now) + durationHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
 
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tUpdate('rooms',{ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'RENEWAL',
@@ -1058,7 +1058,7 @@ async function apiSilenceAlarm(p, res) {
   const roomId = String(p.roomId || '').trim();
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({ alarm_silenced_ms: Date.now(), alarm_silenced_for_due_ms: Number(room.due_ms || 0), updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tUpdate('rooms',{ alarm_silenced_ms: Date.now(), alarm_silenced_for_due_ms: Number(room.due_ms || 0), updated_at: new Date().toISOString() }).eq('room_id', roomId);
   return ok(res, { roomId });
 }
 
@@ -1075,11 +1075,11 @@ async function apiMaidTake(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED' && !room.retoque) return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
   if(room.retoque){
-    await supabase.from('rooms').update({retoque:false,state:'AVAILABLE',state_since_ms:now,updated_at:new Date().toISOString()}).eq('room_id',roomId);
+    await tUpdate('rooms',{retoque:false,state:'AVAILABLE',state_since_ms:now,updated_at:new Date().toISOString()}).eq('room_id',roomId);
     return ok(res,{roomId,maidName,startedMs:now,retoque:true});
   }
 
-  await supabase.from('maid_log').insert({
+  await tInsert('maid_log',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: roomId,
     action: 'START', state: room.state, note: '',
@@ -1089,7 +1089,7 @@ async function apiMaidTake(p, res) {
     checkout_ms: Number(room.last_checkout_ms || 0),
     category: String(room.category || '')
   });
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     maid_in_progress: true,
     maid_name_progress: maidName,
     updated_at: new Date().toISOString()
@@ -1112,8 +1112,7 @@ async function apiMaidFinish(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED') return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
 
-  const { data: openLog } = await supabase.from('maid_log')
-    .select('id, started_ms, ts_ms')
+  const { data: openLog } = await tSelect('maid_log', 'id, started_ms, ts_ms')
     .eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay)
     .eq('action', 'START').eq('finished_ms', 0)
     .order('ts_ms', { ascending: false }).limit(1);
@@ -1123,7 +1122,7 @@ async function apiMaidFinish(p, res) {
   const dirtyMins = lastCheckoutMs ? Math.max(0, Math.round((now - lastCheckoutMs) / 60000)) : 0;
   const cleanMins = Math.max(0, Math.round((now - startedMs) / 60000));
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: resultState, state_since_ms: now,
     last_maid_name: maidName, last_maid_done_ms: now,
     contaminated_since_ms: resultState === 'CONTAMINATED' ? now : 0,
@@ -1133,7 +1132,7 @@ async function apiMaidFinish(p, res) {
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'MAID', user_name: maidName, room_id: roomId,
     from_state: room.state, to_state: resultState, people: 0,
@@ -1142,14 +1141,14 @@ async function apiMaidFinish(p, res) {
 
   if (openLog && openLog.length) {
     if(resultState !== 'CONTAMINATED'){
-      await supabase.from('maid_log').update({
+      await tUpdate('maid_log',{
         action: 'FINISH', finished_ms: now, state_to: resultState,
         note: p.note || ''
       }).eq('id', openLog[0].id);
     }
   } else {
     if(resultState !== 'CONTAMINATED'){
-      await supabase.from('maid_log').insert({
+      await tInsert('maid_log',{
         ts_ms: now, business_day: bDay, shift_id: shift,
         maid_name: maidName, room_id: roomId,
         action: 'FINISH', state: resultState, note: p.note || '',
@@ -1168,7 +1167,7 @@ async function apiMaidLogAction(p, res) {
   const shift = currentShiftId(now);
   const maidName = String(p.maidName || p.userName || '').trim();
   if (!maidName) return err(res, 'Nombre requerido');
-  await supabase.from('maid_log').insert({
+  await tInsert('maid_log',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: String(p.roomId || ''),
     action: String(p.action || ''), state: String(p.state || ''), note: String(p.note || ''),
@@ -1182,13 +1181,13 @@ async function apiMaidMarkExit(p, res) {
   const bDay = businessDay(now);
   const maidName = String(p.maidName || '').trim();
   const roomId = String(p.roomId || '').trim();
-  await supabase.from('maid_log').update({ finished_ms: now }).eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay).eq('finished_ms', 0);
+  await tUpdate('maid_log',{ finished_ms: now }).eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay).eq('finished_ms', 0);
   return ok(res, { exitMs: now });
 }
 
 async function apiGetMaidLog(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('maid_log').select('*').eq('business_day', bDay).order('ts_ms');
+  const { data } = await tSelect('maid_log','*').eq('business_day', bDay).order('ts_ms');
   return ok(res, {
     logs: (data || []).map(r => ({
       id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id,
@@ -1214,27 +1213,26 @@ async function apiClearContaminated(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'CONTAMINATED') return err(res, 'Solo si CONTAMINADA');
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0,
     maid_in_progress: false, maid_name_progress: '',
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: p.userRole||'RECEPTION', user_name: userName, room_id: roomId,
     from_state: 'CONTAMINATED', to_state: 'AVAILABLE', people: 0,
     meta_json: JSON.stringify({action:'clearContaminated', maidName: userName})
   });
 
-  const { data: openLog } = await supabase.from('maid_log')
-    .select('id, started_ms')
+  const { data: openLog } = await tSelect('maid_log', 'id, started_ms')
     .eq('room_id', roomId).eq('business_day', bDay)
     .eq('action', 'START').eq('finished_ms', 0)
     .order('ts_ms', { ascending: false }).limit(1);
 
   if (openLog && openLog.length) {
-    await supabase.from('maid_log').update({
+    await tUpdate('maid_log',{
       action: 'FINISH', finished_ms: now, state_to: 'AVAILABLE',
       note: p.note || '',
       check_in_ms: Number(room.check_in_ms || 0),
@@ -1242,7 +1240,7 @@ async function apiClearContaminated(p, res) {
       category: String(room.category || '')
     }).eq('id', openLog[0].id);
   } else {
-    await supabase.from('maid_log').insert({
+    await tInsert('maid_log',{
       ts_ms: now, business_day: bDay, shift_id: shift,
       maid_name: userName, room_id: roomId,
       action: 'FINISH', state: 'AVAILABLE', note: '',
@@ -1263,7 +1261,7 @@ async function apiSetMinorNote(p, res) {
   const text = String(p.text || '').trim();
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     note_minor: enabled,
     note_minor_text: enabled ? text : '',
     updated_at: new Date().toISOString()
@@ -1283,7 +1281,7 @@ async function apiSetDisabled(p, res) {
   if (disableFlag && reason.length < 3) return err(res, 'Motivo obligatorio');
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({ disabled: disableFlag, disabled_date_ms: disableFlag ? now : 0, disabled_reason: disableFlag ? reason : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tUpdate('rooms',{ disabled: disableFlag, disabled_date_ms: disableFlag ? now : 0, disabled_reason: disableFlag ? reason : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await supabase.from('maintenance').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: userRole, user_name: String(p.userName || 'ADMIN'), room_id: roomId, type: disableFlag ? 'DISABLE' : 'ENABLE', text: disableFlag ? reason : 'HABILITADA', repair_desc: String(p.repairDesc||''), repair_cost: Number(p.repairCost||0) });
   return ok(res, { roomId, disabled: disableFlag });
 }
@@ -1293,7 +1291,7 @@ async function apiSetDisabled(p, res) {
 // poder reactivar). La grilla operativa filtra archived=false aparte.
 async function apiGetRoomsAdmin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const { data, error } = await supabase.from('rooms').select('*').order('floor').order('room_id');
+  const { data, error } = await tSelect('rooms','*').order('floor').order('room_id');
   if(error) return err(res, error.message);
   return ok(res, { rooms: (data||[]).map(mapRoom) });
 }
@@ -1313,10 +1311,10 @@ async function apiCreateRoom(p, res) {
   if(!Number.isInteger(floor) || floor <= 0) return err(res,'Piso inválido (entero > 0)');
   if(!category) return err(res,'Categoría requerida');
   if(!(await categoriaActiva(category))) return err(res,'La categoría no existe o está inactiva: '+category);
-  const { data: existe } = await supabase.from('rooms').select('room_id').eq('room_id', roomId).maybeSingle();
+  const { data: existe } = await tSelect('rooms','room_id').eq('room_id', roomId).maybeSingle();
   if(existe) return err(res,'Ya existe una habitación con el número '+roomId);
   const now = Date.now();
-  const { error: insErr } = await supabase.from('rooms').insert({
+  const { error: insErr } = await tInsert('rooms',{
     room_id: roomId, floor, category, state: 'AVAILABLE', state_since_ms: now,
     disabled: false, archived: false, people: 0, updated_at: new Date().toISOString()
   });
@@ -1333,8 +1331,7 @@ async function apiEditRoom(p, res) {
   const category = String(p.category||'').trim();
   if(!category) return err(res,'Categoría requerida');
   if(!(await categoriaActiva(category))) return err(res,'La categoría no existe o está inactiva: '+category);
-  const { data, error } = await supabase.from('rooms')
-    .update({ floor, category, updated_at: new Date().toISOString() })
+  const { data, error } = await tUpdate('rooms', { floor, category, updated_at: new Date().toISOString() })
     .eq('room_id', roomId).select('room_id').maybeSingle();
   if(error) return err(res, error.message);
   if(!data) return err(res,'Habitación no encontrada');
@@ -1349,8 +1346,7 @@ async function apiArchiveRoom(p, res) {
   const room = await getRoom(roomId);
   if(!room) return err(res,'Habitación no encontrada');
   if(archived && String(room.state) === 'OCCUPIED') return err(res,'No se puede archivar una habitación ocupada');
-  const { error } = await supabase.from('rooms')
-    .update({ archived, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  const { error } = await tUpdate('rooms', { archived, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   if(error) return err(res, error.message);
   return ok(res, { roomId, archived });
 }
@@ -1944,8 +1940,7 @@ async function apiMonthMetrics(p, res) {
   // Queries que pueden superar 1000 filas — usan el helper fetchAll
   const salesData = await fetchAll(() => tSelect('sales', 'business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada,devolucion_efectivo,devolucion_metodo_original')
     .like('business_day', ym+'%'));
-  const maidLogsData = await fetchAll(() => supabase.from('maid_log')
-    .select('maid_name,finished_ms,started_ms,state_to')
+  const maidLogsData = await fetchAll(() => tSelect('maid_log', 'maid_name,finished_ms,started_ms,state_to')
     .like('business_day', ym+'%'));
   const roomProdsData = await fetchAll(() => tSelect('room_products', 'business_day,shift_id,pay_method,total,is_cortesia')
     .like('business_day', ym+'%'));
@@ -2126,9 +2121,9 @@ async function apiMaidPanel(p, res) {
   const shift = currentShiftId(now);
 
   const [roomsRes, logsRes, maidLogsRes, shiftLogRes] = await Promise.all([
-    supabase.from('rooms').select('*').eq('archived', false).order('room_id'),
-    supabase.from('state_history').select('*').eq('business_day', bDay),
-    supabase.from('maid_log').select('*').eq('business_day', bDay).order('ts_ms'),
+    tSelect('rooms','*').eq('archived', false).order('room_id'),
+    tSelect('state_history','*').eq('business_day', bDay),
+    tSelect('maid_log','*').eq('business_day', bDay).order('ts_ms'),
     tSelect('shift_log','*').eq('business_day', bDay).eq('user_role', 'MAID').in('action', ['LOGIN', 'RELOGIN'])
   ]);
 
@@ -2323,7 +2318,7 @@ async function apiRoomHistory(p, res) {
   if(!roomId)return err(res,'roomId requerido');
   const limit=Number(p.limit||30);
   const[stateRes,salesRes,taxiRes]=await Promise.all([
-    supabase.from('state_history').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
+    tSelect('state_history','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
     tSelect('sales','*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
     tSelect('taxi_expenses','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
   ]);
@@ -2530,7 +2525,7 @@ async function apiAgregarHoraExtraManual(p, res) {
     anulada: false
   }).select('id').single();
   if(errIns) return err(res,'Error guardando hora extra: '+errIns.message);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: businessDayParam,
     shift_id: shiftId,
@@ -2706,7 +2701,7 @@ async function apiEditarPersonasCheckIn(p, res) {
     motivo_edicion: motivo
   }).eq('id', saleId);
   if(errUpd) return err(res,'Error actualizando venta: '+errUpd.message);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: sale.business_day,
     shift_id: sale.shift_id,
@@ -2746,7 +2741,7 @@ async function apiAddExtraPerson(p, res) {
   const PRICING = await getPricing(MOTEL_ID);
   const cfg = cfgFor(PRICING, room.category);
   const cost=Number(cfg.extraPerson||0),newPeople=currentPeople+1;
-  await supabase.from('rooms').update({people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
+  await tUpdate('rooms',{people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
   await tInsert('sales',{ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
   return ok(res,{roomId,newPeople,extraPersonCost:cost});
 }
@@ -2791,7 +2786,7 @@ async function apiRoomChange(p, res) {
   const diff = toPrice - fromPrice;
 
   // Marcar habitacion origen como RETOQUE
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'AVAILABLE', retoque: true, state_since_ms: now,
     people: 0, due_ms: 0, last_checkout_ms: now,
     arrival_type: '', arrival_plate: '',
@@ -2803,7 +2798,7 @@ async function apiRoomChange(p, res) {
   const originalCheckInMs = Number(fromRoom.check_in_ms || now);
   const originalDueMs = Number(fromRoom.due_ms || (now + durationHrs * 3600000));
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: originalCheckInMs, due_ms: originalDueMs,
     arrival_type: fromRoom.arrival_type || 'WALK',
@@ -2882,7 +2877,7 @@ async function apiRoomChange(p, res) {
   }
 
   // Registrar el cambio en el historial (antes no se registraba state_history)
-  await supabase.from('state_history').insert([
+  await tInsert('state_history',[
     { ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName,
       room_id: fromRoomId, from_state: 'OCCUPIED', to_state: 'AVAILABLE', people: 0,
       meta_json: JSON.stringify({ accion:'CAMBIO_HAB_SALIDA', destino: toRoomId, checkInMs: originalCheckInMs, caso }) },
@@ -2908,7 +2903,7 @@ async function apiUpdatePayMethod(p, res) {
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const checkInMs=Number(room.check_in_ms||0);
   await tUpdate('sales',{pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
-  await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
+  await tUpdate('rooms',{pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,payMethod});
 }
 
@@ -2922,7 +2917,7 @@ async function apiUpdateArrivalPlate(p, res) {
   if(room.state!=='OCCUPIED')return err(res,'Habitacion no esta ocupada');
   const updates={arrival_plate:plate,updated_at:new Date().toISOString()};
   if(arrivalType)updates.arrival_type=arrivalType;
-  await supabase.from('rooms').update(updates).eq('room_id',roomId);
+  await tUpdate('rooms',updates).eq('room_id',roomId);
   return ok(res,{roomId,plate,arrivalType});
 }
 
@@ -3024,7 +3019,7 @@ async function bloquearPorDanoUrgenteSiCorresponde(roomId, descDano, userName) {
       }
     }
 
-    await supabase.from('rooms').update({
+    await tUpdate('rooms',{
       disabled: true,
       disabled_date_ms: Number(room.disabled_date_ms || 0) || now,
       disabled_reason: motivoFinal,
@@ -4556,7 +4551,7 @@ async function apiSaveMesProyeccion(p, res) {
 async function apiClearMaidLog(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const bDay=String(p.businessDay||businessDay(Date.now()));
-  await supabase.from('maid_log').delete().eq('business_day',bDay);
+  await tDelete('maid_log').eq('business_day',bDay);
   return ok(res,{businessDay:bDay});
 }
 async function apiMaidCancel(p, res) {
@@ -4567,11 +4562,10 @@ async function apiMaidCancel(p, res) {
   if(!roomId) return err(res,'roomId requerido');
   const room=await getRoom(roomId);
   if(!room) return err(res,'Habitacion no existe');
-  await supabase.from('maid_log')
-    .delete()
+  await tDelete('maid_log')
     .eq('maid_name',maidName).eq('room_id',roomId)
     .eq('business_day',bDay).eq('action','START').eq('finished_ms',0);
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     maid_in_progress:false,
     maid_name_progress:'',
     state: room.state==='CONTAMINATED'?'DIRTY':room.state,
@@ -4836,9 +4830,8 @@ async function apiToggleCategoria(p, res) {
     .select('id,nombre_db').eq('motel_id', MOTEL_ID).eq('id', id).maybeSingle();
   if(!cat) return err(res,'Categoria no encontrada');
   if(!activo){
-    // Bloquear baja si hay habitaciones en esta categoria (rooms aun sin motel_id; Fase 3 agrega el filtro)
-    const { count } = await supabase.from('rooms')
-      .select('room_id', { count: 'exact', head: true }).eq('category', cat.nombre_db);
+    // Bloquear baja si hay habitaciones en esta categoria (filtra por motel via tSelect)
+    const { count } = await tSelect('rooms', 'room_id', { count: 'exact', head: true }).eq('category', cat.nombre_db);
     if(count && count > 0) return err(res,'No se puede desactivar: hay '+count+' habitacion(es) en esta categoria. Reasignalas primero.');
   }
   const { data, error } = await supabase.from('app_categorias')
@@ -5441,7 +5434,7 @@ async function apiAgregarVentaManual(p, res) {
     anulada: false
   }).select('id').single();
   if(errIns) return err(res, 'Error guardando venta: '+errIns.message);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: businessDay_,
     shift_id: shiftId,
@@ -5485,7 +5478,7 @@ async function apiAnularVentaModulo(p, res) {
     anulada_ms: now,
     anulada_por: userName
   }).eq('id', saleId);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: sale.business_day,
     shift_id: sale.shift_id,
@@ -5548,7 +5541,7 @@ async function apiAnularVenta(p, res) {
   };
   await tUpdate('sales',updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
   // Devolver habitacion a disponible
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state:'AVAILABLE', state_since_ms:now, people:0,
     due_ms:0, check_in_ms:0, last_checkout_ms:now,
     arrival_type:'', arrival_plate:'',
@@ -5557,7 +5550,7 @@ async function apiAnularVenta(p, res) {
     updated_at:new Date().toISOString()
   }).eq('room_id',roomId);
   // Registrar en historial
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:userRole, user_name:userName, room_id:roomId,
     from_state:'OCCUPIED', to_state:'AVAILABLE', people:0,
@@ -5571,7 +5564,7 @@ async function apiSaveRoomBarcode(p, res) {
   const barcode = String(p.barcode||'').trim();
   if(!roomId) return err(res,'roomId requerido');
   if(!barcode) return err(res,'barcode requerido');
-  await supabase.from('rooms').update({ barcode }).eq('room_id', roomId);
+  await tUpdate('rooms',{ barcode }).eq('room_id', roomId);
   return ok(res, { roomId, barcode });
 }
 // ==================== AJUSTE DE INVENTARIO (ADMIN) ====================
@@ -6446,8 +6439,7 @@ async function apiGetMetricasMes(p, res) {
   const recepRanking = Object.values(recepMap).sort((a,b) => b.total - a.total);
 
   // 4. Ranking camareras
-  const maidLogs = await fetchAll(() => supabase.from('maid_log')
-    .select('maid_name, business_day, started_ms, finished_ms, state_to')
+  const maidLogs = await fetchAll(() => tSelect('maid_log', 'maid_name, business_day, started_ms, finished_ms, state_to')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .gt('finished_ms', 0)
