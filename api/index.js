@@ -6614,8 +6614,7 @@ async function apiGetGastosMesResumen(p, res) {
   });
 
   // 3. Descargos de Nequi del mes
-  const { data: descargos, error: errD } = await supabase.from('descargos_nequi')
-    .select('*')
+  const { data: descargos, error: errD } = await tSelect('descargos_nequi', '*')
     .eq('mes', mes)
     .order('fecha', { ascending: true });
   if(errD) return err(res, errD.message);
@@ -6995,7 +6994,7 @@ async function apiDescargarNequi(p, res) {
   const nota = String(p.nota||'').trim();
   const mes = fecha.substring(0,7);
   const now = Date.now();
-  const { data, error } = await supabase.from('descargos_nequi').insert({
+  const { data, error } = await tInsert('descargos_nequi',{
     ts_ms: now,
     fecha: fecha,
     mes: mes,
@@ -7015,11 +7014,11 @@ async function apiAnularDescargoNequi(p, res) {
   if(!userName) return err(res,'Usuario requerido');
   const descargoId = Number(p.descargoId||0);
   if(!descargoId) return err(res,'descargoId requerido');
-  const { data: descargoActual, error: errD } = await supabase.from('descargos_nequi').select('*').eq('id', descargoId).maybeSingle();
+  const { data: descargoActual, error: errD } = await tSelect('descargos_nequi','*').eq('id', descargoId).maybeSingle();
   if(errD) return err(res, errD.message);
   if(!descargoActual) return err(res,'Descargo no encontrado');
   if(descargoActual.anulada) return err(res,'Este descargo ya esta anulado');
-  const { error } = await supabase.from('descargos_nequi').update({
+  const { error } = await tUpdate('descargos_nequi',{
     anulada: true,
     anulada_ms: Date.now(),
     anulada_por: userName
@@ -7139,8 +7138,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Descargos de Nequi a efectivo (suman al efectivo)
-  const { data: descargos } = await supabase.from('descargos_nequi')
-    .select('monto, anulada')
+  const { data: descargos } = await tSelect('descargos_nequi', 'monto, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
   let totalDescargos = 0;
@@ -7345,8 +7343,7 @@ async function apiAprobarCajaEntrega(p, res) {
   if(!pin) return err(res,'PIN requerido');
 
   // Verificar PIN contra config_caja
-  const { data: cfg, error: errC } = await supabase.from('config_caja')
-    .select('value')
+  const { data: cfg, error: errC } = await tSelect('config_caja', 'value')
     .eq('key', 'pin_ruben')
     .maybeSingle();
   if(errC) return err(res, errC.message);
@@ -7748,7 +7745,7 @@ async function apiGetHistorialAjustes(p, res) {
     return err(res, 'Mes invalido (formato YYYY-MM)');
   }
 
-  let query = supabase.from('ajustes').select('*')
+  let query = tSelect('ajustes','*')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .order('ts_ms', { ascending: false });
@@ -8051,7 +8048,7 @@ async function apiAjusteInventarioV2(p, res) {
   }
 
   // ========== REGISTRAR EN TABLA AUDITABLE ==========
-  await supabase.from('ajustes').insert({
+  await tInsert('ajustes',{
     ts_ms: now,
     categoria: categoria,
     tipo: tipo,
