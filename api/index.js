@@ -1628,7 +1628,18 @@ async function apiDeleteNote(p, res) {
   if (String(p.userRole || '').toUpperCase() !== 'ADMIN') return err(res, 'Solo ADMIN');
   const noteId = Number(p.noteId || 0);
   if (!noteId) return err(res, 'noteId requerido');
-  await supabase.from('shift_notes').update({ is_deleted: true }).eq('id', noteId);
+  // Leer la foto real de la BD (no confiar en el cliente) y borrarla del storage
+  // para liberar espacio. Si falla el storage, no abortar el borrado de la nota.
+  const { data: note } = await supabase.from('shift_notes').select('photo_url').eq('id', noteId).single();
+  const photoUrl = note && note.photo_url ? String(note.photo_url) : '';
+  if (photoUrl) {
+    try {
+      const fileName = photoUrl.split('/').pop();
+      await supabase.storage.from('maid-photos').remove([fileName]);
+    } catch (e) { console.error('Error borrando foto de nota:', e); }
+  }
+  // Soft delete (conserva historial) + limpiar la URL muerta.
+  await supabase.from('shift_notes').update({ is_deleted: true, photo_url: null }).eq('id', noteId);
   return ok(res, { noteId });
 }
 
