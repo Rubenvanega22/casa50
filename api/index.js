@@ -206,6 +206,7 @@ function mapRoom(r) {
     dueMs: Number(r.due_ms || 0), lastCheckoutMs: Number(r.last_checkout_ms || 0),
     noteMinor: !!r.note_minor, noteMinorText: r.note_minor_text || '',
     disabled: !!r.disabled, disabledReason: r.disabled_reason || '', disabledDateMs: Number(r.disabled_date_ms || 0),
+    archived: !!r.archived,
     arrivalType: r.arrival_type || '', arrivalPlate: r.arrival_plate || '',
     alarmSilencedMs: Number(r.alarm_silenced_ms || 0),
     alarmSilencedForDueMs: Number(r.alarm_silenced_for_due_ms || 0),
@@ -377,6 +378,10 @@ module.exports = async function handler(req, res) {
       case 'createCategoria':        return await apiCreateCategoria(payload, res);
       case 'editCategoria':          return await apiEditCategoria(payload, res);
       case 'toggleCategoria':        return await apiToggleCategoria(payload, res);
+      case 'getRoomsAdmin':          return await apiGetRoomsAdmin(payload, res);
+      case 'createRoom':             return await apiCreateRoom(payload, res);
+      case 'editRoom':               return await apiEditRoom(payload, res);
+      case 'archiveRoom':            return await apiArchiveRoom(payload, res);
       case 'saveMotelInfo':          return await apiSaveMotelInfo(payload, res);
       case 'deleteProduct':          return await apiDeleteProduct(payload, res);
       case 'addStock':               return await apiAddStock(payload, res);
@@ -467,7 +472,7 @@ async function getMotelInfo() {
 async function apiBootstrap(req, res) {
   const now = Date.now();
   const settings = await getSettings();
-  const { data: rooms } = await supabase.from('rooms').select('*').order('floor').order('room_id');
+  const { data: rooms } = await supabase.from('rooms').select('*').eq('archived', false).order('floor').order('room_id');
   return ok(res, {
     settings, rooms: (rooms || []).map(mapRoom),
     motelInfo: await getMotelInfo(),
@@ -482,7 +487,7 @@ async function apiBootstrap(req, res) {
 }
 
 async function apiGetRooms(req, res) {
-  const { data: rooms } = await supabase.from('rooms').select('*').order('floor').order('room_id');
+  const { data: rooms } = await supabase.from('rooms').select('*').eq('archived', false).order('floor').order('room_id');
 
   // Cargar danos activos por habitacion (Fase 3 mantenimiento)
   // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
@@ -1239,6 +1244,73 @@ async function apiSetDisabled(p, res) {
   await supabase.from('rooms').update({ disabled: disableFlag, disabled_date_ms: disableFlag ? now : 0, disabled_reason: disableFlag ? reason : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
   await supabase.from('maintenance').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: userRole, user_name: String(p.userName || 'ADMIN'), room_id: roomId, type: disableFlag ? 'DISABLE' : 'ENABLE', text: disableFlag ? reason : 'HABILITADA', repair_desc: String(p.repairDesc||''), repair_cost: Number(p.repairCost||0) });
   return ok(res, { roomId, disabled: disableFlag });
+}
+
+// ==================== HABITACIONES CRUD (Configuracion, ADMIN) ====================
+// Lista TODAS las habitaciones incl. archivadas (para el editor; el editor necesita
+// poder reactivar). La grilla operativa filtra archived=false aparte.
+async function apiGetRoomsAdmin(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const { data, error } = await supabase.from('rooms').select('*').order('floor').order('room_id');
+  if(error) return err(res, error.message);
+  return ok(res, { rooms: (data||[]).map(mapRoom) });
+}
+// Valida que la categoria exista y este activa en este motel. Devuelve true/false.
+async function categoriaActiva(nombreDb) {
+  const { data } = await supabase.from('app_categorias')
+    .select('id').eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb).eq('activo', true).maybeSingle();
+  return !!data;
+}
+// Alta de habitacion. ADMIN. room_id unico + floor entero>0 + categoria activa.
+async function apiCreateRoom(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const roomId = String(p.roomId||'').trim();
+  const floor = Number(p.floor);
+  const category = String(p.category||'').trim();
+  if(!roomId) return err(res,'Número de habitación requerido');
+  if(!Number.isInteger(floor) || floor <= 0) return err(res,'Piso inválido (entero > 0)');
+  if(!category) return err(res,'Categoría requerida');
+  if(!(await categoriaActiva(category))) return err(res,'La categoría no existe o está inactiva: '+category);
+  const { data: existe } = await supabase.from('rooms').select('room_id').eq('room_id', roomId).maybeSingle();
+  if(existe) return err(res,'Ya existe una habitación con el número '+roomId);
+  const now = Date.now();
+  const { error: insErr } = await supabase.from('rooms').insert({
+    room_id: roomId, floor, category, state: 'AVAILABLE', state_since_ms: now,
+    disabled: false, archived: false, people: 0, updated_at: new Date().toISOString()
+  });
+  if(insErr) return err(res, insErr.message);
+  return ok(res, { roomId });
+}
+// Edita SOLO floor + category. room_id NO se toca (inmutable). ADMIN.
+async function apiEditRoom(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const roomId = String(p.roomId||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  const floor = Number(p.floor);
+  if(!Number.isInteger(floor) || floor <= 0) return err(res,'Piso inválido (entero > 0)');
+  const category = String(p.category||'').trim();
+  if(!category) return err(res,'Categoría requerida');
+  if(!(await categoriaActiva(category))) return err(res,'La categoría no existe o está inactiva: '+category);
+  const { data, error } = await supabase.from('rooms')
+    .update({ floor, category, updated_at: new Date().toISOString() })
+    .eq('room_id', roomId).select('room_id').maybeSingle();
+  if(error) return err(res, error.message);
+  if(!data) return err(res,'Habitación no encontrada');
+  return ok(res, { roomId, floor, category });
+}
+// Baja/alta logica (archived). Al archivar BLOQUEA si esta OCCUPIED. Nunca DELETE. ADMIN.
+async function apiArchiveRoom(p, res) {
+  if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
+  const roomId = String(p.roomId||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  const archived = p.archived === true;
+  const room = await getRoom(roomId);
+  if(!room) return err(res,'Habitación no encontrada');
+  if(archived && String(room.state) === 'OCCUPIED') return err(res,'No se puede archivar una habitación ocupada');
+  const { error } = await supabase.from('rooms')
+    .update({ archived, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  if(error) return err(res, error.message);
+  return ok(res, { roomId, archived });
 }
 
 // ITEM 9: Devolucion - descuenta solo el monto indicado
@@ -2009,7 +2081,7 @@ async function apiMaidPanel(p, res) {
   const shift = currentShiftId(now);
 
   const [roomsRes, logsRes, maidLogsRes, shiftLogRes] = await Promise.all([
-    supabase.from('rooms').select('*').order('room_id'),
+    supabase.from('rooms').select('*').eq('archived', false).order('room_id'),
     supabase.from('state_history').select('*').eq('business_day', bDay),
     supabase.from('maid_log').select('*').eq('business_day', bDay).order('ts_ms'),
     supabase.from('shift_log').select('*').eq('business_day', bDay).eq('user_role', 'MAID').in('action', ['LOGIN', 'RELOGIN'])
