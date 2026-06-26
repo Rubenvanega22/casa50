@@ -42,6 +42,55 @@ const MASTER_PRICING = {
 // bootstrap llama con {force:true} para reflejar cambios sin redeploy. Si la
 // tabla falla -> fallback global a MASTER_PRICING.
 const MOTEL_ID = process.env.MOTEL_ID || '24992a8a-48d8-4444-a50f-2d6c7d949828';
+
+// ==================== ACCESO MULTI-TENANT (Fase 3) ====================
+// Helpers que inyectan MOTEL_ID automaticamente en las tablas TENANT (las que
+// tienen columna motel_id). Garantizan el aislamiento sin depender de recordar
+// el filtro en cada query. Las tablas NO tenant (app_moteles, app_reservas,
+// app_usuarios, admin_pins/reception_pins/maintenance_pins, settings) pasan sin
+// tocar. Devuelven el query builder para seguir encadenando (.eq/.order/.single/etc.).
+// NOTA: la migracion de call-sites a estos helpers se hace por tandas (Fase 3);
+// hasta que un call-site se migre, sigue usando supabase.from(...) directo.
+const TENANT_TABLES = new Set([
+  'aire_mantenimiento','aire_rondas','aire_unidades','ajustes','app_categorias',
+  'app_fotos','app_motel_admins','bar_sales','caja_paola','cierre_mes','config_caja',
+  'cortesias','descargos_nequi','extra_staff','gastos_mes','general_expenses','loans',
+  'login_failures','luciana_chats','maid_log','maintenance','maintenance_bitacora',
+  'mantenimiento_solicitudes','mantenimiento_tareas','mantenimiento_zonas_comunes',
+  'motel_info','payment_method_changes','product_shift_obs','products','proyeccion_meses',
+  'proyeccion_tareas','retiros_dueno','room_issues','room_products','rooms','sales',
+  'schedule','schedule_extras','shift_close','shift_failures','shift_inventory_start',
+  'shift_log','shift_notes','staff','staff_vacaciones_historial','state_history','stock_entries',
+  'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales'
+]);
+
+// SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
+function tSelect(table, cols, opts){
+  let q = supabase.from(table).select(cols, opts);
+  if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
+  return q;
+}
+// INSERT scopeado: fuerza motel_id=MOTEL_ID en cada fila de tablas tenant.
+function tInsert(table, rows){
+  if (TENANT_TABLES.has(table)) {
+    rows = Array.isArray(rows) ? rows.map(r => ({ ...r, motel_id: MOTEL_ID }))
+                               : { ...rows, motel_id: MOTEL_ID };
+  }
+  return supabase.from(table).insert(rows);
+}
+// UPDATE scopeado por motel. El caller sigue encadenando .eq(...).
+function tUpdate(table, patch){
+  let q = supabase.from(table).update(patch);
+  if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
+  return q;
+}
+// DELETE scopeado por motel. El caller sigue encadenando .eq(...).
+function tDelete(table){
+  let q = supabase.from(table).delete();
+  if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
+  return q;
+}
+
 const PRICING_CACHE = {}; // { [motelId]: { data, ms } }
 const PRICING_TTL_MS = 5 * 60 * 1000;
 const PRECIO_KEYS = { '3h': 'h3', '6h': 'h6', '8h': 'h8', '12h': 'h12' };
@@ -194,7 +243,7 @@ async function getSettings() {
   return map;
 }
 async function getRoom(roomId) {
-  const { data } = await supabase.from('rooms').select('*').eq('room_id', roomId).single();
+  const { data } = await tSelect('rooms','*').eq('room_id', roomId).single();
   return data;
 }
 
@@ -225,7 +274,7 @@ function mapRoom(r) {
 // Se usa para consultas de rangos largos (ej: mes completo) donde Supabase
 // corta por defecto a 1000 filas aunque pidas mas con .range().
 //
-// Uso: const sales = await fetchAll(() => supabase.from('sales').select('...').like('business_day', '2026-04%'));
+// Uso: const sales = await fetchAll(() => tSelect('sales','...').like('business_day', '2026-04%'));
 async function fetchAll(queryBuilder, batchSize = 1000) {
   const all = [];
   let from = 0;
@@ -457,8 +506,7 @@ function motelInfoFallback() {
 }
 async function getMotelInfo() {
   try {
-    const { data, error } = await supabase.from('motel_info')
-      .select(MOTEL_INFO_FIELDS).eq('motel_id', MOTEL_ID).maybeSingle();
+    const { data, error } = await tSelect('motel_info', MOTEL_INFO_FIELDS).maybeSingle();
     if (error) throw error;
     if (!data) throw new Error('motel_info sin fila para ' + MOTEL_ID);
     return data;
@@ -472,7 +520,7 @@ async function getMotelInfo() {
 async function apiBootstrap(req, res) {
   const now = Date.now();
   const settings = await getSettings();
-  const { data: rooms } = await supabase.from('rooms').select('*').eq('archived', false).order('floor').order('room_id');
+  const { data: rooms } = await tSelect('rooms','*').eq('archived', false).order('floor').order('room_id');
   return ok(res, {
     settings, rooms: (rooms || []).map(mapRoom),
     motelInfo: await getMotelInfo(),
@@ -487,13 +535,12 @@ async function apiBootstrap(req, res) {
 }
 
 async function apiGetRooms(req, res) {
-  const { data: rooms } = await supabase.from('rooms').select('*').eq('archived', false).order('floor').order('room_id');
+  const { data: rooms } = await tSelect('rooms','*').eq('archived', false).order('floor').order('room_id');
 
   // Cargar danos activos por habitacion (Fase 3 mantenimiento)
   // Estados que activan el bombillito (PENDIENTE_RECEPCION queda para Fase 6)
   const estadosBombillito = ['NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
-  const { data: danos } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url, revisiones')
+  const { data: danos } = await tSelect('room_issues', 'id, ubicacion_id, prioridad, estado, description, reportado_ms, created_by, arreglado_por, arreglado_ms, arreglo_nota, foto_arreglo_url, revisiones')
     .eq('anulada', false)
     .eq('ubicacion_tipo', 'habitacion')
     .in('estado', estadosBombillito);
@@ -557,7 +604,7 @@ async function apiLogin(p, res) {
     const nowHour = new Date(now + (-5*3600000)).getUTCHours();
     // Solo verificar si estamos en la madrugada (0am-6am)
     if(nowHour >= 0 && nowHour < 6){
-      const{data:logoutT3}=await supabase.from('shift_log').select('id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+      const{data:logoutT3}=await tSelect('shift_log','id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
       if(logoutT3&&logoutT3.length){
         const logoutHour = new Date(Number(logoutT3[0].ts_ms) + (-5*3600000)).getUTCHours();
         // Solo cambia a SHIFT_1 si el logout fue tambien en la madrugada
@@ -576,12 +623,10 @@ async function apiLogin(p, res) {
     // snapshot con el stock de la mañana (bug del agua del 29-may).
     else if(nowHour >= 6 && nowHour < 17){
       const prevBDay = previousBusinessDay(bDay);
-      const { data: prevT3Login } = await supabase.from('shift_log')
-        .select('id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
+      const { data: prevT3Login } = await tSelect('shift_log', 'id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
         .in('action',['LOGIN','RELOGIN']).limit(1);
       if(prevT3Login && prevT3Login.length){
-        const { data: prevT3Logout } = await supabase.from('shift_log')
-          .select('id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
+        const { data: prevT3Logout } = await tSelect('shift_log', 'id').eq('business_day', prevBDay).eq('shift_id','SHIFT_3')
           .eq('action','LOGOUT').limit(1);
         if(!prevT3Logout || !prevT3Logout.length){
           // El turno noche de ayer sigue abierto → este login lo continúa.
@@ -598,7 +643,7 @@ async function apiLogin(p, res) {
   if(shift==='SHIFT_1'){
     const nowHour = new Date(now + (-5*3600000)).getUTCHours();
     if(nowHour >= 0 && nowHour < 6){
-      const{data:logoutT3b}=await supabase.from('shift_log').select('id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
+      const{data:logoutT3b}=await tSelect('shift_log','id,ts_ms').eq('business_day',bDay).eq('shift_id','SHIFT_3').eq('action','LOGOUT').limit(1);
       if(logoutT3b && logoutT3b.length){
         const logoutHourB = new Date(Number(logoutT3b[0].ts_ms) + (-5*3600000)).getUTCHours();
         if(logoutHourB >= 0 && logoutHourB < 6){
@@ -615,8 +660,7 @@ async function apiLogin(p, res) {
   if (!userName && userRole !== 'MAINTENANCE') return err(res, 'Nombre requerido');
 
   const tenMinsAgo = now - 10 * 60 * 1000;
-  const { data: fails } = await supabase.from('login_failures')
-    .select('ts_ms').eq('user_name', userName.toLowerCase()).eq('user_role', userRole)
+  const { data: fails } = await tSelect('login_failures', 'ts_ms').eq('user_name', userName.toLowerCase()).eq('user_role', userRole)
     .gt('ts_ms', tenMinsAgo).order('ts_ms', { ascending: false });
   if (fails && fails.length >= 3) {
     const wait = Math.ceil((Number(fails[0].ts_ms) + 5 * 60 * 1000 - now) / 60000);
@@ -640,24 +684,24 @@ async function apiLogin(p, res) {
       const settings = await getSettings();
       const expected = String(settings.ADMIN_CODE || '2206');
       if (String(p.adminCode || '') !== expected) {
-        await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
+        await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'ADMIN', ip: '' });
         return err(res, 'PIN de administrador incorrecto.');
       }
       adminName = userName;
       verLuciana = true;
     }
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: adminName, action: 'LOGIN' });
+    await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: adminName, action: 'LOGIN' });
     return ok(res, { session: { userName: adminName, userRole: 'ADMIN', verLuciana: verLuciana, shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'RECEPTION') {
     const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
     if (!pinRow) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
+      await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'Recepcionista no autorizada. Contacte al administrador.');
     }
     if (String(p.userPin || '') !== String(pinRow.pin || '')) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
+      await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
 
@@ -671,8 +715,7 @@ async function apiLogin(p, res) {
       const prevBDay = shift === 'SHIFT_1' ? businessDay(now - 86400000) : bDay;
 
       // Ver si el turno anterior tuvo login (hubo recepcionista)
-      const { data: prevLogin } = await supabase.from('shift_log')
-        .select('user_name')
+      const { data: prevLogin } = await tSelect('shift_log', 'user_name')
         .eq('business_day', prevBDay)
         .eq('shift_id', prevShiftId)
         .eq('user_role', 'RECEPTION')
@@ -681,8 +724,7 @@ async function apiLogin(p, res) {
         .limit(1);
 
       if(prevLogin && prevLogin.length) {
-        const { data: prevReleased } = await supabase.from('shift_log')
-          .select('id')
+        const { data: prevReleased } = await tSelect('shift_log', 'id')
           .eq('business_day', prevBDay)
           .eq('shift_id', prevShiftId)
           .eq('action', 'LOGOUT')
@@ -692,8 +734,7 @@ async function apiLogin(p, res) {
         if(!prevReleased || !prevReleased.length) {
           if(userName.toLowerCase() !== prevLogin[0].user_name.toLowerCase()) {
             // Verificar si el nuevo turno ya fue abierto (nueva logica)
-            const { data: newShiftOpen } = await supabase.from('shift_log')
-              .select('id')
+            const { data: newShiftOpen } = await tSelect('shift_log', 'id')
               .eq('business_day', bDay)
               .eq('shift_id', shift)
               .eq('user_role', 'RECEPTION')
@@ -709,19 +750,19 @@ async function apiLogin(p, res) {
       }
     }
 
-    const { data: existing } = await supabase.from('shift_log').select('user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
+    const { data: existing } = await tSelect('shift_log','user_name').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGIN').order('ts_ms').limit(1).single();
     if (existing && existing.user_name.toLowerCase() !== userName.toLowerCase()) {
-      const { data: logout } = await supabase.from('shift_log').select('id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
+      const { data: logout } = await tSelect('shift_log','id').eq('business_day', bDay).eq('shift_id', shift).eq('user_role', 'RECEPTION').eq('action', 'LOGOUT').limit(1);
     if (!logout || !logout.length) {
         // No bloquear — permitir reingreso
       }
     }
- await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
+ await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, action: existing ? 'RELOGIN' : 'LOGIN' });
     if(!existing) {
       // Primer login del turno → congelar snapshot de inventario inicial (inmutable).
       await capturarSnapshotInventarioInicial(bDay, shift, userName, now);
     }
-    const { data: lastLogout } = await supabase.from('shift_log').select('logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
+    const { data: lastLogout } = await tSelect('shift_log','logout_ms').eq('business_day', bDay).eq('shift_id', shift).eq('action', 'LOGOUT').order('ts_ms', { ascending: false }).limit(1);
     const fromMs = lastLogout && lastLogout.length ? Number(lastLogout[0].logout_ms || 0) : 0;
     return ok(res, { session: { userName, userRole: 'RECEPTION', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now, fromMs } });
   }
@@ -734,18 +775,18 @@ async function apiLogin(p, res) {
     const { data: pinRows } = await supabase.from('maintenance_pins').select('user_name, active').eq('pin', userPin).limit(1);
     const pinRow = (pinRows && pinRows.length) ? pinRows[0] : null;
     if (!pinRow) {
-      await supabase.from('login_failures').insert({ ts_ms: now, user_name: 'maintenance', user_role: 'MAINTENANCE', ip: '' });
+      await tInsert('login_failures',{ ts_ms: now, user_name: 'maintenance', user_role: 'MAINTENANCE', ip: '' });
       return err(res, 'PIN incorrecto.');
     }
     if (pinRow.active === false) return err(res, 'Mantenedor inactivo.');
     const canonicalName = pinRow.user_name;
     // Sin verificacion de turno (mantenedor no tiene turnos)
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: canonicalName, action: 'LOGIN' });
+    await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAINTENANCE', user_name: canonicalName, action: 'LOGIN' });
     return ok(res, { session: { userName: canonicalName, userRole: 'MAINTENANCE', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
   if (userRole === 'MAID') {
-    await supabase.from('shift_log').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAID', user_name: userName, action: 'LOGIN' });
+    await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'MAID', user_name: userName, action: 'LOGIN' });
     return ok(res, { session: { userName, userRole: 'MAID', shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
   }
 
@@ -811,7 +852,7 @@ async function apiCheckIn(p, res) {
   const mixtoTj = Number(p.mixtoTj || 0);
   const mixtoNq = Number(p.mixtoNq || 0);
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: now, due_ms: dueMs,
     arrival_type: arrivalType, arrival_plate: arrivalPlate,
@@ -821,7 +862,7 @@ async function apiCheckIn(p, res) {
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'SALE',
     room_id: roomId, category: room.category, duration_hrs: durationHrs,
@@ -837,7 +878,7 @@ async function apiCheckIn(p, res) {
     check_in_ms: now, due_ms: dueMs
   });
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, room_id: roomId,
     from_state: 'AVAILABLE', to_state: 'OCCUPIED', people,
@@ -869,7 +910,7 @@ async function apiCheckOut(p, res) {
     return res.status(200).json({ ok: false, warning: true, minsLeft, message: `Hay ${minsLeft} min pagados aun. Confirmar checkout?` });
   }
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'DIRTY', state_since_ms: now, people: 0,
     due_ms: 0, last_checkout_ms: now,
     arrival_type: '', arrival_plate: '',
@@ -879,7 +920,7 @@ async function apiCheckOut(p, res) {
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, room_id: roomId,
     from_state: 'OCCUPIED', to_state: 'DIRTY', people: 0,
@@ -888,8 +929,7 @@ async function apiCheckOut(p, res) {
 
   const checkInMs = Number(room.check_in_ms || 0);
   if (checkInMs > 0) {
-    await supabase.from('sales')
-      .update({ checkout_ms: now })
+    await tUpdate('sales', { checkout_ms: now })
       .eq('room_id', roomId)
       .eq('type', 'SALE')
       .eq('check_in_ms', checkInMs);
@@ -900,8 +940,7 @@ async function apiCheckOut(p, res) {
   // así que el helper bloqueará sin problema (no rechaza por OCCUPIED). Cualquier
   // error acá se loggea pero NO se propaga — el checkout no debe fallar por esto.
   try {
-    const { data: urgentes } = await supabase.from('room_issues')
-      .select('id, description')
+    const { data: urgentes } = await tSelect('room_issues', 'id, description')
       .eq('anulada', false)
       .eq('ubicacion_tipo', 'habitacion')
       .eq('ubicacion_id', roomId)
@@ -942,8 +981,8 @@ async function apiExtendTime(p, res) {
   const newDueMs = Number(room.due_ms || now) + extraHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
   const note = noteIn;
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({
+  await tUpdate('rooms',{ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'EXTENSION',
     room_id: roomId, category: room.category, duration_hrs: extraHrs,
@@ -963,16 +1002,15 @@ async function apiHoraGratis(p, res) {
   if(!room) return err(res, 'Habitacion no existe');
   if(room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
   const checkInMs = Number(room.check_in_ms || 0);
-  const { data: existing } = await supabase.from('sales')
-    .select('id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
+  const { data: existing } = await tSelect('sales', 'id').eq('room_id', roomId).eq('type', 'HORA_GRATIS')
     .gte('check_in_ms', checkInMs).limit(1);
   if(existing && existing.length) return err(res, 'Ya se obsequio la hora gratis para esta habitacion');
   const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const userName = String(p.userName || '').trim();
   const newDueMs = Number(room.due_ms || now) + 3600000;
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
+  await tUpdate('rooms',{ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tInsert('sales',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName, type: 'HORA_GRATIS', room_id: roomId, category: room.category, total: 0, pay_method: 'EFECTIVO', check_in_ms: checkInMs });
   return ok(res, { roomId, newDueMs });
 }
 
@@ -998,8 +1036,8 @@ async function apiRenewTime(p, res) {
   const newDueMs = Number(room.due_ms || now) + durationHrs * 3600000;
   const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
 
-  await supabase.from('rooms').update({ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('sales').insert({
+  await tUpdate('rooms',{ due_ms: newDueMs, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'RENEWAL',
     room_id: roomId, category: room.category, duration_hrs: durationHrs,
@@ -1016,7 +1054,7 @@ async function apiSilenceAlarm(p, res) {
   const roomId = String(p.roomId || '').trim();
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({ alarm_silenced_ms: Date.now(), alarm_silenced_for_due_ms: Number(room.due_ms || 0), updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tUpdate('rooms',{ alarm_silenced_ms: Date.now(), alarm_silenced_for_due_ms: Number(room.due_ms || 0), updated_at: new Date().toISOString() }).eq('room_id', roomId);
   return ok(res, { roomId });
 }
 
@@ -1033,11 +1071,11 @@ async function apiMaidTake(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED' && !room.retoque) return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
   if(room.retoque){
-    await supabase.from('rooms').update({retoque:false,state:'AVAILABLE',state_since_ms:now,updated_at:new Date().toISOString()}).eq('room_id',roomId);
+    await tUpdate('rooms',{retoque:false,state:'AVAILABLE',state_since_ms:now,updated_at:new Date().toISOString()}).eq('room_id',roomId);
     return ok(res,{roomId,maidName,startedMs:now,retoque:true});
   }
 
-  await supabase.from('maid_log').insert({
+  await tInsert('maid_log',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: roomId,
     action: 'START', state: room.state, note: '',
@@ -1047,7 +1085,7 @@ async function apiMaidTake(p, res) {
     checkout_ms: Number(room.last_checkout_ms || 0),
     category: String(room.category || '')
   });
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     maid_in_progress: true,
     maid_name_progress: maidName,
     updated_at: new Date().toISOString()
@@ -1070,8 +1108,7 @@ async function apiMaidFinish(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'DIRTY' && room.state !== 'CONTAMINATED') return err(res, 'Hab debe estar SUCIA o CONTAMINADA');
 
-  const { data: openLog } = await supabase.from('maid_log')
-    .select('id, started_ms, ts_ms')
+  const { data: openLog } = await tSelect('maid_log', 'id, started_ms, ts_ms')
     .eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay)
     .eq('action', 'START').eq('finished_ms', 0)
     .order('ts_ms', { ascending: false }).limit(1);
@@ -1081,7 +1118,7 @@ async function apiMaidFinish(p, res) {
   const dirtyMins = lastCheckoutMs ? Math.max(0, Math.round((now - lastCheckoutMs) / 60000)) : 0;
   const cleanMins = Math.max(0, Math.round((now - startedMs) / 60000));
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: resultState, state_since_ms: now,
     last_maid_name: maidName, last_maid_done_ms: now,
     contaminated_since_ms: resultState === 'CONTAMINATED' ? now : 0,
@@ -1091,7 +1128,7 @@ async function apiMaidFinish(p, res) {
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'MAID', user_name: maidName, room_id: roomId,
     from_state: room.state, to_state: resultState, people: 0,
@@ -1100,14 +1137,14 @@ async function apiMaidFinish(p, res) {
 
   if (openLog && openLog.length) {
     if(resultState !== 'CONTAMINATED'){
-      await supabase.from('maid_log').update({
+      await tUpdate('maid_log',{
         action: 'FINISH', finished_ms: now, state_to: resultState,
         note: p.note || ''
       }).eq('id', openLog[0].id);
     }
   } else {
     if(resultState !== 'CONTAMINATED'){
-      await supabase.from('maid_log').insert({
+      await tInsert('maid_log',{
         ts_ms: now, business_day: bDay, shift_id: shift,
         maid_name: maidName, room_id: roomId,
         action: 'FINISH', state: resultState, note: p.note || '',
@@ -1126,7 +1163,7 @@ async function apiMaidLogAction(p, res) {
   const shift = currentShiftId(now);
   const maidName = String(p.maidName || p.userName || '').trim();
   if (!maidName) return err(res, 'Nombre requerido');
-  await supabase.from('maid_log').insert({
+  await tInsert('maid_log',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     maid_name: maidName, room_id: String(p.roomId || ''),
     action: String(p.action || ''), state: String(p.state || ''), note: String(p.note || ''),
@@ -1140,13 +1177,13 @@ async function apiMaidMarkExit(p, res) {
   const bDay = businessDay(now);
   const maidName = String(p.maidName || '').trim();
   const roomId = String(p.roomId || '').trim();
-  await supabase.from('maid_log').update({ finished_ms: now }).eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay).eq('finished_ms', 0);
+  await tUpdate('maid_log',{ finished_ms: now }).eq('maid_name', maidName).eq('room_id', roomId).eq('business_day', bDay).eq('finished_ms', 0);
   return ok(res, { exitMs: now });
 }
 
 async function apiGetMaidLog(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('maid_log').select('*').eq('business_day', bDay).order('ts_ms');
+  const { data } = await tSelect('maid_log','*').eq('business_day', bDay).order('ts_ms');
   return ok(res, {
     logs: (data || []).map(r => ({
       id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id,
@@ -1172,27 +1209,26 @@ async function apiClearContaminated(p, res) {
   if (!room) return err(res, 'Habitacion no existe');
   if (room.state !== 'CONTAMINATED') return err(res, 'Solo si CONTAMINADA');
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'AVAILABLE', state_since_ms: now, contaminated_since_ms: 0,
     maid_in_progress: false, maid_name_progress: '',
     updated_at: new Date().toISOString()
   }).eq('room_id', roomId);
 
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: p.userRole||'RECEPTION', user_name: userName, room_id: roomId,
     from_state: 'CONTAMINATED', to_state: 'AVAILABLE', people: 0,
     meta_json: JSON.stringify({action:'clearContaminated', maidName: userName})
   });
 
-  const { data: openLog } = await supabase.from('maid_log')
-    .select('id, started_ms')
+  const { data: openLog } = await tSelect('maid_log', 'id, started_ms')
     .eq('room_id', roomId).eq('business_day', bDay)
     .eq('action', 'START').eq('finished_ms', 0)
     .order('ts_ms', { ascending: false }).limit(1);
 
   if (openLog && openLog.length) {
-    await supabase.from('maid_log').update({
+    await tUpdate('maid_log',{
       action: 'FINISH', finished_ms: now, state_to: 'AVAILABLE',
       note: p.note || '',
       check_in_ms: Number(room.check_in_ms || 0),
@@ -1200,7 +1236,7 @@ async function apiClearContaminated(p, res) {
       category: String(room.category || '')
     }).eq('id', openLog[0].id);
   } else {
-    await supabase.from('maid_log').insert({
+    await tInsert('maid_log',{
       ts_ms: now, business_day: bDay, shift_id: shift,
       maid_name: userName, room_id: roomId,
       action: 'FINISH', state: 'AVAILABLE', note: '',
@@ -1221,7 +1257,7 @@ async function apiSetMinorNote(p, res) {
   const text = String(p.text || '').trim();
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     note_minor: enabled,
     note_minor_text: enabled ? text : '',
     updated_at: new Date().toISOString()
@@ -1241,8 +1277,8 @@ async function apiSetDisabled(p, res) {
   if (disableFlag && reason.length < 3) return err(res, 'Motivo obligatorio');
   const room = await getRoom(roomId);
   if (!room) return err(res, 'Habitacion no existe');
-  await supabase.from('rooms').update({ disabled: disableFlag, disabled_date_ms: disableFlag ? now : 0, disabled_reason: disableFlag ? reason : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
-  await supabase.from('maintenance').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_role: userRole, user_name: String(p.userName || 'ADMIN'), room_id: roomId, type: disableFlag ? 'DISABLE' : 'ENABLE', text: disableFlag ? reason : 'HABILITADA', repair_desc: String(p.repairDesc||''), repair_cost: Number(p.repairCost||0) });
+  await tUpdate('rooms',{ disabled: disableFlag, disabled_date_ms: disableFlag ? now : 0, disabled_reason: disableFlag ? reason : '', updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tInsert('maintenance',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: userRole, user_name: String(p.userName || 'ADMIN'), room_id: roomId, type: disableFlag ? 'DISABLE' : 'ENABLE', text: disableFlag ? reason : 'HABILITADA', repair_desc: String(p.repairDesc||''), repair_cost: Number(p.repairCost||0) });
   return ok(res, { roomId, disabled: disableFlag });
 }
 
@@ -1251,14 +1287,13 @@ async function apiSetDisabled(p, res) {
 // poder reactivar). La grilla operativa filtra archived=false aparte.
 async function apiGetRoomsAdmin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const { data, error } = await supabase.from('rooms').select('*').order('floor').order('room_id');
+  const { data, error } = await tSelect('rooms','*').order('floor').order('room_id');
   if(error) return err(res, error.message);
   return ok(res, { rooms: (data||[]).map(mapRoom) });
 }
 // Valida que la categoria exista y este activa en este motel. Devuelve true/false.
 async function categoriaActiva(nombreDb) {
-  const { data } = await supabase.from('app_categorias')
-    .select('id').eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb).eq('activo', true).maybeSingle();
+  const { data } = await tSelect('app_categorias', 'id').eq('nombre_db', nombreDb).eq('activo', true).maybeSingle();
   return !!data;
 }
 // Alta de habitacion. ADMIN. room_id unico + floor entero>0 + categoria activa.
@@ -1271,10 +1306,10 @@ async function apiCreateRoom(p, res) {
   if(!Number.isInteger(floor) || floor <= 0) return err(res,'Piso inválido (entero > 0)');
   if(!category) return err(res,'Categoría requerida');
   if(!(await categoriaActiva(category))) return err(res,'La categoría no existe o está inactiva: '+category);
-  const { data: existe } = await supabase.from('rooms').select('room_id').eq('room_id', roomId).maybeSingle();
+  const { data: existe } = await tSelect('rooms','room_id').eq('room_id', roomId).maybeSingle();
   if(existe) return err(res,'Ya existe una habitación con el número '+roomId);
   const now = Date.now();
-  const { error: insErr } = await supabase.from('rooms').insert({
+  const { error: insErr } = await tInsert('rooms',{
     room_id: roomId, floor, category, state: 'AVAILABLE', state_since_ms: now,
     disabled: false, archived: false, people: 0, updated_at: new Date().toISOString()
   });
@@ -1291,8 +1326,7 @@ async function apiEditRoom(p, res) {
   const category = String(p.category||'').trim();
   if(!category) return err(res,'Categoría requerida');
   if(!(await categoriaActiva(category))) return err(res,'La categoría no existe o está inactiva: '+category);
-  const { data, error } = await supabase.from('rooms')
-    .update({ floor, category, updated_at: new Date().toISOString() })
+  const { data, error } = await tUpdate('rooms', { floor, category, updated_at: new Date().toISOString() })
     .eq('room_id', roomId).select('room_id').maybeSingle();
   if(error) return err(res, error.message);
   if(!data) return err(res,'Habitación no encontrada');
@@ -1307,8 +1341,7 @@ async function apiArchiveRoom(p, res) {
   const room = await getRoom(roomId);
   if(!room) return err(res,'Habitación no encontrada');
   if(archived && String(room.state) === 'OCCUPIED') return err(res,'No se puede archivar una habitación ocupada');
-  const { error } = await supabase.from('rooms')
-    .update({ archived, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  const { error } = await tUpdate('rooms', { archived, updated_at: new Date().toISOString() }).eq('room_id', roomId);
   if(error) return err(res, error.message);
   return ok(res, { roomId, archived });
 }
@@ -1325,7 +1358,7 @@ async function apiRefund(p, res) {
   if (reason.length < 3) return err(res, 'Motivo obligatorio');
   const room = await getRoom(roomId);
   // Insertar devolucion como venta negativa - se descuenta del cuadre automaticamente
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
     room_id: roomId, category: room ? room.category : '',
@@ -1342,7 +1375,7 @@ async function apiTaxi(p, res) {
   const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const roomId = String(p.roomId || '').trim();
-  const { data } = await supabase.from('taxi_expenses').insert({
+  const { data } = await tInsert('taxi_expenses',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: String(p.userName || ''),
     amount: 3000, note: 'Taxi fijo', room_id: roomId
@@ -1359,12 +1392,12 @@ async function apiDeleteTaxi(p, res) {
   const userName = String(p.userName || '').trim();
   if(!id) return err(res, 'id requerido');
   if(!motivo || motivo.length < 5) return err(res, 'Motivo requerido (min 5 caracteres)');
-  const { data: taxi, error: errTaxi } = await supabase.from('taxi_expenses').select('*').eq('id', id).maybeSingle();
+  const { data: taxi, error: errTaxi } = await tSelect('taxi_expenses','*').eq('id', id).maybeSingle();
   if(errTaxi) return err(res, errTaxi.message);
   if(!taxi) return err(res, 'Taxi no encontrado');
   if(taxi.anulada) return err(res, 'Este taxi ya está anulado');
   const now = Date.now();
-  await supabase.from('taxi_expenses').update({
+  await tUpdate('taxi_expenses',{
     anulada: true,
     anulada_ms: now,
     anulada_por: userName,
@@ -1381,8 +1414,7 @@ async function apiListTaxisTurno(p, res) {
   const shiftId = String(p.shiftId || '').trim();
   if(!businessDay_) return err(res, 'businessDay requerido');
   if(!shiftId) return err(res, 'shiftId requerido');
-  const { data, error } = await supabase.from('taxi_expenses')
-    .select('*')
+  const { data, error } = await tSelect('taxi_expenses', '*')
     .eq('business_day', businessDay_)
     .eq('shift_id', shiftId)
     .order('ts_ms');
@@ -1399,13 +1431,13 @@ async function apiAddLoan(p, res) {
   const amount = Number(p.amount || 0);
   if (!borrowerName) return err(res, 'Nombre requerido');
   if (amount <= 0) return err(res, 'Monto invalido');
-  await supabase.from('loans').insert({ ts_ms: now, business_day: bDay, shift_id: shift, user_name: String(p.userName || ''), borrower_name: borrowerName, amount, note: String(p.note || '') });
+  await tInsert('loans',{ ts_ms: now, business_day: bDay, shift_id: shift, user_name: String(p.userName || ''), borrower_name: borrowerName, amount, note: String(p.note || '') });
   return ok(res, {});
 }
 
 async function apiGetLoans(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
+  const { data } = await tSelect('loans','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
   return ok(res, { loans: (data || []).map(r => ({ tsMs: Number(r.ts_ms), shiftId: r.shift_id, userName: r.user_name, borrowerName: r.borrower_name, amount: Number(r.amount), note: r.note })) });
 }
 
@@ -1420,7 +1452,7 @@ async function apiRegisterExtra(p, res) {
   const scheduledExitMs = Number(p.scheduledExitMs || 0);
   const workHours = Number(p.workHours || 0);
   if (!personName) return err(res, 'Nombre requerido');
-  await supabase.from('extra_staff').insert({
+  await tInsert('extra_staff',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     registered_by: String(p.userName || ''),
     person_name: personName, entry_ms: entryMs,
@@ -1440,7 +1472,7 @@ async function apiUpdateExtra(p, res) {
   const workHours = Number(p.workHours || 0);
   const shift = String(p.shiftId || '');
   if (!personName) return err(res, 'Nombre requerido');
-  await supabase.from('extra_staff').update({
+  await tUpdate('extra_staff',{
     person_name: personName, area, entry_ms: entryMs,
     scheduled_exit_ms: scheduledExitMs, work_hours: workHours,
     shift_id: shift
@@ -1456,12 +1488,12 @@ async function apiDeleteExtra(p, res) {
   const userName = String(p.userName || '').trim();
   if(!id) return err(res, 'ID requerido');
   if(!motivo || motivo.length < 5) return err(res, 'Motivo requerido (min 5 caracteres)');
-  const { data: extra, error: errExtra } = await supabase.from('extra_staff').select('*').eq('id', id).maybeSingle();
+  const { data: extra, error: errExtra } = await tSelect('extra_staff','*').eq('id', id).maybeSingle();
   if(errExtra) return err(res, errExtra.message);
   if(!extra) return err(res, 'Personal extra no encontrado');
   if(extra.anulada) return err(res, 'Este personal extra ya está anulado');
   const now = Date.now();
-  await supabase.from('extra_staff').update({
+  await tUpdate('extra_staff',{
     anulada: true,
     anulada_ms: now,
     anulada_por: userName,
@@ -1478,8 +1510,7 @@ async function apiListExtrasTurno(p, res) {
   const shiftId = String(p.shiftId || '').trim();
   if(!businessDay_) return err(res, 'businessDay requerido');
   if(!shiftId) return err(res, 'shiftId requerido');
-  const { data, error } = await supabase.from('extra_staff')
-    .select('*')
+  const { data, error } = await tSelect('extra_staff', '*')
     .eq('business_day', businessDay_)
     .eq('shift_id', shiftId)
     .order('ts_ms');
@@ -1496,16 +1527,16 @@ async function apiCheckoutExtra(p, res) {
   if (!personName) return err(res, 'Nombre requerido');
   if (payment <= 0) return err(res, 'Pago requerido');
 
-  const { data } = await supabase.from('extra_staff').select('id').eq('person_name', personName).eq('active', true).order('ts_ms', { ascending: false }).limit(1);
+  const { data } = await tSelect('extra_staff','id').eq('person_name', personName).eq('active', true).order('ts_ms', { ascending: false }).limit(1);
   if (!data || !data.length) return err(res, `No se encontro "${personName}" activo`);
 
-  await supabase.from('extra_staff').update({ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy }).eq('id', data[0].id);
+  await tUpdate('extra_staff',{ exit_ms: exitMs, payment, active: false, paid_ms: now, paid_by: paidBy }).eq('id', data[0].id);
   return ok(res, { personName, payment, paidBy });
 }
 
 async function apiGetExtra(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('extra_staff').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
+  const { data } = await tSelect('extra_staff','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms');
   return ok(res, {
     extraStaff: (data || []).map(r => ({
       id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id,
@@ -1531,7 +1562,7 @@ async function apiReviewNote(p, res) {
       await supabase.storage.from('maid-photos').remove([fileName]);
     } catch(e) { console.error('Error borrando foto:', e); }
   }
-  await supabase.from('shift_notes').update({photo_url: null}).eq('id', noteId);
+  await tUpdate('shift_notes',{photo_url: null}).eq('id', noteId);
   return ok(res, {});
 }
 
@@ -1542,7 +1573,7 @@ async function apiAddNote(p, res) {
   const target = String(p.target || 'ALL').toUpperCase();
   let photoUrl = null;
   if(p.photoUrl){ photoUrl = String(p.photoUrl); }
-  await supabase.from('shift_notes').insert({
+  await tInsert('shift_notes',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: String(p.userRole || ''), user_name: String(p.userName || ''),
     note: String(p.note || ''), target,
@@ -1569,8 +1600,7 @@ async function apiAddNoteReply(p, res) {
 
   const fotoUrl = String(p.fotoUrl || '').trim() || null;
 
-  const { data: note } = await supabase.from('shift_notes')
-    .select('id, is_deleted, respuestas').eq('id', noteId).single();
+  const { data: note } = await tSelect('shift_notes', 'id, is_deleted, respuestas').eq('id', noteId).single();
   if(!note) return err(res, 'Nota no encontrada');
   if(note.is_deleted) return err(res, 'Nota borrada');
 
@@ -1578,13 +1608,13 @@ async function apiAddNoteReply(p, res) {
   const nueva = { ts: Date.now(), por: userName, rol: userRole, texto: texto, fotoUrl: fotoUrl };
   const nuevas = prev.concat([nueva]);
 
-  await supabase.from('shift_notes').update({ respuestas: nuevas }).eq('id', noteId);
+  await tUpdate('shift_notes',{ respuestas: nuevas }).eq('id', noteId);
   return ok(res, { noteId: noteId, respuestas: nuevas });
 }
 
 async function apiGetNotes(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
-  const { data } = await supabase.from('shift_notes').select('*')
+  const { data } = await tSelect('shift_notes','*')
     .eq('business_day', bDay).eq('is_deleted', false).eq('pasado_a_mantenimiento', false)
     .order('ts_ms', { ascending: false }).limit(100);
   return ok(res, { notes: (data || []).map(r => ({
@@ -1600,12 +1630,12 @@ async function apiMarkNoteSeen(p, res) {
   const noteId = Number(p.noteId || 0);
   const userRole = String(p.userRole || '').toUpperCase();
   if (!noteId) return err(res, 'noteId requerido');
-  const { data } = await supabase.from('shift_notes').select('seen_by').eq('id', noteId).single();
+  const { data } = await tSelect('shift_notes','seen_by').eq('id', noteId).single();
   if (!data) return err(res, 'Nota no encontrada');
   let seenBy = [];
   try { seenBy = JSON.parse(data.seen_by || '[]'); } catch(e) {}
   if (!seenBy.includes(userRole)) seenBy.push(userRole);
-  await supabase.from('shift_notes').update({ seen_by: JSON.stringify(seenBy) }).eq('id', noteId);
+  await tUpdate('shift_notes',{ seen_by: JSON.stringify(seenBy) }).eq('id', noteId);
   return ok(res, { noteId, seenBy });
 }
 
@@ -1616,11 +1646,11 @@ async function apiMarkNotePasado(p, res) {
   if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
   const noteId = Number(p.noteId || 0);
   if(!noteId) return err(res, 'noteId requerido');
-  const { data: note } = await supabase.from('shift_notes').select('id, is_deleted, pasado_a_mantenimiento').eq('id', noteId).single();
+  const { data: note } = await tSelect('shift_notes','id, is_deleted, pasado_a_mantenimiento').eq('id', noteId).single();
   if(!note) return err(res, 'Nota no encontrada');
   if(note.is_deleted) return err(res, 'Nota ya borrada');
   if(note.pasado_a_mantenimiento) return err(res, 'Nota ya estaba pasada a mantenimiento');
-  await supabase.from('shift_notes').update({ pasado_a_mantenimiento: true }).eq('id', noteId);
+  await tUpdate('shift_notes',{ pasado_a_mantenimiento: true }).eq('id', noteId);
   return ok(res, { noteId });
 }
 
@@ -1630,7 +1660,7 @@ async function apiDeleteNote(p, res) {
   if (!noteId) return err(res, 'noteId requerido');
   // Leer la foto real de la BD (no confiar en el cliente) y borrarla del storage
   // para liberar espacio. Si falla el storage, no abortar el borrado de la nota.
-  const { data: note } = await supabase.from('shift_notes').select('photo_url').eq('id', noteId).single();
+  const { data: note } = await tSelect('shift_notes','photo_url').eq('id', noteId).single();
   const photoUrl = note && note.photo_url ? String(note.photo_url) : '';
   if (photoUrl) {
     try {
@@ -1639,14 +1669,14 @@ async function apiDeleteNote(p, res) {
     } catch (e) { console.error('Error borrando foto de nota:', e); }
   }
   // Soft delete (conserva historial) + limpiar la URL muerta.
-  await supabase.from('shift_notes').update({ is_deleted: true, photo_url: null }).eq('id', noteId);
+  await tUpdate('shift_notes',{ is_deleted: true, photo_url: null }).eq('id', noteId);
   return ok(res, { noteId });
 }
 
 async function apiGetAllNotes(p, res) {
   const limit = Math.min(200, Number(p.limit || 100));
   const fromDate = String(p.fromDate || '');
-  let query = supabase.from('shift_notes').select('*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
+  let query = tSelect('shift_notes','*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
   if (fromDate) query = query.gte('business_day', fromDate);
   const { data } = await query;
   return ok(res, { notes: (data || []).map(r => ({
@@ -1661,7 +1691,7 @@ async function apiGetAllNotes(p, res) {
 async function apiGetNoteHistory(p, res) {
   const limit = Math.min(200, Number(p.limit || 100));
   const fromDate = String(p.fromDate || '');
-  let query = supabase.from('shift_notes').select('*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
+  let query = tSelect('shift_notes','*').eq('is_deleted', false).order('ts_ms', { ascending: false }).limit(limit);
   if (fromDate) query = query.gte('business_day', fromDate);
   const { data } = await query;
   return ok(res, { notes: (data || []).map(r => ({ id: r.id, tsMs: Number(r.ts_ms), businessDay: r.business_day, shiftId: r.shift_id, userRole: r.user_role, userName: r.user_name, note: r.note })) });
@@ -1676,25 +1706,24 @@ async function apiCloseShift(p, res) {
   const userName = String(p.userName || '');
 
   // Marcar turno como cerrado Y liberado (released=true)
-  await supabase.from('shift_log').insert({
+  await tInsert('shift_log',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_role: 'RECEPTION', user_name: userName,
     action: 'LOGOUT', logout_ms: now,
     released: true // NUEVO: libera el turno siguiente
   });
 
-  const { data: loginLog } = await supabase.from('shift_log')
-    .select('ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
+  const { data: loginLog } = await tSelect('shift_log', 'ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
     .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
     .order('ts_ms', { ascending: false }).limit(1);
   const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
 
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('taxi_expenses').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('loans').select('amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('extra_staff').select('payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    supabase.from('room_products').select('total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
+    tSelect('sales','type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('extra_staff','payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
+    tSelect('room_products','total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
 
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
@@ -1725,7 +1754,7 @@ async function apiCloseShift(p, res) {
 
   const net = totalSales + totalRefunds - totalTaxi - totalLoans - totalExtraStaff;
 
-  await supabase.from('shift_close').insert({
+  await tInsert('shift_close',{
     ts_ms: now, business_day: bDay, shift_id: shift, user_name: userName,
     total_sales: totalSales, total_refunds: totalRefunds, total_taxi: totalTaxi,
     total_loans: totalLoans, total_extra_staff: totalExtraStaff, net,
@@ -1750,15 +1779,15 @@ async function apiMetrics(p, res) {
   const shiftFilter = String(p.shiftId || '');
 
   const [salesRes, taxiRes, loansRes, extraRes, barRes, gastoRes, settingsRes, shiftLogRes, shiftCloseRes] = await Promise.all([
-    supabase.from('sales').select('*').eq('business_day', bDay).order('ts_ms'),
-    supabase.from('taxi_expenses').select('*').eq('business_day', bDay).eq('anulada', false),
-    supabase.from('loans').select('*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
-    supabase.from('extra_staff').select('*').eq('business_day', bDay).eq('anulada', false),
-    supabase.from('bar_sales').select('*').eq('business_day', bDay),
-    supabase.from('general_expenses').select('*').eq('business_day', bDay),
+    tSelect('sales','*').eq('business_day', bDay).order('ts_ms'),
+    tSelect('taxi_expenses','*').eq('business_day', bDay).eq('anulada', false),
+    tSelect('loans','*').eq('business_day', bDay).eq('anulada', false).order('ts_ms'),
+    tSelect('extra_staff','*').eq('business_day', bDay).eq('anulada', false),
+    tSelect('bar_sales','*').eq('business_day', bDay),
+    tSelect('general_expenses','*').eq('business_day', bDay),
     supabase.from('settings').select('key,value'),
-    supabase.from('shift_log').select('user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
-    supabase.from('shift_close').select('shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
+    tSelect('shift_log','user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
+    tSelect('shift_close','shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
   ]);
 
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
@@ -1805,7 +1834,7 @@ async function apiMetrics(p, res) {
     }
     if(type==='REFUND'){dayRefunds+=t;if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else dayEfe+=t;if(!shiftFilter||sid===shiftFilter){shiftSales+=t;if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else shiftEfe+=t;}allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
   });
-const {data:prodSales}=await supabase.from('room_products').select('*').eq('business_day',bDay);
+const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay);
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
   const totalProductos=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
   const totalCortesiasProds=prodSalesFilt.filter(s=>s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
@@ -1822,15 +1851,14 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
 
  let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=a;shiftBarEfe+=Number(r.amount_cash||0);shiftBarTar+=Number(r.amount_card||0);shiftBarNeq+=Number(r.amount_nequi||0);}});
-  const{data:roomProdsBar}=await supabase.from('room_products').select('shift_id,pay_method,total,is_cortesia').eq('business_day',bDay).eq('is_cortesia',false);
+  const{data:roomProdsBar}=await tSelect('room_products','shift_id,pay_method,total,is_cortesia').eq('business_day',bDay).eq('is_cortesia',false);
   (roomProdsBar||[]).forEach(r=>{const t=Number(r.total||0),pm=String(r.pay_method||'EFECTIVO').toUpperCase();dayBar+=t;if(pm==='TARJETA'){dayBarTar+=t;}else if(pm==='NEQUI'){dayBarNeq+=t;}else{dayBarEfe+=t;}if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=t;if(pm==='TARJETA'){shiftBarTar+=t;}else if(pm==='NEQUI'){shiftBarNeq+=t;}else{shiftBarEfe+=t;}}});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
 
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del dia origen del cuadre del dia
   // Los retiros se descuentan de las ventas del dia origen y metodo correspondiente
-  const { data: retirosDia } = await supabase.from('retiros_dueno')
-    .select('monto, pay_method, anulado')
+  const { data: retirosDia } = await tSelect('retiros_dueno', 'monto, pay_method, anulado')
     .eq('dia_origen', bDay)
     .eq('anulado', false);
   let dayRetirosEfe = 0;
@@ -1874,8 +1902,7 @@ const {data:prodSales}=await supabase.from('room_products').select('*').eq('busi
 async function apiMetricsHourly(p, res) {
   const bDay = String(p.businessDay || businessDay(Date.now()));
   const { start, end } = businessDayRange(bDay);
-  const { data } = await supabase.from('sales')
-    .select('ts_ms, total, type')
+  const { data } = await tSelect('sales', 'ts_ms, total, type')
     .eq('business_day', bDay)
     .in('type', ['SALE', 'EXTENSION', 'RENEWAL'])
     .order('ts_ms');
@@ -1905,24 +1932,21 @@ async function apiMonthMetrics(p, res) {
   if (!/^\d{4}-\d{2}$/.test(ym)) return err(res, 'yearMonth invalido. Formato: YYYY-MM');
 
   // Queries que pueden superar 1000 filas — usan el helper fetchAll
-  const salesData = await fetchAll(() => supabase.from('sales')
-    .select('business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada,devolucion_efectivo,devolucion_metodo_original')
+  const salesData = await fetchAll(() => tSelect('sales', 'business_day,shift_id,type,total,pay_method,extra_people_value,amount_1,amount_2,amount_3,people,user_name,room_id,duration_hrs,anulada,devolucion_efectivo,devolucion_metodo_original')
     .like('business_day', ym+'%'));
-  const maidLogsData = await fetchAll(() => supabase.from('maid_log')
-    .select('maid_name,finished_ms,started_ms,state_to')
+  const maidLogsData = await fetchAll(() => tSelect('maid_log', 'maid_name,finished_ms,started_ms,state_to')
     .like('business_day', ym+'%'));
-  const roomProdsData = await fetchAll(() => supabase.from('room_products')
-    .select('business_day,shift_id,pay_method,total,is_cortesia')
+  const roomProdsData = await fetchAll(() => tSelect('room_products', 'business_day,shift_id,pay_method,total,is_cortesia')
     .like('business_day', ym+'%'));
 
   // Queries pequeñas — se mantienen con Promise.all normal
   const [taxiRes, loansRes, extraRes, failuresRes, shiftLogRes, barSalesRes] = await Promise.all([
-    supabase.from('taxi_expenses').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
-    supabase.from('loans').select('business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
-    supabase.from('extra_staff').select('business_day,shift_id,payment,anulada').like('business_day', ym+'%').gt('payment',0),
-    supabase.from('shift_failures').select('*').like('business_day', ym+'%'),
-    supabase.from('shift_log').select('business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
-    supabase.from('bar_sales').select('business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
+    tSelect('taxi_expenses','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
+    tSelect('loans','business_day,shift_id,amount,anulada').like('business_day', ym+'%'),
+    tSelect('extra_staff','business_day,shift_id,payment,anulada').like('business_day', ym+'%').gt('payment',0),
+    tSelect('shift_failures','*').like('business_day', ym+'%'),
+    tSelect('shift_log','business_day,shift_id,user_name').like('business_day', ym+'%').eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN']),
+    tSelect('bar_sales','business_day,shift_id,amount_cash,amount_card,amount_nequi').like('business_day', ym+'%')
   ]);
 
   // Envolver los arrays paginados en {data: ...} para compatibilidad con el código existente
@@ -2023,8 +2047,7 @@ async function apiMonthMetrics(p, res) {
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos de las ventas del dia origen y metodo correspondiente
   // Esto cumple la regla de oro: el retiro se ve reflejado en el Mes
-  const { data: retirosMes } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, pay_method, anulado')
+  const { data: retirosMes } = await tSelect('retiros_dueno', 'dia_origen, monto, pay_method, anulado')
     .like('dia_origen', ym+'%')
     .eq('anulado', false);
   (retirosMes||[]).forEach(r=>{
@@ -2092,10 +2115,10 @@ async function apiMaidPanel(p, res) {
   const shift = currentShiftId(now);
 
   const [roomsRes, logsRes, maidLogsRes, shiftLogRes] = await Promise.all([
-    supabase.from('rooms').select('*').eq('archived', false).order('room_id'),
-    supabase.from('state_history').select('*').eq('business_day', bDay),
-    supabase.from('maid_log').select('*').eq('business_day', bDay).order('ts_ms'),
-    supabase.from('shift_log').select('*').eq('business_day', bDay).eq('user_role', 'MAID').in('action', ['LOGIN', 'RELOGIN'])
+    tSelect('rooms','*').eq('archived', false).order('room_id'),
+    tSelect('state_history','*').eq('business_day', bDay),
+    tSelect('maid_log','*').eq('business_day', bDay).order('ts_ms'),
+    tSelect('shift_log','*').eq('business_day', bDay).eq('user_role', 'MAID').in('action', ['LOGIN', 'RELOGIN'])
   ]);
 
   const rooms = (roomsRes.data||[]).map(mapRoom);
@@ -2136,9 +2159,8 @@ async function apiMaidPanel(p, res) {
 
 // ==================== PERSONAL / CALENDARIO ====================
 async function apiGetStaff(p, res) {
-  const { data } = await supabase.from('staff').select('*').order('area').order('name');
-  const { data: hist } = await supabase.from('staff_vacaciones_historial')
-    .select('*').order('created_at', { ascending: false });
+  const { data } = await tSelect('staff','*').order('area').order('name');
+  const { data: hist } = await tSelect('staff_vacaciones_historial', '*').order('created_at', { ascending: false });
   const histByStaff = {};
   (hist||[]).forEach(h => {
     if(!histByStaff[h.staff_id]) histByStaff[h.staff_id] = [];
@@ -2168,8 +2190,8 @@ async function apiSaveStaff(p, res) {
     direccion:String(p.direccion||'').trim(), contacto_emergencia:String(p.contactoEmergencia||'').trim(),
     fecha_nacimiento:p.fechaNacimiento||null, fecha_ingreso:p.fechaIngreso||null, fecha_vacaciones:p.fechaVacaciones||null
   };
-  if(id){await supabase.from('staff').update({name,area,active,...extra}).eq('id',id);}
-  else{await supabase.from('staff').insert({id:'S'+Date.now(),name,area,type:'nomina',active,created_ms:Date.now(),...extra});}
+  if(id){await tUpdate('staff',{name,area,active,...extra}).eq('id',id);}
+  else{await tInsert('staff',{id:'S'+Date.now(),name,area,type:'nomina',active,created_ms:Date.now(),...extra});}
   return ok(res,{});
 }
 
@@ -2184,7 +2206,7 @@ async function apiSaveVacacionesEvent(p, res) {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaReingreso)) return err(res, 'Fecha reingreso invalida (YYYY-MM-DD)');
   if(fechaReingreso < fechaSalida) return err(res, 'Reingreso no puede ser antes de salida');
 
-  const { data: staffRow } = await supabase.from('staff').select('fecha_ingreso').eq('id', staffId).single();
+  const { data: staffRow } = await tSelect('staff','fecha_ingreso').eq('id', staffId).single();
   if(!staffRow) return err(res, 'Staff no existe');
 
   // Proxima fecha tentativa = re-ingreso + 1 año
@@ -2194,13 +2216,13 @@ async function apiSaveVacacionesEvent(p, res) {
     String(proxima.getMonth()+1).padStart(2,'0') + '-' +
     String(proxima.getDate()).padStart(2,'0');
 
-  await supabase.from('staff_vacaciones_historial').insert({
+  await tInsert('staff_vacaciones_historial',{
     staff_id: staffId,
     fecha_ingreso: staffRow.fecha_ingreso,
     fecha_salida_vacaciones: fechaSalida,
     fecha_reingreso: fechaReingreso
   });
-  await supabase.from('staff').update({
+  await tUpdate('staff',{
     fecha_ingreso: fechaReingreso,
     fecha_vacaciones: proximaStr
   }).eq('id', staffId);
@@ -2210,7 +2232,7 @@ async function apiSaveVacacionesEvent(p, res) {
 
 async function apiGetSchedule(p, res) {
   const ws=String(p.weekStart||'').trim();
-  let query=supabase.from('schedule').select('*');
+  let query=tSelect('schedule','*');
   if(ws)query=query.eq('week_start',ws);
   const{data}=await query.order('shift_id').order('area');
   return ok(res,{schedule:(data||[]).map(r=>({weekStart:r.week_start,shiftId:r.shift_id,area:r.area,personName:r.person_name,dayOfWeek:r.day_of_week,type:r.type,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',extraNombre:r.extra_nombre||'',extraTurno:r.extra_turno||''}))});
@@ -2221,7 +2243,7 @@ async function apiSaveSchedule(p, res) {
   const ws=String(p.weekStart||'').trim(),entries=p.entries||[];
   if(!ws)return err(res,'Semana requerida');
   const mesPrefix=ws.substring(0,7);
-  const existingRes=await supabase.from('schedule').select('id,area,person_name,day_of_week,type');
+  const existingRes=await tSelect('schedule','id,area,person_name,day_of_week,type');
   const existing=existingRes.data||[];
   const personasEnEntradas=[...new Set(entries.map(function(e){return e.area+'|'+e.personName;}))];
   const toDelete=(existing||[]).filter(function(r){
@@ -2229,10 +2251,10 @@ async function apiSaveSchedule(p, res) {
     if(String(r.type||'').startsWith('extra')||String(r.type||'')==='extra_day')return false;
     return personasEnEntradas.indexOf(r.area+'|'+r.person_name)>=0;
   }).map(function(r){return r.id;});
-  if(toDelete.length>0){await supabase.from('schedule').delete().in('id',toDelete);}
+  if(toDelete.length>0){await tDelete('schedule').in('id',toDelete);}
   if(entries.length>0){
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal'),hora_entrada:String(e.horaEntrada||''),hora_salida:String(e.horaSalida||''),extra_nombre:String(e.extraNombre||''),extra_turno:String(e.extraTurno||'')}));
-    await supabase.from('schedule').insert(rows);
+    await tInsert('schedule',rows);
   }
   return ok(res,{saved:entries.length,weekStart:ws});
 }
@@ -2289,9 +2311,9 @@ async function apiRoomHistory(p, res) {
   if(!roomId)return err(res,'roomId requerido');
   const limit=Number(p.limit||30);
   const[stateRes,salesRes,taxiRes]=await Promise.all([
-    supabase.from('state_history').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
-    supabase.from('sales').select('*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
-    supabase.from('taxi_expenses').select('*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
+    tSelect('state_history','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
+    tSelect('sales','*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
+    tSelect('taxi_expenses','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
   ]);
   return ok(res,{
     roomId,
@@ -2310,13 +2332,13 @@ async function apiAddBarSale(p, res) {
   if(userRole!=='RECEPTION'&&userRole!=='ADMIN')return err(res,'Solo RECEPTION o ADMIN');
   const cash=Number(p.amountCash||0),card=Number(p.amountCard||0),nequi=Number(p.amountNequi||0);
   if(cash+card+nequi<=0)return err(res,'Monto total debe ser mayor a 0');
-  await supabase.from('bar_sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,amount_nequi:nequi,total:cash+card+nequi});
+  await tInsert('bar_sales',{ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:String(p.description||'').trim(),amount_cash:cash,amount_card:card,amount_nequi:nequi,total:cash+card+nequi});
   return ok(res,{tsMs:now,total:cash+card+nequi,shiftId:shift});
 }
 async function apiGetBarSales(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   const shiftFilter=String(p.shiftId||'');
-  let q=supabase.from('bar_sales').select('*').eq('business_day',bDay).order('ts_ms');
+  let q=tSelect('bar_sales','*').eq('business_day',bDay).order('ts_ms');
   if(shiftFilter)q=q.eq('shift_id',shiftFilter);
   const{data}=await q;
   const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amountCash:Number(r.amount_cash||0),amountCard:Number(r.amount_card||0),amountNequi:Number(r.amount_nequi||0),total:Number(r.total||0)}));
@@ -2332,13 +2354,13 @@ async function apiAddGeneralExpense(p, res) {
   const desc=String(p.description||'').trim(),amount=Number(p.amount||0);
   if(desc.length<3)return err(res,'Descripcion requerida (min 3 caracteres)');
   if(amount<=0)return err(res,'Monto debe ser mayor a 0');
-  await supabase.from('general_expenses').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:desc,amount,category:String(p.category||'Otro').trim()});
+  await tInsert('general_expenses',{ts_ms:now,business_day:bDay,shift_id:shift,user_name:String(p.userName||''),description:desc,amount,category:String(p.category||'Otro').trim()});
   return ok(res,{tsMs:now,amount,shiftId:shift});
 }
 async function apiGetGeneralExpenses(p, res) {
   const bDay=String(p.businessDay||businessDay(Date.now()));
   const shiftFilter=String(p.shiftId||'');
-  let q=supabase.from('general_expenses').select('*').eq('business_day',bDay).order('ts_ms');
+  let q=tSelect('general_expenses','*').eq('business_day',bDay).order('ts_ms');
   if(shiftFilter)q=q.eq('shift_id',shiftFilter);
   const{data}=await q;
   const list=(data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,description:r.description||'',amount:Number(r.amount||0),category:r.category||''}));
@@ -2351,12 +2373,12 @@ async function apiGetDailyCuadre(p, res) {
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    supabase.from('sales').select('type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
-    supabase.from('taxi_expenses').select('amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
-    supabase.from('extra_staff').select('payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
-    supabase.from('bar_sales').select('amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
-    supabase.from('general_expenses').select('amount,shift_id').eq('business_day',bDay),
-    supabase.from('shift_log').select('shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
+    tSelect('sales','type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
+    tSelect('taxi_expenses','amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
+    tSelect('extra_staff','payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
+    tSelect('bar_sales','amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
+    tSelect('general_expenses','amount,shift_id').eq('business_day',bDay),
+    tSelect('shift_log','shift_id,user_name,ts_ms').eq('business_day',bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms')
   ]);
 
   const responsables={SHIFT_1:'—',SHIFT_2:'—',SHIFT_3:'—'};
@@ -2429,9 +2451,7 @@ async function apiGetPersonasHabitacion(p, res) {
   if(!businessDayParam) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
   if(!roomId) return err(res,'roomId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price, editada, editada_por, editada_ms, motivo_edicion')
+  const { data, error } = await tSelect('sales', 'id, ts_ms, extra_people, extra_people_value, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note, type, duration_hrs, base_price, editada, editada_por, editada_ms, motivo_edicion')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
@@ -2474,7 +2494,7 @@ async function apiAgregarHoraExtraManual(p, res) {
     if((amount_1+amount_2+amount_3)!==total) return err(res,'Suma del mixto debe ser igual al total');
     pay_method_2='MIXTO';
   }
-  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
+  const { data: inserted, error: errIns } = await tInsert('sales',{
     ts_ms: now,
     business_day: businessDayParam,
     shift_id: shiftId,
@@ -2498,7 +2518,7 @@ async function apiAgregarHoraExtraManual(p, res) {
     anulada: false
   }).select('id').single();
   if(errIns) return err(res,'Error guardando hora extra: '+errIns.message);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: businessDayParam,
     shift_id: shiftId,
@@ -2528,9 +2548,7 @@ async function apiGetExtrasHabitacion(p, res) {
   if(!businessDayParam) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
   if(!roomId) return err(res,'roomId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note')
+  const { data, error } = await tSelect('sales', 'id, ts_ms, extra_hours, total, pay_method, user_name, anulada, anulada_ms, anulada_por, note')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .eq('room_id', roomId)
@@ -2547,9 +2565,7 @@ async function apiGetHabitacionesTurno(p, res) {
   const shiftId = String(p.shiftId||'').trim();
   if(!businessDayParam) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase
-    .from('sales')
-    .select('room_id, category, type, anulada, duration_hrs, base_price, extra_people_value')
+  const { data, error } = await tSelect('sales', 'room_id, category, type, anulada, duration_hrs, base_price, extra_people_value')
     .eq('business_day', businessDayParam)
     .eq('shift_id', shiftId)
     .in('type', ['SALE', 'RENEWAL', 'EXTENSION']);
@@ -2590,7 +2606,7 @@ async function apiAgregarPersonaManual(p, res) {
   const cfg = cfgFor(PRICING, room.category);
   const costPerPerson = Number(cfg.extraPerson||0);
   const totalCost = costPerPerson * cantidad;
-  await supabase.from('sales').insert({
+  await tInsert('sales',{
     ts_ms:now, business_day:businessDayParam, shift_id:shiftId,
     user_role:'ADMIN', user_name:userName, type:'SALE',
     room_id:roomId, category:room.category, duration_hrs:0,
@@ -2612,7 +2628,7 @@ async function apiEditarPersonasCheckIn(p, res) {
   if(!saleId) return err(res,'saleId requerido');
   if(!Number.isFinite(nuevaCantidad) || nuevaCantidad < 0) return err(res,'Cantidad inválida (debe ser >= 0)');
   if(!motivo || motivo.length < 5) return err(res,'Motivo obligatorio (mínimo 5 caracteres)');
-  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
+  const { data: sale, error: errSale } = await tSelect('sales','*').eq('id', saleId).maybeSingle();
   if(errSale) return err(res, errSale.message);
   if(!sale) return err(res,'Venta no encontrada');
   if(sale.anulada) return err(res,'Esta venta está anulada, no se puede editar');
@@ -2624,8 +2640,7 @@ async function apiEditarPersonasCheckIn(p, res) {
   if(nuevaCantidad === personasOriginales) return err(res,'La cantidad no cambia, nada que actualizar');
   const esCheckIn = Number(sale.duration_hrs||0) > 0 || Number(sale.base_price||0) > 0;
   if(!esCheckIn) return err(res,'Esta fila no es de check-in. Usá Anular en su lugar.');
-  const { data: refunds } = await supabase.from('sales')
-    .select('id').eq('room_id', sale.room_id).eq('check_in_ms', Number(sale.check_in_ms||0))
+  const { data: refunds } = await tSelect('sales', 'id').eq('room_id', sale.room_id).eq('check_in_ms', Number(sale.check_in_ms||0))
     .eq('type','REFUND').limit(1);
   if(refunds && refunds.length) return err(res,'Esta venta tiene una devolución asociada, no se puede editar');
   const PRICING = await getPricing(MOTEL_ID);
@@ -2664,7 +2679,7 @@ async function apiEditarPersonasCheckIn(p, res) {
   }
   const now = Date.now();
   const noteFinal = String(sale.note||'') + ' | EDITADO: ' + motivo;
-  const { error: errUpd } = await supabase.from('sales').update({
+  const { error: errUpd } = await tUpdate('sales',{
     extra_people: nuevaCantidad,
     extra_people_value: extraPeopleValueNuevo,
     total: totalNuevo,
@@ -2679,7 +2694,7 @@ async function apiEditarPersonasCheckIn(p, res) {
     motivo_edicion: motivo
   }).eq('id', saleId);
   if(errUpd) return err(res,'Error actualizando venta: '+errUpd.message);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: sale.business_day,
     shift_id: sale.shift_id,
@@ -2719,8 +2734,8 @@ async function apiAddExtraPerson(p, res) {
   const PRICING = await getPricing(MOTEL_ID);
   const cfg = cfgFor(PRICING, room.category);
   const cost=Number(cfg.extraPerson||0),newPeople=currentPeople+1;
-  await supabase.from('rooms').update({people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
-  await supabase.from('sales').insert({ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
+  await tUpdate('rooms',{people:newPeople,updated_at:new Date().toISOString()}).eq('room_id',roomId);
+  await tInsert('sales',{ts_ms:now,business_day:bDay,shift_id:shift,user_role:'RECEPTION',user_name:userName,type:'SALE',room_id:roomId,category:room.category,duration_hrs:0,base_price:0,people:newPeople,included_people:Number(cfg.included||2),extra_people:newPeople-Number(cfg.included||2),extra_people_value:cost,total:cost,pay_method:payMethod,check_in_ms:Number(room.check_in_ms||0),due_ms:Number(room.due_ms||0),arrival_type:room.arrival_type||'',arrival_plate:room.arrival_plate||''});
   return ok(res,{roomId,newPeople,extraPersonCost:cost});
 }
 
@@ -2764,7 +2779,7 @@ async function apiRoomChange(p, res) {
   const diff = toPrice - fromPrice;
 
   // Marcar habitacion origen como RETOQUE
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'AVAILABLE', retoque: true, state_since_ms: now,
     people: 0, due_ms: 0, last_checkout_ms: now,
     arrival_type: '', arrival_plate: '',
@@ -2776,7 +2791,7 @@ async function apiRoomChange(p, res) {
   const originalCheckInMs = Number(fromRoom.check_in_ms || now);
   const originalDueMs = Number(fromRoom.due_ms || (now + durationHrs * 3600000));
 
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state: 'OCCUPIED', state_since_ms: now, people,
     check_in_ms: originalCheckInMs, due_ms: originalDueMs,
     arrival_type: fromRoom.arrival_type || 'WALK',
@@ -2789,8 +2804,7 @@ async function apiRoomChange(p, res) {
 
   // ITEM 8: Transferir la venta original de fromRoom a toRoom
   // Buscar la venta original de esta estadia
-  const { data: originalSale } = await supabase.from('sales')
-    .select('id, total, pay_method')
+  const { data: originalSale } = await tSelect('sales', 'id, total, pay_method')
     .eq('room_id', fromRoomId)
     .eq('type', 'SALE')
     .eq('check_in_ms', originalCheckInMs)
@@ -2806,7 +2820,7 @@ async function apiRoomChange(p, res) {
     // Cierre = Resumen = Cuadre (REGLA DE ORO). La traza queda en la nota.
     caso = 'A_CORTESIA';
     if(saleId){
-      await supabase.from('sales').update({
+      await tUpdate('sales',{
         room_id: '304', category: toRoom.category,
         total: 0, amount_1: 0, amount_2: 0, amount_3: 0, pay_method_2: '',
         note: 'Cambio a 304 (cortesia): cobrado y devuelto $'+saleTotalOriginal+' al cliente. Origen hab '+fromRoomId
@@ -2821,7 +2835,7 @@ async function apiRoomChange(p, res) {
       return err(res, 'Los montos MIXTO deben sumar '+toPrice);
     }
     if(saleId){
-      await supabase.from('sales').update({
+      await tUpdate('sales',{
         room_id: toRoomId, category: toRoom.category,
         total: toPrice, pay_method: payMethod,
         pay_method_2: payMethod==='MIXTO'?'MIXTO_EF_TJ_NQ':'',
@@ -2834,10 +2848,10 @@ async function apiRoomChange(p, res) {
   } else {
     // ===== Caso NORMAL (igual que hoy): mover venta + fila diff =====
     if(saleId){
-      await supabase.from('sales').update({ room_id: toRoomId, category: toRoom.category }).eq('id', saleId);
+      await tUpdate('sales',{ room_id: toRoomId, category: toRoom.category }).eq('id', saleId);
     }
     if(diff > 0) {
-      await supabase.from('sales').insert({
+      await tInsert('sales',{
         ts_ms: now, business_day: bDay, shift_id: shift,
         user_role: 'RECEPTION', user_name: userName, type: 'SALE',
         room_id: toRoomId, category: toRoom.category, duration_hrs: durationHrs,
@@ -2846,7 +2860,7 @@ async function apiRoomChange(p, res) {
         arrival_type: fromRoom.arrival_type||'WALK'
       });
     } else if(diff < 0) {
-      await supabase.from('sales').insert({
+      await tInsert('sales',{
         ts_ms: now, business_day: bDay, shift_id: shift,
         user_role: 'RECEPTION', user_name: userName, type: 'REFUND',
         room_id: toRoomId, category: fromRoom.category, total: diff,
@@ -2856,7 +2870,7 @@ async function apiRoomChange(p, res) {
   }
 
   // Registrar el cambio en el historial (antes no se registraba state_history)
-  await supabase.from('state_history').insert([
+  await tInsert('state_history',[
     { ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'RECEPTION', user_name: userName,
       room_id: fromRoomId, from_state: 'OCCUPIED', to_state: 'AVAILABLE', people: 0,
       meta_json: JSON.stringify({ accion:'CAMBIO_HAB_SALIDA', destino: toRoomId, checkInMs: originalCheckInMs, caso }) },
@@ -2881,8 +2895,8 @@ async function apiUpdatePayMethod(p, res) {
   const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
   const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
   const checkInMs=Number(room.check_in_ms||0);
-  await supabase.from('sales').update({pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
-  await supabase.from('rooms').update({pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
+  await tUpdate('sales',{pay_method:payMethod}).eq('room_id',roomId).eq('business_day',bDay).in('type',['SALE','EXTENSION','RENEWAL']).eq('shift_id',shift).eq('check_in_ms',checkInMs);
+  await tUpdate('rooms',{pay_method:payMethod, updated_at:new Date().toISOString()}).eq('room_id',roomId);
   return ok(res,{roomId,payMethod});
 }
 
@@ -2896,7 +2910,7 @@ async function apiUpdateArrivalPlate(p, res) {
   if(room.state!=='OCCUPIED')return err(res,'Habitacion no esta ocupada');
   const updates={arrival_plate:plate,updated_at:new Date().toISOString()};
   if(arrivalType)updates.arrival_type=arrivalType;
-  await supabase.from('rooms').update(updates).eq('room_id',roomId);
+  await tUpdate('rooms',updates).eq('room_id',roomId);
   return ok(res,{roomId,plate,arrivalType});
 }
 
@@ -2906,7 +2920,7 @@ async function apiGetMaintHistory(p, res) {
   const from=String(p.from||'');
   const to=String(p.to||'');
   if(!from||!to) return err(res,'Fechas requeridas');
-  const{data}=await supabase.from('maintenance').select('*').gte('business_day',from).lte('business_day',to).order('ts_ms',{ascending:false});
+  const{data}=await tSelect('maintenance','*').gte('business_day',from).lte('business_day',to).order('ts_ms',{ascending:false});
   return ok(res,{logs:(data||[]).map(r=>({
     id:r.id, tsMs:Number(r.ts_ms), businessDay:r.business_day, shiftId:r.shift_id,
     roomId:r.room_id, type:r.type, text:r.text||'',
@@ -2919,14 +2933,14 @@ async function apiClearMaintHistory(p, res) {
   const from=String(p.from||'');
   const to=String(p.to||'');
   if(!from||!to) return err(res,'Fechas requeridas');
-  await supabase.from('maintenance').delete().gte('business_day',from).lte('business_day',to);
+  await tDelete('maintenance').gte('business_day',from).lte('business_day',to);
   return ok(res,{});
 }
 
 // ==================== ROOM ISSUES ====================
 async function apiGetRoomIssues(p, res) {
   const roomId=String(p.roomId||'').trim();
-  const{data}=await supabase.from('room_issues').select('*').eq('room_id',roomId).order('created_at',{ascending:false});
+  const{data}=await tSelect('room_issues','*').eq('room_id',roomId).order('created_at',{ascending:false});
   return ok(res,{issues:(data||[]).map(r=>({id:r.id,roomId:r.room_id,type:r.type,description:r.description,resolved:!!r.resolved,resolvedAt:r.resolved_at||'',resolvedBy:r.resolved_by||'',createdAt:r.created_at||'',createdBy:r.created_by||''}))});
 }
 async function apiAddRoomIssue(p, res) {
@@ -2936,7 +2950,7 @@ async function apiAddRoomIssue(p, res) {
   const description=String(p.description||'').trim();
   if(!roomId)return err(res,'roomId requerido');
   if(!description)return err(res,'Descripcion requerida');
-  await supabase.from('room_issues').insert({room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
+  await tInsert('room_issues',{room_id:roomId,type,description,resolved:false,created_by:String(p.userName||'')});
   return ok(res,{});
 }
 async function apiEditRoomIssue(p, res) {
@@ -2945,7 +2959,7 @@ async function apiEditRoomIssue(p, res) {
   const description=String(p.description||'').trim();
   if(!id)return err(res,'id requerido');
   if(!description)return err(res,'Descripcion requerida');
-  await supabase.from('room_issues').update({description}).eq('id',id);
+  await tUpdate('room_issues',{description}).eq('id',id);
   return ok(res,{});
 }
 async function apiResolveRoomIssue(p, res) {
@@ -2953,14 +2967,14 @@ async function apiResolveRoomIssue(p, res) {
   const id=Number(p.id||0);
   if(!id)return err(res,'id requerido');
   const hoy=new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
+  await tUpdate('room_issues',{resolved:true,resolved_at:hoy,resolved_by:String(p.userName||'')}).eq('id',id);
   return ok(res,{});
 }
 async function apiDeleteRoomIssue(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id)return err(res,'id requerido');
-  await supabase.from('room_issues').delete().eq('id',id);
+  await tDelete('room_issues').eq('id',id);
   return ok(res,{});
 }
 
@@ -2998,7 +3012,7 @@ async function bloquearPorDanoUrgenteSiCorresponde(roomId, descDano, userName) {
       }
     }
 
-    await supabase.from('rooms').update({
+    await tUpdate('rooms',{
       disabled: true,
       disabled_date_ms: Number(room.disabled_date_ms || 0) || now,
       disabled_reason: motivoFinal,
@@ -3006,7 +3020,7 @@ async function bloquearPorDanoUrgenteSiCorresponde(roomId, descDano, userName) {
     }).eq('room_id', roomId);
 
     // Registro en historial de mantenimiento (mismo formato que apiSetDisabled)
-    await supabase.from('maintenance').insert({
+    await tInsert('maintenance',{
       ts_ms: now, business_day: bDay, shift_id: shift,
       user_role: 'AUTO', user_name: userName || 'sistema',
       room_id: roomId, type: 'DISABLE',
@@ -3042,8 +3056,7 @@ async function apiGetReportesActivos(p, res) {
     estadosFiltro = ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'];
   }
 
-  let query = supabase.from('room_issues')
-    .select('*')
+  let query = tSelect('room_issues', '*')
     .eq('anulada', false)
     .in('estado', estadosFiltro)
     .order('reportado_ms', {ascending: false});
@@ -3119,8 +3132,7 @@ async function apiCrearReporteMant(p, res) {
     'PENDIENTE_RECEPCION','NOTA_ACTIVA',
     'ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'
   ];
-  const {data: existentes} = await supabase.from('room_issues')
-    .select('id, estado')
+  const {data: existentes} = await tSelect('room_issues', 'id, estado')
     .eq('anulada', false)
     .eq('ubicacion_tipo', ubicacionTipo)
     .eq('ubicacion_id', ubicacionId)
@@ -3158,7 +3170,7 @@ async function apiCrearReporteMant(p, res) {
     aprobadoMs = now;
   }
 
-  const {data: inserted, error} = await supabase.from('room_issues').insert({
+  const {data: inserted, error} = await tInsert('room_issues',{
     // Campos originales (compat con apiAddRoomIssue + ranking existente)
     room_id: (ubicacionTipo === 'habitacion') ? ubicacionId : '',
     type: 'dano',
@@ -3205,8 +3217,7 @@ async function apiGetMisDanos(p, res) {
   if(!userName) return err(res, 'Usuario requerido');
 
   // Danos activos para el mantenedor
-  const { data: activos } = await supabase.from('room_issues')
-    .select('*')
+  const { data: activos } = await tSelect('room_issues', '*')
     .eq('anulada', false)
     .in('estado', ['NOTA_ACTIVA','RECHAZADO_VERIFICACION'])
     .order('reportado_ms', { ascending: false });
@@ -3215,8 +3226,7 @@ async function apiGetMisDanos(p, res) {
   const today = businessDay(Date.now());
   const inicioHoy = new Date(today + 'T00:00:00').getTime();
   const finHoy = inicioHoy + 86400000;
-  const { data: terminados } = await supabase.from('room_issues')
-    .select('id, estado')
+  const { data: terminados } = await tSelect('room_issues', 'id, estado')
     .eq('anulada', false)
     .eq('arreglado_por', userName)
     .gte('arreglado_ms', inicioHoy)
@@ -3264,7 +3274,7 @@ async function apiMarcarArreglo(p, res) {
   const fotoUrl = String(p.fotoArregloUrl || '').trim() || null;
 
   // Buscar el reporte y validar estado
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
@@ -3273,7 +3283,7 @@ async function apiMarcarArreglo(p, res) {
 
   // Marcar como arreglado, listo para verificar
   const now = Date.now();
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'ESPERA_VERIFICACION',
     arreglado_por: userName,
     arreglado_ms: now,
@@ -3295,7 +3305,7 @@ async function apiVerificarArreglo(p, res) {
   const reporteId = Number(p.reporteId || 0);
   if(!reporteId) return err(res, 'reporteId requerido');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.estado !== 'ESPERA_VERIFICACION') {
@@ -3304,7 +3314,7 @@ async function apiVerificarArreglo(p, res) {
 
   const now = Date.now();
   const todayDate = new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'VERIFICADO',
     verificado_por: userName,
     verificado_ms: now,
@@ -3329,7 +3339,7 @@ async function apiRechazarArreglo(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo de rechazo minimo 3 caracteres');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.estado !== 'ESPERA_VERIFICACION') {
@@ -3339,7 +3349,7 @@ async function apiRechazarArreglo(p, res) {
   // Vuelve a estado activo para el mantenedor.
   // arreglado_por / arreglado_ms / arreglo_nota / foto_arreglo_url se mantienen
   // como historial del intento previo. apiMarcarArreglo los sobreescribe en el proximo intento.
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'RECHAZADO_VERIFICACION',
     motivo_rechazo: motivo
   }).eq('id', reporteId);
@@ -3365,7 +3375,7 @@ async function apiAprobarReporteMant(p, res) {
     return err(res,'Prioridad requerida (urgente, normal o baja)');
   }
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.estado !== 'PENDIENTE_RECEPCION') {
@@ -3374,7 +3384,7 @@ async function apiAprobarReporteMant(p, res) {
 
   const now = Date.now();
   const comentario = String(p.comentario||'').trim() || null;
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'NOTA_ACTIVA',
     prioridad: prioridadInput,
     aprobado_por: userName,
@@ -3405,7 +3415,7 @@ async function apiAnularReporteMant(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte ya anulado');
   if(reporte.estado !== 'PENDIENTE_RECEPCION') {
@@ -3413,7 +3423,7 @@ async function apiAnularReporteMant(p, res) {
   }
 
   const now = Date.now();
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     anulada: true,
     anulada_por: userName,
     anulada_ms: now,
@@ -3436,7 +3446,7 @@ async function apiResolverDanoZonaComun(p, res) {
   const reporteId = Number(p.reporteId || 0);
   if(!reporteId) return err(res, 'reporteId requerido');
 
-  const { data: reporte } = await supabase.from('room_issues').select('*').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.ubicacion_tipo !== 'zona_comun') return err(res, 'Solo aplica a zonas comunes. Las habitaciones requieren flujo de mantenedor.');
@@ -3446,7 +3456,7 @@ async function apiResolverDanoZonaComun(p, res) {
 
   const now = Date.now();
   const todayDate = new Date().toISOString().split('T')[0];
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     estado: 'VERIFICADO',
     verificado_por: userName,
     verificado_ms: now,
@@ -3480,8 +3490,7 @@ async function apiMarcarRevision(p, res) {
 
   const fotoUrl = String(p.fotoUrl || '').trim() || null;
 
-  const { data: reporte } = await supabase.from('room_issues')
-    .select('id, estado, anulada, revisiones').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues', 'id, estado, anulada, revisiones').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(!['NOTA_ACTIVA','RECHAZADO_VERIFICACION'].includes(reporte.estado)) {
@@ -3493,7 +3502,7 @@ async function apiMarcarRevision(p, res) {
   if(p.tecnicoExterno === true) nueva.tecnicoExterno = true;
   const nuevas = prev.concat([nueva]);
 
-  await supabase.from('room_issues').update({ revisiones: nuevas }).eq('id', reporteId);
+  await tUpdate('room_issues',{ revisiones: nuevas }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, revisiones: nuevas });
 }
@@ -3512,13 +3521,12 @@ async function apiMarcarDanioVisto(p, res) {
   const reporteId = Number(p.reporteId || 0);
   if(!reporteId) return err(res, 'reporteId requerido');
 
-  const { data: reporte } = await supabase.from('room_issues')
-    .select('id, anulada, visto_por_admin').eq('id', reporteId).single();
+  const { data: reporte } = await tSelect('room_issues', 'id, anulada, visto_por_admin').eq('id', reporteId).single();
   if(!reporte) return err(res, 'Reporte no existe');
   if(reporte.anulada) return err(res, 'Reporte anulado');
   if(reporte.visto_por_admin) return ok(res, { id: reporteId, yaVisto: true });
 
-  await supabase.from('room_issues').update({
+  await tUpdate('room_issues',{
     visto_por_admin: true,
     visto_por_admin_ms: Date.now()
   }).eq('id', reporteId);
@@ -3537,8 +3545,7 @@ async function apiGetBitacoraMantenedor(p, res) {
   const inicio = new Date(fecha + 'T00:00:00').getTime();
   const fin = inicio + 86400000;
 
-  const { data: arreglados } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, ubicacion_tipo, description, estado, arreglo_nota, arreglado_ms')
+  const { data: arreglados } = await tSelect('room_issues', 'id, ubicacion_id, ubicacion_tipo, description, estado, arreglo_nota, arreglado_ms')
     .eq('arreglado_por', mantenedor)
     .eq('anulada', false)
     .gte('arreglado_ms', inicio)
@@ -3546,8 +3553,7 @@ async function apiGetBitacoraMantenedor(p, res) {
     .order('arreglado_ms', { ascending: true });
 
   // Filtro del array revisiones en JS (jsonb-por-elemento no es queryable directo aqui)
-  const { data: conRevs } = await supabase.from('room_issues')
-    .select('id, ubicacion_id, ubicacion_tipo, description, revisiones')
+  const { data: conRevs } = await tSelect('room_issues', 'id, ubicacion_id, ubicacion_tipo, description, revisiones')
     .not('revisiones', 'is', null);
 
   const mantLower = mantenedor.toLowerCase();
@@ -3567,8 +3573,7 @@ async function apiGetBitacoraMantenedor(p, res) {
     };
   }).filter(Boolean);
 
-  const { data: bitRow } = await supabase.from('maintenance_bitacora')
-    .select('nota_libre').eq('fecha', fecha).eq('mantenedor', mantenedor).maybeSingle();
+  const { data: bitRow } = await tSelect('maintenance_bitacora', 'nota_libre').eq('fecha', fecha).eq('mantenedor', mantenedor).maybeSingle();
 
   return ok(res, {
     fecha, mantenedor,
@@ -3595,7 +3600,7 @@ async function apiSaveBitacoraMantenedor(p, res) {
   if(!fecha) return err(res, 'Fecha requerida');
 
   const { error } = await supabase.from('maintenance_bitacora').upsert({
-    fecha, mantenedor, nota_libre: notaLibre, ts_ms: Date.now()
+    motel_id: MOTEL_ID, fecha, mantenedor, nota_libre: notaLibre, ts_ms: Date.now()
   }, { onConflict: 'fecha,mantenedor' });
   if(error) return err(res, 'Error guardando: ' + error.message);
 
@@ -3633,7 +3638,7 @@ async function apiCrearTareaMant(p, res) {
   }
 
   const now = Date.now();
-  const { data: inserted, error } = await supabase.from('mantenimiento_tareas').insert({
+  const { data: inserted, error } = await tInsert('mantenimiento_tareas',{
     descripcion: descripcion,
     prioridad: prioridad,
     asignado_a: asignadoA,
@@ -3654,7 +3659,7 @@ async function apiGetTareasMant(p, res) {
   if(!['MAINTENANCE','ADMIN'].includes(userRole)) return err(res, 'Sin permiso');
   const userName = String(p.userName||'').trim();
 
-  let query = supabase.from('mantenimiento_tareas').select('*');
+  let query = tSelect('mantenimiento_tareas','*');
   if(userRole === 'MAINTENANCE'){
     if(!userName) return err(res, 'Usuario requerido');
     query = query.eq('asignado_a', userName);
@@ -3719,13 +3724,13 @@ async function apiCompletarTareaMant(p, res) {
 
   const fotoUrl = String(p.fotoCompletadoUrl || '').trim() || null;
 
-  const { data: tarea } = await supabase.from('mantenimiento_tareas').select('*').eq('id', tareaId).single();
+  const { data: tarea } = await tSelect('mantenimiento_tareas','*').eq('id', tareaId).single();
   if(!tarea) return err(res, 'Tarea no existe');
   if(tarea.estado !== 'pendiente') return err(res, 'Tarea no esta pendiente (estado: '+tarea.estado+')');
   if(tarea.asignado_a !== userName) return err(res, 'Esta tarea no esta asignada a vos');
 
   const now = Date.now();
-  await supabase.from('mantenimiento_tareas').update({
+  await tUpdate('mantenimiento_tareas',{
     estado: 'hecha',
     completado_por: userName,
     completado_ms: now,
@@ -3748,12 +3753,12 @@ async function apiAnularTareaMant(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo de anulacion minimo 3 caracteres');
 
-  const { data: tarea } = await supabase.from('mantenimiento_tareas').select('estado').eq('id', tareaId).single();
+  const { data: tarea } = await tSelect('mantenimiento_tareas','estado').eq('id', tareaId).single();
   if(!tarea) return err(res, 'Tarea no existe');
   if(tarea.estado === 'anulada') return err(res, 'Tarea ya estaba anulada');
 
   const now = Date.now();
-  await supabase.from('mantenimiento_tareas').update({
+  await tUpdate('mantenimiento_tareas',{
     estado: 'anulada',
     anulada_por: userName,
     anulada_ms: now,
@@ -3793,7 +3798,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 1) DAÑOS VERIFICADOS
   if(tipo === 'todos' || tipo === 'danos'){
-    let q1 = supabase.from('room_issues').select('*')
+    let q1 = tSelect('room_issues','*')
       .eq('anulada', false)
       .eq('estado', 'VERIFICADO')
       .gte('verificado_ms', desdeMs)
@@ -3831,7 +3836,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 2) TAREAS COMPLETADAS
   if(tipo === 'todos' || tipo === 'tareas'){
-    let q2 = supabase.from('mantenimiento_tareas').select('*')
+    let q2 = tSelect('mantenimiento_tareas','*')
       .eq('estado', 'hecha')
       .gte('completado_ms', desdeMs)
       .lt('completado_ms', hastaMs);
@@ -3859,8 +3864,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 3) REVISIONES (G1) — explotar array revisiones como items individuales
   if(tipo === 'todos' || tipo === 'danos'){
-    let q3 = supabase.from('room_issues')
-      .select('id, ubicacion_id, ubicacion_tipo, description, revisiones')
+    let q3 = tSelect('room_issues', 'id, ubicacion_id, ubicacion_tipo, description, revisiones')
       .eq('anulada', false)
       .not('revisiones', 'is', null);
     if(ubicacionFilter) q3 = q3.ilike('ubicacion_id', '%'+ubicacionFilter+'%');
@@ -3892,7 +3896,7 @@ async function apiGetHistorialMant(p, res) {
 
   // 4) BITACORAS LIBRES — una por dia/mantenedor (si tiene texto)
   if(tipo === 'todos' && !ubicacionFilter){
-    let q4 = supabase.from('maintenance_bitacora').select('*')
+    let q4 = tSelect('maintenance_bitacora', '*')
       .gte('fecha', desde).lte('fecha', hasta);
     if(mantenedorFilter) q4 = q4.eq('mantenedor', mantenedorFilter);
     const { data: bits } = await q4;
@@ -3938,28 +3942,24 @@ async function apiGetResumenMantHoy(p, res) {
   const finHoyMs = inicioHoyMs + 86400000;
 
   // 1) Nuevos hoy: danos creados hoy (cualquier estado, sin anulados)
-  const { data: nuevosData } = await supabase.from('room_issues')
-    .select('id')
+  const { data: nuevosData } = await tSelect('room_issues', 'id')
     .eq('anulada', false)
     .eq('business_day', today);
 
   // 2) Activos: no verificados ni anulados
-  const { data: activosData } = await supabase.from('room_issues')
-    .select('estado')
+  const { data: activosData } = await tSelect('room_issues', 'estado')
     .eq('anulada', false)
     .in('estado', ['PENDIENTE_RECEPCION','NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION']);
 
   // 3) Verificados hoy
-  const { data: verifHoyData } = await supabase.from('room_issues')
-    .select('id')
+  const { data: verifHoyData } = await tSelect('room_issues', 'id')
     .eq('anulada', false)
     .eq('estado', 'VERIFICADO')
     .gte('verificado_ms', inicioHoyMs)
     .lt('verificado_ms', finHoyMs);
 
   // 4) Tareas completadas hoy
-  const { data: tareasHoyData } = await supabase.from('mantenimiento_tareas')
-    .select('id')
+  const { data: tareasHoyData } = await tSelect('mantenimiento_tareas', 'id')
     .eq('estado', 'hecha')
     .gte('completado_ms', inicioHoyMs)
     .lt('completado_ms', finHoyMs);
@@ -3994,11 +3994,9 @@ function aireAddMonthsMs(ms, months){
 
 // Devuelve la ronda ABIERTA (o null) y la ultima CERRADA (o null).
 async function aireGetRondas(){
-  const { data: abiertaArr } = await supabase.from('aire_rondas')
-    .select('*').eq('estado','ABIERTA').limit(1);
+  const { data: abiertaArr } = await tSelect('aire_rondas', '*').eq('estado','ABIERTA').limit(1);
   const rondaAbierta = (abiertaArr && abiertaArr[0]) || null;
-  const { data: cerradaArr } = await supabase.from('aire_rondas')
-    .select('*').eq('estado','CERRADA').order('cerrada_ms',{ascending:false}).limit(1);
+  const { data: cerradaArr } = await tSelect('aire_rondas', '*').eq('estado','CERRADA').order('cerrada_ms',{ascending:false}).limit(1);
   const ultimaCerrada = (cerradaArr && cerradaArr[0]) || null;
   return { rondaAbierta, ultimaCerrada };
 }
@@ -4010,8 +4008,7 @@ async function apiGetAireGrid(p, res){
 
   const now = Date.now();
 
-  const { data: unidades, error: eu } = await supabase.from('aire_unidades')
-    .select('*').eq('activo', true).order('orden', {ascending:true});
+  const { data: unidades, error: eu } = await tSelect('aire_unidades', '*').eq('activo', true).order('orden', {ascending:true});
   if(eu) return err(res, 'Error consultando unidades: '+eu.message);
 
   const { rondaAbierta, ultimaCerrada } = await aireGetRondas();
@@ -4020,8 +4017,7 @@ async function apiGetAireGrid(p, res){
   const rondaRef = rondaAbierta || ultimaCerrada || null;
   let regsPorUnidad = {};
   if(rondaRef){
-    const { data: regs } = await supabase.from('aire_mantenimiento')
-      .select('*').eq('ronda_id', rondaRef.id);
+    const { data: regs } = await tSelect('aire_mantenimiento', '*').eq('ronda_id', rondaRef.id);
     (regs||[]).forEach(function(r){ regsPorUnidad[r.unidad_id] = r; });
   }
 
@@ -4083,8 +4079,7 @@ async function apiRegistrarAire(p, res){
   const resultado = String(p.resultado||'').toUpperCase();
   if(!['VERDE','AMARILLO'].includes(resultado)) return err(res, 'resultado invalido (VERDE o AMARILLO)');
 
-  const { data: unidad } = await supabase.from('aire_unidades')
-    .select('id').eq('id', unidadId).eq('activo', true).single();
+  const { data: unidad } = await tSelect('aire_unidades', 'id').eq('id', unidadId).eq('activo', true).single();
   if(!unidad) return err(res, 'Unidad no encontrada');
 
   // Normalizar las 8 tareas a booleanos estrictos.
@@ -4098,10 +4093,9 @@ async function apiRegistrarAire(p, res){
   // Apertura automatica de ronda.
   let { rondaAbierta } = await aireGetRondas();
   if(!rondaAbierta){
-    const { data: ultArr } = await supabase.from('aire_rondas')
-      .select('numero').order('numero',{ascending:false}).limit(1);
+    const { data: ultArr } = await tSelect('aire_rondas', 'numero').order('numero',{ascending:false}).limit(1);
     const siguiente = ((ultArr && ultArr[0] && ultArr[0].numero) || 0) + 1;
-    const { data: nueva, error: ec } = await supabase.from('aire_rondas').insert({
+    const { data: nueva, error: ec } = await tInsert('aire_rondas',{
       numero: siguiente,
       estado: 'ABIERTA',
       abierta_ms: now,
@@ -4112,6 +4106,7 @@ async function apiRegistrarAire(p, res){
   }
 
   const { error: em } = await supabase.from('aire_mantenimiento').upsert({
+    motel_id: MOTEL_ID,
     ronda_id: rondaAbierta.id,
     unidad_id: unidadId,
     tareas: tareas,
@@ -4136,12 +4131,10 @@ async function apiCerrarRondaAire(p, res){
   const { rondaAbierta } = await aireGetRondas();
   if(!rondaAbierta) return err(res, 'No hay ronda abierta para cerrar');
 
-  const { data: unidades } = await supabase.from('aire_unidades')
-    .select('id').eq('activo', true);
+  const { data: unidades } = await tSelect('aire_unidades', 'id').eq('activo', true);
   const totalUnidades = (unidades||[]).length;
 
-  const { data: regs } = await supabase.from('aire_mantenimiento')
-    .select('unidad_id').eq('ronda_id', rondaAbierta.id);
+  const { data: regs } = await tSelect('aire_mantenimiento', 'unidad_id').eq('ronda_id', rondaAbierta.id);
   const totalReg = (regs||[]).length;
 
   if(totalReg < totalUnidades){
@@ -4151,7 +4144,7 @@ async function apiCerrarRondaAire(p, res){
   const now = Date.now();
   const venceMs = aireAddMonthsMs(now, AIRE_CICLO_MESES);
 
-  const { error } = await supabase.from('aire_rondas').update({
+  const { error } = await tUpdate('aire_rondas',{
     estado: 'CERRADA',
     cerrada_ms: now,
     cerrada_por: userName,
@@ -4170,20 +4163,17 @@ async function apiGetAireHistorial(p, res){
   const unidadId = Number(p.unidadId||0);
   if(!unidadId) return err(res, 'unidadId requerido');
 
-  const { data: unidad } = await supabase.from('aire_unidades')
-    .select('*').eq('id', unidadId).single();
+  const { data: unidad } = await tSelect('aire_unidades', '*').eq('id', unidadId).single();
   if(!unidad) return err(res, 'Unidad no encontrada');
 
-  const { data: regs, error } = await supabase.from('aire_mantenimiento')
-    .select('*').eq('unidad_id', unidadId).order('registrado_ms',{ascending:false});
+  const { data: regs, error } = await tSelect('aire_mantenimiento', '*').eq('unidad_id', unidadId).order('registrado_ms',{ascending:false});
   if(error) return err(res, 'Error consultando historial: '+error.message);
 
   // Enriquecer con datos de cada ronda.
   const rondaIds = [...new Set((regs||[]).map(function(r){ return r.ronda_id; }))];
   let rondasMap = {};
   if(rondaIds.length){
-    const { data: rondas } = await supabase.from('aire_rondas')
-      .select('*').in('id', rondaIds);
+    const { data: rondas } = await tSelect('aire_rondas', '*').in('id', rondaIds);
     (rondas||[]).forEach(function(r){ rondasMap[r.id] = r; });
   }
 
@@ -4239,7 +4229,7 @@ async function apiCrearSolicitudMant(p, res) {
   const fotoUrl = String(p.fotoUrl||'').trim() || null;
   const now = Date.now();
 
-  const { data: inserted, error } = await supabase.from('mantenimiento_solicitudes').insert({
+  const { data: inserted, error } = await tInsert('mantenimiento_solicitudes',{
     tipo_solicitud: tipo,
     ubicacion_tipo: ubicacionTipo,
     ubicacion_id: ubicacionId,
@@ -4259,7 +4249,7 @@ async function apiGetSolicitudesMant(p, res) {
   if(!['MAINTENANCE','ADMIN'].includes(userRole)) return err(res, 'Sin permiso');
   const userName = String(p.userName||'').trim();
 
-  let query = supabase.from('mantenimiento_solicitudes').select('*');
+  let query = tSelect('mantenimiento_solicitudes','*');
 
   if(userRole === 'MAINTENANCE'){
     if(!userName) return err(res, 'Usuario requerido');
@@ -4322,8 +4312,7 @@ async function apiGetHistorialSolicitudesGeo(p, res) {
   const userName = String(p.userName||'').trim();
   if(!userName) return err(res, 'Usuario requerido');
 
-  const { data, error } = await supabase.from('mantenimiento_solicitudes')
-    .select('*')
+  const { data, error } = await tSelect('mantenimiento_solicitudes', '*')
     .eq('solicitado_por', userName)
     .order('solicitado_ms', {ascending: false})
     .limit(200);
@@ -4362,7 +4351,7 @@ async function apiAprobarSolicitudMant(p, res) {
   const solicitudId = Number(p.solicitudId || 0);
   if(!solicitudId) return err(res, 'solicitudId requerido');
 
-  const { data: sol } = await supabase.from('mantenimiento_solicitudes').select('*').eq('id', solicitudId).single();
+  const { data: sol } = await tSelect('mantenimiento_solicitudes','*').eq('id', solicitudId).single();
   if(!sol) return err(res, 'Solicitud no existe');
   if(sol.estado !== 'pendiente') return err(res, 'Solicitud no esta pendiente (estado: '+sol.estado+')');
 
@@ -4376,8 +4365,7 @@ async function apiAprobarSolicitudMant(p, res) {
 
     // 1 reporte activo por ubicacion (regla del modulo)
     const estadosActivos = ['PENDIENTE_RECEPCION','NOTA_ACTIVA','ESPERA_VERIFICACION','RECHAZADO_VERIFICACION'];
-    const { data: existentes } = await supabase.from('room_issues')
-      .select('id, estado')
+    const { data: existentes } = await tSelect('room_issues', 'id, estado')
       .eq('anulada', false)
       .eq('ubicacion_tipo', sol.ubicacion_tipo)
       .eq('ubicacion_id', sol.ubicacion_id)
@@ -4389,7 +4377,7 @@ async function apiAprobarSolicitudMant(p, res) {
     const bDay = businessDay(now);
     const shift = currentShiftId(now);
 
-    const { data: insertedDano, error: errDano } = await supabase.from('room_issues').insert({
+    const { data: insertedDano, error: errDano } = await tInsert('room_issues',{
       room_id: (sol.ubicacion_tipo === 'habitacion') ? sol.ubicacion_id : '',
       type: 'dano',
       description: sol.descripcion,
@@ -4416,7 +4404,7 @@ async function apiAprobarSolicitudMant(p, res) {
       await bloquearPorDanoUrgenteSiCorresponde(sol.ubicacion_id, sol.descripcion, userName);
     }
 
-    await supabase.from('mantenimiento_solicitudes').update({
+    await tUpdate('mantenimiento_solicitudes',{
       estado: 'aprobada',
       resuelto_por: userName,
       resuelto_ms: now,
@@ -4428,7 +4416,7 @@ async function apiAprobarSolicitudMant(p, res) {
     return ok(res, { id: solicitudId, estado: 'aprobada', roomIssueId: insertedDano.id });
   } else {
     // Aprobar permiso: solo update solicitud
-    await supabase.from('mantenimiento_solicitudes').update({
+    await tUpdate('mantenimiento_solicitudes',{
       estado: 'aprobada',
       resuelto_por: userName,
       resuelto_ms: now,
@@ -4450,12 +4438,12 @@ async function apiRechazarSolicitudMant(p, res) {
   const motivo = String(p.motivo || '').trim();
   if(motivo.length < 3) return err(res, 'Motivo minimo 3 caracteres');
 
-  const { data: sol } = await supabase.from('mantenimiento_solicitudes').select('estado').eq('id', solicitudId).single();
+  const { data: sol } = await tSelect('mantenimiento_solicitudes','estado').eq('id', solicitudId).single();
   if(!sol) return err(res, 'Solicitud no existe');
   if(sol.estado !== 'pendiente') return err(res, 'Solicitud no esta pendiente (estado: '+sol.estado+')');
 
   const now = Date.now();
-  await supabase.from('mantenimiento_solicitudes').update({
+  await tUpdate('mantenimiento_solicitudes',{
     estado: 'rechazada',
     resuelto_por: userName,
     resuelto_ms: now,
@@ -4471,8 +4459,8 @@ async function apiGetProyeccion(p, res) {
     if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
     const anio=Number(p.anio||new Date().getFullYear());
     const[tareasRes,mesesRes]=await Promise.all([
-      supabase.from('proyeccion_tareas').select('*').eq('anio',anio).order('mes',{ascending:true}),
-      supabase.from('proyeccion_meses').select('*').eq('anio',anio).order('mes')
+      tSelect('proyeccion_tareas','*').eq('anio',anio).order('mes',{ascending:true}),
+      tSelect('proyeccion_meses','*').eq('anio',anio).order('mes')
     ]);
     return ok(res,{
       tareas:(tareasRes.data||[]).map(r=>({id:r.id,anio:r.anio,nombre:r.nombre,descripcion:r.descripcion||'',area:r.area,mes:r.mes,responsable:r.responsable||'',prioridad:r.prioridad||'media',estado:r.estado||'pendiente',observaciones:r.observaciones||'',fechaEstado:r.fecha_estado||''})),
@@ -4483,7 +4471,7 @@ async function apiGetProyeccion(p, res) {
 async function apiSaveTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const anio=Number(p.anio||new Date().getFullYear());
-  const{data}=await supabase.from('proyeccion_tareas').insert({
+  const{data}=await tInsert('proyeccion_tareas',{
     anio,nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
     area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
     prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
@@ -4495,7 +4483,7 @@ async function apiUpdateTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('proyeccion_tareas').update({
+  await tUpdate('proyeccion_tareas',{
     nombre:String(p.nombre||'').trim(),descripcion:String(p.descripcion||'').trim(),
     area:String(p.area||'').trim(),mes:Number(p.mes||1),responsable:String(p.responsable||'').trim(),
     prioridad:String(p.prioridad||'media'),estado:String(p.estado||'pendiente'),
@@ -4509,13 +4497,14 @@ async function apiDeleteTarea(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('proyeccion_tareas').delete().eq('id',id);
+  await tDelete('proyeccion_tareas').eq('id',id);
   return ok(res,{id});
 }
 async function apiSaveMesProyeccion(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const anio=Number(p.anio||new Date().getFullYear()),mes=Number(p.mes||1);
   await supabase.from('proyeccion_meses').upsert({
+    motel_id: MOTEL_ID,
     anio,mes,meta:Number(p.meta||0),presupuesto:Number(p.presupuesto||0),
     observaciones:String(p.observaciones||'').trim(),
     ventas_anterior:Number(p.ventasAnterior||0),
@@ -4530,7 +4519,7 @@ async function apiSaveMesProyeccion(p, res) {
 async function apiClearMaidLog(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const bDay=String(p.businessDay||businessDay(Date.now()));
-  await supabase.from('maid_log').delete().eq('business_day',bDay);
+  await tDelete('maid_log').eq('business_day',bDay);
   return ok(res,{businessDay:bDay});
 }
 async function apiMaidCancel(p, res) {
@@ -4541,11 +4530,10 @@ async function apiMaidCancel(p, res) {
   if(!roomId) return err(res,'roomId requerido');
   const room=await getRoom(roomId);
   if(!room) return err(res,'Habitacion no existe');
-  await supabase.from('maid_log')
-    .delete()
+  await tDelete('maid_log')
     .eq('maid_name',maidName).eq('room_id',roomId)
     .eq('business_day',bDay).eq('action','START').eq('finished_ms',0);
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     maid_in_progress:false,
     maid_name_progress:'',
     state: room.state==='CONTAMINATED'?'DIRTY':room.state,
@@ -4566,10 +4554,10 @@ function ncalMapAreaExtra(a){
 async function apiGetExtras(p, res) {
   const mes=String(p.mes||'').trim();
   if(!mes) return err(res,'mes requerido');
-  const{data}=await supabase.from('schedule_extras').select('*').like('fecha',mes+'%').order('fecha');
+  const{data}=await tSelect('schedule_extras','*').like('fecha',mes+'%').order('fecha');
   const manual=(data||[]).map(r=>({id:r.id,fecha:r.fecha,area:r.area,nombre:r.nombre,horaEntrada:r.hora_entrada||'',horaSalida:r.hora_salida||'',tipo:r.tipo||'normal',vacInicio:r.vac_inicio||'',vacFin:r.vac_fin||'',fijo:r.fijo||'',origen:'manual'}));
   const SHIFT={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-  const{data:reales}=await supabase.from('extra_staff').select('id,person_name,area,shift_id,business_day,entry_ms,exit_ms,payment,registered_by').like('business_day',mes+'%').eq('anulada',false);
+  const{data:reales}=await tSelect('extra_staff','id,person_name,area,shift_id,business_day,entry_ms,exit_ms,payment,registered_by').like('business_day',mes+'%').eq('anulada',false);
   const realesMap=(reales||[]).map(r=>{
     const area=ncalMapAreaExtra(r.area);
     if(!area)return null;
@@ -4591,13 +4579,13 @@ async function apiSaveExtra(p, res) {
   if(!fecha||!area||!nombre) return err(res,'Datos incompletos');
   if(!id){
     const limite=area==='Camareria'?4:area==='Patio'?2:10;
-    const{data:existing}=await supabase.from('schedule_extras').select('id').eq('fecha',fecha).eq('area',area);
+    const{data:existing}=await tSelect('schedule_extras','id').eq('fecha',fecha).eq('area',area);
     if(existing&&existing.length>=limite) return err(res,'Limite de extras alcanzado para este dia ('+limite+')');
   }
   if(id){
-    await supabase.from('schedule_extras').update({nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
+    await tUpdate('schedule_extras',{nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')}).eq('id',id);
   } else {
-    await supabase.from('schedule_extras').insert({fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')});
+    await tInsert('schedule_extras',{fecha,area,nombre,hora_entrada:horaEntrada,hora_salida:horaSalida,tipo,vac_inicio:vacInicio,vac_fin:vacFin,fijo:String(p.fijo||'')});
   }
   return ok(res,{ok:true});
 }
@@ -4605,7 +4593,7 @@ async function apiDeleteScheduleExtra(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id=Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('schedule_extras').delete().eq('id',id);
+  await tDelete('schedule_extras').eq('id',id);
   return ok(res,{ok:true});
 }
 
@@ -4619,7 +4607,7 @@ async function apiSaveShiftFailure(p, res) {
   const failures=p.failures||[];
   if(!userName) return err(res,'userName requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  await supabase.from('shift_failures').insert({
+  await tInsert('shift_failures',{
     ts_ms:now, business_day:bDay, shift_id:shiftId,
     user_name:userName, failures:JSON.stringify(failures),
     created_by:String(p.createdBy||'ADMIN')
@@ -4630,7 +4618,7 @@ async function apiGetShiftFailures(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const yearMonth=String(p.yearMonth||'');
   const filterUserName=String(p.filterUserName||'').trim();
-  let query=supabase.from('shift_failures').select('*').order('ts_ms',{ascending:false});
+  let query=tSelect('shift_failures','*').order('ts_ms',{ascending:false});
   if(yearMonth) query=query.like('business_day',yearMonth+'%');
   if(filterUserName) query=query.eq('user_name',filterUserName);
   const{data}=await query.limit(filterUserName?1000:200);
@@ -4648,7 +4636,7 @@ async function apiGetShiftFailures(p, res) {
 }
 // ==================== PRODUCTOS ====================
 async function apiGetProducts(p, res) {
-  const { data } = await supabase.from('products').select('*').order('categoria').order('nombre');
+  const { data } = await tSelect('products','*').order('categoria').order('nombre');
   return ok(res, { products: (data || []).map(r => ({
     id: r.id, nombre: r.nombre, codigoBarras: r.codigo_barras || '',
     precio: Number(r.precio || 0), categoria: r.categoria || '',
@@ -4670,12 +4658,12 @@ async function apiSaveProduct(p, res) {
   if(!precio) return err(res,'Precio requerido');
   if(id) {
     // Al EDITAR no se modifica stock_actual — para ajustar stock usar apiAjusteInventario
-    await supabase.from('products').update({
+    await tUpdate('products',{
       nombre, codigo_barras: codigo||null, precio, categoria,
       stock_minimo: stockMinimo
     }).eq('id', id);
   } else {
-    await supabase.from('products').insert({
+    await tInsert('products',{
       nombre, codigo_barras: codigo||null, precio, categoria,
       stock_actual: 0, stock_bodega: stockActual, stock_minimo: stockMinimo, activo: true
     });
@@ -4687,7 +4675,7 @@ async function apiDeleteProduct(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const id = Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  await supabase.from('products').update({ activo: false }).eq('id', id);
+  await tUpdate('products',{ activo: false }).eq('id', id);
   return ok(res, {});
 }
 
@@ -4712,9 +4700,8 @@ async function apiSaveCategoriaPrecios(p, res) {
   if(!Number.isInteger(inc) || inc < 1 || inc > 10) return err(res,'included debe ser entero entre 1 y 10');
   out.included = inc;
   // Update scopeado por motel + categoria; .select confirma que la fila existia
-  const { data: upd, error: updErr } = await supabase.from('app_categorias')
-    .update({ precios: out })
-    .eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb)
+  const { data: upd, error: updErr } = await tUpdate('app_categorias', { precios: out })
+    .eq('nombre_db', nombreDb)
     .select('nombre_db');
   if(updErr) return err(res, updErr.message);
   if(!upd || !upd.length) return err(res,'Categoria no encontrada para este motel: '+nombreDb);
@@ -4743,9 +4730,8 @@ function validarPreciosCat(precios) {
 // Lista todas las categorias del motel (incluye inactivas) para el editor. ADMIN.
 async function apiGetCategorias(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
-  const { data, error } = await supabase.from('app_categorias')
-    .select('id,nombre_ui,nombre_db,precios,orden,activo')
-    .eq('motel_id', MOTEL_ID).order('orden');
+  const { data, error } = await tSelect('app_categorias', 'id,nombre_ui,nombre_db,precios,orden,activo')
+    .order('orden');
   if(error) return err(res, error.message);
   return ok(res, { categorias: data || [] });
 }
@@ -4760,18 +4746,15 @@ async function apiCreateCategoria(p, res) {
   if(v.error) return err(res, v.error);
   const nombreDb = nombre; // clave de match con rooms.category, inmutable
   // Unicidad por motel (incluye inactivas para no colisionar)
-  const { data: existe } = await supabase.from('app_categorias')
-    .select('id').eq('motel_id', MOTEL_ID).eq('nombre_db', nombreDb).maybeSingle();
+  const { data: existe } = await tSelect('app_categorias', 'id').eq('nombre_db', nombreDb).maybeSingle();
   if(existe) return err(res,'Ya existe una categoria con ese nombre');
   // orden: el enviado, o el siguiente disponible
   let orden = Number(p.orden||0);
   if(!Number.isInteger(orden) || orden <= 0){
-    const { data: maxRow } = await supabase.from('app_categorias')
-      .select('orden').eq('motel_id', MOTEL_ID).order('orden',{ascending:false}).limit(1).maybeSingle();
+    const { data: maxRow } = await tSelect('app_categorias', 'orden').order('orden',{ascending:false}).limit(1).maybeSingle();
     orden = ((maxRow && Number(maxRow.orden)) || 0) + 1;
   }
-  const { data: ins, error: insErr } = await supabase.from('app_categorias')
-    .insert({ motel_id: MOTEL_ID, nombre_ui: nombre, nombre_db: nombreDb, precios: v.out, orden, activo: true, creado: new Date().toISOString() })
+  const { data: ins, error: insErr } = await tInsert('app_categorias', { nombre_ui: nombre, nombre_db: nombreDb, precios: v.out, orden, activo: true, creado: new Date().toISOString() })
     .select('id,nombre_ui,nombre_db,orden,activo').single();
   if(insErr) return err(res, insErr.message);
   invalidatePricingCache(MOTEL_ID);
@@ -4789,8 +4772,7 @@ async function apiEditCategoria(p, res) {
   const upd = { nombre_ui: nombre };
   const orden = Number(p.orden);
   if(Number.isInteger(orden) && orden > 0) upd.orden = orden;
-  const { data, error } = await supabase.from('app_categorias')
-    .update(upd).eq('motel_id', MOTEL_ID).eq('id', id)
+  const { data, error } = await tUpdate('app_categorias', upd).eq('id', id)
     .select('id,nombre_ui,nombre_db,orden,activo').maybeSingle();
   if(error) return err(res, error.message);
   if(!data) return err(res,'Categoria no encontrada');
@@ -4806,17 +4788,14 @@ async function apiToggleCategoria(p, res) {
   const id = String(p.id||'').trim();
   if(!id) return err(res,'id requerido');
   const activo = p.activo === true;
-  const { data: cat } = await supabase.from('app_categorias')
-    .select('id,nombre_db').eq('motel_id', MOTEL_ID).eq('id', id).maybeSingle();
+  const { data: cat } = await tSelect('app_categorias', 'id,nombre_db').eq('id', id).maybeSingle();
   if(!cat) return err(res,'Categoria no encontrada');
   if(!activo){
-    // Bloquear baja si hay habitaciones en esta categoria (rooms aun sin motel_id; Fase 3 agrega el filtro)
-    const { count } = await supabase.from('rooms')
-      .select('room_id', { count: 'exact', head: true }).eq('category', cat.nombre_db);
+    // Bloquear baja si hay habitaciones en esta categoria (filtra por motel via tSelect)
+    const { count } = await tSelect('rooms', 'room_id', { count: 'exact', head: true }).eq('category', cat.nombre_db);
     if(count && count > 0) return err(res,'No se puede desactivar: hay '+count+' habitacion(es) en esta categoria. Reasignalas primero.');
   }
-  const { data, error } = await supabase.from('app_categorias')
-    .update({ activo }).eq('motel_id', MOTEL_ID).eq('id', id)
+  const { data, error } = await tUpdate('app_categorias', { activo }).eq('id', id)
     .select('id,nombre_ui,nombre_db,orden,activo').maybeSingle();
   if(error) return err(res, error.message);
   invalidatePricingCache(MOTEL_ID);
@@ -4841,8 +4820,7 @@ async function apiSaveMotelInfo(p, res) {
     resolucion_dian: String(p.resolucionDian||'').trim(),
     actualizado: new Date().toISOString()
   };
-  const { data, error } = await supabase.from('motel_info')
-    .update(upd).eq('motel_id', MOTEL_ID)
+  const { data, error } = await tUpdate('motel_info', upd)
     .select(MOTEL_INFO_FIELDS).maybeSingle();
   if(error) return err(res, error.message);
   if(!data) return err(res,'No existe motel_info para este motel');
@@ -4856,12 +4834,12 @@ async function apiAddStock(p, res) {
   const cantidad = Number(p.cantidad||0);
   if(!id) return err(res,'id requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('*').eq('id', id).single();
+  const { data: prod } = await tSelect('products','*').eq('id', id).single();
   if(!prod) return err(res,'Producto no existe');
   const { data: nuevoStock, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: id, p_delta: cantidad });
   if(stockErr) return err(res, stockErr.message);
   const now = Date.now();
-  await supabase.from('stock_entries').insert({
+  await tInsert('stock_entries',{
     ts_ms: now, business_day: businessDay(now), shift_id: currentShiftId(now),
     product_id: id, product_name: prod.nombre||'',
     cantidad: cantidad, user_name: String(p.userName||'')
@@ -4873,7 +4851,7 @@ async function apiGetRoomProducts(p, res) {
   const roomId = String(p.roomId||'').trim();
   const checkInMs = Number(p.checkInMs||0);
   if(!roomId) return err(res,'roomId requerido');
-  let query = supabase.from('room_products').select('*').eq('room_id', roomId);
+  let query = tSelect('room_products','*').eq('room_id', roomId);
   if(checkInMs) query = query.eq('check_in_ms', checkInMs);
   const { data } = await query.order('ts_ms');
   return ok(res, { products: (data||[]).map(r => ({
@@ -4900,11 +4878,11 @@ async function apiAddRoomProduct(p, res) {
   if(!roomId) return err(res,'roomId requerido');
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id', productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente. Quedan: '+prod.stock_actual);
   const total = isCortesia ? 0 : Number(prod.precio||0) * cantidad;
-  await supabase.from('room_products').insert({
+  await tInsert('room_products',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     room_id: roomId, check_in_ms: checkInMs,
     product_id: productId, product_name: prod.nombre,
@@ -4915,7 +4893,7 @@ async function apiAddRoomProduct(p, res) {
   });
   const { data: stockRestante, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_name: userName, user_role: 'RECEPTION',
     product_id: productId, product_name: prod.nombre,
@@ -4924,7 +4902,7 @@ async function apiAddRoomProduct(p, res) {
     nota: roomId ? ('Hab '+roomId) : ''
   });
   if(isCortesia) {
-    await supabase.from('cortesias').insert({
+    await tInsert('cortesias',{
       ts_ms: now, business_day: bDay, shift_id: shift,
       product_id: productId, product_name: prod.nombre,
       cantidad, precio_unit: Number(prod.precio||0),
@@ -4941,20 +4919,20 @@ async function apiEditRoomProduct(p, res) {
   const nuevaCantidad = Number(p.cantidad||0);
   if(!id) return err(res,'id requerido');
   if(nuevaCantidad<=0) return err(res,'Cantidad invalida');
-  const { data: rp } = await supabase.from('room_products').select('*').eq('id', id).single();
+  const { data: rp } = await tSelect('room_products','*').eq('id', id).single();
   if(!rp) return err(res,'Registro no existe');
   const diff = nuevaCantidad - Number(rp.cantidad||0);
-  const { data: prod } = await supabase.from('products').select('stock_actual').eq('id', rp.product_id).single();
+  const { data: prod } = await tSelect('products','stock_actual').eq('id', rp.product_id).single();
   if(!prod) return err(res,'Producto no existe');
   if(diff > 0 && Number(prod.stock_actual||0) < diff) return err(res,'Stock insuficiente');
   const nuevoTotal = rp.is_cortesia ? 0 : Number(rp.precio_unit||0) * nuevaCantidad;
-  await supabase.from('room_products').update({
+  await tUpdate('room_products',{
     cantidad: nuevaCantidad, total: nuevoTotal
   }).eq('id', id);
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: -diff });
   if(stockErr) return err(res, stockErr.message);
   if(diff !== 0) {
-    await supabase.from('stock_movements').insert({
+    await tInsert('stock_movements',{
       ts_ms: Date.now(), business_day: rp.business_day, shift_id: rp.shift_id,
       user_name: String(p.userName||rp.user_name||''), user_role: String(p.userRole||'').toUpperCase() || 'RECEPTION',
       product_id: rp.product_id, product_name: rp.product_name,
@@ -4969,11 +4947,11 @@ async function apiEditRoomProduct(p, res) {
 async function apiDeleteRoomProduct(p, res) {
   const id = Number(p.id||0);
   if(!id) return err(res,'id requerido');
-  const { data: rp } = await supabase.from('room_products').select('*').eq('id', id).single();
+  const { data: rp } = await tSelect('room_products','*').eq('id', id).single();
   if(!rp) return err(res,'Registro no existe');
   const { error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: rp.product_id, p_delta: Number(rp.cantidad||0) });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: Date.now(), business_day: rp.business_day, shift_id: rp.shift_id,
     user_name: String(p.userName||rp.user_name||''), user_role: String(p.userRole||'').toUpperCase() || 'RECEPTION',
     product_id: rp.product_id, product_name: rp.product_name,
@@ -4981,7 +4959,7 @@ async function apiDeleteRoomProduct(p, res) {
     cantidad: Number(rp.cantidad||0),
     nota: 'Hab '+rp.room_id+' — delete'
   });
-  await supabase.from('room_products').delete().eq('id', id);
+  await tDelete('room_products').eq('id', id);
   return ok(res, {});
 }
 
@@ -4994,10 +4972,10 @@ async function apiSaveCortesia(p, res) {
   const userName = String(p.userName||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const { data: prod } = await supabase.from('products').select('*').eq('id', productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id', productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente');
-  await supabase.from('cortesias').insert({
+  await tInsert('cortesias',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     product_id: productId, product_name: prod.nombre,
     cantidad, precio_unit: Number(prod.precio||0),
@@ -5006,7 +4984,7 @@ async function apiSaveCortesia(p, res) {
   });
   const { data: stockRestante, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     user_name: userName, user_role: 'RECEPTION',
     product_id: productId, product_name: prod.nombre,
@@ -5023,26 +5001,26 @@ async function apiSaveObservacionTurno(p, res) {
   const shiftId=String(p.shiftId||'');
   const observacion=String(p.observacion||'');
   if(!shiftId) return err(res,'shiftId requerido');
-  const {data:existing}=await supabase.from('product_shift_obs').select('id').eq('business_day',bd).eq('shift_id',shiftId).maybeSingle();
+  const {data:existing}=await tSelect('product_shift_obs','id').eq('business_day',bd).eq('shift_id',shiftId).maybeSingle();
   if(existing){
-    await supabase.from('product_shift_obs').update({observacion,user_name:String(p.userName||''),ts_ms:now}).eq('id',existing.id);
+    await tUpdate('product_shift_obs',{observacion,user_name:String(p.userName||''),ts_ms:now}).eq('id',existing.id);
   } else {
-    await supabase.from('product_shift_obs').insert({business_day:bd,shift_id:shiftId,observacion,user_name:String(p.userName||''),ts_ms:now});
+    await tInsert('product_shift_obs',{business_day:bd,shift_id:shiftId,observacion,user_name:String(p.userName||''),ts_ms:now});
   }
   return ok(res,{saved:true});
 }
 
 async function apiGetObservacionesTurno(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
-  const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
+  const {data:obs}=await tSelect('product_shift_obs','*').eq('business_day',bd);
   return ok(res,{obs:obs||[]});
 }
 async function apiGetProductosMes(p, res) {
   const ym=String(p.yearMonth||'');
   if(!ym)return err(res,'yearMonth requerido');
-  const {data:prods}=await supabase.from('room_products').select('total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
-  const {data:cors}=await supabase.from('room_products').select('total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
-  const {data:prodsList}=await supabase.from('products').select('id,precio');
+  const {data:prods}=await tSelect('room_products','total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
+  const {data:cors}=await tSelect('room_products','total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
+  const {data:prodsList}=await tSelect('products','id,precio');
   const totalVentas=(prods||[]).reduce((a,r)=>a+Number(r.total||0),0);
   const totalEf=(prods||[]).filter(r=>r.pay_method==='EFECTIVO').reduce((a,r)=>a+Number(r.total||0),0);
   const totalTa=(prods||[]).filter(r=>r.pay_method==='TARJETA').reduce((a,r)=>a+Number(r.total||0),0);
@@ -5053,19 +5031,19 @@ async function apiGetProductosMes(p, res) {
 }
 async function apiGetInventarioByDay(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
-  const {data:products}=await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  const {data:products}=await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
   if(!products||!products.length) return ok(res,{rows:[],resumenTurnos:{},businessDay:bd});
-  const {data:entries}=await supabase.from('stock_entries').select('*').eq('business_day',bd);
-  const {data:sales}=await supabase.from('room_products').select('*').eq('business_day',bd);
-  const {data:obs}=await supabase.from('product_shift_obs').select('*').eq('business_day',bd);
-  const {data:movements}=await supabase.from('stock_movements').select('*').eq('business_day',bd);
-  const {data:snapsRows}=await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
+  const {data:entries}=await tSelect('stock_entries','*').eq('business_day',bd);
+  const {data:sales}=await tSelect('room_products','*').eq('business_day',bd);
+  const {data:obs}=await tSelect('product_shift_obs','*').eq('business_day',bd);
+  const {data:movements}=await tSelect('stock_movements','*').eq('business_day',bd);
+  const {data:snapsRows}=await tSelect('shift_inventory_start','shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps={};(snapsRows||[]).forEach(s=>{if(!snaps[s.shift_id])snaps[s.shift_id]={};snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial);});
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
  const ayer=new Date(bd.replace(/-/g,'/'));ayer.setDate(ayer.getDate()-1);
   const ayerStr=ayer.getFullYear()+'-'+String(ayer.getMonth()+1).padStart(2,'0')+'-'+String(ayer.getDate()).padStart(2,'0');
-  const {data:salesAyer}=await supabase.from('room_products').select('product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
-  const {data:entriesAyer}=await supabase.from('stock_entries').select('product_id,cantidad').eq('business_day',ayerStr);
+  const {data:salesAyer}=await tSelect('room_products','product_id,cantidad,is_cortesia').eq('business_day',ayerStr);
+  const {data:entriesAyer}=await tSelect('stock_entries','product_id,cantidad').eq('business_day',ayerStr);
   const rows=products.map(function(prod){
     const totalVentas=(sales||[]).filter(s=>s.product_id===prod.id&&!s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
     const totalCortesias=(sales||[]).filter(s=>s.product_id===prod.id&&s.is_cortesia).reduce((a,s)=>a+Number(s.cantidad||0),0);
@@ -5146,10 +5124,10 @@ async function capturarSnapshotInventarioInicial(bDay, shiftId, userName, now) {
         return;
       }
     }
-    const { data: products } = await supabase.from('products')
-      .select('id, stock_actual').eq('activo', true);
+    const { data: products } = await tSelect('products', 'id, stock_actual').eq('activo', true);
     if(!products || !products.length) return;
     const rows = products.map(p => ({
+      motel_id: MOTEL_ID,
       business_day: bDay,
       shift_id: shiftId,
       product_id: p.id,
@@ -5174,11 +5152,11 @@ async function apiIngresoBodega(p, res) {
   const nota = String(p.nota||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  const {data:prod} = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
   const { data: nuevoBodega, error: stockErr } = await supabase.rpc('apply_stock_bodega_delta', { p_product_id: productId, p_delta: cantidad });
   if(stockErr) return err(res, stockErr.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_name:String(p.userName||''), user_role:userRole,
     product_id:productId, product_name:prod.nombre,
@@ -5198,14 +5176,14 @@ async function apiDevolverABodega(p, res) {
   const nota = String(p.nota||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  const {data:prod} = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0)<cantidad) return err(res,'No hay suficiente en recepción. Hay: '+prod.stock_actual);
   const { data: nuevoRecepcion, error: stockErrA } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErrA) return err(res, stockErrA.message);
   const { data: nuevoBodega, error: stockErrB } = await supabase.rpc('apply_stock_bodega_delta', { p_product_id: productId, p_delta: cantidad });
   if(stockErrB) return err(res, stockErrB.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_name:String(p.userName||''), user_role:userRole,
     product_id:productId, product_name:prod.nombre,
@@ -5224,14 +5202,14 @@ async function apiTrasladoRecepcion(p, res) {
   const nota = String(p.nota||'').trim();
   if(!productId) return err(res,'productId requerido');
   if(cantidad<=0) return err(res,'Cantidad invalida');
-  const {data:prod} = await supabase.from('products').select('*').eq('id',productId).single();
+  const {data:prod} = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_bodega||0)<cantidad) return err(res,'Stock en bodega insuficiente. Hay: '+prod.stock_bodega);
   const { data: nuevoBodega, error: stockErrA } = await supabase.rpc('apply_stock_bodega_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErrA) return err(res, stockErrA.message);
   const { data: nuevoRecepcion, error: stockErrB } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: cantidad });
   if(stockErrB) return err(res, stockErrB.message);
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_name:String(p.userName||''), user_role:userRole,
     product_id:productId, product_name:prod.nombre,
@@ -5245,8 +5223,7 @@ async function apiListGastosTurno(p, res) {
   const shiftId = String(p.shiftId||'').trim();
   if(!businessDay_) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase.from('loans')
-    .select('*')
+  const { data, error } = await tSelect('loans', '*')
     .eq('business_day', businessDay_)
     .eq('shift_id', shiftId)
     .order('ts_ms', {ascending:true});
@@ -5269,7 +5246,7 @@ async function apiAgregarGastoManual(p, res) {
   if(amount<=0) return err(res,'Monto inválido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data, error } = await supabase.from('loans').insert({
+  const { data, error } = await tInsert('loans',{
     ts_ms: now,
     business_day: businessDay_,
     shift_id: shiftId,
@@ -5298,7 +5275,7 @@ async function apiEditarGastoModulo(p, res) {
   if(amount<=0) return err(res,'Monto inválido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gasto, error: errGasto } = await tSelect('loans','*').eq('id', gastoId).maybeSingle();
   if(errGasto) return err(res, errGasto.message);
   if(!gasto) return err(res,'Gasto no encontrado');
   if(gasto.anulada) return err(res,'No se puede editar un gasto anulado');
@@ -5306,7 +5283,7 @@ async function apiEditarGastoModulo(p, res) {
   const amountOriginal = gasto.amount_original!==null && gasto.amount_original!==undefined
     ? gasto.amount_original
     : gasto.amount;
-  await supabase.from('loans').update({
+  await tUpdate('loans',{
     borrower_name: borrowerName,
     amount: amount,
     note: note,
@@ -5327,11 +5304,11 @@ async function apiAnularGastoModulo(p, res) {
   if(!gastoId) return err(res,'gastoId requerido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data: gasto, error: errGasto } = await supabase.from('loans').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gasto, error: errGasto } = await tSelect('loans','*').eq('id', gastoId).maybeSingle();
   if(errGasto) return err(res, errGasto.message);
   if(!gasto) return err(res,'Gasto no encontrado');
   if(gasto.anulada) return err(res,'Este gasto ya está anulado');
-  await supabase.from('loans').update({
+  await tUpdate('loans',{
     anulada: true,
     anulada_ms: now,
     anulada_por: userName,
@@ -5382,7 +5359,7 @@ async function apiAgregarVentaManual(p, res) {
   const extraPeople = Math.max(0,people-included);
   const extraPeopleValue = extraPeople*20000;
   const noteFinal = '[MANUAL] '+motivo;
-  const { data: inserted, error: errIns } = await supabase.from('sales').insert({
+  const { data: inserted, error: errIns } = await tInsert('sales',{
     ts_ms: now,
     business_day: businessDay_,
     shift_id: shiftId,
@@ -5416,7 +5393,7 @@ async function apiAgregarVentaManual(p, res) {
     anulada: false
   }).select('id').single();
   if(errIns) return err(res, 'Error guardando venta: '+errIns.message);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: businessDay_,
     shift_id: shiftId,
@@ -5448,19 +5425,19 @@ async function apiAnularVentaModulo(p, res) {
   if(!saleId) return err(res,'saleId requerido');
   if(!motivo||motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
   const now = Date.now();
-  const { data: sale, error: errSale } = await supabase.from('sales').select('*').eq('id', saleId).maybeSingle();
+  const { data: sale, error: errSale } = await tSelect('sales','*').eq('id', saleId).maybeSingle();
   if(errSale) return err(res, errSale.message);
   if(!sale) return err(res,'Venta no encontrada');
   if(sale.anulada) return err(res,'Esta venta ya está anulada');
   const motivoFinal = '[AJUSTE-ANULACION] ' + motivo;
-  await supabase.from('sales').update({
+  await tUpdate('sales',{
     type:'ANULADA',
     note: motivoFinal,
     anulada: true,
     anulada_ms: now,
     anulada_por: userName
   }).eq('id', saleId);
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms: now,
     business_day: sale.business_day,
     shift_id: sale.shift_id,
@@ -5501,8 +5478,7 @@ async function apiAnularVenta(p, res) {
   // Si es devolucion en efectivo, leer el metodo de pago original de la venta
   let metodoOriginal = null;
   if(devolucionEfectivo){
-    const { data: ventaOriginal } = await supabase.from('sales')
-      .select('pay_method')
+    const { data: ventaOriginal } = await tSelect('sales', 'pay_method')
       .eq('room_id',roomId)
       .eq('check_in_ms',checkInMs)
       .eq('type','SALE')
@@ -5522,9 +5498,9 @@ async function apiAnularVenta(p, res) {
     devolucion_efectivo: devolucionEfectivo,
     devolucion_metodo_original: metodoOriginal
   };
-  await supabase.from('sales').update(updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  await tUpdate('sales',updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
   // Devolver habitacion a disponible
-  await supabase.from('rooms').update({
+  await tUpdate('rooms',{
     state:'AVAILABLE', state_since_ms:now, people:0,
     due_ms:0, check_in_ms:0, last_checkout_ms:now,
     arrival_type:'', arrival_plate:'',
@@ -5533,7 +5509,7 @@ async function apiAnularVenta(p, res) {
     updated_at:new Date().toISOString()
   }).eq('room_id',roomId);
   // Registrar en historial
-  await supabase.from('state_history').insert({
+  await tInsert('state_history',{
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:userRole, user_name:userName, room_id:roomId,
     from_state:'OCCUPIED', to_state:'AVAILABLE', people:0,
@@ -5547,7 +5523,7 @@ async function apiSaveRoomBarcode(p, res) {
   const barcode = String(p.barcode||'').trim();
   if(!roomId) return err(res,'roomId requerido');
   if(!barcode) return err(res,'barcode requerido');
-  await supabase.from('rooms').update({ barcode }).eq('room_id', roomId);
+  await tUpdate('rooms',{ barcode }).eq('room_id', roomId);
   return ok(res, { roomId, barcode });
 }
 // ==================== AJUSTE DE INVENTARIO (ADMIN) ====================
@@ -5583,7 +5559,7 @@ async function apiAjusteInventario(p, res) {
     if(cantidad <= 0) return err(res,'Cantidad debe ser positiva en venta olvidada/faltante');
   }
 
-  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
 
   const vaDescontar = (cantidad > 0);
@@ -5594,7 +5570,7 @@ async function apiAjusteInventario(p, res) {
   const { data: nuevoStock, error: stockErr } = await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
   if(stockErr) return err(res, stockErr.message);
 
-  await supabase.from('stock_movements').insert({
+  await tInsert('stock_movements',{
     ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
     user_name: adminName, user_role: 'ADMIN',
     product_id: productId, product_name: prod.nombre,
@@ -5606,7 +5582,7 @@ async function apiAjusteInventario(p, res) {
   if(afectaCuadre) {
     const precioUnit = Number(prod.precio||0);
     const total = precioUnit * cantidad;
-    await supabase.from('room_products').insert({
+    await tInsert('room_products',{
       ts_ms: now, business_day: bDayAjuste, shift_id: shiftAjuste,
       room_id: 'AJUSTE', check_in_ms: 0,
       product_id: productId, product_name: prod.nombre,
@@ -5629,19 +5605,18 @@ async function apiGetPrintTurno(p, res) {
   const sid = String(p.shiftId || '').trim();
   if(!['SHIFT_1','SHIFT_2','SHIFT_3'].includes(sid)) return err(res,'Turno invalido');
 
-  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  const { data: products } = await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
   if(!products || !products.length) return ok(res,{rows:[],totals:{},cortesias:[],businessDay:bd,shiftId:sid});
 
-  const { data: salesDay } = await supabase.from('room_products').select('*').eq('business_day',bd);
-  const { data: movements } = await supabase.from('stock_movements').select('*').eq('business_day',bd);
-  const { data: entries } = await supabase.from('stock_entries').select('*').eq('business_day',bd);
-  const { data: snapsRows } = await supabase.from('shift_inventory_start').select('shift_id,product_id,saldo_inicial').eq('business_day',bd);
+  const { data: salesDay } = await tSelect('room_products','*').eq('business_day',bd);
+  const { data: movements } = await tSelect('stock_movements','*').eq('business_day',bd);
+  const { data: entries } = await tSelect('stock_entries','*').eq('business_day',bd);
+  const { data: snapsRows } = await tSelect('shift_inventory_start','shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps = {}; (snapsRows||[]).forEach(s=>{ if(!snaps[s.shift_id]) snaps[s.shift_id]={}; snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial); });
 
   const salesShift = (salesDay||[]).filter(s => s.shift_id === sid);
 
-  const { data: shiftLog } = await supabase.from('shift_log')
-    .select('user_name').eq('business_day',bd).eq('shift_id',sid)
+  const { data: shiftLog } = await tSelect('shift_log', 'user_name').eq('business_day',bd).eq('shift_id',sid)
     .eq('user_role','RECEPTION').in('action',['LOGIN','RELOGIN'])
     .order('ts_ms').limit(1);
   const recepName = shiftLog && shiftLog.length ? shiftLog[0].user_name : '—';
@@ -5749,8 +5724,7 @@ async function apiGetAnoAnterior(p, res) {
   if(userRole!=='ADMIN') return err(res,'Solo ADMIN');
   const ano = Number(p.ano||0);
   if(!ano || ano < 2020 || ano > 2100) return err(res,'Ano invalido');
-  const { data, error } = await supabase.from('ventas_gastos_anuales')
-    .select('*')
+  const { data, error } = await tSelect('ventas_gastos_anuales', '*')
     .eq('ano', ano)
     .maybeSingle();
   if(error) return err(res, error.message);
@@ -5784,21 +5758,18 @@ async function apiSaveAnoAnterior(p, res) {
   });
 
   // Verificar si ya existe el ano
-  const { data: existe } = await supabase.from('ventas_gastos_anuales')
-    .select('id')
+  const { data: existe } = await tSelect('ventas_gastos_anuales', 'id')
     .eq('ano', ano)
     .maybeSingle();
 
   let result;
   if(existe){
     // Actualizar
-    result = await supabase.from('ventas_gastos_anuales')
-      .update(datos)
+    result = await tUpdate('ventas_gastos_anuales', datos)
       .eq('ano', ano);
   } else {
     // Crear nuevo
-    result = await supabase.from('ventas_gastos_anuales')
-      .insert(datos);
+    result = await tInsert('ventas_gastos_anuales', datos);
   }
   if(result.error) return err(res, result.error.message);
   return ok(res, { ano: ano, guardado: true });
@@ -5840,64 +5811,57 @@ async function apiGetGraficaDiaADia(p, res) {
   const ultimoDiaActual = esActualMes ? hoyDay : diasActual;
 
   // 1. Ventas mes actual
-  const ventasActual = await fetchAll(() => supabase.from('sales')
-    .select('business_day, total, type, anulada')
+  const ventasActual = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDayActual)
     .lte('business_day', lastDayActual)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
 
   // 1b. Ventas del bar mes actual
-  const ventasBarActual = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBarActual = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDayActual)
     .lte('business_day', lastDayActual));
 
   // 2. Ventas mes anterior
-  const ventasAnterior = await fetchAll(() => supabase.from('sales')
-    .select('business_day, total, type, anulada')
+  const ventasAnterior = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDayAnterior)
     .lte('business_day', lastDayAnterior)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
 
   // 2b. Ventas del bar mes anterior
-  const ventasBarAnterior = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBarAnterior = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDayAnterior)
     .lte('business_day', lastDayAnterior));
 
   // 2c. Ventas diarias MANUALES del mes actual (override)
-  const { data: manualActual } = await supabase.from('ventas_diarias_manuales')
-    .select('fecha, total_ventas')
+  const { data: manualActual } = await tSelect('ventas_diarias_manuales', 'fecha, total_ventas')
     .eq('mes', mes);
 
   // 2d. Ventas diarias MANUALES del mes anterior (override)
-  const { data: manualAnterior } = await supabase.from('ventas_diarias_manuales')
-    .select('fecha, total_ventas')
+  const { data: manualAnterior } = await tSelect('ventas_diarias_manuales', 'fecha, total_ventas')
     .eq('mes', mesAnterior);
 
 // 3. Gastos del mes actual (de gastos_mes)
-  const { data: gastosActual } = await supabase.from('gastos_mes')
-    .select('fecha, monto, anulada')
+  const { data: gastosActual } = await tSelect('gastos_mes', 'fecha, monto, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
 
   // 3b. GASTOS DEL CUADRE del mes actual (general + taxi + turnos + loans manuales)
   // Estos se descuentan del calculo automatico (no se suman como gastos_mes)
   const [gralAct, taxiAct, extraAct, loansAct] = await Promise.all([
-    supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('taxi_expenses').select('amount, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('extra_staff').select('payment, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
-    supabase.from('loans').select('amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
+    tSelect('general_expenses','amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    tSelect('taxi_expenses','amount, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    tSelect('extra_staff','payment, business_day').eq('anulada', false).gte('business_day', firstDayActual).lte('business_day', lastDayActual),
+    tSelect('loans','amount, business_day').gte('business_day', firstDayActual).lte('business_day', lastDayActual).eq('manual', true).eq('anulada', false)
   ]);
 
   // 3c. GASTOS DEL CUADRE del mes anterior
   const [gralAnt, taxiAnt, extraAnt, loansAnt] = await Promise.all([
-    supabase.from('general_expenses').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('taxi_expenses').select('amount, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('extra_staff').select('payment, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
-    supabase.from('loans').select('amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
+    tSelect('general_expenses','amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    tSelect('taxi_expenses','amount, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    tSelect('extra_staff','payment, business_day').eq('anulada', false).gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior),
+    tSelect('loans','amount, business_day').gte('business_day', firstDayAnterior).lte('business_day', lastDayAnterior).eq('manual', true).eq('anulada', false)
   ]);
 
   // Agrupar gastos del cuadre POR DIA (mes actual)
@@ -5970,8 +5934,7 @@ async function apiGetGraficaDiaADia(p, res) {
 
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del mes actual (regla de oro - grafica dia a dia)
-  const { data: retirosGDDActual } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosGDDActual } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDayActual)
     .lte('dia_origen', lastDayActual)
     .eq('anulado', false);
@@ -5984,8 +5947,7 @@ async function apiGetGraficaDiaADia(p, res) {
   });
 
   // Restar retiros activos del mes anterior tambien (para comparacion justa)
-  const { data: retirosGDDAnterior } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosGDDAnterior } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDayAnterior)
     .lte('dia_origen', lastDayAnterior)
     .eq('anulado', false);
@@ -6070,8 +6032,7 @@ async function apiGetGraficaDiaADia(p, res) {
   }
 
   // Gastos mes anterior hasta misma fecha
-  const { data: gastosAnteriorRaw } = await supabase.from('gastos_mes')
-    .select('fecha, monto, anulada')
+  const { data: gastosAnteriorRaw } = await tSelect('gastos_mes', 'fecha, monto, anulada')
     .eq('mes', mesAnterior)
     .neq('anulada', true);
   (gastosAnteriorRaw||[]).forEach(g => {
@@ -6138,21 +6099,18 @@ async function apiGetGraficaAnoAno(p, res) {
   const firstDay = `${ano}-01-01`;
   const lastDay = `${ano}-12-31`;
 // 1. Ventas y gastos del año actual (calculados desde sales, room_products y gastos_mes)
-  const ventasActual = await fetchAll(() => supabase.from('sales')
-    .select('business_day, total, type, anulada')
+  const ventasActual = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
 
   // 1b. Ventas del bar (room_products) del año actual
-  const ventasBarActual = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBarActual = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
 
-  const { data: gastosActual } = await supabase.from('gastos_mes')
-    .select('mes, monto, anulada')
+  const { data: gastosActual } = await tSelect('gastos_mes', 'mes, monto, anulada')
     .gte('mes', `${ano}-01`)
     .lte('mes', `${ano}-12`)
     .neq('anulada', true);
@@ -6177,8 +6135,7 @@ async function apiGetGraficaAnoAno(p, res) {
 
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del año (regla de oro - grafica año a año)
-  const { data: retirosGAA } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosGAA } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDay)
     .lte('dia_origen', lastDay)
     .eq('anulado', false);
@@ -6201,20 +6158,17 @@ async function apiGetGraficaAnoAno(p, res) {
   const ultimoMes = (ano === hoyYear) ? hoyMonth : 12;
 
   // 2. Año anterior (de la tabla ventas_gastos_anuales)
-  const { data: anoAnt } = await supabase.from('ventas_gastos_anuales')
-    .select('*')
+  const { data: anoAnt } = await tSelect('ventas_gastos_anuales', '*')
     .eq('ano', anoAnterior)
     .maybeSingle();
 
   // 2b. Año actual MANUAL (override de meses pasados — totales mensuales)
-  const { data: anoActualManual } = await supabase.from('ventas_gastos_anuales')
-    .select('*')
+  const { data: anoActualManual } = await tSelect('ventas_gastos_anuales', '*')
     .eq('ano', ano)
     .maybeSingle();
 
   // 2c. Ventas diarias MANUALES del año actual (override mas preciso)
-  const { data: ventasDiariasManuales } = await supabase.from('ventas_diarias_manuales')
-    .select('mes, total_ventas')
+  const { data: ventasDiariasManuales } = await tSelect('ventas_diarias_manuales', 'mes, total_ventas')
     .gte('mes', `${ano}-01`)
     .lte('mes', `${ano}-12`);
 
@@ -6314,16 +6268,14 @@ async function apiGetMetricasMes(p, res) {
   const daysInMonth = lastDayDate.getDate();
 
 // 1. Ventas del mes (de la tabla sales)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
+  const ventasMes = await fetchAll(() => tSelect('sales', 'id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
     .neq('anulada', true));
 
   // 1b. Ventas del bar (de la tabla room_products)
-  const ventasBar = await fetchAll(() => supabase.from('room_products')
-    .select('business_day, total, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'business_day, total, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
 
@@ -6367,8 +6319,7 @@ async function apiGetMetricasMes(p, res) {
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del totalVentas y de las ventas por dia (regla de oro)
   // Esto cumple la regla de oro: el retiro se ve reflejado en Metricas
-  const { data: retirosMM } = await supabase.from('retiros_dueno')
-    .select('dia_origen, monto, anulado')
+  const { data: retirosMM } = await tSelect('retiros_dueno', 'dia_origen, monto, anulado')
     .gte('dia_origen', firstDay)
     .lte('dia_origen', lastDay)
     .eq('anulado', false);
@@ -6407,8 +6358,7 @@ async function apiGetMetricasMes(p, res) {
   });
 
   // Contar turnos trabajados y fallas (de tabla shift_log y shift_failures)
-  const { data: shiftLogs } = await supabase.from('shift_log')
-    .select('user_name, business_day')
+  const { data: shiftLogs } = await tSelect('shift_log', 'user_name, business_day')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay);
   const turnosPorRecep = {};
@@ -6418,8 +6368,7 @@ async function apiGetMetricasMes(p, res) {
     turnosPorRecep[nm]++;
   });
 
-  const { data: failures } = await supabase.from('shift_failures')
-    .select('user_name, business_day')
+  const { data: failures } = await tSelect('shift_failures', 'user_name, business_day')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay);
   const fallasPorRecep = {};
@@ -6437,8 +6386,7 @@ async function apiGetMetricasMes(p, res) {
   const recepRanking = Object.values(recepMap).sort((a,b) => b.total - a.total);
 
   // 4. Ranking camareras
-  const maidLogs = await fetchAll(() => supabase.from('maid_log')
-    .select('maid_name, business_day, started_ms, finished_ms, state_to')
+  const maidLogs = await fetchAll(() => tSelect('maid_log', 'maid_name, business_day, started_ms, finished_ms, state_to')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .gt('finished_ms', 0)
@@ -6456,8 +6404,7 @@ async function apiGetMetricasMes(p, res) {
   // 5. Habitaciones mas danadas (filtrar por created_at del mes en curso)
   const firstDayTs = `${firstDay}T00:00:00`;
   const lastDayTs = `${lastDay}T23:59:59`;
-  const { data: roomIssues } = await supabase.from('room_issues')
-    .select('room_id, type, description, resolved, created_at')
+  const { data: roomIssues } = await tSelect('room_issues', 'room_id, type, description, resolved, created_at')
     .gte('created_at', firstDayTs)
     .lte('created_at', lastDayTs);
   const roomMap = {};
@@ -6470,8 +6417,7 @@ async function apiGetMetricasMes(p, res) {
   const habsDanadas = Object.values(roomMap).sort((a,b) => b.count - a.count).slice(0,5);
 
   // 6. Proyeccion del mes (mes y anio son numericos en la tabla)
-  const { data: proyTareas } = await supabase.from('proyeccion_tareas')
-    .select('id, anio, mes, nombre, descripcion, area, responsable, prioridad, estado, fecha_estado')
+  const { data: proyTareas } = await tSelect('proyeccion_tareas', 'id, anio, mes, nombre, descripcion, area, responsable, prioridad, estado, fecha_estado')
     .eq('anio', year)
     .eq('mes', month);
   let totalTareas = 0;
@@ -6546,8 +6492,7 @@ async function apiGetGastosMesResumen(p, res) {
   const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
 
   // 1. Ventas del mes desde la tabla "sales" (habitaciones + extensiones)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type, devolucion_efectivo, devolucion_metodo_original')
+  const ventasMes = await fetchAll(() => tSelect('sales', 'id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type, devolucion_efectivo, devolucion_metodo_original')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -6579,8 +6524,7 @@ async function apiGetGastosMesResumen(p, res) {
 
   // Devoluciones cruzadas: ventas anuladas con devolucion en efectivo
   // El banco/Nequi tiene la plata (suma a tarjeta/nequi) pero la caja entrego (resta del efectivo)
-  const ventasCruzadas = await fetchAll(() => supabase.from('sales')
-    .select('total, devolucion_metodo_original')
+  const ventasCruzadas = await fetchAll(() => tSelect('sales', 'total, devolucion_metodo_original')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .eq('anulada', true)
@@ -6594,8 +6538,7 @@ async function apiGetGastosMesResumen(p, res) {
   });
 
   // 1b. Ventas del bar desde la tabla "room_products" (productos consumidos en habitaciones)
-  const ventasBar = await fetchAll(() => supabase.from('room_products')
-    .select('total, pay_method, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
   
@@ -6625,8 +6568,7 @@ async function apiGetGastosMesResumen(p, res) {
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
   // Restar retiros activos del mes de las ventas (regla de oro)
   // El retiro se ve reflejado en la pantalla "Gastos Mes" como menos ventas
-  const retirosMesGM = await fetchAll(() => supabase.from('retiros_dueno')
-    .select('monto, pay_method, anulado')
+  const retirosMesGM = await fetchAll(() => tSelect('retiros_dueno', 'monto, pay_method, anulado')
     .gte('dia_origen', firstDay)
     .lte('dia_origen', lastDay)
     .eq('anulado', false));
@@ -6645,8 +6587,7 @@ async function apiGetGastosMesResumen(p, res) {
   cantVentas += cantVentasBar;
 
   // 2. Gastos del mes desde la nueva tabla "gastos_mes"
-  const { data: gastosMes, error: errG } = await supabase.from('gastos_mes')
-    .select('*')
+  const { data: gastosMes, error: errG } = await tSelect('gastos_mes', '*')
     .eq('mes', mes)
     .order('fecha', { ascending: true })
     .order('ts_ms', { ascending: true });
@@ -6670,8 +6611,7 @@ async function apiGetGastosMesResumen(p, res) {
   });
 
   // 3. Descargos de Nequi del mes
-  const { data: descargos, error: errD } = await supabase.from('descargos_nequi')
-    .select('*')
+  const { data: descargos, error: errD } = await tSelect('descargos_nequi', '*')
     .eq('mes', mes)
     .order('fecha', { ascending: true });
   if(errD) return err(res, errD.message);
@@ -6680,22 +6620,18 @@ async function apiGetGastosMesResumen(p, res) {
   // Estos gastos SE PAGAN EN EFECTIVO durante el turno y nunca entran a caja
   // Se descuentan de "Ventas en efectivo" para mostrar la plata REAL disponible
   const [gralRes, taxiRes, extraRes, loansRes] = await Promise.all([
-    supabase.from('general_expenses')
-      .select('amount')
+    tSelect('general_expenses', 'amount')
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
-    supabase.from('taxi_expenses')
-      .select('amount')
+    tSelect('taxi_expenses', 'amount')
       .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
-    supabase.from('extra_staff')
-      .select('payment')
+    tSelect('extra_staff', 'payment')
       .eq('anulada', false)
       .gte('business_day', firstDay)
       .lte('business_day', lastDay),
-    supabase.from('loans')
-      .select('amount')
+    tSelect('loans', 'amount')
       .gte('business_day', firstDay)
       .lte('business_day', lastDay)
       .eq('manual', true)
@@ -6782,7 +6718,7 @@ async function apiAddGastoMes(p, res) {
   if(!['EFECTIVO','TARJETA'].includes(payMethod)) return err(res,'Metodo de pago invalido (solo EFECTIVO o TARJETA)');
   const mes = fecha.substring(0,7);
   const now = Date.now();
-  const { data, error } = await supabase.from('gastos_mes').insert({
+  const { data, error } = await tInsert('gastos_mes',{
     ts_ms: now,
     fecha: fecha,
     mes: mes,
@@ -6811,8 +6747,7 @@ async function apiAnularRetiro(p, res) {
   if(motivo.length < 5) return err(res, 'Motivo de anulacion obligatorio (minimo 5 caracteres)');
   
   // Verificar que el retiro existe y no esta ya anulado
-  const { data: retiroExistente, error: errBusqueda } = await supabase.from('retiros_dueno')
-    .select('*')
+  const { data: retiroExistente, error: errBusqueda } = await tSelect('retiros_dueno', '*')
     .eq('id', retiroId)
     .single();
   
@@ -6821,7 +6756,7 @@ async function apiAnularRetiro(p, res) {
   
   // Anular el retiro (NO se borra, queda en historial)
   const now = Date.now();
-  const { error: errUpdate } = await supabase.from('retiros_dueno').update({
+  const { error: errUpdate } = await tUpdate('retiros_dueno',{
     anulado: true,
     anulado_ms: now,
     anulado_por: userName,
@@ -6846,7 +6781,7 @@ async function apiGetRetiros(p, res) {
   const mes = String(p.mes||'').trim(); // formato YYYY-MM (opcional)
   
   // Construir query base
-  let query = supabase.from('retiros_dueno').select('*');
+  let query = tSelect('retiros_dueno','*');
   
   // Filtrar por mes si se proporciona
   if(mes && mes.match(/^\d{4}-\d{2}$/)) {
@@ -6917,8 +6852,7 @@ async function apiCreateRetiro(p, res) {
   
   // VALIDACION ESTRICTA: verificar disponibilidad del dia origen
   // Sumar ventas de ese dia y metodo (solo SALE/RENEWAL/EXTENSION, no anuladas, no devolucion cruzada)
-  const { data: ventasDia } = await supabase.from('sales')
-    .select('total, pay_method, pay_method_2, amount_1, amount_2, amount_3, type, anulada, devolucion_efectivo')
+  const { data: ventasDia } = await tSelect('sales', 'total, pay_method, pay_method_2, amount_1, amount_2, amount_3, type, anulada, devolucion_efectivo')
     .eq('business_day', diaOrigen)
     .in('type', ['SALE','RENEWAL','EXTENSION']);
   
@@ -6937,8 +6871,7 @@ async function apiCreateRetiro(p, res) {
   });
   
   // Restar bar productos del dia con ese metodo (tambien cuenta como ventas)
-  const { data: barDia } = await supabase.from('room_products')
-    .select('total, pay_method, is_cortesia')
+  const { data: barDia } = await tSelect('room_products', 'total, pay_method, is_cortesia')
     .eq('business_day', diaOrigen);
   (barDia||[]).forEach(b => {
     if(b.is_cortesia) return;
@@ -6947,8 +6880,7 @@ async function apiCreateRetiro(p, res) {
   });
   
   // Restar retiros previos del mismo dia y metodo (no anulados)
-  const { data: retirosPrev } = await supabase.from('retiros_dueno')
-    .select('monto')
+  const { data: retirosPrev } = await tSelect('retiros_dueno', 'monto')
     .eq('dia_origen', diaOrigen)
     .eq('pay_method', payMethod)
     .eq('anulado', false);
@@ -6969,7 +6901,7 @@ async function apiCreateRetiro(p, res) {
   if(hour >= 14 && hour < 21) shiftId = 'SHIFT_2';
   else if(hour >= 21 || hour < 6) shiftId = 'SHIFT_3';
   
-  const { data, error } = await supabase.from('retiros_dueno').insert({
+  const { data, error } = await tInsert('retiros_dueno',{
     ts_ms: now,
     business_day: today,
     dia_origen: diaOrigen,
@@ -7004,7 +6936,7 @@ async function apiEditGastoMes(p, res) {
   if(!gastoId) return err(res,'gastoId requerido');
   const motivo = String(p.motivo||'').trim();
   if(motivo.length<5) return err(res,'Motivo de edicion requerido (min 5 caracteres)');
-  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('gastos_mes','*').eq('id', gastoId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Gasto no encontrado');
   if(gastoActual.anulada) return err(res,'No se puede editar un gasto anulado');
@@ -7041,7 +6973,7 @@ async function apiEditGastoMes(p, res) {
     updates.fecha = fecha;
     updates.mes = fecha.substring(0,7);
   }
-  const { error } = await supabase.from('gastos_mes').update(updates).eq('id', gastoId);
+  const { error } = await tUpdate('gastos_mes',updates).eq('id', gastoId);
   if(error) return err(res, error.message);
   return ok(res, { gastoId: gastoId });
 }
@@ -7059,7 +6991,7 @@ async function apiDescargarNequi(p, res) {
   const nota = String(p.nota||'').trim();
   const mes = fecha.substring(0,7);
   const now = Date.now();
-  const { data, error } = await supabase.from('descargos_nequi').insert({
+  const { data, error } = await tInsert('descargos_nequi',{
     ts_ms: now,
     fecha: fecha,
     mes: mes,
@@ -7079,11 +7011,11 @@ async function apiAnularDescargoNequi(p, res) {
   if(!userName) return err(res,'Usuario requerido');
   const descargoId = Number(p.descargoId||0);
   if(!descargoId) return err(res,'descargoId requerido');
-  const { data: descargoActual, error: errD } = await supabase.from('descargos_nequi').select('*').eq('id', descargoId).maybeSingle();
+  const { data: descargoActual, error: errD } = await tSelect('descargos_nequi','*').eq('id', descargoId).maybeSingle();
   if(errD) return err(res, errD.message);
   if(!descargoActual) return err(res,'Descargo no encontrado');
   if(descargoActual.anulada) return err(res,'Este descargo ya esta anulado');
-  const { error } = await supabase.from('descargos_nequi').update({
+  const { error } = await tUpdate('descargos_nequi',{
     anulada: true,
     anulada_ms: Date.now(),
     anulada_por: userName
@@ -7102,11 +7034,11 @@ async function apiAnularGastoMes(p, res) {
   if(!gastoId) return err(res,'gastoId requerido');
   const motivo = String(p.motivo||'').trim();
   if(motivo.length<5) return err(res,'Motivo requerido (min 5 caracteres)');
-  const { data: gastoActual, error: errG } = await supabase.from('gastos_mes').select('*').eq('id', gastoId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('gastos_mes','*').eq('id', gastoId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Gasto no encontrado');
   if(gastoActual.anulada) return err(res,'Este gasto ya esta anulado');
-  const { error } = await supabase.from('gastos_mes').update({
+  const { error } = await tUpdate('gastos_mes',{
     anulada: true,
     anulada_ms: Date.now(),
     anulada_por: userName,
@@ -7128,8 +7060,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   if(!/^\d{4}-\d{2}$/.test(mes)) return err(res,'Mes invalido (formato YYYY-MM)');
 
   // Leer todos los movimientos del mes (excepto anulados)
-  const { data: movs, error: errM } = await supabase.from('caja_paola')
-    .select('*')
+  const { data: movs, error: errM } = await tSelect('caja_paola', '*')
     .eq('mes', mes)
     .order('ts_ms', { ascending: false });
   if(errM) return err(res, errM.message);
@@ -7163,8 +7094,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   const lastDay = `${mes}-${String(lastDayDate.getDate()).padStart(2,'0')}`;
 
   // Ventas en efectivo (sales)
-  const ventasMes = await fetchAll(() => supabase.from('sales')
-    .select('total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
+  const ventasMes = await fetchAll(() => tSelect('sales', 'total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .in('type', ['SALE','RENEWAL','EXTENSION'])
@@ -7182,8 +7112,7 @@ async function apiGetCajaPaolaResumen(p, res) {
 
   // Devoluciones cruzadas: ventas anuladas con devolucion en efectivo
   // La caja entrego esa plata al cliente, asi que se resta del efectivo del mes
-  const ventasCruzadasCP = await fetchAll(() => supabase.from('sales')
-    .select('total')
+  const ventasCruzadasCP = await fetchAll(() => tSelect('sales', 'total')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .eq('anulada', true)
@@ -7193,8 +7122,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Ventas del bar en efectivo
-  const ventasBar = await fetchAll(() => supabase.from('room_products')
-    .select('total, pay_method, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
   (ventasBar||[]).forEach(v => {
@@ -7207,8 +7135,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Descargos de Nequi a efectivo (suman al efectivo)
-  const { data: descargos } = await supabase.from('descargos_nequi')
-    .select('monto, anulada')
+  const { data: descargos } = await tSelect('descargos_nequi', 'monto, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
   let totalDescargos = 0;
@@ -7218,8 +7145,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Gastos publicos en efectivo (gastos_mes con pay_method=EFECTIVO)
-  const { data: gastosPublic } = await supabase.from('gastos_mes')
-    .select('monto, pay_method, anulada')
+  const { data: gastosPublic } = await tSelect('gastos_mes', 'monto, pay_method, anulada')
     .eq('mes', mes)
     .neq('anulada', true);
   let gastosPublicEfectivo = 0;
@@ -7233,10 +7159,10 @@ async function apiGetCajaPaolaResumen(p, res) {
   // Gastos del cuadre (los que paga la recepcionista en cada turno - ya salieron de caja)
   // Mismo calculo que apiGetGastosMesResumen para que las dos pantallas coincidan
   const [gralResCP, taxiResCP, extraResCP, loansResCP] = await Promise.all([
-    supabase.from('general_expenses').select('amount').gte('business_day', firstDay).lte('business_day', lastDay),
-    supabase.from('taxi_expenses').select('amount').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
-    supabase.from('extra_staff').select('payment').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
-    supabase.from('loans').select('amount').gte('business_day', firstDay).lte('business_day', lastDay).eq('manual', true).eq('anulada', false)
+    tSelect('general_expenses','amount').gte('business_day', firstDay).lte('business_day', lastDay),
+    tSelect('taxi_expenses','amount').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
+    tSelect('extra_staff','payment').eq('anulada', false).gte('business_day', firstDay).lte('business_day', lastDay),
+    tSelect('loans','amount').gte('business_day', firstDay).lte('business_day', lastDay).eq('manual', true).eq('anulada', false)
   ]);
   let gastosCuadreCP = 0;
   (gralResCP.data||[]).forEach(r => gastosCuadreCP += Number(r.amount||0));
@@ -7295,7 +7221,7 @@ async function apiAddCajaEntrega(p, res) {
   const fecha = new Date(now).toISOString().slice(0,10); // YYYY-MM-DD UTC
   const mes = fecha.substring(0,7);
 
-  const { data, error } = await supabase.from('caja_paola').insert({
+  const { data, error } = await tInsert('caja_paola',{
     ts_ms: now,
     fecha: fecha,
     mes: mes,
@@ -7323,7 +7249,7 @@ async function apiAddCajaGasto(p, res) {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res,'Fecha invalida (YYYY-MM-DD)');
   const mes = fecha.substring(0,7);
 
-  const { data, error } = await supabase.from('caja_paola').insert({
+  const { data, error } = await tInsert('caja_paola',{
     ts_ms: Date.now(),
     fecha: fecha,
     mes: mes,
@@ -7346,7 +7272,7 @@ async function apiEditCajaGasto(p, res) {
   const movId = Number(p.movId||0);
   if(!movId) return err(res,'movId requerido');
 
-  const { data: gastoActual, error: errG } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Movimiento no encontrado');
   if(gastoActual.tipo !== 'gasto') return err(res,'Solo se editan gastos, no entregas');
@@ -7373,7 +7299,7 @@ async function apiEditCajaGasto(p, res) {
     updates.mes = fecha.substring(0,7);
   }
 
-  const { error } = await supabase.from('caja_paola').update(updates).eq('id', movId);
+  const { error } = await tUpdate('caja_paola',updates).eq('id', movId);
   if(error) return err(res, error.message);
   return ok(res, { movId: movId });
 }
@@ -7387,13 +7313,13 @@ async function apiDeleteCajaGasto(p, res) {
   const movId = Number(p.movId||0);
   if(!movId) return err(res,'movId requerido');
 
-  const { data: gastoActual, error: errG } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: gastoActual, error: errG } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errG) return err(res, errG.message);
   if(!gastoActual) return err(res,'Movimiento no encontrado');
   if(gastoActual.tipo !== 'gasto') return err(res,'Solo se eliminan gastos, no entregas');
   if(gastoActual.anulada) return err(res,'Este gasto ya fue eliminado');
 
-  const { error } = await supabase.from('caja_paola').update({
+  const { error } = await tUpdate('caja_paola',{
     anulada: true,
     anulada_ms: Date.now(),
     anulada_por: userName
@@ -7414,8 +7340,7 @@ async function apiAprobarCajaEntrega(p, res) {
   if(!pin) return err(res,'PIN requerido');
 
   // Verificar PIN contra config_caja
-  const { data: cfg, error: errC } = await supabase.from('config_caja')
-    .select('value')
+  const { data: cfg, error: errC } = await tSelect('config_caja', 'value')
     .eq('key', 'pin_ruben')
     .maybeSingle();
   if(errC) return err(res, errC.message);
@@ -7423,7 +7348,7 @@ async function apiAprobarCajaEntrega(p, res) {
   if(String(cfg.value).trim() !== pin) return err(res,'PIN incorrecto');
 
   // Validar la entrega
-  const { data: entrega, error: errE } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: entrega, error: errE } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errE) return err(res, errE.message);
   if(!entrega) return err(res,'Entrega no encontrada');
   if(entrega.tipo !== 'entrega') return err(res,'Solo se aprueban entregas');
@@ -7432,7 +7357,7 @@ async function apiAprobarCajaEntrega(p, res) {
 
   // Aprobar
   const now = Date.now();
-  const { error } = await supabase.from('caja_paola').update({
+  const { error } = await tUpdate('caja_paola',{
     estado: 'aprobada',
     approved_ms: now,
     approved_by: userName
@@ -7450,7 +7375,7 @@ async function apiAnularCajaEntrega(p, res) {
   const movId = Number(p.movId||0);
   if(!movId) return err(res,'movId requerido');
 
-  const { data: entrega, error: errE } = await supabase.from('caja_paola').select('*').eq('id', movId).maybeSingle();
+  const { data: entrega, error: errE } = await tSelect('caja_paola','*').eq('id', movId).maybeSingle();
   if(errE) return err(res, errE.message);
   if(!entrega) return err(res,'Entrega no encontrada');
   if(entrega.tipo !== 'entrega') return err(res,'Solo se anulan entregas');
@@ -7459,7 +7384,7 @@ async function apiAnularCajaEntrega(p, res) {
 
   const motivo = String(p.motivo||'').trim() || 'Anulada por el creador';
 
-  const { error } = await supabase.from('caja_paola').update({
+  const { error } = await tUpdate('caja_paola',{
     anulada: true,
     estado: 'anulada',
     anulada_ms: Date.now(),
@@ -7488,7 +7413,7 @@ async function apiGetResumenMes(p, res) {
   const prevYear = month === 1 ? year - 1 : year;
   const prevMes = `${prevYear}-${String(prevMonth).padStart(2,'0')}`;
 
-  const { data: products } = await supabase.from('products').select('*').eq('activo',true).order('categoria').order('nombre');
+  const { data: products } = await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
   if(!products || !products.length) return ok(res,{rows:[],totals:{},daysTotals:{},mes:mes});
 
   // Saldo inicial calculado al vuelo (sin depender de tabla cierre_mes).
@@ -7496,18 +7421,18 @@ async function apiGetResumenMes(p, res) {
   // a lastDay hasta hoy) para combinarlos con los del mes y poder deshacer todo
   // desde stock_actual/stock_bodega hacia atras hasta el primer dia del mes.
   const todayBd = businessDay(Date.now());
-  const salesPost = await fetchAll(() => supabase.from('room_products').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
-  const movementsPost = await fetchAll(() => supabase.from('stock_movements').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
-  const entriesPost = await fetchAll(() => supabase.from('stock_entries').select('*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const salesPost = await fetchAll(() => tSelect('room_products','*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const movementsPost = await fetchAll(() => tSelect('stock_movements','*').gt('business_day',lastDay).lte('business_day',todayBd));
+  const entriesPost = await fetchAll(() => tSelect('stock_entries','*').gt('business_day',lastDay).lte('business_day',todayBd));
 
   // Combinamos movimientos del mes + posteriores = todos los movs desde firstDay hasta hoy
   const salesAfter = (salesPost||[]);
   const movementsAfter = (movementsPost||[]);
   const entriesAfter = (entriesPost||[]);
 
-  const salesMes = await fetchAll(() => supabase.from('room_products').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const movementsMes = await fetchAll(() => supabase.from('stock_movements').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
-  const entriesMes = await fetchAll(() => supabase.from('stock_entries').select('*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const salesMes = await fetchAll(() => tSelect('room_products','*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const movementsMes = await fetchAll(() => tSelect('stock_movements','*').gte('business_day',firstDay).lte('business_day',lastDay));
+  const entriesMes = await fetchAll(() => tSelect('stock_entries','*').gte('business_day',firstDay).lte('business_day',lastDay));
 
 
   const SHIFTS = ['SHIFT_1','SHIFT_2','SHIFT_3'];
@@ -7663,7 +7588,7 @@ async function apiUpdatePrecioCompra(p, res) {
   if(!productId) return err(res,'productId requerido');
   if(precioCompra < 0) return err(res,'Precio invalido');
 
-  await supabase.from('products').update({ precio_compra: precioCompra }).eq('id', productId);
+  await tUpdate('products',{ precio_compra: precioCompra }).eq('id', productId);
   return ok(res, { productId, precioCompra });
 }
 async function apiChangePaymentMethod(p, res) {
@@ -7681,7 +7606,7 @@ async function apiChangePaymentMethod(p, res) {
     if (!['EFECTIVO','TARJETA','NEQUI','MIXTO'].includes(newPm)) return err(res, 'Metodo invalido');
     if (!reason) return err(res, 'Falta motivo');
     if (!userName) return err(res, 'Falta usuario');
-    const { data: saleData, error: saleErr } = await supabase.from('sales').select('*').eq('id', saleId).single();
+    const { data: saleData, error: saleErr } = await tSelect('sales','*').eq('id', saleId).single();
     if (saleErr || !saleData) return err(res, 'Venta no encontrada');
     if (saleData.anulada) return err(res, 'No se puede modificar una venta anulada');
     const total = Number(saleData.total || 0);
@@ -7693,7 +7618,7 @@ async function apiChangePaymentMethod(p, res) {
       if (newPm === 'NEQUI'    && Math.round(newA3) !== Math.round(total)) return err(res, 'amount_3 debe igualar al total');
     }
     const nowMs = Date.now();
-    const { error: insErr } = await supabase.from('payment_method_changes').insert({
+    const { error: insErr } = await tInsert('payment_method_changes',{
       sale_id: saleId,
       changed_at_ms: nowMs,
       business_day: saleData.business_day,
@@ -7714,7 +7639,7 @@ async function apiChangePaymentMethod(p, res) {
       reason: reason
     });
     if (insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
-    const { error: updErr } = await supabase.from('sales').update({
+    const { error: updErr } = await tUpdate('sales',{
       pay_method: newPm,
       pay_method_2: newPm2,
       amount_1: newA1,
@@ -7743,14 +7668,14 @@ async function apiChangePaymentMethodBar(p, res) {
     if(!['EFECTIVO','TARJETA','NEQUI'].includes(newPm)) return err(res,'Metodo invalido (EFECTIVO/TARJETA/NEQUI)');
     if(!reason || reason.length < 5) return err(res,'Motivo requerido (min 5 caracteres)');
     if(!userName) return err(res,'Falta usuario');
-    const { data: rp, error: rpErr } = await supabase.from('room_products').select('*').eq('id', roomProductId).maybeSingle();
+    const { data: rp, error: rpErr } = await tSelect('room_products','*').eq('id', roomProductId).maybeSingle();
     if(rpErr) return err(res, rpErr.message);
     if(!rp) return err(res,'Venta de bar no encontrada');
     if(rp.is_cortesia) return err(res,'Las cortesias no tienen metodo de pago');
     const oldPm = String(rp.pay_method||'').toUpperCase();
     if(oldPm === newPm) return err(res,'El metodo de pago ya es '+newPm);
     const nowMs = Date.now();
-    const { error: insErr } = await supabase.from('payment_method_changes').insert({
+    const { error: insErr } = await tInsert('payment_method_changes',{
       sale_id: null,
       room_product_id: roomProductId,
       changed_at_ms: nowMs,
@@ -7764,7 +7689,7 @@ async function apiChangePaymentMethodBar(p, res) {
       reason: reason
     });
     if(insErr) return err(res, 'Error guardando auditoria: ' + insErr.message);
-    const { error: updErr } = await supabase.from('room_products').update({ pay_method: newPm }).eq('id', roomProductId);
+    const { error: updErr } = await tUpdate('room_products',{ pay_method: newPm }).eq('id', roomProductId);
     if(updErr) return err(res, 'Error actualizando venta: ' + updErr.message);
     return ok(res, { changed: true, roomProductId, oldPayMethod: oldPm, newPayMethod: newPm });
   } catch (e) {
@@ -7780,8 +7705,7 @@ async function apiListRoomProductsTurno(p, res) {
   const shiftId = String(p.shiftId||'').trim();
   if(!bDay) return err(res,'businessDay requerido');
   if(!shiftId) return err(res,'shiftId requerido');
-  const { data, error } = await supabase.from('room_products')
-    .select('id, ts_ms, room_id, product_id, product_name, cantidad, precio_unit, total, pay_method, user_name, is_cortesia, created_by_admin')
+  const { data, error } = await tSelect('room_products', 'id, ts_ms, room_id, product_id, product_name, cantidad, precio_unit, total, pay_method, user_name, is_cortesia, created_by_admin')
     .eq('business_day', bDay)
     .eq('shift_id', shiftId)
     .eq('is_cortesia', false)
@@ -7818,7 +7742,7 @@ async function apiGetHistorialAjustes(p, res) {
     return err(res, 'Mes invalido (formato YYYY-MM)');
   }
 
-  let query = supabase.from('ajustes').select('*')
+  let query = tSelect('ajustes','*')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
     .order('ts_ms', { ascending: false });
@@ -7881,7 +7805,7 @@ async function apiAjusteInventarioV2(p, res) {
   if(!productId) return err(res,'Producto requerido');
   if(motivo.length < 3) return err(res,'Motivo minimo 3 letras');
 
-  const { data: prod } = await supabase.from('products').select('*').eq('id',productId).single();
+  const { data: prod } = await tSelect('products','*').eq('id',productId).single();
   if(!prod) return err(res,'Producto no existe');
 
   const precio = Number(prod.precio||0);
@@ -7926,7 +7850,7 @@ async function apiAjusteInventarioV2(p, res) {
       nuevoStockBod = _newBod;
     }
 
-    await supabase.from('stock_movements').insert({
+    await tInsert('stock_movements',{
       ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
       user_name: adminName, user_role: 'ADMIN',
       product_id: productId, product_name: prod.nombre,
@@ -7967,7 +7891,7 @@ async function apiAjusteInventarioV2(p, res) {
         if(_err) return err(res, _err.message);
         nuevoStockBod = _newStock;
       }
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -7990,7 +7914,7 @@ async function apiAjusteInventarioV2(p, res) {
         nuevoStockBod = _newStock;
       }
 
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -7999,7 +7923,7 @@ async function apiAjusteInventarioV2(p, res) {
         nota: 'AJUSTE (admin '+adminName+'): '+motivo
       });
 
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
@@ -8024,7 +7948,7 @@ async function apiAjusteInventarioV2(p, res) {
         nuevoStockBod = _newStock;
       }
 
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -8033,7 +7957,7 @@ async function apiAjusteInventarioV2(p, res) {
         nota: 'AJUSTE (admin '+adminName+'): '+motivo
       });
 
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
@@ -8053,7 +7977,7 @@ async function apiAjusteInventarioV2(p, res) {
       if(!productoViejoId) return err(res,'Producto viejo requerido');
       if(cantidad <= 0) return err(res,'Cantidad debe ser positiva');
 
-      const { data: prodViejo } = await supabase.from('products').select('*').eq('id',productoViejoId).single();
+      const { data: prodViejo } = await tSelect('products','*').eq('id',productoViejoId).single();
       if(!prodViejo) return err(res,'Producto viejo no existe');
       const precioViejo = Number(prodViejo.precio||0);
 
@@ -8072,7 +7996,7 @@ async function apiAjusteInventarioV2(p, res) {
         nuevoStockBod = _newStock;
       }
 
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productoViejoId, product_name: prodViejo.nombre,
@@ -8080,7 +8004,7 @@ async function apiAjusteInventarioV2(p, res) {
         cantidad: cantidad,
         nota: 'AJUSTE cambio producto (admin '+adminName+'): '+motivo
       });
-      await supabase.from('stock_movements').insert({
+      await tInsert('stock_movements',{
         ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
         user_name: recepNameAj, user_role: 'ADMIN',
         product_id: productId, product_name: prod.nombre,
@@ -8089,7 +8013,7 @@ async function apiAjusteInventarioV2(p, res) {
         nota: 'AJUSTE cambio producto (admin '+adminName+'): '+motivo
       });
 
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productoViejoId, product_name: prodViejo.nombre,
@@ -8101,7 +8025,7 @@ async function apiAjusteInventarioV2(p, res) {
         tipo_ajuste: 'producto_resta',
         motivo_ajuste: motivo
       });
-      await supabase.from('room_products').insert({
+      await tInsert('room_products',{
         ts_ms: now + 1, business_day: businessDayAj, shift_id: shiftAj,
         room_id: 'AJUSTE', check_in_ms: 0,
         product_id: productId, product_name: prod.nombre,
@@ -8121,7 +8045,7 @@ async function apiAjusteInventarioV2(p, res) {
   }
 
   // ========== REGISTRAR EN TABLA AUDITABLE ==========
-  await supabase.from('ajustes').insert({
+  await tInsert('ajustes',{
     ts_ms: now,
     categoria: categoria,
     tipo: tipo,
@@ -8960,9 +8884,7 @@ async function apiLucianaChat(p, res) {
   // re-fetchean. Si falla, seguimos sin historial.
   let historial = [];
   try {
-    const { data: prevs } = await supabase
-      .from('luciana_chats')
-      .select('pregunta, respuesta')
+    const { data: prevs } = await tSelect('luciana_chats', 'pregunta, respuesta')
       .eq('business_day', bDay)
       .order('ts_ms', { ascending: false })
       .limit(10);
@@ -9110,7 +9032,7 @@ async function apiLucianaChat(p, res) {
 
   // Guardar en BD (best-effort: si falla, igual devolvemos la respuesta)
   try {
-    await supabase.from('luciana_chats').insert({
+    await tInsert('luciana_chats',{
       ts_ms: now,
       user_name: userName,
       business_day: bDay,
@@ -9151,9 +9073,7 @@ async function apiLucianaGastoMes(p, res) {
   const yyyymm = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
 
   // luciana_chats.business_day es 'YYYY-MM-DD' -> LIKE 'YYYY-MM%'
-  const { data, error } = await supabase
-    .from('luciana_chats')
-    .select('costo_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write')
+  const { data, error } = await tSelect('luciana_chats', 'costo_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write')
     .like('business_day', yyyymm + '%');
 
   if (error) {
