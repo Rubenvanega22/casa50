@@ -81,14 +81,26 @@ select option{background:var(--card-2)}
 .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .rg{display:grid;grid-template-columns:repeat(auto-fit,82px);gap:4px;justify-content:center}
-.rc{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px;cursor:pointer;border-top:3px solid var(--border);transition:transform .1s}
+/* Parte 4 — tarjetas de habitacion (franja superior de 4px = color de estado) */
+.rc{position:relative;background:var(--card);border:1px solid var(--border);border-top-width:4px;border-radius:8px;padding:7px 6px;cursor:pointer;transition:transform .1s,box-shadow .15s,border-color .15s}
 .rc:active{transform:scale(.97)}
-.rc.AV{border-top-color:var(--ok)}.rc.OC{border-top-color:var(--danger)}.rc.DI{border-top-color:var(--warn)}.rc.CO{border-top-color:var(--info)}.rc.BL{border-top-color:var(--muted)}.rc.RT{border-top-color:var(--text)}
-.rst{display:inline-block;margin-top:2px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:20px}
-.rst.AV{background:rgba(34,197,94,.15);color:var(--ok)}.rst.OC{background:rgba(239,68,68,.15);color:var(--danger)}
-.rst.DI{background:rgba(245,158,11,.15);color:var(--warn)}.rst.CO{background:rgba(59,130,246,.15);color:var(--info)}.rst.BL{background:rgba(107,114,128,.15);color:var(--muted)}
-.rtm{font-size:10px;font-weight:700;margin-top:1px}
+.rc:hover{box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.rc.AV{border-color:var(--ok);background:linear-gradient(rgba(31,157,82,.07),rgba(31,157,82,.07)),var(--card)}
+.rc.OC{border-color:var(--danger);background:linear-gradient(rgba(216,58,58,.07),rgba(216,58,58,.07)),var(--card)}
+.rc.DI{border-color:var(--warn);background:linear-gradient(rgba(232,160,32,.07),rgba(232,160,32,.07)),var(--card)}
+.rc.CO{border-color:var(--info);background:linear-gradient(rgba(74,163,255,.07),rgba(74,163,255,.07)),var(--card)}
+.rc.RT{border-color:var(--clean);background:linear-gradient(rgba(160,96,224,.07),rgba(160,96,224,.07)),var(--card)}
+.rc.BL{border-color:var(--muted);background:linear-gradient(rgba(107,114,128,.07),rgba(107,114,128,.07)),var(--card)}
+.rn{font-size:16px;font-weight:800;color:var(--text);line-height:1.1}
+.rcat{font-size:9px;color:var(--text-dim);margin-bottom:2px}
+.rst{display:inline-block;margin-top:2px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;border:1px solid transparent}
+.rst.AV{background:rgba(31,157,82,.15);color:var(--ok);border-color:rgba(31,157,82,.4)}.rst.OC{background:rgba(216,58,58,.15);color:var(--danger);border-color:rgba(216,58,58,.4)}
+.rst.DI{background:rgba(232,160,32,.15);color:var(--warn);border-color:rgba(232,160,32,.4)}.rst.CO{background:rgba(74,163,255,.15);color:var(--info);border-color:rgba(74,163,255,.4)}
+.rst.RT{background:rgba(160,96,224,.15);color:var(--clean);border-color:rgba(160,96,224,.4)}.rst.BL{background:rgba(107,114,128,.15);color:var(--muted);border-color:rgba(107,114,128,.4)}
+.rtm{font-size:10px;font-weight:700;margin-top:1px;color:var(--text-dim)}
+.rtm.ok{color:var(--ok)}.rtm.warn{color:var(--warn)}.rtm.over{color:var(--danger)}
 .ri{font-size:9px;color:var(--text-dim);line-height:1.4;margin-top:1px}
+.ri.warn{color:var(--warn)}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.over{color:var(--danger)}
 .ac{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 6px;cursor:pointer;border-top:3px solid var(--border);text-align:center;transition:transform .1s}
 .ac:active{transform:scale(.97)}
@@ -189,9 +201,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 .ext-tab{flex:1;padding:7px;background:var(--card-2);border:2px solid var(--border);border-radius:7px;text-align:center;cursor:pointer;font-size:11px;font-weight:700}
 .ext-tab.on{border-color:var(--accent);background:rgba(124,92,252,.1);color:var(--title)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-/* Bombillito de daño activo (Fase 3 mantenimiento) */
-.rc{position:relative}
-.bomb{position:absolute;top:4px;right:4px;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.85);box-shadow:0 0 8px currentColor;z-index:5;pointer-events:none}
+/* Bombillito de daño activo (Fase 3 mantenimiento) — .rc ya es position:relative */
+.bomb{position:absolute;top:6px;right:5px;width:14px;height:14px;border-radius:50%;border:2px solid var(--card);box-shadow:0 0 8px currentColor;z-index:5;pointer-events:none}
 .bomb.urgente{background:var(--danger);color:var(--danger);animation:blink 1.2s ease-in-out infinite}
 .bomb.normal{background:var(--warn);color:var(--warn);animation:blink 1.2s ease-in-out infinite}
 .bomb.baja{background:var(--ok);color:var(--ok);animation:blink 1.2s ease-in-out infinite}
