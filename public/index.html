@@ -112,6 +112,7 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .metric-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
 .metric-lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
 .metric-val{font-size:18px;font-weight:800;color:var(--text);margin-top:2px}
+.metric-sub{font-size:9px;color:var(--text-dim);margin-top:1px}
 .rooms-counters{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .counter-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 16px;text-align:center}
 .counter-val{font-size:20px;font-weight:800;line-height:1}
@@ -1656,6 +1657,7 @@ var historyOpen=false; // Toggle del botón "Ver historial" en Informes — guar
 var selDur=3,selPpl=2,selArr='WALK',selPay='EFECTIVO';
 var totalHabDia=0;
 var totalSalidasDia=0;
+var metVentasHoy=0,metVentasCount=0,metCheckin=0,metMesNeto=0;
 var selExtMode='ext'; // 'ext' o 'renew'
 var selRenewDur=3;
 var pT,cT,aT,confCb,tapN=0,tapH,adminTap=false,exCoName='',staffList=[];
@@ -2334,8 +2336,9 @@ function renderSM(){
   var el=document.getElementById('roomsTopRow'); if(!el) return;
   var role=sess&&sess.userRole;
   if(role==='ADMIN'){
-    var cards=[['Ventas hoy','—'],['Ticket','—'],['Check-in / out','—'],['Ventas mes','—']];
-    el.innerHTML='<div class="rooms-metrics">'+cards.map(function(c){return '<div class="metric-card"><div class="metric-lbl">'+c[0]+'</div><div class="metric-val">'+c[1]+'</div></div>';}).join('')+'</div>';
+    var ticket=metVentasCount?Math.round(metVentasHoy/metVentasCount):0;
+    var cards=[['Ventas hoy',fmt(metVentasHoy),metVentasCount+' ventas'],['Ticket',fmt(ticket),'promedio'],['Check-in / out',metCheckin+' / '+totalSalidasDia,'hoy'],['Ventas mes (neto)',fmt(metMesNeto),'']];
+    el.innerHTML='<div class="rooms-metrics">'+cards.map(function(c){return '<div class="metric-card"><div class="metric-lbl">'+c[0]+'</div><div class="metric-val">'+c[1]+'</div>'+(c[2]?'<div class="metric-sub">'+c[2]+'</div>':'')+'</div>';}).join('')+'</div>';
   } else if(role==='RECEPTION'){
     el.innerHTML='<div class="rooms-counters">'
       +'<div class="counter-card"><div class="counter-val" style="color:var(--ok)">'+totalHabDia+'</div><div class="counter-lbl">Vendidas hoy</div></div>'
@@ -3568,7 +3571,11 @@ function loadVentas(){
     totalHabDia=totalSinCortesia;
     // Salidas hoy (opcion A): ventas del dia (business_day=hoy) que ya tienen checkout registrado.
     totalSalidasDia=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&Number(s.checkoutMs||0)>0;}).length;
+    metVentasHoy=Number(t.sales||0);                 // bruto del dia
+    metVentasCount=totalSinCortesia;                 // cuantas ventas (sin cortesia)
+    metCheckin=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&!s.anulada;}).length;
     renderSM();
+    if(sess&&sess.userRole==='ADMIN'){var _ym=(sess.businessDay||'').slice(0,7);rpc('monthMetrics',{yearMonth:_ym},function(dm){metMesNeto=(dm&&dm.monthTotals&&dm.monthTotals.neto)||0;renderSM();},function(){});}
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+totalSinCortesia+' ventas hoy</div>';
     if(!sl.length){
       h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
