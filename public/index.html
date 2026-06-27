@@ -1658,6 +1658,7 @@ var selDur=3,selPpl=2,selArr='WALK',selPay='EFECTIVO';
 var totalHabDia=0;
 var totalSalidasDia=0;
 var metVentasHoy=0,metVentasCount=0,metCheckin=0,metMesNeto=0;
+var metVentasHoyCmp=0,metVentasAyerCmp=0;
 var selExtMode='ext'; // 'ext' o 'renew'
 var selRenewDur=3;
 var pT,cT,aT,confCb,tapN=0,tapH,adminTap=false,exCoName='',staffList=[];
@@ -2337,7 +2338,9 @@ function renderSM(){
   var role=sess&&sess.userRole;
   if(role==='ADMIN'){
     var ticket=metVentasCount?Math.round(metVentasHoy/metVentasCount):0;
-    var cards=[['Ventas hoy',fmt(metVentasHoy),metVentasCount+' ventas'],['Ticket',fmt(ticket),'promedio'],['Check-in / out',metCheckin+' / '+totalSalidasDia,'hoy'],['Ventas mes (neto)',fmt(metMesNeto),'']];
+    var cmp='';
+    if(metVentasAyerCmp>0){var dif=Math.round((metVentasHoyCmp-metVentasAyerCmp)/metVentasAyerCmp*100);cmp=dif>=0?' · <span style="color:var(--ok)">▲ '+dif+'%</span>':' · <span style="color:var(--danger)">▼ '+Math.abs(dif)+'%</span>';}
+    var cards=[['Ventas hoy',fmt(metVentasHoy),metVentasCount+' ventas'+cmp],['Ticket',fmt(ticket),'promedio'],['Check-in / out',metCheckin+' / '+totalSalidasDia,'hoy'],['Ventas mes (neto)',fmt(metMesNeto),'']];
     el.innerHTML='<div class="rooms-metrics">'+cards.map(function(c){return '<div class="metric-card"><div class="metric-lbl">'+c[0]+'</div><div class="metric-val">'+c[1]+'</div>'+(c[2]?'<div class="metric-sub">'+c[2]+'</div>':'')+'</div>';}).join('')+'</div>';
   } else if(role==='RECEPTION'){
     el.innerHTML='<div class="rooms-counters">'
@@ -3575,7 +3578,17 @@ function loadVentas(){
     metVentasCount=totalSinCortesia;                 // cuantas ventas (sin cortesia)
     metCheckin=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&!s.anulada;}).length;
     renderSM();
-    if(sess&&sess.userRole==='ADMIN'){var _ym=(sess.businessDay||'').slice(0,7);rpc('monthMetrics',{yearMonth:_ym},function(dm){metMesNeto=(dm&&dm.monthTotals&&dm.monthTotals.neto)||0;renderSM();},function(){});}
+    if(sess&&sess.userRole==='ADMIN'){
+      var _ym=(sess.businessDay||'').slice(0,7);
+      rpc('monthMetrics',{yearMonth:_ym},function(dm){metMesNeto=(dm&&dm.monthTotals&&dm.monthTotals.neto)||0;renderSM();},function(){});
+      // Comparacion "Ventas hoy" vs ayer a la misma hora (opcion 1): ambos lados desde allSalesList, mismo filtro.
+      var cmpFiltro=function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL'||s.type==='EXTENSION');};
+      metVentasHoyCmp=(m.allSalesList||[]).filter(cmpFiltro).reduce(function(a,s){return a+Number(s.total||0);},0);
+      var _corte=Date.now()-86400000;
+      var _d=new Date(sess.businessDay+'T12:00:00');_d.setDate(_d.getDate()-1);
+      var _ayer=_d.getFullYear()+'-'+('0'+(_d.getMonth()+1)).slice(-2)+'-'+('0'+_d.getDate()).slice(-2);
+      rpc('metrics',{businessDay:_ayer},function(my){metVentasAyerCmp=(my.allSalesList||[]).filter(cmpFiltro).filter(function(s){return Number(s.tsMs||s.checkInMs||0)<=_corte;}).reduce(function(a,s){return a+Number(s.total||0);},0);renderSM();},function(){});
+    }
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+totalSinCortesia+' ventas hoy</div>';
     if(!sl.length){
       h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
