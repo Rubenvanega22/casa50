@@ -82,6 +82,8 @@ select option{background:var(--card-2)}
 hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .rg{display:flex;gap:4px;overflow-x:auto;padding-bottom:6px}
 .rg>.rc{flex:0 0 82px}
+.floor-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.floor-title::before{content:'';width:4px;height:14px;border-radius:2px;background:var(--accent)}
 /* Parte 4 — tarjetas de habitacion (franja superior de 4px = color de estado) */
 .rc{position:relative;background:var(--card);border:1px solid var(--border);border-top-width:4px;border-radius:8px;padding:7px 6px;cursor:pointer;transition:transform .1s,box-shadow .15s,border-color .15s}
 .rc:active{transform:scale(.97)}
@@ -2288,7 +2290,7 @@ function renderRooms(){
   fl.forEach(function(f){
     var sec=document.createElement('div'),gr=document.createElement('div');gr.className='rg';
     rooms.filter(function(r){return r.floor===f;}).forEach(function(r){gr.appendChild(mkCard(r));});
-    sec.innerHTML='<div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid #2e2e3a;padding-bottom:4px">Piso '+f+'</div>';
+    sec.innerHTML='<div class="floor-title">Piso '+f+'</div>';
     sec.appendChild(gr);c.appendChild(sec);
   });
 }
