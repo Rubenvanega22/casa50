@@ -2369,25 +2369,25 @@ function buildRoomB(r){
   var eff=r.disabled?'BL':r.retoque?'RT':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':'CO';
   var isR=sess&&sess.userRole==='RECEPTION',isA=sess&&sess.userRole==='ADMIN';
   var cfg=MP[r.category]||MP['Junior'];
-  var sc={AV:'#22c55e',OC:'#ef4444',DI:'#f59e0b',CO:'#3b82f6',BL:'#6b7280',RT:'#e5e7eb'};
+  var sc={AV:'var(--ok)',OC:'var(--danger)',DI:'var(--warn)',CO:'var(--info)',BL:'var(--muted)',RT:'var(--clean)'};
   var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
   var h='';
   // Seccion "Dano activo" (Fase 3 mantenimiento) - va ARRIBA de todo
   if(r.danoActivo){
     var d=r.danoActivo;
-    var col=d.prioridad==='urgente'?'#ef4444':d.prioridad==='baja'?'#22c55e':'#f59e0b';
+    var col=d.prioridad==='urgente'?'var(--danger)':d.prioridad==='baja'?'var(--ok)':'var(--warn)';
     var bg=d.prioridad==='urgente'?'rgba(239,68,68,.1)':d.prioridad==='baja'?'rgba(34,197,94,.1)':'rgba(245,158,11,.1)';
     h+='<div style="background:'+bg+';border:1px solid '+col+';border-radius:8px;padding:10px;margin-bottom:10px">';
     h+='<div style="font-size:11px;font-weight:700;color:'+col+';margin-bottom:4px">🔧 DAÑO ACTIVO — '+(d.prioridad||'').toUpperCase()+'</div>';
-    h+='<div style="font-size:13px;color:#e5e7eb;margin-bottom:4px">'+esc(d.descripcion||'')+'</div>';
+    h+='<div style="font-size:13px;color:var(--text);margin-bottom:4px">'+esc(d.descripcion||'')+'</div>';
     if(d.estado==='NOTA_ACTIVA'){
-      h+='<div style="font-size:10px;color:#9ca3af">⏳ Mantenedor trabajando — esperando que termine</div>';
+      h+='<div style="font-size:10px;color:var(--text-dim)">⏳ Mantenedor trabajando — esperando que termine</div>';
     } else if(d.estado==='ESPERA_VERIFICACION'){
-      h+='<div style="font-size:10px;color:#22c55e;font-weight:700">✓ Listo para verificar (botón en Fase 5)</div>';
+      h+='<div style="font-size:10px;color:var(--ok);font-weight:700">✓ Listo para verificar (botón en Fase 5)</div>';
     } else if(d.estado==='RECHAZADO_VERIFICACION'){
-      h+='<div style="font-size:10px;color:#ef4444">⚠ Arreglo rechazado — vuelve al mantenedor</div>';
+      h+='<div style="font-size:10px;color:var(--danger)">⚠ Arreglo rechazado — vuelve al mantenedor</div>';
     }
-    h+='<div style="font-size:10px;color:#9ca3af;margin-top:4px">Reportado por '+esc(d.reportadoPor||'?')+'</div>';
+    h+='<div style="font-size:10px;color:var(--text-dim);margin-top:4px">Reportado por '+esc(d.reportadoPor||'?')+'</div>';
     // Indicador de revisiones (G1)
     var revsDA = Array.isArray(d.revisiones) ? d.revisiones : [];
     if(revsDA.some(function(rv){return rv.tecnicoExterno===true;})){
@@ -2412,70 +2412,70 @@ function buildRoomB(r){
         else if(min<1440) hace='hace '+Math.round(min/60)+' h';
         else { var dd=Math.round(min/1440); hace='hace '+dd+' día'+(dd===1?'':'s'); }
       }
-      h+='<div style="background:rgba(34,197,94,.1);border:1px solid #22c55e;border-radius:8px;padding:10px;margin-bottom:10px">';
-      h+='<div style="font-size:11px;font-weight:700;color:#22c55e;margin-bottom:4px">🔧 ARREGLO POR '+esc((d.arregladoPor||'?').toUpperCase())+'</div>';
-      if(hace) h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:6px">Terminado '+hace+'</div>';
-      if(d.arregloNota) h+='<div style="font-size:13px;color:#e5e7eb;margin-bottom:'+(d.fotoArregloUrl?'8':'0')+'px">'+esc(d.arregloNota)+'</div>';
-      if(d.fotoArregloUrl) h+='<img src="'+d.fotoArregloUrl+'" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid #2e2e3a;display:block" alt="Foto del arreglo">';
+      h+='<div style="background:rgba(34,197,94,.1);border:1px solid var(--ok);border-radius:8px;padding:10px;margin-bottom:10px">';
+      h+='<div style="font-size:11px;font-weight:700;color:var(--ok);margin-bottom:4px">🔧 ARREGLO POR '+esc((d.arregladoPor||'?').toUpperCase())+'</div>';
+      if(hace) h+='<div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">Terminado '+hace+'</div>';
+      if(d.arregloNota) h+='<div style="font-size:13px;color:var(--text);margin-bottom:'+(d.fotoArregloUrl?'8':'0')+'px">'+esc(d.arregloNota)+'</div>';
+      if(d.fotoArregloUrl) h+='<img src="'+d.fotoArregloUrl+'" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid var(--border);display:block" alt="Foto del arreglo">';
       h+='</div>';
       // Botones Verificar / Rechazar (Fase 5) — solo ADMIN/RECEPTION
       if(isR||isA){
         h+='<div style="display:flex;gap:6px;margin-bottom:12px">';
         h+='<button class="btn br" style="flex:1" onclick="openRechazarArreglo('+d.id+')">✗ Rechazar</button>';
-        h+='<button class="btn bg" style="flex:2;background:#22c55e;color:#fff;font-weight:700" onclick="doVerificarArreglo('+d.id+')">✓ Solucionado</button>';
+        h+='<button class="btn bg" style="flex:2;background:var(--ok);color:#fff;font-weight:700" onclick="doVerificarArreglo('+d.id+')">✓ Solucionado</button>';
         h+='</div>';
       }
     }
   }
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'#6b7280')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>'+(eff==='OC'&&isR&&(r.payMethod||'EFECTIVO')==='EFECTIVO'?'<button class="btn bg xs" style="margin-right:30px" onclick="doHoraGratis()">🎁 +1h</button>':'')+'</div>';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:'+(sc[eff]||'var(--muted)')+'"></div><b style="font-size:15px">'+(sl[eff]||eff)+'</b></div>'+(eff==='OC'&&isR&&(r.payMethod||'EFECTIVO')==='EFECTIVO'?'<button class="btn bg xs" style="margin-right:30px" onclick="doHoraGratis()">🎁 +1h</button>':'')+'</div>';
   if(eff==='BL'){
     var disMs=Number(r.disabledDateMs||0);
     h+='<div style="background:rgba(107,114,128,.1);border:1px solid rgba(107,114,128,.4);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Motivo</span><b style="color:#f59e0b">'+esc(r.disabledReason||'Sin motivo')+'</b></div>';
-    if(disMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Deshabilitada</span><b>'+new Date(disMs).toLocaleString("es-CO",{dateStyle:"short",timeStyle:"short"})+'</b></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Motivo</span><b style="color:var(--warn)">'+esc(r.disabledReason||'Sin motivo')+'</b></div>';
+    if(disMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Deshabilitada</span><b>'+new Date(disMs).toLocaleString("es-CO",{dateStyle:"short",timeStyle:"short"})+'</b></div>';
     h+='</div>';
   }
 
  // --- OCUPADA ---
   if(eff==='OC'){
     var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-    h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
-    if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora ingreso</span><b>'+fT(r.checkInMs)+'</b></div>';
-    if(r.dueMs){var left=Number(r.dueMs)-now;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora salida</span><b>'+fT(r.dueMs)+'</b></div><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo</span><b style="color:'+(left>0?'#22c55e':'#ef4444')+'">'+(left>0?fDur(left):'VENCIDA +'+fDur(Math.abs(left)))+'</b></div>';}
-    if(r.people)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Personas</span><b>'+r.people+'</b></div>';
-    if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Llegada</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(aLbl)+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPlate()">✏ Llegada</button>':'')+'</div></div>';}
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Método pago</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(r.payMethod||'EFECTIVO')+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPayMethod()">✏ Pago</button>':'')+'</div></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Turno venta</span><b style="color:#a78bfa" id="turnoVentaDisp">—</b></div>';
+    h+='<div style="background:var(--card-2);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
+    if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Hora ingreso</span><b>'+fT(r.checkInMs)+'</b></div>';
+    if(r.dueMs){var left=Number(r.dueMs)-now;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Hora salida</span><b>'+fT(r.dueMs)+'</b></div><div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Tiempo</span><b style="color:'+(left>0?'var(--ok)':'var(--danger)')+'">'+(left>0?fDur(left):'VENCIDA +'+fDur(Math.abs(left)))+'</b></div>';}
+    if(r.people)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Personas</span><b>'+r.people+'</b></div>';
+    if(r.arrivalType){var aLbl=r.arrivalPlate?(r.arrivalType+' — '+r.arrivalPlate):r.arrivalType;h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Llegada</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(aLbl)+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPlate()">✏ Llegada</button>':'')+'</div></div>';}
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Método pago</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(r.payMethod||'EFECTIVO')+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPayMethod()">✏ Pago</button>':'')+'</div></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Turno venta</span><b style="color:var(--title)" id="turnoVentaDisp">—</b></div>';
     h+='</div>';
-   h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
+   h+='<div id="resumenEstadia" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:var(--title);margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:var(--muted)">Cargando...</p></div>';
     if(isR){
      h+='<div class="row"><button class="btn br sm" onclick="showCO()">Registrar Salida</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
       // FRANJA PRODUCTOS
-      h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-top:10px">';
+      h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-      h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos</div>';
-      h+='<b style="color:#f97316;font-size:13px" id="roomProdTotal">$0</b>';
+      h+='<div style="font-size:11px;font-weight:700;color:var(--warn);text-transform:uppercase">🛒 Productos</div>';
+      h+='<b style="color:var(--warn);font-size:13px" id="roomProdTotal">$0</b>';
       h+='</div>';
       h+='<div id="roomProdList" style="margin-bottom:6px"></div>';
-h+='<div style="margin-top:4px;border-top:1px solid #2e2e3a;padding-top:8px">';
+h+='<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:8px">';
 h+='<input type="text" id="roomProdBuscar" placeholder="🔍 Buscar producto por nombre..." style="width:100%;margin:0 0 8px 0;font-size:12px;padding:6px 9px;box-sizing:border-box" oninput="buscarProductoPorNombre(this.value)">';
-h+='<button onclick="togRoomCats()" style="padding:4px 12px;background:#22222c;border:1px solid #7c5cfc;border-radius:20px;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px">📂 Buscar por Categoría</button>';
+h+='<button onclick="togRoomCats()" style="padding:4px 12px;background:var(--card-2);border:1px solid var(--accent);border-radius:20px;color:var(--title);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px">📂 Buscar por Categoría</button>';
 h+='<div id="roomCats" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
-h+='<div id="roomProdResultados" style="background:#22222c;border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
+h+='<div id="roomProdResultados" style="background:var(--card-2);border-radius:6px;max-height:150px;overflow-y:auto;margin-bottom:6px"></div>';
 h+='<div id="roomProdPendiente"></div>';
 h+='</div></div>';
       h+='<div id="coF" style="display:none;margin-top:9px"><label>Observacion salida (opcional)</label><input type="text" id="coObs" placeholder="Ej: dejo ropa sucia"><button class="btn br full sm" style="margin-top:6px" onclick="doCheckOut()">Confirmar Salida</button></div>';
       h+='<div id="extP" style="display:none;margin-top:9px">';
       h+='<div class="ext-tabs"><div class="ext-tab'+(selExtMode==='ext'?' on':'')+'" id="extTabExt" onclick="setExtMode(\'ext\')">Extender (hrs sueltas)</div><div class="ext-tab'+(selExtMode==='renew'?' on':'')+'" id="extTabRew" onclick="setExtMode(\'renew\')">Renovar (bloque)</div></div>';
       h+='<div id="extSubExt"'+(selExtMode==='renew'?' style="display:none"':'')+'>';
-      h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:5px">'+fmt(cfg.extraHour)+' por hora adicional</div>';
+      h+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:5px">'+fmt(cfg.extraHour)+' por hora adicional</div>';
       h+='<select id="extHrs" style="margin-bottom:8px"><option value="1">+1h — '+fmt(1*cfg.extraHour)+'</option><option value="2">+2h — '+fmt(2*cfg.extraHour)+'</option><option value="3">+3h — '+fmt(3*cfg.extraHour)+'</option><option value="4">+4h — '+fmt(4*cfg.extraHour)+'</option><option value="5">+5h — '+fmt(5*cfg.extraHour)+'</option><option value="6">+6h — '+fmt(6*cfg.extraHour)+'</option></select>';
       h+='<div class="pm"><div class="pmo on" id="extPmEF" onclick="selExtPm(\'EFECTIVO\')">Efectivo</div><div class="pmo" id="extPmTA" onclick="selExtPm(\'TARJETA\')">Tarjeta</div><div class="pmo" id="extPmNE" onclick="selExtPm(\'NEQUI\')">Nequi</div></div>';
       h+='<button class="btn bb full" onclick="doExt()">Confirmar Extension</button>';
       h+='</div>';
       h+='<div id="extSubRew"'+(selExtMode==='ext'?' style="display:none"':'')+'>';
       var renewDurs=cfg.h6>0?[3,6,8,12]:[3,8,12];
-      h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:6px">Precio de bloque completo (tarifa base):</div>';
+      h+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Precio de bloque completo (tarifa base):</div>';
       h+='<div class="pg">';
       renewDurs.forEach(function(hhr){var pp=calcP(hhr,cfg);if(!pp)return;h+='<div class="po'+(selRenewDur===hhr?' on':'')+'" id="rew'+hhr+'" onclick="selRewDur('+hhr+',\''+r.category+'\')"><div class="ph">'+hhr+'h</div><div class="pp">'+fmt(pp)+'</div></div>';});
       h+='</div>';
@@ -2490,13 +2490,13 @@ h+='</div></div>';
  // --- SUCIA ---
   if(eff==='DI'){
     var mD=r.lastCheckoutMs?Math.round((now-Number(r.lastCheckoutMs))/60000):0;
-    h+='<div style="background:#22222c;border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
-    if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora de entrada</span><b>'+fT(r.checkInMs)+'</b></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Hora de salida</span><b>'+fT(r.lastCheckoutMs)+'</b></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo sucia</span><b style="color:#f59e0b">'+mD+' minutos</b></div>';
-    if(r.checkoutObs)h+='<div style="margin-top:5px;color:#f59e0b;font-size:11px">Obs: '+esc(r.checkoutObs)+'</div>';
+    h+='<div style="background:var(--card-2);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
+    if(r.checkInMs)h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Hora de entrada</span><b>'+fT(r.checkInMs)+'</b></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Hora de salida</span><b>'+fT(r.lastCheckoutMs)+'</b></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Tiempo sucia</span><b style="color:var(--warn)">'+mD+' minutos</b></div>';
+    if(r.checkoutObs)h+='<div style="margin-top:5px;color:var(--warn);font-size:11px">Obs: '+esc(r.checkoutObs)+'</div>';
     h+='</div>';
-    h+='<div id="resumenEstadia" style="background:#18181f;border:1px solid #2e2e3a;border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:#6b7280">Cargando...</p></div>';
+    h+='<div id="resumenEstadia" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:var(--title);margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:var(--muted)">Cargando...</p></div>';
     if(sess&&sess.userRole==='MAID'){
       h+='<div class="row"><button class="btn by sm" id="btnTake_'+r.roomId+'" onclick="doMaidTake(\''+r.roomId+'\')">Empezar Limpieza</button></div>';
       h+='<div style="margin-top:8px;display:none" id="btnsDone_'+r.roomId+'"><button class="btn bg sm" onclick="doMaidFinish(\''+r.roomId+'\',\'AVAILABLE\')">Marcar Lista</button>&nbsp;<button class="btn bo xs" onclick="doMaidFinish(\''+r.roomId+'\',\'CONTAMINATED\')">Contaminada</button></div>';
@@ -2507,8 +2507,8 @@ h+='</div></div>';
   if(eff==='CO'){
     var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0),mC=since?Math.round((now-since)/60000):0;
     h+='<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.4);border-radius:8px;padding:9px;margin-bottom:9px;font-size:12px">';
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Contaminada desde</span><b style="color:#3b82f6">'+fT(since)+'</b></div>';
-    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#9ca3af">Tiempo</span><b style="color:#3b82f6">'+mC+' min</b></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Contaminada desde</span><b style="color:var(--info)">'+fT(since)+'</b></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Tiempo</span><b style="color:var(--info)">'+mC+' min</b></div>';
     h+='</div>';
     if(isR)h+='<div class="row"><button class="btn bg sm" onclick="doClear()">Marcar Disponible</button></div>';
     if(sess&&sess.userRole==='MAID'){
@@ -2519,18 +2519,18 @@ h+='</div></div>';
   // --- DISPONIBLE FORMULARIO CHECK-IN ---
   if(eff==='AV'&&isR){
     var durs=cfg.h6>0?[3,6,8,12]:[3,8,12];
-    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Duracion:</div>';
+    h+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:700">Duracion:</div>';
     h+='<div class="pg">';
     durs.forEach(function(hr){var p=calcP(hr,cfg);if(!p)return;h+='<div class="po'+(hr===selDur?' on':'')+'" id="d'+hr+'" onclick="selD('+hr+',\''+r.category+'\')"><div class="ph">'+hr+' hrs</div><div class="pp">'+fmt(p)+'</div></div>';});
     h+='</div>';
     // Personas adicionales (no personal extra)
     var incl=Number(cfg.included||2);
-    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Personas adicionales <span style="font-weight:400;color:#6b7280">('+incl+' incluidas, extra '+fmt(cfg.extraPerson)+'c/u)</span>:</div>';
+    h+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:700">Personas adicionales <span style="font-weight:400;color:var(--muted)">('+incl+' incluidas, extra '+fmt(cfg.extraPerson)+'c/u)</span>:</div>';
     h+='<div class="pr"><button class="pb" onclick="chP(-1,\''+r.category+'\')">-</button><div class="pc" id="pcnt">'+selPpl+'</div><button class="pb" onclick="chP(1,\''+r.category+'\')">+</button></div>';
-    h+='<div id="extraPeopleInfo" style="font-size:11px;color:#9ca3af;margin-bottom:4px"></div>';
+    h+='<div id="extraPeopleInfo" style="font-size:11px;color:var(--text-dim);margin-bottom:4px"></div>';
     // Llegada: WALK, CAR, MOTO
    
-    h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Metodo de pago:</div>';
+    h+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:700">Metodo de pago:</div>';
     h+='<div class="pm"><div class="pmo'+(selPay==='EFECTIVO'?' on':'')+'" id="pmEFECTIVO" onclick="selPm(\'EFECTIVO\')">Efectivo</div><div class="pmo'+(selPay==='TARJETA'?' on':'')+'" id="pmTARJETA" onclick="selPm(\'TARJETA\')">Tarjeta</div><div class="pmo'+(selPay==='NEQUI'?' on':'')+'" id="pmNEQUI" onclick="selPm(\'NEQUI\')">Nequi</div><div class="pmo'+(selPay==='MIXTO'?' on':'')+'" id="pmMIXTO" onclick="selPm(\'MIXTO\')">Mixto</div></div>';
 h+='<div id="mixtoDiv" class="'+(selPay==='MIXTO'?'':'h')+'" style="margin-top:6px">';
 h+='<label>Monto en Efectivo</label><input type="number" id="mixtoEf" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
@@ -2538,16 +2538,16 @@ h+='<label>Monto en Tarjeta</label><input type="number" id="mixtotj" placeholder
 h+='<label>Monto en Nequi</label><input type="number" id="mixtoNq" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
 h+='</div>';
-    h+='<div style="background:#18181f;border:1px solid rgba(249,115,22,.5);border-radius:10px;padding:10px;margin-bottom:8px">';
+    h+='<div style="background:var(--card);border:1px solid rgba(249,115,22,.5);border-radius:10px;padding:10px;margin-bottom:8px">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-    h+='<div style="font-size:11px;font-weight:700;color:#f97316;text-transform:uppercase">🛒 Productos al ingreso</div>';
-    h+='<b style="color:#f97316;font-size:12px" id="ciProdTotal">$0</b>';
+    h+='<div style="font-size:11px;font-weight:700;color:var(--warn);text-transform:uppercase">🛒 Productos al ingreso</div>';
+    h+='<b style="color:var(--warn);font-size:12px" id="ciProdTotal">$0</b>';
     h+='</div>';
     h+='<div id="ciProdList" style="margin-bottom:6px"></div>';
     h+='<input type="text" id="ciProdBuscar" placeholder="🔍 Buscar producto por nombre..." style="width:100%;margin:0 0 6px 0;font-size:12px;padding:6px 9px;box-sizing:border-box" oninput="ciRl(this.value)">';
-    h+='<button onclick="togCiCats()" style="padding:4px 12px;background:#22222c;border:1px solid #7c5cfc;border-radius:20px;color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px">📂 Por Categoría</button>';
+    h+='<button onclick="togCiCats()" style="padding:4px 12px;background:var(--card-2);border:1px solid var(--accent);border-radius:20px;color:var(--title);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px">📂 Por Categoría</button>';
     h+='<div id="ciCats" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
-    h+='<div id="ciProdRes" style="background:#22222c;border-radius:6px;max-height:130px;overflow-y:auto;margin-bottom:6px"></div>';
+    h+='<div id="ciProdRes" style="background:var(--card-2);border-radius:6px;max-height:130px;overflow-y:auto;margin-bottom:6px"></div>';
     h+='<div id="ciPendiente"></div>';
     h+='</div>';
     h+='<div id="cashDiv" class="'+(selPay==='EFECTIVO'?'':'h')+'"><label>Cliente paga con:</label><input type="number" id="paidWith" placeholder="Monto recibido" min="0" oninput="updChg(\''+r.category+'\')"></div>';
@@ -2563,19 +2563,19 @@ h+='</div>';
   // ACORDEON — opciones secundarias
   if(isR||isA){
     h+='<div style="margin-top:10px">';
-    h+='<button onclick="toggleAcordeon()" style="width:100%;background:#22222c;border:1px solid #2e2e3a;border-radius:8px;padding:8px 12px;color:#9ca3af;font-size:11px;font-weight:700;cursor:pointer;text-align:left" id="btnAcordeon">▼ Opciones adicionales</button>';
-    h+='<div id="acordeonBody" style="display:none;border:1px solid #2e2e3a;border-top:none;border-radius:0 0 8px 8px;padding:10px;background:#18181f">';
+    h+='<button onclick="toggleAcordeon()" style="width:100%;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text-dim);font-size:11px;font-weight:700;cursor:pointer;text-align:left" id="btnAcordeon">▼ Opciones adicionales</button>';
+    h+='<div id="acordeonBody" style="display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:10px;background:var(--card)">';
     if(eff==='AV'&&isR){
-      h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-weight:700">Llegaron en:</div>';
+      h+='<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:700">Llegaron en:</div>';
       h+='<div class="ar" style="margin-bottom:6px"><div class="abtn2'+(selArr==='WALK'?' on':'')+'" id="aWALK" onclick="selAr(\'WALK\')">A pie</div><div class="abtn2'+(selArr==='TAXI'?' on':'')+'" id="aTAXI" onclick="selAr(\'TAXI\')">Taxi</div><div class="abtn2'+(selArr==='CAR'?' on':'')+'" id="aCAR" onclick="selAr(\'CAR\')">Carro</div><div class="abtn2'+(selArr==='MOTO'?' on':'')+'" id="aMOTO" onclick="selAr(\'MOTO\')">Moto</div></div>';
-      h+='<div id="plW" class="'+(selArr==='CAR'||selArr==='MOTO'?'':'h')+'"><label>Placa <span id="plateReqLabel" style="color:'+(selArr==='CAR'?'#ef4444':'#9ca3af')+'">'+(selArr==='CAR'?'(obligatoria)':'(opcional)')+'</span></label><input type="text" id="plIn" placeholder="ABC123" maxlength="10" oninput="this.value=this.value.toUpperCase()"></div>';
+      h+='<div id="plW" class="'+(selArr==='CAR'||selArr==='MOTO'?'':'h')+'"><label>Placa <span id="plateReqLabel" style="color:'+(selArr==='CAR'?'var(--danger)':'var(--text-dim)')+'">'+(selArr==='CAR'?'(obligatoria)':'(opcional)')+'</span></label><input type="text" id="plIn" placeholder="ABC123" maxlength="10" oninput="this.value=this.value.toUpperCase()"></div>';
       h+='<hr>';
     }
 
     // Nota
     if(isR||isA){
       if(r.noteMinor){
-        h+='<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:7px;padding:8px;font-size:12px;color:#f59e0b;margin-bottom:8px">'+(r.noteMinorText||'Nota activa')+'</div>';
+        h+='<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:7px;padding:8px;font-size:12px;color:var(--warn);margin-bottom:8px">'+(r.noteMinorText||'Nota activa')+'</div>';
         h+='<button class="btn bk xs" onclick="doResolveNote()">Resolver Nota</button>';
       } else {
         h+='<label>Nota menor</label><input type="text" id="noteT" placeholder="Descripcion"><button class="btn by xs" style="margin-top:4px" onclick="doSetNote()">Agregar Nota</button>';
