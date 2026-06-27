@@ -71,9 +71,10 @@ select option{background:var(--card-2)}
 .hdr-name{display:inline-block;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:4px 16px;font-size:15px;font-weight:700;letter-spacing:3px;color:var(--text)}
 .hdr-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--border);padding:0 10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.tab{padding:9px 11px;border:none;background:transparent;color:var(--text-dim);font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
-.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
-.tab .ti{font-size:14px;vertical-align:-1px;margin-right:3px}
+.tab{display:inline-flex;align-items:center;gap:5px;padding:9px 12px;border:none;background:transparent;color:var(--text-dim);font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,background .15s}
+.tab .ti{font-size:15px;line-height:1}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);background:rgba(74,163,255,.06)}
 .cnt{padding:12px}
 .pnl{display:none}.pnl.on{display:block}
 .sec{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 7px;border-bottom:1px solid var(--border);padding-bottom:4px}
@@ -1958,9 +1959,9 @@ function buildTabs(){
   if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones',i:'ti-bed'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos',i:'ti-broom'});
   if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños',i:'ti-tool'},{id:'aire',l:'Aire',i:'ti-snowflake'});
- if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-receipt'},{id:'cuadre',l:'Cierre de caja',i:'ti-cash'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'productos',l:'Inventario',i:'ti-package'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
-if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-month'},{id:'gastosmes',l:'Gastos',i:'ti-receipt'},{id:'maids',l:'Limpieza',i:'ti-broom'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-calendar'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-cash'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-package'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
+ if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-cash'},{id:'cuadre',l:'Cierre de caja',i:'ti-receipt-2'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'productos',l:'Inventario',i:'ti-box'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
+if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-stats'},{id:'gastosmes',l:'Gastos',i:'ti-cash'},{id:'maids',l:'Limpieza',i:'ti-spray'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-receipt-2'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-box'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Configuración',i:'ti-settings'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';
