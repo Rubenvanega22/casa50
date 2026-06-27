@@ -129,10 +129,11 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .sb-floor-top b{color:var(--text)}
 .sb-bar{height:6px;background:var(--card-2);border-radius:4px;overflow:hidden}
 .sb-bar-fill{height:100%;background:var(--accent);border-radius:4px}
-.sb-ring{width:120px;height:120px;border-radius:50%;margin:4px auto 6px;display:flex;align-items:center;justify-content:center}
-.sb-ring-hole{width:84px;height:84px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center}
-.sb-ring-pct{font-size:22px;font-weight:800;color:var(--text)}
+.sb-ring-svg{display:block;width:100%;max-width:148px;margin:2px auto 4px}
 .sb-ring-sub{text-align:center;font-size:11px;color:var(--text-dim)}
+.sb-legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:6px}
+.sb-leg{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--text-dim)}
+.sb-leg i{width:8px;height:8px;border-radius:2px}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.over{color:var(--danger)}
 .ac{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 6px;cursor:pointer;border-top:3px solid var(--border);text-align:center;transition:transform .1s}
 .ac:active{transform:scale(.97)}
@@ -2366,8 +2367,26 @@ function renderSidebar(){
     h+='<div class="sb-floor"><div class="sb-floor-top"><span>Piso '+f+'</span><b>'+p+'%</b></div><div class="sb-bar"><div class="sb-bar-fill" style="width:'+p+'%"></div></div></div>';
   });
   h+='</div>';
-  // 3) Anillo del edificio (ocupacion total sobre TODAS las habitaciones)
-  h+='<div class="sb-sec"><div class="sb-title">Edificio</div><div class="sb-ring" style="background:conic-gradient(var(--clean) 0% '+pct+'%, var(--border) '+pct+'% 100%)"><div class="sb-ring-hole"><span class="sb-ring-pct">'+pct+'%</span></div></div><div class="sb-ring-sub">'+occ+' / '+total+' habitaciones</div></div>';
+  // 3) Anillo del edificio — donut SVG segmentado por estado (solo estados con >=1)
+  var ringOrden=['OC','DI','AV','CO','BL','RT'];
+  var ringMeta={OC:{l:'Ocup',col:'var(--danger)'},DI:{l:'Suc',col:'var(--warn)'},AV:{l:'Disp',col:'var(--ok)'},CO:{l:'Cont',col:'var(--info)'},BL:{l:'Bloq',col:'var(--muted)'},RT:{l:'Ret',col:'var(--clean)'}};
+  var segs=ringOrden.filter(function(k){return c[k]>0;}).map(function(k){return {n:c[k],frac:total?c[k]/total:0,col:ringMeta[k].col,lbl:ringMeta[k].l};});
+  var R=46,SW=14,LR=64,CIRC=2*Math.PI*R,acc=0;
+  var svg='<svg class="sb-ring-svg" viewBox="0 0 160 160">';
+  svg+='<circle cx="80" cy="80" r="'+R+'" fill="none" stroke="var(--border)" stroke-width="'+SW+'"></circle>';
+  segs.forEach(function(s){
+    var segLen=s.frac*CIRC;
+    svg+='<circle cx="80" cy="80" r="'+R+'" fill="none" stroke-width="'+SW+'" style="stroke:'+s.col+'" stroke-dasharray="'+segLen.toFixed(2)+' '+(CIRC-segLen).toFixed(2)+'" stroke-dashoffset="'+(-acc).toFixed(2)+'" transform="rotate(-90 80 80)"></circle>';
+    var midFrac=acc/CIRC+s.frac/2, ang=(midFrac*360-90)*Math.PI/180;
+    var lx=(80+LR*Math.cos(ang)).toFixed(1), ly=(80+LR*Math.sin(ang)).toFixed(1);
+    svg+='<text x="'+lx+'" y="'+ly+'" text-anchor="middle" dominant-baseline="middle" font-size="8" font-weight="700" style="fill:'+s.col+'">'+Math.round(s.frac*100)+'%</text>';
+    acc+=segLen;
+  });
+  svg+='<text x="80" y="76" text-anchor="middle" dominant-baseline="middle" font-size="20" font-weight="800" style="fill:var(--text)">'+pct+'%</text>';
+  svg+='<text x="80" y="95" text-anchor="middle" dominant-baseline="middle" font-size="8" style="fill:var(--text-dim)">ocupacion</text>';
+  svg+='</svg>';
+  var leg=segs.map(function(s){return '<span class="sb-leg"><i style="background:'+s.col+'"></i>'+s.lbl+'</span>';}).join('');
+  h+='<div class="sb-sec"><div class="sb-title">Edificio</div>'+svg+'<div class="sb-ring-sub">'+occ+' / '+total+' habitaciones</div><div class="sb-legend">'+leg+'</div></div>';
   side.innerHTML=h;
 }
 
