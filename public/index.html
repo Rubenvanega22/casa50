@@ -106,6 +106,22 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .rooms-layout #roomsCont{flex:1;min-width:0}
 .rooms-sidebar{flex:0 0 230px;align-self:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}
 @media(max-width:820px){.rooms-layout{flex-direction:column}.rooms-sidebar{flex:none;width:100%}}
+/* Sidebar de Habitaciones — Paso 3 (contenido) */
+.sb-sec{margin-bottom:14px}
+.sb-sec:last-child{margin-bottom:0}
+.sb-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:7px}
+.sb-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0}
+.sb-row .sb-lbl{color:var(--text-dim)}
+.sb-row b{font-size:14px}
+.sb-floor{margin-bottom:8px}
+.sb-floor-top{display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:3px}
+.sb-floor-top b{color:var(--text)}
+.sb-bar{height:6px;background:var(--card-2);border-radius:4px;overflow:hidden}
+.sb-bar-fill{height:100%;background:var(--accent);border-radius:4px}
+.sb-ring{width:120px;height:120px;border-radius:50%;margin:4px auto 6px;display:flex;align-items:center;justify-content:center}
+.sb-ring-hole{width:84px;height:84px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center}
+.sb-ring-pct{font-size:22px;font-weight:800;color:var(--text)}
+.sb-ring-sub{text-align:center;font-size:11px;color:var(--text-dim)}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.over{color:var(--danger)}
 .ac{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 6px;cursor:pointer;border-top:3px solid var(--border);text-align:center;transition:transform .1s}
 .ac:active{transform:scale(.97)}
@@ -2254,6 +2270,7 @@ function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},fu
 // ---- HABITACIONES ----
 function renderRooms(){
   renderSM();
+  renderSidebar();
   var c=document.getElementById('roomsCont');c.innerHTML='';
   var fl=[];rooms.forEach(function(r){if(fl.indexOf(r.floor)<0)fl.push(r.floor);});fl.sort(function(a,b){return a-b;});
   fl.forEach(function(f){
@@ -2309,6 +2326,33 @@ function renderSM(){
   var btnC=document.getElementById('btnCortesia');
   if(badge){badge.style.display=(isRec||sess.userRole==='ADMIN')?'':'none';badge.style.background='rgba(34,197,94,.12)';badge.style.border='1px solid rgba(34,197,94,.4)';badge.style.color='#22c55e';badge.textContent='🟢 '+totalHabDia+' hoy';}
   if(btnC)btnC.style.display=isRec?'':'none';
+}
+
+// Sidebar de Habitaciones: Estado general + Ocupacion por piso + Anillo del edificio.
+// Solo lee datos ya disponibles (contarEstados/rooms/totalHabDia); no recalcula nada del backend.
+function renderSidebar(){
+  var side=document.getElementById('roomsSidebar');
+  if(!side) return;
+  var c=contarEstados();
+  var total=rooms.length, occ=c.OC, pct=total?Math.round(occ/total*100):0;
+  // 1) Estado general
+  var estados=[['Disponibles',c.AV,'var(--ok)'],['Ocupadas',c.OC,'var(--danger)'],['Sucias',c.DI,'var(--warn)'],['Contaminadas',c.CO,'var(--info)'],['Bloqueadas',c.BL,'var(--muted)'],['Retoque',c.RT,'var(--clean)']];
+  var h='<div class="sb-sec"><div class="sb-title">Estado general</div>';
+  estados.forEach(function(e){h+='<div class="sb-row"><span class="sb-lbl">'+e[0]+'</span><b style="color:'+e[2]+'">'+e[1]+'</b></div>';});
+  h+='</div>';
+  // 2) Ocupacion por piso
+  var pisos=[];rooms.forEach(function(r){if(pisos.indexOf(r.floor)<0)pisos.push(r.floor);});pisos.sort(function(a,b){return a-b;});
+  h+='<div class="sb-sec"><div class="sb-title">Ocupacion por piso</div>';
+  pisos.forEach(function(f){
+    var ro=rooms.filter(function(r){return r.floor===f;});
+    var t=ro.length, o=ro.filter(function(r){return r.state==='OCCUPIED';}).length;
+    var p=t?Math.round(o/t*100):0;
+    h+='<div class="sb-floor"><div class="sb-floor-top"><span>Piso '+f+'</span><b>'+p+'%</b></div><div class="sb-bar"><div class="sb-bar-fill" style="width:'+p+'%"></div></div></div>';
+  });
+  h+='</div>';
+  // 3) Anillo del edificio (ocupacion total sobre TODAS las habitaciones)
+  h+='<div class="sb-sec"><div class="sb-title">Edificio</div><div class="sb-ring" style="background:conic-gradient(var(--clean) 0% '+pct+'%, var(--border) '+pct+'% 100%)"><div class="sb-ring-hole"><span class="sb-ring-pct">'+pct+'%</span></div></div><div class="sb-ring-sub">'+occ+' / '+total+' habitaciones</div></div>';
+  side.innerHTML=h;
 }
 
 // ---- MODAL HABITACION ----
