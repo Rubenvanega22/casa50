@@ -106,6 +106,16 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .rooms-center{flex:1;min-width:0}
 .rooms-sidebar{flex:0 0 230px;align-self:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}
 @media(max-width:820px){.rooms-layout{flex-direction:column}.rooms-sidebar{flex:none;width:100%}}
+/* Fila superior de Habitaciones — Paso B */
+.rooms-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.metric-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
+.metric-lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.metric-val{font-size:18px;font-weight:800;color:var(--text);margin-top:2px}
+.rooms-counters{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.counter-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 16px;text-align:center}
+.counter-val{font-size:20px;font-weight:800;line-height:1}
+.counter-lbl{font-size:10px;color:var(--text-dim);margin-top:2px}
+@media(max-width:560px){.rooms-metrics{grid-template-columns:repeat(2,1fr)}}
 /* Sidebar de Habitaciones — Paso 3 (contenido) */
 .sb-sec{margin-bottom:14px}
 .sb-sec:last-child{margin-bottom:0}
@@ -1362,12 +1372,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="rooms-layout">
 <aside class="rooms-sidebar" id="roomsSidebar"><div style="color:var(--text-dim);font-size:11px">Resumen (Paso 3)</div></aside>
 <div class="rooms-center">
-<div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-<div style="display:flex;align-items:center;gap:8px">
-<div id="ocupadasBadge" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;color:#ef4444"></div>
-<button class="btn ba sm" id="btnCortesia" style="display:none" onclick="openCortesia()">🎁 Cortesía</button>
-</div>
-</div>
+<div id="roomsTopRow"></div>
 <div id="roomsCont"></div>
 </div>
 </div>
@@ -1648,6 +1653,7 @@ var BS={},rooms=[],sess=null,curRoom=null,multiMaidMode=false,maidSelected='',ma
 var historyOpen=false; // Toggle del botón "Ver historial" en Informes — guarda el flag para que startPoll no sobrescriba la vista
 var selDur=3,selPpl=2,selArr='WALK',selPay='EFECTIVO';
 var totalHabDia=0;
+var totalSalidasDia=0;
 var selExtMode='ext'; // 'ext' o 'renew'
 var selRenewDur=3;
 var pT,cT,aT,confCb,tapN=0,tapH,adminTap=false,exCoName='',staffList=[];
@@ -2319,13 +2325,22 @@ function contarEstados(){
   rooms.forEach(function(r){if(r.disabled){c.BL++;return;}if(r.retoque){c.RT++;return;}var k=r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';c[k]++;});
   return c;
 }
-// Maneja el badge "N hoy" y el boton Cortesia (el conteo por estado vive en el sidebar).
+// Fila superior de Habitaciones segun rol:
+//  ADMIN -> tira de metricas (placeholders, se llenan despues)
+//  RECEPCION -> contadores Vendidas hoy / Salidas hoy + boton Cortesia
 function renderSM(){
-  var isRec=sess&&sess.userRole==='RECEPTION';
-  var badge=document.getElementById('ocupadasBadge');
-  var btnC=document.getElementById('btnCortesia');
-  if(badge){badge.style.display=(isRec||sess.userRole==='ADMIN')?'':'none';badge.style.background='rgba(34,197,94,.12)';badge.style.border='1px solid rgba(34,197,94,.4)';badge.style.color='#22c55e';badge.textContent='🟢 '+totalHabDia+' hoy';}
-  if(btnC)btnC.style.display=isRec?'':'none';
+  var el=document.getElementById('roomsTopRow'); if(!el) return;
+  var role=sess&&sess.userRole;
+  if(role==='ADMIN'){
+    var cards=[['Ventas hoy','—'],['Ticket','—'],['Check-in / out','—'],['Ventas mes','—']];
+    el.innerHTML='<div class="rooms-metrics">'+cards.map(function(c){return '<div class="metric-card"><div class="metric-lbl">'+c[0]+'</div><div class="metric-val">'+c[1]+'</div></div>';}).join('')+'</div>';
+  } else if(role==='RECEPTION'){
+    el.innerHTML='<div class="rooms-counters">'
+      +'<div class="counter-card"><div class="counter-val" style="color:var(--ok)">'+totalHabDia+'</div><div class="counter-lbl">Vendidas hoy</div></div>'
+      +'<div class="counter-card"><div class="counter-val" style="color:var(--info)">'+totalSalidasDia+'</div><div class="counter-lbl">Salidas hoy</div></div>'
+      +'<button class="btn ba sm" id="btnCortesia" style="margin-left:auto" onclick="openCortesia()">🎁 Cortesia</button>'
+      +'</div>';
+  } else { el.innerHTML=''; }
 }
 
 // Sidebar de Habitaciones: Estado general + Ocupacion por piso + Anillo del edificio.
@@ -3531,6 +3546,8 @@ function loadVentas(){
     h+='</div>';
     var totalSinCortesia=sl.filter(function(s){return s.roomId!=='304';}).length;
     totalHabDia=totalSinCortesia;
+    // Salidas hoy (opcion A): ventas del dia (business_day=hoy) que ya tienen checkout registrado.
+    totalSalidasDia=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&Number(s.checkoutMs||0)>0;}).length;
     renderSM();
     h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:8px">'+totalSinCortesia+' ventas hoy</div>';
     if(!sl.length){
