@@ -101,6 +101,11 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .rtm.ok{color:var(--ok)}.rtm.warn{color:var(--warn)}.rtm.over{color:var(--danger)}
 .ri{font-size:9px;color:var(--text-dim);line-height:1.4;margin-top:1px}
 .ri.warn{color:var(--warn)}
+/* Sidebar de Habitaciones — Paso 1 (layout contenedor) */
+.rooms-layout{display:flex;gap:12px;align-items:flex-start}
+.rooms-layout #roomsCont{flex:1;min-width:0}
+.rooms-sidebar{flex:0 0 230px;align-self:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}
+@media(max-width:820px){.rooms-layout{flex-direction:column}.rooms-sidebar{flex:none;width:100%}}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.over{color:var(--danger)}
 .ac{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 6px;cursor:pointer;border-top:3px solid var(--border);text-align:center;transition:transform .1s}
 .ac:active{transform:scale(.97)}
@@ -1345,7 +1350,10 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn ba sm" id="btnCortesia" style="display:none" onclick="openCortesia()">🎁 Cortesía</button>
 </div>
 </div>
+<div class="rooms-layout">
+<aside class="rooms-sidebar" id="roomsSidebar"><div style="color:var(--text-dim);font-size:11px">Resumen (Paso 3)</div></aside>
 <div id="roomsCont"></div>
+</div>
 </div>
 <!-- LISTADO CAMARERA -->
 <div class="pnl" id="pnl-listado">
