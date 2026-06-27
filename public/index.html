@@ -3574,8 +3574,8 @@ function loadVentas(){
     h+='</div>';
     var totalSinCortesia=sl.filter(function(s){return s.roomId!=='304';}).length;
     totalHabDia=totalSinCortesia;
-    // Salidas hoy (opcion A): ventas del dia (business_day=hoy) que ya tienen checkout registrado.
-    totalSalidasDia=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&Number(s.checkoutMs||0)>0;}).length;
+    // Salidas hoy (opcion C, exacto): check-outs del businessDay (desde 6am) que da el backend.
+    totalSalidasDia=Number((t&&t.salidasHoy)||0);
     metVentasHoy=Number(t.sales||0);                 // bruto del dia
     metVentasCount=totalSinCortesia;                 // cuantas ventas (sin cortesia)
     metCheckin=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&!s.anulada;}).length;

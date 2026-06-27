@@ -1877,6 +1877,12 @@ const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay
   const dayNet=dayTotal+dayBar+dayRefunds-dayTaxi-dayLoans-dayExtraStaff-dayGastos;
   const shiftNet=shiftSales+shiftBar-shiftTaxi-shiftGastos;
 
+  // Salidas reales del businessDay (desde las 6am): check-outs por checkout_ms en la
+  // ventana del dia, sin importar cuando fue el check-in (opcion C, exacto).
+  const { start: bdStart, end: bdEnd } = businessDayRange(bDay);
+  const { count: salidasHoy } = await tSelect('sales','id',{count:'exact',head:true})
+    .eq('type','SALE').gte('checkout_ms', bdStart).lt('checkout_ms', bdEnd).neq('anulada', true);
+
   return ok(res,{
     businessDay:bDay,
     totals:{
@@ -1886,7 +1892,8 @@ const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay
       shiftNet,shiftSales,shiftRoomsSold:shiftRooms,shiftPeople,shiftBar,shiftTaxi,shiftGastos,
       shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,
       shiftBarEfectivo:shiftBarEfe,shiftBarTarjeta:shiftBarTar,shiftBarNequi:shiftBarNeq,
-      totalProductos,totalCortesiasProds,totalProductosEf,totalProductosTa,totalProductosNq
+      totalProductos,totalCortesiasProds,totalProductosEf,totalProductosTa,totalProductosNq,
+      salidasHoy:salidasHoy||0
     },
     loans:(loansRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,userName:r.user_name,borrowerName:r.borrower_name,amount:Number(r.amount),note:r.note})),
     extraStaff:(extraRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),shiftId:r.shift_id,personName:r.person_name,area:r.area,entryMs:Number(r.entry_ms||0),exitMs:Number(r.exit_ms||0),payment:Number(r.payment||0),active:r.active,paidBy:r.paid_by||''})),
