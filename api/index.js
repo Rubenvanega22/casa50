@@ -61,7 +61,9 @@ const TENANT_TABLES = new Set([
   'proyeccion_tareas','retiros_dueno','room_issues','room_products','rooms','sales',
   'schedule','schedule_extras','shift_close','shift_failures','shift_inventory_start',
   'shift_log','shift_notes','staff','staff_vacaciones_historial','state_history','stock_entries',
-  'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales'
+  'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales',
+  // Fase 4 (Parte 2): PINs + settings ahora scopeados por motel
+  'admin_pins','reception_pins','maintenance_pins','settings'
 ]);
 
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
@@ -89,6 +91,15 @@ function tDelete(table){
   let q = supabase.from(table).delete();
   if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
   return q;
+}
+// UPSERT scopeado: fuerza motel_id=MOTEL_ID en cada fila de tablas tenant.
+// opts pasa tal cual a supabase (ej. {onConflict:'motel_id,key'}).
+function tUpsert(table, rows, opts){
+  if (TENANT_TABLES.has(table)) {
+    rows = Array.isArray(rows) ? rows.map(r => ({ ...r, motel_id: MOTEL_ID }))
+                               : { ...rows, motel_id: MOTEL_ID };
+  }
+  return supabase.from(table).upsert(rows, opts);
 }
 
 const PRICING_CACHE = {}; // { [motelId]: { data, ms } }
