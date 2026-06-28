@@ -2037,7 +2037,7 @@ function sw(id){
   if(id==='misdanos')loadMisDanos();
   if(id==='aire')loadAireGrid();
   if(id==='maids')loadMP();
-  if(id==='rooms'&&sess&&sess.userRole==='ADMIN')loadVentas();
+  if(id==='rooms'&&sess&&(sess.userRole==='ADMIN'||sess.userRole==='RECEPTION'))loadVentas();
   if(id==='cuadre-admin'){document.getElementById('cuadreAdminDay').value=sess.businessDay||'';loadCuadreAdmin();}
   if(id==='gastosmes'){var gp=document.getElementById('gmPick');if(gp&&!gp.value){var n=new Date();gp.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}loadGastosMes();}
  if(id==='maint'){
