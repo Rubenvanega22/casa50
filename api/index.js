@@ -61,7 +61,9 @@ const TENANT_TABLES = new Set([
   'proyeccion_tareas','retiros_dueno','room_issues','room_products','rooms','sales',
   'schedule','schedule_extras','shift_close','shift_failures','shift_inventory_start',
   'shift_log','shift_notes','staff','staff_vacaciones_historial','state_history','stock_entries',
-  'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales'
+  'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales',
+  // Fase 4 (Parte 2): PINs + settings ahora scopeados por motel
+  'admin_pins','reception_pins','maintenance_pins','settings'
 ]);
 
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
@@ -89,6 +91,15 @@ function tDelete(table){
   let q = supabase.from(table).delete();
   if (TENANT_TABLES.has(table)) q = q.eq('motel_id', MOTEL_ID);
   return q;
+}
+// UPSERT scopeado: fuerza motel_id=MOTEL_ID en cada fila de tablas tenant.
+// opts pasa tal cual a supabase (ej. {onConflict:'motel_id,key'}).
+function tUpsert(table, rows, opts){
+  if (TENANT_TABLES.has(table)) {
+    rows = Array.isArray(rows) ? rows.map(r => ({ ...r, motel_id: MOTEL_ID }))
+                               : { ...rows, motel_id: MOTEL_ID };
+  }
+  return supabase.from(table).upsert(rows, opts);
 }
 
 const PRICING_CACHE = {}; // { [motelId]: { data, ms } }
@@ -237,7 +248,7 @@ function err(res, msg, status = 400) {
 }
 
 async function getSettings() {
-  const { data } = await supabase.from('settings').select('key, value');
+  const { data } = await tSelect('settings','key, value');
   const map = {};
   (data || []).forEach(r => { map[r.key] = r.value; });
   return map;
@@ -672,8 +683,8 @@ async function apiLogin(p, res) {
     // Si coincide: usamos el nombre canonico de la tabla (auditoria confiable)
     // y su flag ver_luciana. El nombre escrito a mano se ignora a proposito,
     // asi nadie puede hacerse pasar por otro admin tipeando otro nombre.
-    const { data: adminRow } = await supabase.from('admin_pins')
-      .select('user_name, ver_luciana').eq('pin', String(p.adminCode || '')).maybeSingle();
+    const { data: adminRow } = await tSelect('admin_pins','user_name, ver_luciana')
+      .eq('pin', String(p.adminCode || '')).maybeSingle();
     let adminName, verLuciana;
     if (adminRow) {
       adminName = adminRow.user_name;
@@ -695,7 +706,7 @@ async function apiLogin(p, res) {
   }
 
   if (userRole === 'RECEPTION') {
-    const { data: pinRow } = await supabase.from('reception_pins').select('pin').eq('user_name', userName).single();
+    const { data: pinRow } = await tSelect('reception_pins','pin').eq('user_name', userName).single();
     if (!pinRow) {
       await tInsert('login_failures',{ ts_ms: now, user_name: userName.toLowerCase(), user_role: 'RECEPTION', ip: '' });
       return err(res, 'Recepcionista no autorizada. Contacte al administrador.');
@@ -772,7 +783,7 @@ async function apiLogin(p, res) {
     // y usamos el user_name canonico de maintenance_pins en sesion + logs
     const userPin = String(p.userPin || '').trim();
     if (!userPin) return err(res, 'PIN requerido.');
-    const { data: pinRows } = await supabase.from('maintenance_pins').select('user_name, active').eq('pin', userPin).limit(1);
+    const { data: pinRows } = await tSelect('maintenance_pins','user_name, active').eq('pin', userPin).limit(1);
     const pinRow = (pinRows && pinRows.length) ? pinRows[0] : null;
     if (!pinRow) {
       await tInsert('login_failures',{ ts_ms: now, user_name: 'maintenance', user_role: 'MAINTENANCE', ip: '' });
@@ -1785,7 +1796,7 @@ async function apiMetrics(p, res) {
     tSelect('extra_staff','*').eq('business_day', bDay).eq('anulada', false),
     tSelect('bar_sales','*').eq('business_day', bDay),
     tSelect('general_expenses','*').eq('business_day', bDay),
-    supabase.from('settings').select('key,value'),
+    tSelect('settings','key,value'),
     tSelect('shift_log','user_name,shift_id').eq('business_day', bDay).eq('user_role','RECEPTION').eq('action','LOGIN').order('ts_ms'),
     tSelect('shift_close','shift_id,cash_count,cash_billetes,cash_monedas,net,total_efectivo,ts_ms').eq('business_day', bDay)
   ]);
@@ -2270,7 +2281,7 @@ async function apiSaveSchedule(p, res) {
 async function apiSetMultiMaidMode(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN') return err(res,'Solo ADMIN');
   const value=p.enabled?'true':'false';
-  await supabase.from('settings').upsert({key:'MULTI_MAID_MODE',value},{onConflict:'key'});
+  await tUpsert('settings',{key:'MULTI_MAID_MODE',value},{onConflict:'motel_id,key'});
   return ok(res,{multiMaidMode:p.enabled});
 }
 async function apiGetMultiMaidMode(p, res) {
@@ -2281,26 +2292,26 @@ async function apiGetMultiMaidMode(p, res) {
 async function apiSetGoal(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const goal=Number(p.goal||0);
-  await supabase.from('settings').upsert({key:'DAILY_GOAL',value:String(goal)},{onConflict:'key'});
+  await tUpsert('settings',{key:'DAILY_GOAL',value:String(goal)},{onConflict:'motel_id,key'});
   return ok(res,{goal});
 }
 async function apiSetPin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const targetName=String(p.targetName||'').trim(),pin=String(p.pin||'').trim();
   if(!targetName)return err(res,'Nombre requerido');
-  await supabase.from('reception_pins').upsert({user_name:targetName,pin,updated_at:new Date().toISOString()},{onConflict:'user_name'});
+  await tUpsert('reception_pins',{user_name:targetName,pin,updated_at:new Date().toISOString()},{onConflict:'motel_id,user_name'});
   return ok(res,{});
 }
 async function apiDeletePin(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
   const targetName=String(p.targetName||'').trim();
   if(!targetName)return err(res,'Nombre requerido');
-  await supabase.from('reception_pins').delete().eq('user_name',targetName);
+  await tDelete('reception_pins').eq('user_name',targetName);
   return ok(res,{});
 }
 async function apiGetPins(p, res) {
   if(String(p.userRole||'').toUpperCase()!=='ADMIN')return err(res,'Solo ADMIN');
-  const{data}=await supabase.from('reception_pins').select('user_name, pin');
+  const{data}=await tSelect('reception_pins','user_name, pin');
   return ok(res,{pins:(data||[]).map(r=>({userName:r.user_name,hasPin:!!String(r.pin||'').trim()}))});
 }
 async function apiChangeAdminPin(p, res) {
@@ -2309,7 +2320,7 @@ async function apiChangeAdminPin(p, res) {
   const settings=await getSettings();
   if(cur!==String(settings.ADMIN_CODE||'2206'))return err(res,'PIN actual incorrecto');
   if(nw.length<4||!/^\d+$/.test(nw))return err(res,'PIN invalido');
-  await supabase.from('settings').upsert({key:'ADMIN_CODE',value:nw},{onConflict:'key'});
+  await tUpsert('settings',{key:'ADMIN_CODE',value:nw},{onConflict:'motel_id,key'});
   return ok(res,{});
 }
 
@@ -8839,8 +8850,8 @@ async function apiLucianaChat(p, res) {
   // admin_pins, no puede usar Luciana aunque su rol sea ADMIN (caso lisset).
   const quien = String(p.userName || '').trim().toLowerCase();
   if (quien) {
-    const { data: adminRow } = await supabase.from('admin_pins')
-      .select('ver_luciana').eq('user_name', quien).maybeSingle();
+    const { data: adminRow } = await tSelect('admin_pins','ver_luciana')
+      .eq('user_name', quien).maybeSingle();
     if (adminRow && adminRow.ver_luciana === false) {
       return err(res, 'Este administrador no tiene acceso a Luciana', 403);
     }
