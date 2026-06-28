@@ -119,6 +119,7 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .counter-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 16px;text-align:center}
 .counter-val{font-size:20px;font-weight:800;line-height:1}
 .counter-lbl{font-size:10px;color:var(--text-dim);margin-top:2px}
+.sb-counters{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
 @media(max-width:560px){.rooms-metrics{grid-template-columns:repeat(2,1fr)}}
 /* Sidebar de Habitaciones — Paso 3 (contenido) */
 .sb-sec{margin-bottom:14px}
@@ -2345,11 +2346,8 @@ function renderSM(){
     var cards=[['Ventas hoy',fmt(metVentasHoy),metVentasCount+' ventas'+cmp],['Ticket',fmt(ticket),'promedio'],['Check-in / out',metCheckin+' / '+totalSalidasDia,'hoy'],['Ventas mes (neto)',fmt(metMesNeto),'']];
     el.innerHTML='<div class="rooms-metrics">'+cards.map(function(c){return '<div class="metric-card"><div class="metric-lbl">'+c[0]+'</div><div class="metric-val">'+c[1]+'</div>'+(c[2]?'<div class="metric-sub">'+c[2]+'</div>':'')+'</div>';}).join('')+'</div>';
   } else if(role==='RECEPTION'){
-    el.innerHTML='<div class="rooms-counters">'
-      +'<div class="counter-card"><div class="counter-val" style="color:var(--ok)">'+totalHabDia+'</div><div class="counter-lbl">Vendidas hoy</div></div>'
-      +'<div class="counter-card"><div class="counter-val" style="color:var(--info)">'+totalSalidasDia+'</div><div class="counter-lbl">Salidas hoy</div></div>'
-      +'<button class="btn ba sm" id="btnCortesia" style="margin-left:auto" onclick="openCortesia()">🎁 Cortesia</button>'
-      +'</div>';
+    // Contadores movidos al sidebar; arriba queda solo Cortesia (derecha).
+    el.innerHTML='<div class="rooms-counters" style="justify-content:flex-end"><button class="btn ba sm" id="btnCortesia" onclick="openCortesia()">🎁 Cortesia</button></div>';
   } else { el.innerHTML=''; }
 }
 
@@ -2395,6 +2393,13 @@ function renderSidebar(){
   svg+='</svg>';
   var leg=segs.map(function(s){return '<span class="sb-leg"><i style="background:'+s.col+'"></i>'+s.lbl+'</span>';}).join('');
   h+='<div class="sb-sec"><div class="sb-title">Edificio</div>'+svg+'<div class="sb-ring-sub">'+occ+' / '+total+' habitaciones</div><div class="sb-legend">'+leg+'</div></div>';
+  // Contadores de recepcion apilados, debajo del anillo (solo RECEPTION; mismos datos)
+  if(sess&&sess.userRole==='RECEPTION'){
+    h+='<div class="sb-counters">'
+      +'<div class="counter-card"><div class="counter-val" style="color:var(--ok)">'+totalHabDia+'</div><div class="counter-lbl">Vendidas hoy</div></div>'
+      +'<div class="counter-card"><div class="counter-val" style="color:var(--info)">'+totalSalidasDia+'</div><div class="counter-lbl">Salidas hoy</div></div>'
+      +'</div>';
+  }
   side.innerHTML=h;
 }
 
@@ -3579,7 +3584,7 @@ function loadVentas(){
     metVentasHoy=Number(t.sales||0);                 // bruto del dia
     metVentasCount=totalSinCortesia;                 // cuantas ventas (sin cortesia)
     metCheckin=(m.allSalesList||[]).filter(function(s){return s.type==='SALE'&&!s.anulada;}).length;
-    renderSM();
+    renderSM();renderSidebar();
     if(sess&&sess.userRole==='ADMIN'){
       var _ym=(sess.businessDay||'').slice(0,7);
       rpc('monthMetrics',{yearMonth:_ym},function(dm){metMesNeto=(dm&&dm.monthTotals&&dm.monthTotals.neto)||0;renderSM();},function(){});
