@@ -277,8 +277,16 @@ function mapRoom(r) {
     maidInProgress: !!r.maid_in_progress,
     maidNameProgress: r.maid_name_progress || '',
     retoque: !!r.retoque,
-    payMethod: r.pay_method || ''
+    payMethod: r.pay_method || '',
+    isCortesia: !!r.is_cortesia
   };
+}
+
+// Set de room_id de cortesia del motel (reemplaza el hardcode '304').
+// Vacio = motel sin cortesia. Scopeado por motel via tSelect.
+async function getCortesiaIds(){
+  const { data } = await tSelect('rooms','room_id').eq('is_cortesia', true);
+  return new Set((data || []).map(r => String(r.room_id)));
 }
 // ==================== HELPER DE PAGINACION ====================
 // Trae TODAS las filas de una consulta Supabase, paginando en lotes de 1000.
@@ -1803,6 +1811,7 @@ async function apiMetrics(p, res) {
 
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
   const dailyGoal=Number(settings.DAILY_GOAL||0);
+  const cortesiaIds=await getCortesiaIds();
   let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
   let dayEfe=0,dayTar=0,dayNeq=0;
   let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
@@ -1828,7 +1837,7 @@ async function apiMetrics(p, res) {
           if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
         }
       }
-      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal});
+      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal,isCortesia:cortesiaIds.has(String(r.room_id))});
       if(!shiftFilter||sid===shiftFilter){
         if(!skip304){
           if(esCruzada){
