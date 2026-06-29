@@ -145,15 +145,17 @@ BEGIN
   END LOOP;
 
   -- 4) rooms (motel_id EXPLICITO; resto operativo por default)
+  --    is_cortesia: flag por-habitacion (default false = sin cortesia)
   FOR v_room IN SELECT * FROM jsonb_array_elements(payload->'rooms') LOOP
-    INSERT INTO rooms (motel_id, room_id, floor, category, state, archived)
+    INSERT INTO rooms (motel_id, room_id, floor, category, state, archived, is_cortesia)
     VALUES (
       v_motel_id,
       v_room->>'room_id',
       coalesce(nullif(v_room->>'floor','')::int, 0),
       v_room->>'category',
       'AVAILABLE',
-      false
+      false,
+      coalesce(nullif(v_room->>'is_cortesia','')::boolean, false)
     );
   END LOOP;
 
@@ -211,7 +213,7 @@ $$;
 --   ],
 --   "rooms": [
 --     {"room_id":"101","floor":1,"category":"Junior"},
---     {"room_id":"102","floor":1,"category":"Junior"},
+--     {"room_id":"102","floor":1,"category":"Junior","is_cortesia":true},
 --     {"room_id":"201","floor":2,"category":"Suite"}
 --   ],
 --   "admin": { "user_name":"ruben", "pin":"1234", "ver_luciana": true },
