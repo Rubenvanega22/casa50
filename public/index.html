@@ -2884,7 +2884,10 @@ function selRCPm(pm){
   ['EF','TA','NE','MX'].forEach(function(k){var el=document.getElementById('rcPm'+k);if(el)el.classList.toggle('on',{EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI',MX:'MIXTO'}[k]===pm);});
   var mx=document.getElementById('rcMixtoDiv');if(mx)mx.classList.toggle('h',pm!=='MIXTO');
 }
-function precioHabRC(roomId,cfg,hrs){return roomId==='304'?0:calcP(hrs,cfg);}
+// Cortesia por-habitacion (reemplaza el hardcode '304'). Usa el flag isCortesia
+// que viaja en rooms via mapRoom. Vacio/no encontrado = no cortesia.
+function esCortesia(rid){var r=rooms.find(function(x){return x.roomId===rid;});return !!(r&&r.isCortesia);}
+function precioHabRC(roomId,cfg,hrs){return esCortesia(roomId)?0:calcP(hrs,cfg);}
 function updRoomChangeDiff(){
   var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
   var toRoom=rooms.find(function(r){return r.roomId===toRoomId;});
@@ -2894,10 +2897,10 @@ function updRoomChangeDiff(){
   var toCfg=MP[toRoom.category]||MP['Junior'];
   var fromPrice=precioHabRC(curRoom.roomId,fromCfg,rcDur);
   var toPrice=precioHabRC(toRoomId,toCfg,rcDur);
-  if(toRoomId==='304'){
-    el.innerHTML='<div style="color:#22c55e">Pasa a <b>cortesía (304)</b>: se devuelve <b>'+fmt(fromPrice)+'</b> al cliente</div>';return;
+  if(esCortesia(toRoomId)){
+    el.innerHTML='<div style="color:#22c55e">Pasa a <b>cortesía ('+toRoomId+')</b>: se devuelve <b>'+fmt(fromPrice)+'</b> al cliente</div>';return;
   }
-  if(curRoom.roomId==='304'){
+  if(esCortesia(curRoom.roomId)){
     el.innerHTML='<div style="color:#f59e0b">Sale de cortesía: <b>a cobrar '+fmt(toPrice)+'</b> con el método elegido</div>';return;
   }
   var diff=toPrice-fromPrice;
@@ -2922,7 +2925,7 @@ function confirmRoomChange(){
     rpc('roomChange',{fromRoomId:curRoom.roomId,toRoomId:toRoomId,durationHrs:rcDur,payMethod:rcPm,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
       function(res){
         var msg='Cambio realizado.';
-        if(res.caso==='A_CORTESIA')msg='Cambio a cortesía (304): devolver '+fmt(Math.abs(res.diff))+' al cliente.';
+        if(res.caso==='A_CORTESIA')msg='Cambio a cortesía: devolver '+fmt(Math.abs(res.diff))+' al cliente.';
         else if(res.caso==='B_DESDE_CORTESIA')msg='Cambio realizado. Cobrar: '+fmt(res.diff);
         else if(res.diff>0)msg+=' Cobrar: '+fmt(res.diff);
         else if(res.diff<0)msg+=' Devolver: '+fmt(Math.abs(res.diff));
@@ -3577,7 +3580,7 @@ function loadVentas(){
       h+='<div style="font-size:11px;color:#9ca3af">'+fmt(r.total)+'</div></div>';
     });
     h+='</div>';
-    var totalSinCortesia=sl.filter(function(s){return s.roomId!=='304';}).length;
+    var totalSinCortesia=sl.filter(function(s){return !s.isCortesia;}).length;
     totalHabDia=totalSinCortesia;
     // Salidas hoy (opcion C, exacto): check-outs del businessDay (desde 6am) que da el backend.
     totalSalidasDia=Number((t&&t.salidasHoy)||0);
@@ -3600,10 +3603,10 @@ function loadVentas(){
     if(!sl.length){
       h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
     } else {
-      var sinCobro304=sl.filter(function(s){return s.roomId==='304';});
-      var conCobro304=sl.filter(function(s){return s.roomId!=='304';});
+      var sinCortesia=sl.filter(function(s){return s.isCortesia;});
+      var conCortesia=sl.filter(function(s){return !s.isCortesia;});
       var num=1;
-      conCobro304.forEach(function(s){
+      conCortesia.forEach(function(s){
         var col=turnoColor[s.shiftId]||'#6b7280';
         var lbl=turnoLabel[s.shiftId]||'';
         var checkoutReal=Number(s.checkoutMs||0);
@@ -3649,11 +3652,11 @@ function loadVentas(){
         h+='</div>';
         num++;
       });
-      if(sinCobro304.length){
+      if(sinCortesia.length){
         h+='<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:8px">';
         h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #6b7280;border-radius:0 8px 8px 0;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">';
-        h+='<span style="font-weight:700;color:#9ca3af">Hab 304</span>';
-        h+='<span style="font-size:12px;color:#6b7280">['+sinCobro304.length+' '+(sinCobro304.length===1?'vez':'veces')+']</span>';
+        h+='<span style="font-weight:700;color:#9ca3af">Cortesía</span>';
+        h+='<span style="font-size:12px;color:#6b7280">['+sinCortesia.length+' '+(sinCortesia.length===1?'vez':'veces')+']</span>';
         h+='</div></div>';
       }
     }
@@ -9334,7 +9337,7 @@ h+='</div>';
     var todasVentas=[];
     ms.forEach(function(m,i){
       var sid=shifts[i];
-      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0&&s.roomId!=='304'&&s.shiftId===sid;});
+      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0&&!s.isCortesia&&s.shiftId===sid;});
       sl.forEach(function(s){todasVentas.push(s);});
     });
     todasVentas.sort(function(a,b){return (a.tsMs||a.checkInMs)-(b.tsMs||b.checkInMs);});
@@ -10506,11 +10509,11 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
     h+='</div></div>';
   }
 // ── BLOQUE 2: VENTAS EN TIEMPO REAL ──
-  var sinCobro304M=onlySales.filter(function(s){return s.roomId==='304';});
-  var conCobro304M=onlySales.filter(function(s){return s.roomId!=='304';});
+  var sinCortesiaM=onlySales.filter(function(s){return s.isCortesia;});
+  var conCortesiaM=onlySales.filter(function(s){return !s.isCortesia;});
   var num=1;
   var grupos={SHIFT_1:[],SHIFT_2:[],SHIFT_3:[]};
-  conCobro304M.forEach(function(s){(grupos[s.shiftId]||(grupos[s.shiftId]=[])).push(s);});
+  conCortesiaM.forEach(function(s){(grupos[s.shiftId]||(grupos[s.shiftId]=[])).push(s);});
   ['SHIFT_1','SHIFT_2','SHIFT_3'].forEach(function(sid){
     var lista=grupos[sid]||[];
     if(!lista.length)return;
@@ -10551,11 +10554,11 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
     });
     h+='</div>';
   });
- if(sinCobro304M.length){
+ if(sinCortesiaM.length){
     h+='<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:8px">';
     h+='<div style="background:#18181f;border:1px solid #2e2e3a;border-left:3px solid #6b7280;border-radius:0 8px 8px 0;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">';
-    h+='<span style="font-weight:700;color:#9ca3af">Hab 304</span>';
-    h+='<span style="font-size:12px;color:#6b7280">['+sinCobro304M.length+' '+(sinCobro304M.length===1?'vez':'veces')+']</span>';
+    h+='<span style="font-weight:700;color:#9ca3af">Cortesía</span>';
+    h+='<span style="font-size:12px;color:#6b7280">['+sinCortesiaM.length+' '+(sinCortesiaM.length===1?'vez':'veces')+']</span>';
 h+='</div></div>';
   }
   h+='</div>';

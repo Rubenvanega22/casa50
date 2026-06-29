@@ -277,8 +277,16 @@ function mapRoom(r) {
     maidInProgress: !!r.maid_in_progress,
     maidNameProgress: r.maid_name_progress || '',
     retoque: !!r.retoque,
-    payMethod: r.pay_method || ''
+    payMethod: r.pay_method || '',
+    isCortesia: !!r.is_cortesia
   };
+}
+
+// Set de room_id de cortesia del motel (reemplaza el hardcode '304').
+// Vacio = motel sin cortesia. Scopeado por motel via tSelect.
+async function getCortesiaIds(){
+  const { data } = await tSelect('rooms','room_id').eq('is_cortesia', true);
+  return new Set((data || []).map(r => String(r.room_id)));
 }
 // ==================== HELPER DE PAGINACION ====================
 // Trae TODAS las filas de una consulta Supabase, paginando en lotes de 1000.
@@ -849,7 +857,7 @@ async function apiCheckIn(p, res) {
   const people = Math.max(includedPeople, Number(p.people || includedPeople));
   const extraPeople = Math.max(0, people - includedPeople);
   const extraPeopleValue = extraPeople * Number(cfg.extraPerson || 0);
-  const total = roomId === '304' ? 0 : basePrice + extraPeopleValue;
+  const total = room.is_cortesia ? 0 : basePrice + extraPeopleValue;
   const dueMs = now + durationHrs * 3600000;
 
   const arrivalType = String(p.arrivalType || 'WALK').toUpperCase();
@@ -1737,13 +1745,14 @@ async function apiCloseShift(p, res) {
     tSelect('room_products','total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
   ]);
 
+  const cortesiaIds = await getCortesiaIds();
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
   let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
   let totalProductos=0, totalProductosEf=0, totalProductosTa=0, totalProductosNq=0;
 
   (salesRes.data || []).forEach(r => {
     if (r.anulada) return;
-    if (String(r.room_id) === '304') return;
+    if (cortesiaIds.has(String(r.room_id))) return;
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
     if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'REFUND') { totalRefunds += t; if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; else totalEfectivo+=t; }
@@ -1803,6 +1812,7 @@ async function apiMetrics(p, res) {
 
   const settings={};(settingsRes.data||[]).forEach(r=>{settings[r.key]=r.value;});
   const dailyGoal=Number(settings.DAILY_GOAL||0);
+  const cortesiaIds=await getCortesiaIds();
   let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
   let dayEfe=0,dayTar=0,dayNeq=0;
   let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
@@ -1815,7 +1825,7 @@ async function apiMetrics(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    const skip304 = String(r.room_id) === '304';
+    const skip304 = cortesiaIds.has(String(r.room_id));
     if(isRev || (esCruzada && type==='ANULADA')){
       if(!skip304){
         if(esCruzada){
@@ -1828,7 +1838,7 @@ async function apiMetrics(p, res) {
           if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
         }
       }
-      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal});
+      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal,isCortesia:cortesiaIds.has(String(r.room_id))});
       if(!shiftFilter||sid===shiftFilter){
         if(!skip304){
           if(esCruzada){
@@ -1998,12 +2008,13 @@ async function apiMonthMetrics(p, res) {
   });
 
   // Ventas
+  const cortesiaIds = await getCortesiaIds();
   (salesRes.data||[]).forEach(r=>{
     // Devolucion cruzada: anulada pero con devolucion en efectivo
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    if(String(r.room_id)==='304') return;
+    if(cortesiaIds.has(String(r.room_id))) return;
     const d=getDay(r.business_day);
     const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
     const s=d[sid];
@@ -2406,13 +2417,14 @@ async function apiGetDailyCuadre(p, res) {
   const c={};
   shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiHab:0,nequiPersonas:0,nequiHoras:0,nequiBar:0,gastos:0,taxis:0,turnos:0};});
 
+  const cortesiaIds = await getCortesiaIds();
   (salesRes.data||[]).forEach(r=>{
     const sid=r.shift_id;if(!c[sid])return;
     // Devolucion cruzada: anulada pero con devolucion en efectivo
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    if(String(r.room_id) === '304') return;
+    if(cortesiaIds.has(String(r.room_id))) return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
     if(esCruzada){
       // La venta queda en su seccion original (el banco/Nequi tiene la plata)
@@ -2650,7 +2662,8 @@ async function apiEditarPersonasCheckIn(p, res) {
   if(errSale) return err(res, errSale.message);
   if(!sale) return err(res,'Venta no encontrada');
   if(sale.anulada) return err(res,'Esta venta está anulada, no se puede editar');
-  if(String(sale.room_id) === '304') return err(res,'Habitación 304 (cortesía) no admite ajuste de personas');
+  const cortesiaIds = await getCortesiaIds();
+  if(cortesiaIds.has(String(sale.room_id))) return err(res,'Habitación de cortesía no admite ajuste de personas');
   if(String(sale.pay_method_2||'') === 'MIXTO_EF_TJ_NQ') return err(res,'Venta con devolución cruzada, no se puede editar');
   const personasOriginales = Number(sale.extra_people||0);
   if(personasOriginales <= 0) return err(res,'Esta venta no tiene personas adicionales');
@@ -2790,10 +2803,10 @@ async function apiRoomChange(p, res) {
     return base + extra * Number(cfg.extraPerson||0);
   }
 
-  // La 304 es cortesia: precio efectivo siempre 0 (misma regla que apiCheckIn L669)
-  const precio304Aware = (rid, cfg) => rid==='304' ? 0 : calcTotalPrice(cfg, durationHrs, people);
-  const fromPrice = precio304Aware(fromRoomId, fromCfg);
-  const toPrice = precio304Aware(toRoomId, toCfg);
+  // Cortesia: precio efectivo siempre 0 (misma regla que apiCheckIn). Flag por-habitacion.
+  const precioCortAware = (room, cfg) => room.is_cortesia ? 0 : calcTotalPrice(cfg, durationHrs, people);
+  const fromPrice = precioCortAware(fromRoom, fromCfg);
+  const toPrice = precioCortAware(toRoom, toCfg);
   const diff = toPrice - fromPrice;
 
   // Marcar habitacion origen como RETOQUE
@@ -2816,7 +2829,7 @@ async function apiRoomChange(p, res) {
     arrival_plate: fromRoom.arrival_plate || '',
     alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0,
     checkout_obs: '', contaminated_since_ms: 0,
-    pay_method: fromRoomId==='304' ? payMethod : (fromRoom.payMethod || payMethod),
+    pay_method: fromRoom.is_cortesia ? payMethod : (fromRoom.payMethod || payMethod),
     updated_at: new Date().toISOString()
   }).eq('room_id', toRoomId);
 
@@ -2831,21 +2844,21 @@ async function apiRoomChange(p, res) {
   const saleTotalOriginal = (originalSale && originalSale.length) ? Number(originalSale[0].total||0) : 0;
 
   let caso = 'NORMAL';
-  if(toRoomId === '304'){
-    // ===== CASO A: cambio HACIA la 304 (entra a cortesia) =====
+  if(toRoom.is_cortesia){
+    // ===== CASO A: cambio HACIA cortesia (entra a cortesia) =====
     // La venta queda en $0. La plata cobrada se devuelve fisicamente al cliente.
     // NO se inserta REFUND: poner total=0 ya representa ingreso neto $0 y mantiene
     // Cierre = Resumen = Cuadre (REGLA DE ORO). La traza queda en la nota.
     caso = 'A_CORTESIA';
     if(saleId){
       await tUpdate('sales',{
-        room_id: '304', category: toRoom.category,
+        room_id: toRoomId, category: toRoom.category,
         total: 0, amount_1: 0, amount_2: 0, amount_3: 0, pay_method_2: '',
-        note: 'Cambio a 304 (cortesia): cobrado y devuelto $'+saleTotalOriginal+' al cliente. Origen hab '+fromRoomId
+        note: 'Cambio a '+toRoomId+' (cortesia): cobrado y devuelto $'+saleTotalOriginal+' al cliente. Origen hab '+fromRoomId
       }).eq('id', saleId);
     }
-  } else if(fromRoomId === '304'){
-    // ===== CASO B: cambio DESDE la 304 (sale de cortesia) =====
+  } else if(fromRoom.is_cortesia){
+    // ===== CASO B: cambio DESDE cortesia (sale de cortesia) =====
     // Ahora si paga la habitacion nueva: se cobra el precio completo con el metodo elegido.
     caso = 'B_DESDE_CORTESIA';
     const mixtoEf = Number(p.mixtoEf||0), mixtoTj = Number(p.mixtoTj||0), mixtoNq = Number(p.mixtoNq||0);
@@ -2860,7 +2873,7 @@ async function apiRoomChange(p, res) {
         amount_1: payMethod==='MIXTO'?mixtoEf:(payMethod==='EFECTIVO'?toPrice:0),
         amount_2: payMethod==='MIXTO'?mixtoTj:(payMethod==='TARJETA'?toPrice:0),
         amount_3: payMethod==='MIXTO'?mixtoNq:(payMethod==='NEQUI'?toPrice:0),
-        note: 'Cambio desde 304: cobrado $'+toPrice+' ['+payMethod+']. Destino hab '+toRoomId
+        note: 'Cambio desde '+fromRoomId+' (cortesia): cobrado $'+toPrice+' ['+payMethod+']. Destino hab '+toRoomId
       }).eq('id', saleId);
     }
   } else {
