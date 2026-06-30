@@ -2887,6 +2887,9 @@ function selRCPm(pm){
 // Cortesia por-habitacion (reemplaza el hardcode '304'). Usa el flag isCortesia
 // que viaja en rooms via mapRoom. Vacio/no encontrado = no cortesia.
 function esCortesia(rid){var r=rooms.find(function(x){return x.roomId===rid;});return !!(r&&r.isCortesia);}
+// Una venta es "cortesia GRATIS" (no suma, va a la seccion Cortesia) solo si es
+// del cuarto cortesia Y total 0. Si tiene cobro (personas/horas), cuenta normal.
+function ventaCortesiaGratis(s){return !!(s&&s.isCortesia)&&Number(s&&s.total||0)===0;}
 function precioHabRC(roomId,cfg,hrs){return esCortesia(roomId)?0:calcP(hrs,cfg);}
 function updRoomChangeDiff(){
   var toRoomId=(document.getElementById('rcToRoom')||{}).value||'';
@@ -3580,7 +3583,7 @@ function loadVentas(){
       h+='<div style="font-size:11px;color:#9ca3af">'+fmt(r.total)+'</div></div>';
     });
     h+='</div>';
-    var totalSinCortesia=sl.filter(function(s){return !s.isCortesia;}).length;
+    var totalSinCortesia=sl.filter(function(s){return !ventaCortesiaGratis(s);}).length;
     totalHabDia=totalSinCortesia;
     // Salidas hoy (opcion C, exacto): check-outs del businessDay (desde 6am) que da el backend.
     totalSalidasDia=Number((t&&t.salidasHoy)||0);
@@ -3603,8 +3606,8 @@ function loadVentas(){
     if(!sl.length){
       h+='<p style="color:#9ca3af">Sin ventas hoy.</p>';
     } else {
-      var sinCortesia=sl.filter(function(s){return s.isCortesia;});
-      var conCortesia=sl.filter(function(s){return !s.isCortesia;});
+      var sinCortesia=sl.filter(function(s){return ventaCortesiaGratis(s);});
+      var conCortesia=sl.filter(function(s){return !ventaCortesiaGratis(s);});
       var num=1;
       conCortesia.forEach(function(s){
         var col=turnoColor[s.shiftId]||'#6b7280';
@@ -9337,7 +9340,7 @@ h+='</div>';
     var todasVentas=[];
     ms.forEach(function(m,i){
       var sid=shifts[i];
-      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0&&!s.isCortesia&&s.shiftId===sid;});
+      var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0&&!ventaCortesiaGratis(s)&&s.shiftId===sid;});
       sl.forEach(function(s){todasVentas.push(s);});
     });
     todasVentas.sort(function(a,b){return (a.tsMs||a.checkInMs)-(b.tsMs||b.checkInMs);});
@@ -10509,8 +10512,8 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
     h+='</div></div>';
   }
 // ── BLOQUE 2: VENTAS EN TIEMPO REAL ──
-  var sinCortesiaM=onlySales.filter(function(s){return s.isCortesia;});
-  var conCortesiaM=onlySales.filter(function(s){return !s.isCortesia;});
+  var sinCortesiaM=onlySales.filter(function(s){return ventaCortesiaGratis(s);});
+  var conCortesiaM=onlySales.filter(function(s){return !ventaCortesiaGratis(s);});
   var num=1;
   var grupos={SHIFT_1:[],SHIFT_2:[],SHIFT_3:[]};
   conCortesiaM.forEach(function(s){(grupos[s.shiftId]||(grupos[s.shiftId]=[])).push(s);});
