@@ -1724,14 +1724,6 @@ async function apiCloseShift(p, res) {
   const bDay = String(p.businessDay||'').trim()||businessDay(now);
   const userName = String(p.userName || '');
 
-  // Marcar turno como cerrado Y liberado (released=true)
-  await tInsert('shift_log',{
-    ts_ms: now, business_day: bDay, shift_id: shift,
-    user_role: 'RECEPTION', user_name: userName,
-    action: 'LOGOUT', logout_ms: now,
-    released: true // NUEVO: libera el turno siguiente
-  });
-
   const { data: loginLog } = await tSelect('shift_log', 'ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
     .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
     .order('ts_ms', { ascending: false }).limit(1);
@@ -1774,7 +1766,7 @@ async function apiCloseShift(p, res) {
 
   const net = totalSales + totalRefunds - totalTaxi - totalLoans - totalExtraStaff;
 
-  await tInsert('shift_close',{
+  const { error: closeErr } = await tInsert('shift_close',{
     ts_ms: now, business_day: bDay, shift_id: shift, user_name: userName,
     total_sales: totalSales, total_refunds: totalRefunds, total_taxi: totalTaxi,
     total_loans: totalLoans, total_extra_staff: totalExtraStaff, net,
@@ -1787,6 +1779,19 @@ async function apiCloseShift(p, res) {
     total_productos_ef: totalProductosEf,
     total_productos_ta: totalProductosTa,
     total_productos_nq: totalProductosNq
+  });
+  // No tragar el error: si el snapshot del cierre no se guarda, avisar (antes se
+  // perdia en silencio -> 256 cierres sin shift_close desde abr-2026).
+  if (closeErr) return err(res, 'No se pudo guardar el cierre de turno: ' + (closeErr.message || closeErr));
+
+  // Recien con el snapshot guardado OK, marcar el turno cerrado y liberado.
+  // (Antes el LOGOUT iba ANTES del snapshot -> si el snapshot fallaba, el turno
+  // quedaba liberado igual, sin cuadre guardado.)
+  await tInsert('shift_log',{
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName,
+    action: 'LOGOUT', logout_ms: now,
+    released: true // libera el turno siguiente
   });
 
   // Bar bar_sales removido - duplicaba valores de room_products
