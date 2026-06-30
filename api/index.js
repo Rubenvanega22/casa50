@@ -857,7 +857,9 @@ async function apiCheckIn(p, res) {
   const people = Math.max(includedPeople, Number(p.people || includedPeople));
   const extraPeople = Math.max(0, people - includedPeople);
   const extraPeopleValue = extraPeople * Number(cfg.extraPerson || 0);
-  const total = room.is_cortesia ? 0 : basePrice + extraPeopleValue;
+  // Cortesia: la HABITACION es gratis (basePrice no se cobra), pero las PERSONAS
+  // adicionales SI se cobran. (Antes ponia total=0 a todo -> no cobraba personas.)
+  const total = room.is_cortesia ? extraPeopleValue : basePrice + extraPeopleValue;
   const dueMs = now + durationHrs * 3600000;
 
   const arrivalType = String(p.arrivalType || 'WALK').toUpperCase();
