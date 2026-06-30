@@ -2669,8 +2669,8 @@ async function apiEditarPersonasCheckIn(p, res) {
   if(errSale) return err(res, errSale.message);
   if(!sale) return err(res,'Venta no encontrada');
   if(sale.anulada) return err(res,'Esta venta está anulada, no se puede editar');
-  const cortesiaIds = await getCortesiaIds();
-  if(cortesiaIds.has(String(sale.room_id))) return err(res,'Habitación de cortesía no admite ajuste de personas');
+  // Cortesia: el ajuste de personas SI se permite (las personas adicionales se
+  // cobran). El recompute opera sobre total/extra_people_value, ya consistentes.
   if(String(sale.pay_method_2||'') === 'MIXTO_EF_TJ_NQ') return err(res,'Venta con devolución cruzada, no se puede editar');
   const personasOriginales = Number(sale.extra_people||0);
   if(personasOriginales <= 0) return err(res,'Esta venta no tiene personas adicionales');
