@@ -288,6 +288,10 @@ async function getCortesiaIds(){
   const { data } = await tSelect('rooms','room_id').eq('is_cortesia', true);
   return new Set((data || []).map(r => String(r.room_id)));
 }
+// Corte de la regla nueva de cortesia: desde esta fecha, en el cuarto cortesia la
+// HABITACION base no suma pero personas/horas/productos SI. Antes de la fecha la
+// cortesia se excluye ENTERA (datos viejos/prueba de abril-mayo no se tocan).
+const CORTESIA_COBRO_DESDE = '2026-06-01';
 // ==================== HELPER DE PAGINACION ====================
 // Trae TODAS las filas de una consulta Supabase, paginando en lotes de 1000.
 // Se usa para consultas de rangos largos (ej: mes completo) donde Supabase
@@ -1746,9 +1750,12 @@ async function apiCloseShift(p, res) {
 
   (salesRes.data || []).forEach(r => {
     if (r.anulada) return;
-    if (cortesiaIds.has(String(r.room_id))) return;
+    // Cortesia: ya NO se salta entero. La habitacion base aporta 0 (total=epv tras
+    // Parte 1); personas/horas SI suman. Solo no cuenta como roomsSold. (Este cierre
+    // es siempre del turno actual -> post-corte, no necesita el cutoff por fecha.)
+    const esCortesia = cortesiaIds.has(String(r.room_id));
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
-    if (r.type === 'SALE') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
+    if (r.type === 'SALE') { totalSales+=t; if(!esCortesia)roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'REFUND') { totalRefunds += t; if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; else totalEfectivo+=t; }
     if (r.type === 'RENEWAL') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'EXTENSION') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
@@ -1832,7 +1839,10 @@ async function apiMetrics(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    const skip304 = cortesiaIds.has(String(r.room_id));
+    const esCortesia = cortesiaIds.has(String(r.room_id));
+    // Cortesia PRE-corte: excluir entero (como hoy). POST-corte: NO excluir; la
+    // habitacion base aporta 0 (total=epv) y personas/horas suman. Solo no roomsSold.
+    const skip304 = esCortesia && String(r.business_day) < CORTESIA_COBRO_DESDE;
     if(isRev || (esCruzada && type==='ANULADA')){
       if(!skip304){
         if(esCruzada){
@@ -1855,7 +1865,7 @@ async function apiMetrics(p, res) {
           } else {
             shiftSales+=t;
             if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
-            if(type==='SALE'){shiftRooms++;shiftPeople+=Number(r.people||0);}
+            if(type==='SALE'){if(!esCortesia)shiftRooms++;shiftPeople+=Number(r.people||0);}
           }
         }
       }
@@ -2021,7 +2031,10 @@ async function apiMonthMetrics(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    if(cortesiaIds.has(String(r.room_id))) return;
+    const esCortesia = cortesiaIds.has(String(r.room_id));
+    // Cortesia PRE-corte: excluir entero. POST-corte: la hab base aporta 0
+    // (base=t-epv=0 tras Parte 1) y personas/horas suman; solo no roomsSold.
+    if(esCortesia && String(r.business_day) < CORTESIA_COBRO_DESDE) return;
     const d=getDay(r.business_day);
     const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
     const s=d[sid];
@@ -2040,7 +2053,11 @@ async function apiMonthMetrics(p, res) {
     const isRoomSale = (r.type==='SALE' && Number(r.check_in_ms||0) === Number(r.ts_ms||0))
                     || r.type==='RENEWAL';
     if(isRoomSale){
-      d.roomsSold++;d.people+=Number(r.people||0);s.roomsSold++;
+      // La habitacion de cortesia NO cuenta como roomsSold (RENEWAL si). (El mes
+      // no selecciona check_in_ms/ts_ms, asi que se usa el type directamente.)
+      const esCortSale = esCortesia && r.type==='SALE';
+      if(!esCortSale){ d.roomsSold++; s.roomsSold++; }
+      d.people+=Number(r.people||0);  // headcount siempre cuenta
     }
     if(r.type==='SALE'||r.type==='RENEWAL'){
       const base=t-epv;
@@ -2431,7 +2448,9 @@ async function apiGetDailyCuadre(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    if(cortesiaIds.has(String(r.room_id))) return;
+    // Cortesia PRE-corte: excluir entero. POST-corte: la hab base aporta 0
+    // (habVal=t-epv=0 tras Parte 1) y personas/horas suman. (Cuadre sin roomsSold.)
+    if(cortesiaIds.has(String(r.room_id)) && String(bDay) < CORTESIA_COBRO_DESDE) return;
     const t=Number(r.total||0),pm=String(r.pay_method||'').toUpperCase(),epv=Number(r.extra_people_value||0);
     if(esCruzada){
       // La venta queda en su seccion original (el banco/Nequi tiene la plata)
