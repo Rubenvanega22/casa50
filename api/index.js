@@ -5983,7 +5983,7 @@ async function apiGetGraficaDiaADia(p, res) {
   (ventasBarActual||[]).forEach(v => {
     if(v.is_cortesia) return; // Cortesias no suman
     const total = Number(v.total||0);
-    if(total <= 0) return;
+    // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
     if(datosActual[v.business_day] !== undefined){
       datosActual[v.business_day] += total;
     }
@@ -6040,7 +6040,7 @@ async function apiGetGraficaDiaADia(p, res) {
   (ventasBarAnterior||[]).forEach(v => {
     if(v.is_cortesia) return; // Cortesias no suman
     const total = Number(v.total||0);
-    if(total <= 0) return;
+    // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
     if(datosAnterior[v.business_day] !== undefined){
       datosAnterior[v.business_day] += total;
     }
@@ -6185,7 +6185,7 @@ async function apiGetGraficaAnoAno(p, res) {
   (ventasBarActual||[]).forEach(v => {
     if(v.is_cortesia) return; // Cortesias no suman
     const total = Number(v.total||0);
-    if(total <= 0) return;
+    // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
     const m = Number(v.business_day.split('-')[1]) - 1;
     if(m >= 0 && m <= 11) ventasPorMes[m] += total;
   });
@@ -6366,7 +6366,7 @@ async function apiGetMetricasMes(p, res) {
   (ventasBar||[]).forEach(v => {
     if(v.is_cortesia) return; // Cortesias no suman
     const total = Number(v.total||0);
-    if(total <= 0) return;
+    // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
     totalVentas += total;
     const dia = v.business_day;
     if(!ventasPorDia[dia]) ventasPorDia[dia] = { total:0, habs:0 };
@@ -6608,7 +6608,7 @@ async function apiGetGastosMesResumen(p, res) {
   (ventasBar||[]).forEach(v => {
     if(v.is_cortesia) return; // Cortesias NO suman
     const total = Number(v.total||0);
-    if(total <= 0) return;
+    // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
     cantVentasBar++;
     totalVentasBar += total;
     const pm = String(v.pay_method||'').toUpperCase();
@@ -7185,7 +7185,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   (ventasBar||[]).forEach(v => {
     if(v.is_cortesia) return;
     const total = Number(v.total||0);
-    if(total <= 0) return;
+    // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
     if(String(v.pay_method||'').toUpperCase() === 'EFECTIVO'){
       ventasEfectivo += total;
     }
