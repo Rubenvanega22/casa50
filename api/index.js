@@ -5871,7 +5871,7 @@ async function apiGetGraficaDiaADia(p, res) {
   const ventasActual = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDayActual)
     .lte('business_day', lastDayActual)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .in('type', ['SALE','RENEWAL','EXTENSION','REFUND'])
     .neq('anulada', true));
 
   // 1b. Ventas del bar mes actual
@@ -5883,7 +5883,7 @@ async function apiGetGraficaDiaADia(p, res) {
   const ventasAnterior = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDayAnterior)
     .lte('business_day', lastDayAnterior)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .in('type', ['SALE','RENEWAL','EXTENSION','REFUND'])
     .neq('anulada', true));
 
   // 2b. Ventas del bar mes anterior
@@ -6159,7 +6159,7 @@ async function apiGetGraficaAnoAno(p, res) {
   const ventasActual = await fetchAll(() => tSelect('sales', 'business_day, total, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .in('type', ['SALE','RENEWAL','EXTENSION','REFUND'])
     .neq('anulada', true));
 
   // 1b. Ventas del bar (room_products) del año actual
@@ -6328,7 +6328,7 @@ async function apiGetMetricasMes(p, res) {
   const ventasMes = await fetchAll(() => tSelect('sales', 'id, ts_ms, business_day, shift_id, total, room_id, user_name, type, anulada')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .in('type', ['SALE','RENEWAL','EXTENSION','REFUND'])
     .neq('anulada', true));
 
   // 1b. Ventas del bar (de la tabla room_products)
@@ -6552,7 +6552,7 @@ async function apiGetGastosMesResumen(p, res) {
   const ventasMes = await fetchAll(() => tSelect('sales', 'id, ts_ms, business_day, shift_id, total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type, devolucion_efectivo, devolucion_metodo_original')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .in('type', ['SALE','RENEWAL','EXTENSION','REFUND'])
     .neq('anulada', true));
   
   let ventasEfectivo = 0;
@@ -6563,7 +6563,7 @@ async function apiGetGastosMesResumen(p, res) {
   
   (ventasMes||[]).forEach(v => {
     if(v.anulada) return;
-    cantVentas++;
+    if(v.type !== 'REFUND') cantVentas++;  // el REFUND netea la plata pero no es una venta (no cuenta)
     totalVentas += Number(v.total||0);
     // Si es MIXTO usa amount_1/2/3
     if(v.pay_method === 'MIXTO' || v.pay_method_2) {
@@ -7154,7 +7154,7 @@ async function apiGetCajaPaolaResumen(p, res) {
   const ventasMes = await fetchAll(() => tSelect('sales', 'total, pay_method, pay_method_2, amount_1, amount_2, amount_3, anulada, type')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay)
-    .in('type', ['SALE','RENEWAL','EXTENSION'])
+    .in('type', ['SALE','RENEWAL','EXTENSION','REFUND'])
     .neq('anulada', true));
 
   let ventasEfectivo = 0;
