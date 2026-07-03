@@ -1977,6 +1977,11 @@ function startApp(){
   document.getElementById('husr').textContent=sess.userName;
   buildTabs();
 actualizarBtnCaja();
+  // Precargar productos una vez al iniciar sesion, asi la busqueda MANUAL (check-in
+  // y venta) tiene la lista lista sin depender de abrir una ocupada o escanear.
+  if(sess.userRole==='RECEPTION' || sess.userRole==='ADMIN'){
+    rpc('getProducts',{},function(data){productosLista=data.products||[];});
+  }
   sw(sess.userRole==='MAID'?'maid':sess.userRole==='MAINTENANCE'?'misdanos':'rooms');
   if(rooms.length)renderRooms();
   startPoll();startClock();
@@ -2642,6 +2647,7 @@ h+='<label>Monto en Efectivo</label><input type="number" id="mixtoEf" placeholde
 h+='<label>Monto en Tarjeta</label><input type="number" id="mixtotj" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<label>Monto en Nequi</label><input type="number" id="mixtoNq" placeholder="0" min="0" oninput="updMixto(\''+r.category+'\')">';
 h+='<div id="mixtoCheck" style="font-size:11px;margin-top:4px"></div>';
+h+='<div id="mixtoReparto" style="margin-top:6px"></div>';
 h+='</div>';
     h+='<div style="background:var(--card);border:1px solid rgba(249,115,22,.5);border-radius:10px;padding:10px;margin-bottom:8px">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -2780,17 +2786,60 @@ function selPm(t){
 function calcP(h,cfg){if(h===3)return cfg.h3||0;if(h===6)return cfg.h6||0;if(h===8)return cfg.h8||(Number(cfg.h6||0)+2*Number(cfg.extraHour||0));if(h===12)return cfg.h12||0;return 0;}
 function calcTot(h,ppl,cfg){var base=calcP(h,cfg),incl=Number(cfg.included||2),ex=Math.max(0,ppl-incl);return base+ex*Number(cfg.extraPerson||0);}
 function updTot(cat){var cfg=MP[cat]||MP['Junior'],tot=calcTot(selDur,selPpl,cfg);var barTot=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);var el=document.getElementById('totD');if(el)el.textContent=fmt(tot+barTot);if(selPay==='EFECTIVO')updChg(cat);}
+// Reparto MIXTO (puro, sin mutar nada): la bolsa cubre PRIMERO el cuarto en orden
+// efectivo -> nequi -> tarjeta, y el sobrante de cada metodo va a los productos, uno
+// por uno, mismo orden. Devuelve la porcion del cuarto (habEf/habTa/habNq) y cada
+// producto con su amount_1/2/3 (ef/tj/nq) y su pm resuelto. Lo usan doCI y updMixto.
+function calcRepartoMixto(bEf, bNq, bTa, totCuarto, prods){
+  var bolsa={ef:bEf, nq:bNq, ta:bTa};
+  var restaHab=totCuarto, habEf=0, habNq=0, habTa=0, uh;
+  uh=Math.min(bolsa.ef,restaHab); bolsa.ef-=uh; restaHab-=uh; habEf=uh;
+  uh=Math.min(bolsa.nq,restaHab); bolsa.nq-=uh; restaHab-=uh; habNq=uh;
+  uh=Math.min(bolsa.ta,restaHab); bolsa.ta-=uh; restaHab-=uh; habTa=uh;
+  var items=(prods||[]).map(function(p){
+    var valor=p.precio*p.cant, aEf=0, aNq=0, aTa=0, u;
+    u=Math.min(bolsa.ef,valor); bolsa.ef-=u; valor-=u; aEf=u;   // efectivo primero
+    u=Math.min(bolsa.nq,valor); bolsa.nq-=u; valor-=u; aNq=u;   // luego nequi
+    u=Math.min(bolsa.ta,valor); bolsa.ta-=u; valor-=u; aTa=u;   // luego tarjeta
+    var mets=[]; if(aEf>0)mets.push('EFECTIVO'); if(aTa>0)mets.push('TARJETA'); if(aNq>0)mets.push('NEQUI');
+    return {id:p.id, nombre:p.nombre, precio:p.precio, cant:p.cant,
+            amount_1:aEf, amount_2:aTa, amount_3:aNq,   // amount_2=tarjeta, amount_3=nequi (como sales)
+            pm:(mets.length<=1?(mets[0]||'EFECTIVO'):'MIXTO'),
+            pm2:(mets.length<=1?'':'MIXTO_EF_TJ_NQ')};
+  });
+  return {habEf:habEf, habTa:habTa, habNq:habNq, items:items};
+}
 function updMixto(cat){
-  var cfg=MP[cat]||MP['Junior'];
+  var cfg=MP[cat||(curRoom&&curRoom.category)]||MP['Junior'];
   var tot=calcTot(selDur,selPpl,cfg);
+  var barTot=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);
+  var totalPagar=tot+barTot;   // el mixto cubre HABITACION + PRODUCTOS
   var ef=Number((document.getElementById('mixtoEf')||{}).value||0);
-var tj=Number((document.getElementById('mixtotj')||{}).value||0);  var nq=Number((document.getElementById('mixtoNq')||{}).value||0);
+  var tj=Number((document.getElementById('mixtotj')||{}).value||0);
+  var nq=Number((document.getElementById('mixtoNq')||{}).value||0);
   var sum=ef+tj+nq;
   var el=document.getElementById('mixtoCheck');
   if(el){
-    if(sum===tot)el.innerHTML='<span style="color:#22c55e">✓ Total correcto: '+fmt(tot)+'</span>';
-    else if(sum>tot)el.innerHTML='<span style="color:#ef4444">⚠ Excede por '+fmt(sum-tot)+'</span>';
-    else el.innerHTML='<span style="color:#f59e0b">Faltan '+fmt(tot-sum)+'</span>';
+    var extra=barTot>0?' (hab '+fmt(tot)+' + prod '+fmt(barTot)+')':'';
+    if(sum===totalPagar)el.innerHTML='<span style="color:#22c55e">✓ Total correcto: '+fmt(totalPagar)+extra+'</span>';
+    else if(sum>totalPagar)el.innerHTML='<span style="color:#ef4444">⚠ Excede por '+fmt(sum-totalPagar)+'</span>';
+    else el.innerHTML='<span style="color:#f59e0b">Faltan '+fmt(totalPagar-sum)+'</span>';
+  }
+  // Panel de reparto en vivo (solo cuando el total cuadra y hay productos).
+  var pan=document.getElementById('mixtoReparto');
+  if(pan){
+    if(sum===totalPagar && barTot>0){
+      var rep=calcRepartoMixto(ef, nq, tj, tot, _ciProds);
+      var metStr=function(e,t,n){var a=[];if(e>0)a.push(fmt(e)+' ef');if(t>0)a.push(fmt(t)+' tj');if(n>0)a.push(fmt(n)+' nq');return a.join(' + ')||'—';};
+      var h='<div style="background:#22222c;border-radius:8px;padding:8px;font-size:10px">';
+      h+='<div style="color:#9ca3af;font-weight:700;margin-bottom:4px">ASÍ SE REPARTE EL PAGO</div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#e5e7eb">Habitación</span><span style="color:#93c5fd">'+metStr(rep.habEf,rep.habTa,rep.habNq)+'</span></div>';
+      rep.items.forEach(function(it){
+        h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:#e5e7eb">'+esc(it.nombre)+' ×'+it.cant+'</span><span style="color:#86efac">'+metStr(it.amount_1,it.amount_2,it.amount_3)+'</span></div>';
+      });
+      h+='</div>';
+      pan.innerHTML=h;
+    } else { pan.innerHTML=''; }
   }
 }
  function updChg(cat){
@@ -2813,20 +2862,39 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
     mixtoTj=Number((document.getElementById('mixtotj')||{}).value||0);
     
     mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
-    if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
+    // El mixto ahora cubre HABITACION + PRODUCTOS (no solo el cuarto).
+    var barTotCI=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);
+    var totalMixto=tot+barTotCI;
+    if(mixtoEf+mixtoTj+mixtoNq!==totalMixto){toast('Los montos mixtos deben sumar '+fmt(totalMixto)+' (habitación + productos)','err');return;}
+    // ===== REPARTO DEL PAGO (helper compartido con updMixto) =====
+    // Cubre el cuarto primero (ef->nq->ta) y aplica el sobrante a los productos.
+    var rep=calcRepartoMixto(mixtoEf, mixtoNq, mixtoTj, tot, _ciProds);
+    // Cada producto del carrito toma su desglose y su pm resuelto.
+    _ciProds.forEach(function(p,i){ var it=rep.items[i]; p.amount_1=it.amount_1; p.amount_2=it.amount_2; p.amount_3=it.amount_3; p.pm=it.pm; p.pm2=it.pm2; });
+    // El cuarto va a checkIn con SU porcion del mixto (no la bolsa entera).
+    mixtoEf=rep.habEf; mixtoTj=rep.habTa; mixtoNq=rep.habNq;
+  } else {
+    // Pago simple: cada producto hereda el metodo del cuarto, con su monto en ese metodo.
+    _ciProds.forEach(function(p){
+      var valor=p.precio*p.cant;
+      p.pm=selPay;
+      p.amount_1=selPay==='EFECTIVO'?valor:0;
+      p.amount_2=selPay==='TARJETA'?valor:0;
+      p.amount_3=selPay==='NEQUI'?valor:0;
+      p.pm2='';
+    });
   }
  
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){
   toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
- _ciProds.forEach(function(p){p.pm=selPay||p.pm;});
 var prodsCI=[..._ciProds];_ciProds=[];
   var checkInMs=res.checkInMs||Date.now();
   function saveNext(i){
     if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
     var p=prodsCI[i];
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,payMethod2:p.pm2||'',amount_1:p.amount_1,amount_2:p.amount_2,amount_3:p.amount_3,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
       function(){saveNext(i+1);},function(){saveNext(i+1);});
   }
   saveNext(0);
@@ -14932,6 +15000,8 @@ function renderCiProds(){
       return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:#e5e7eb">'+esc(x.nombre)+' <span style="color:'+pc+'">×'+x.cant+'</span></span><b style="color:#22c55e">'+fmt(x.precio*x.cant)+'</b></div>';
     }).join('');
   }
+  // Si el pago es MIXTO, refrescar mensaje/panel (cambio el total de productos).
+  if(selPay==='MIXTO') updMixto();
 }
 function togRoomCats(){
   var el=document.getElementById('roomCats');

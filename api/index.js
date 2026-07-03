@@ -1797,17 +1797,17 @@ async function apiCloseShift(p, res) {
   const bDay = String(p.businessDay||'').trim()||businessDay(now);
   const userName = String(p.userName || '');
 
-  const { data: loginLog } = await tSelect('shift_log', 'ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
-    .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
-    .order('ts_ms', { ascending: false }).limit(1);
-  const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
-
+  // Cuadre del turno COMPLETO: filtra por shift_id + business_day (el business_day
+  // sale del sess, snapshot inmutable del turno). Antes usaba una ventana desde el
+  // ULTIMO login/relogin (loginMs), que truncaba el turno si la recepcionista
+  // re-logueaba a mitad -> lo vendido antes del relogin quedaba fuera del cierre
+  // (bug 01-jul: coronas de la 401 vendidas 03:09/03:40, relogin 03:49 -> excluidas).
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
-    tSelect('sales','type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('extra_staff','payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('room_products','total,pay_method,is_cortesia').eq('shift_id', shift).gte('ts_ms', loginMs)
+    tSelect('sales','type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('loans','amount,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('extra_staff','payment,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('room_products','total,pay_method,is_cortesia,amount_1,amount_2,amount_3').eq('shift_id', shift).eq('business_day', bDay)
   ]);
 
   const cortesiaIds = await getCortesiaIds();
@@ -1833,7 +1833,8 @@ async function apiCloseShift(p, res) {
     const t=Number(r.total||0);
     const pm=String(r.pay_method||'').toUpperCase();
     totalProductos+=t;
-    if(pm==='EFECTIVO')totalProductosEf+=t;
+    if(pm==='MIXTO'){totalProductosEf+=Number(r.amount_1||0);totalProductosTa+=Number(r.amount_2||0);totalProductosNq+=Number(r.amount_3||0);}
+    else if(pm==='EFECTIVO')totalProductosEf+=t;
     else if(pm==='TARJETA')totalProductosTa+=t;
     else if(pm==='NEQUI')totalProductosNq+=t;
   });
@@ -1943,9 +1944,9 @@ const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
   const totalProductos=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
   const totalCortesiasProds=prodSalesFilt.filter(s=>s.is_cortesia).reduce((a,s)=>a+Number(s.total||0),0);
-  const totalProductosEf=prodSalesFilt.filter(s=>!s.is_cortesia&&s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0);
-  const totalProductosTa=prodSalesFilt.filter(s=>!s.is_cortesia&&s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0);
-  const totalProductosNq=prodSalesFilt.filter(s=>!s.is_cortesia&&s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0);
+  const totalProductosEf=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+(s.pay_method==='MIXTO'?Number(s.amount_1||0):(s.pay_method==='EFECTIVO'?Number(s.total||0):0)),0);
+  const totalProductosTa=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+(s.pay_method==='MIXTO'?Number(s.amount_2||0):(s.pay_method==='TARJETA'?Number(s.total||0):0)),0);
+  const totalProductosNq=prodSalesFilt.filter(s=>!s.is_cortesia).reduce((a,s)=>a+(s.pay_method==='MIXTO'?Number(s.amount_3||0):(s.pay_method==='NEQUI'?Number(s.total||0):0)),0);
   const taxiList=[];
   (taxiRes.data||[]).forEach(r=>{
     const a=Number(r.amount||0);
@@ -1956,8 +1957,8 @@ const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay
 
  let dayBarEfe=0,dayBarTar=0,dayBarNeq=0,shiftBarEfe=0,shiftBarTar=0,shiftBarNeq=0;
   (barRes.data||[]).forEach(r=>{const a=Number(r.amount_cash||0)+Number(r.amount_card||0)+Number(r.amount_nequi||0);dayBar+=a;dayBarEfe+=Number(r.amount_cash||0);dayBarTar+=Number(r.amount_card||0);dayBarNeq+=Number(r.amount_nequi||0);if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=a;shiftBarEfe+=Number(r.amount_cash||0);shiftBarTar+=Number(r.amount_card||0);shiftBarNeq+=Number(r.amount_nequi||0);}});
-  const{data:roomProdsBar}=await tSelect('room_products','shift_id,pay_method,total,is_cortesia').eq('business_day',bDay).eq('is_cortesia',false);
-  (roomProdsBar||[]).forEach(r=>{const t=Number(r.total||0),pm=String(r.pay_method||'EFECTIVO').toUpperCase();dayBar+=t;if(pm==='TARJETA'){dayBarTar+=t;}else if(pm==='NEQUI'){dayBarNeq+=t;}else{dayBarEfe+=t;}if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=t;if(pm==='TARJETA'){shiftBarTar+=t;}else if(pm==='NEQUI'){shiftBarNeq+=t;}else{shiftBarEfe+=t;}}});
+  const{data:roomProdsBar}=await tSelect('room_products','shift_id,pay_method,total,is_cortesia,amount_1,amount_2,amount_3').eq('business_day',bDay).eq('is_cortesia',false);
+  (roomProdsBar||[]).forEach(r=>{const t=Number(r.total||0),pm=String(r.pay_method||'EFECTIVO').toUpperCase();dayBar+=t;var bEf,bTa,bNq;if(pm==='MIXTO'){bEf=Number(r.amount_1||0);bTa=Number(r.amount_2||0);bNq=Number(r.amount_3||0);}else if(pm==='TARJETA'){bEf=0;bTa=t;bNq=0;}else if(pm==='NEQUI'){bEf=0;bTa=0;bNq=t;}else{bEf=t;bTa=0;bNq=0;}dayBarEfe+=bEf;dayBarTar+=bTa;dayBarNeq+=bNq;if(!shiftFilter||r.shift_id===shiftFilter){shiftBar+=t;shiftBarEfe+=bEf;shiftBarTar+=bTa;shiftBarNeq+=bNq;}});
   (extraRes.data||[]).forEach(r=>{dayExtraStaff+=Number(r.payment||0);});
 
   // ===== RETIROS DEL DUENO (AHORRO SILENCIOSO) =====
@@ -2048,7 +2049,7 @@ async function apiMonthMetrics(p, res) {
     .like('business_day', ym+'%'));
   const maidLogsData = await fetchAll(() => tSelect('maid_log', 'maid_name,finished_ms,started_ms,state_to')
     .like('business_day', ym+'%'));
-  const roomProdsData = await fetchAll(() => tSelect('room_products', 'business_day,shift_id,pay_method,total,is_cortesia')
+  const roomProdsData = await fetchAll(() => tSelect('room_products', 'business_day,shift_id,pay_method,total,is_cortesia,amount_1,amount_2,amount_3')
     .like('business_day', ym+'%'));
 
   // Queries pequeñas — se mantienen con Promise.all normal
@@ -2153,7 +2154,8 @@ async function apiMonthMetrics(p, res) {
     const d=getDay(r.business_day);
     const sid=SHIFTS.includes(r.shift_id)?r.shift_id:'SHIFT_1';
     const s=d[sid], pm=String(r.pay_method||'EFECTIVO').toUpperCase(), t=Number(r.total||0);
-    if(pm==='TARJETA')s.tj_bar+=t;
+    if(pm==='MIXTO'){s.ef_bar+=Number(r.amount_1||0);s.tj_bar+=Number(r.amount_2||0);s.nq_bar+=Number(r.amount_3||0);}
+    else if(pm==='TARJETA')s.tj_bar+=t;
     else if(pm==='NEQUI')s.nq_bar+=t;
     else s.ef_bar+=t;
   });
@@ -5006,12 +5008,21 @@ async function apiAddRoomProduct(p, res) {
   if(!prod) return err(res,'Producto no existe');
   if(Number(prod.stock_actual||0) < cantidad) return err(res,'Stock insuficiente. Quedan: '+prod.stock_actual);
   const total = isCortesia ? 0 : Number(prod.precio||0) * cantidad;
+  // Desglose de pago (Parte 2 del MIXTO en productos): si el front manda el reparto
+  // (check-in mixto), se usa; si no, se deriva del pay_method simple (molde apiCheckIn).
+  const tieneDesglose = (p.amount_1!=null || p.amount_2!=null || p.amount_3!=null);
+  const amount1 = tieneDesglose ? Number(p.amount_1||0) : (payMethod==='EFECTIVO'?total:0);
+  const amount2 = tieneDesglose ? Number(p.amount_2||0) : (payMethod==='TARJETA'?total:0);
+  const amount3 = tieneDesglose ? Number(p.amount_3||0) : (payMethod==='NEQUI'?total:0);
+  const payMethod2 = String(p.payMethod2 || (payMethod==='MIXTO'?'MIXTO_EF_TJ_NQ':''));
   await tInsert('room_products',{
     ts_ms: now, business_day: bDay, shift_id: shift,
     room_id: roomId, check_in_ms: checkInMs,
     product_id: productId, product_name: prod.nombre,
     cantidad, precio_unit: Number(prod.precio||0),
     total, pay_method: payMethod,
+    pay_method_2: payMethod2,
+    amount_1: amount1, amount_2: amount2, amount_3: amount3,
     user_name: userName, is_cortesia: isCortesia,
     cortesia_destinatario: cortesiaDestinatario
   });
@@ -5142,13 +5153,13 @@ async function apiGetObservacionesTurno(p, res) {
 async function apiGetProductosMes(p, res) {
   const ym=String(p.yearMonth||'');
   if(!ym)return err(res,'yearMonth requerido');
-  const {data:prods}=await tSelect('room_products','total,pay_method,is_cortesia').like('business_day',ym+'%').eq('is_cortesia',false);
+  const {data:prods}=await tSelect('room_products','total,pay_method,is_cortesia,amount_1,amount_2,amount_3').like('business_day',ym+'%').eq('is_cortesia',false);
   const {data:cors}=await tSelect('room_products','total,cantidad,product_id').like('business_day',ym+'%').eq('is_cortesia',true);
   const {data:prodsList}=await tSelect('products','id,precio');
   const totalVentas=(prods||[]).reduce((a,r)=>a+Number(r.total||0),0);
-  const totalEf=(prods||[]).filter(r=>r.pay_method==='EFECTIVO').reduce((a,r)=>a+Number(r.total||0),0);
-  const totalTa=(prods||[]).filter(r=>r.pay_method==='TARJETA').reduce((a,r)=>a+Number(r.total||0),0);
-  const totalNq=(prods||[]).filter(r=>r.pay_method==='NEQUI').reduce((a,r)=>a+Number(r.total||0),0);
+  const totalEf=(prods||[]).reduce((a,r)=>a+(r.pay_method==='MIXTO'?Number(r.amount_1||0):(r.pay_method==='EFECTIVO'?Number(r.total||0):0)),0);
+  const totalTa=(prods||[]).reduce((a,r)=>a+(r.pay_method==='MIXTO'?Number(r.amount_2||0):(r.pay_method==='TARJETA'?Number(r.total||0):0)),0);
+  const totalNq=(prods||[]).reduce((a,r)=>a+(r.pay_method==='MIXTO'?Number(r.amount_3||0):(r.pay_method==='NEQUI'?Number(r.total||0):0)),0);
   const precioMap={};(prodsList||[]).forEach(p=>{precioMap[p.id]=Number(p.precio||0);});
   const totalCortesias=(cors||[]).reduce((a,r)=>a+Number(r.cantidad||0)*Number(precioMap[r.product_id]||0),0);
   return ok(res,{yearMonth:ym,totalVentas,totalEf,totalTa,totalNq,totalCortesias});
@@ -5186,7 +5197,7 @@ async function apiGetInventarioByDay(p, res) {
       const corItems=(sales||[]).filter(s=>s.product_id===prod.id&&s.shift_id===sid&&s.is_cortesia);
       const cor=corItems.reduce((a,s)=>a+Number(s.cantidad||0),0);
       const cortesiasDetalle=corItems.map(s=>({cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''}));
-      turnosData[sid]={entradas:ent,ventas:ven.reduce((a,s)=>a+Number(s.cantidad||0),0),cortesias:cor,cortesiasDetalle,valorVendido:ven.reduce((a,s)=>a+Number(s.total||0),0),ef:ven.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),ta:ven.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),nq:ven.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0)};
+      turnosData[sid]={entradas:ent,ventas:ven.reduce((a,s)=>a+Number(s.cantidad||0),0),cortesias:cor,cortesiasDetalle,valorVendido:ven.reduce((a,s)=>a+Number(s.total||0),0),ef:ven.reduce((a,s)=>a+(s.pay_method==='MIXTO'?Number(s.amount_1||0):(s.pay_method==='EFECTIVO'?Number(s.total||0):0)),0),ta:ven.reduce((a,s)=>a+(s.pay_method==='MIXTO'?Number(s.amount_2||0):(s.pay_method==='TARJETA'?Number(s.total||0):0)),0),nq:ven.reduce((a,s)=>a+(s.pay_method==='MIXTO'?Number(s.amount_3||0):(s.pay_method==='NEQUI'?Number(s.total||0):0)),0)};
     });
     const movsProd=(movements||[]).filter(m=>m.product_id===prod.id);
 const ingBodegaTotal=movsProd.filter(m=>m.tipo==='ingreso_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
@@ -6662,7 +6673,7 @@ async function apiGetGastosMesResumen(p, res) {
   });
 
   // 1b. Ventas del bar desde la tabla "room_products" (productos consumidos en habitaciones)
-  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia, amount_1, amount_2, amount_3')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
   
@@ -6679,7 +6690,8 @@ async function apiGetGastosMesResumen(p, res) {
     cantVentasBar++;
     totalVentasBar += total;
     const pm = String(v.pay_method||'').toUpperCase();
-    if(pm === 'EFECTIVO') ventasBarEfectivo += total;
+    if(pm === 'MIXTO'){ ventasBarEfectivo += Number(v.amount_1||0); ventasBarTarjeta += Number(v.amount_2||0); ventasBarNequi += Number(v.amount_3||0); }
+    else if(pm === 'EFECTIVO') ventasBarEfectivo += total;
     else if(pm === 'TARJETA') ventasBarTarjeta += total;
     else if(pm === 'NEQUI') ventasBarNequi += total;
   });
@@ -6995,12 +7007,16 @@ async function apiCreateRetiro(p, res) {
   });
   
   // Restar bar productos del dia con ese metodo (tambien cuenta como ventas)
-  const { data: barDia } = await tSelect('room_products', 'total, pay_method, is_cortesia')
+  const { data: barDia } = await tSelect('room_products', 'total, pay_method, is_cortesia, amount_1, amount_2, amount_3')
     .eq('business_day', diaOrigen);
   (barDia||[]).forEach(b => {
     if(b.is_cortesia) return;
     const pm = String(b.pay_method||'EFECTIVO').toUpperCase();
-    if(pm === payMethod) disponible += Number(b.total||0);
+    if(pm === 'MIXTO'){
+      if(payMethod==='EFECTIVO') disponible += Number(b.amount_1||0);
+      else if(payMethod==='TARJETA') disponible += Number(b.amount_2||0);
+      else if(payMethod==='NEQUI') disponible += Number(b.amount_3||0);
+    } else if(pm === payMethod) disponible += Number(b.total||0);
   });
   
   // Restar retiros previos del mismo dia y metodo (no anulados)
@@ -7246,15 +7262,18 @@ async function apiGetCajaPaolaResumen(p, res) {
   });
 
   // Ventas del bar en efectivo
-  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia')
+  const ventasBar = await fetchAll(() => tSelect('room_products', 'total, pay_method, is_cortesia, amount_1, amount_2, amount_3')
     .gte('business_day', firstDay)
     .lte('business_day', lastDay));
   (ventasBar||[]).forEach(v => {
     if(v.is_cortesia) return;
     const total = Number(v.total||0);
     // incluye ajustes negativos (total<=0): netean ventas de bar mal cargadas
-    if(String(v.pay_method||'').toUpperCase() === 'EFECTIVO'){
+    const pm = String(v.pay_method||'').toUpperCase();
+    if(pm === 'EFECTIVO'){
       ventasEfectivo += total;
+    } else if(pm === 'MIXTO'){
+      ventasEfectivo += Number(v.amount_1||0);   // solo la parte en efectivo del mixto
     }
   });
 
