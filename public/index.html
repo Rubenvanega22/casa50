@@ -1977,6 +1977,11 @@ function startApp(){
   document.getElementById('husr').textContent=sess.userName;
   buildTabs();
 actualizarBtnCaja();
+  // Precargar productos una vez al iniciar sesion, asi la busqueda MANUAL (check-in
+  // y venta) tiene la lista lista sin depender de abrir una ocupada o escanear.
+  if(sess.userRole==='RECEPTION' || sess.userRole==='ADMIN'){
+    rpc('getProducts',{},function(data){productosLista=data.products||[];});
+  }
   sw(sess.userRole==='MAID'?'maid':sess.userRole==='MAINTENANCE'?'misdanos':'rooms');
   if(rooms.length)renderRooms();
   startPoll();startClock();
