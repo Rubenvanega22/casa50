@@ -663,6 +663,16 @@ async function apiGetRooms(req, res) {
 // ==================== LOGIN ====================
 async function apiLogin(p, res) {
   const now = Date.now();
+  // KILL SWITCH (Fase 5 superadmin): si el motel de ESTE deploy (MOTEL_ID) esta
+  // suspendido, no dejar entrar a nadie. FAIL-OPEN: bloquea SOLO si app_moteles.activo
+  // === false explicito; ante cualquier duda (fila ausente, null, error de query, sin
+  // MOTEL_ID) deja pasar, para NO bloquear casa50 por un problema transitorio.
+  try {
+    const { data: motelRow } = await supabase.from('app_moteles').select('activo').eq('id', MOTEL_ID).maybeSingle();
+    if (motelRow && motelRow.activo === false) {
+      return err(res, 'Este motel está suspendido. Contactá al administrador de la plataforma.', 403);
+    }
+  } catch (e) { /* fail-open: si la verificacion falla, seguir con el login normal */ }
   let bDay = businessDay(now);
   // shiftRaw preserva el valor crudo del dropdown (puede ser SHIFT_1_12 o
   // SHIFT_2_12). Se devuelve en sess.shiftIdRaw para que el frontend pueda
