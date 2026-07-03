@@ -1730,17 +1730,17 @@ async function apiCloseShift(p, res) {
   const bDay = String(p.businessDay||'').trim()||businessDay(now);
   const userName = String(p.userName || '');
 
-  const { data: loginLog } = await tSelect('shift_log', 'ts_ms').eq('shift_id', shift).eq('user_role', 'RECEPTION')
-    .in('action', ['LOGIN', 'RELOGIN']).eq('user_name', userName)
-    .order('ts_ms', { ascending: false }).limit(1);
-  const loginMs = loginLog && loginLog.length ? Number(loginLog[0].ts_ms) : (now - 9*3600000);
-
+  // Cuadre del turno COMPLETO: filtra por shift_id + business_day (el business_day
+  // sale del sess, snapshot inmutable del turno). Antes usaba una ventana desde el
+  // ULTIMO login/relogin (loginMs), que truncaba el turno si la recepcionista
+  // re-logueaba a mitad -> lo vendido antes del relogin quedaba fuera del cierre
+  // (bug 01-jul: coronas de la 401 vendidas 03:09/03:40, relogin 03:49 -> excluidas).
   const [salesRes, taxiRes, loansRes, extraRes, prodRes] = await Promise.all([
-    tSelect('sales','type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('loans','amount,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('extra_staff','payment,anulada').eq('shift_id', shift).gte('ts_ms', loginMs),
-    tSelect('room_products','total,pay_method,is_cortesia,amount_1,amount_2,amount_3').eq('shift_id', shift).gte('ts_ms', loginMs)
+    tSelect('sales','type,total,pay_method,people,room_id,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('taxi_expenses','amount,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('loans','amount,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('extra_staff','payment,anulada').eq('shift_id', shift).eq('business_day', bDay),
+    tSelect('room_products','total,pay_method,is_cortesia,amount_1,amount_2,amount_3').eq('shift_id', shift).eq('business_day', bDay)
   ]);
 
   const cortesiaIds = await getCortesiaIds();
