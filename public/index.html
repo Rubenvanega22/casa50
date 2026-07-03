@@ -2813,20 +2813,56 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
     mixtoTj=Number((document.getElementById('mixtotj')||{}).value||0);
     
     mixtoNq=Number((document.getElementById('mixtoNq')||{}).value||0);
-    if(mixtoEf+mixtoTj+mixtoNq!==tot){toast('Los montos mixtos deben sumar '+fmt(tot),'err');return;}
+    // El mixto ahora cubre HABITACION + PRODUCTOS (no solo el cuarto).
+    var barTotCI=_ciProds.reduce(function(a,x){return a+x.precio*x.cant;},0);
+    var totalMixto=tot+barTotCI;
+    if(mixtoEf+mixtoTj+mixtoNq!==totalMixto){toast('Los montos mixtos deben sumar '+fmt(totalMixto)+' (habitación + productos)','err');return;}
+    // ===== REPARTO DEL PAGO ENTRE HABITACION Y PRODUCTOS =====
+    // "Bolsa": lo que el cliente puso en cada metodo (efectivo/nequi/tarjeta).
+    var bolsa={ef:mixtoEf, nq:mixtoNq, ta:mixtoTj};
+    // 1) El pago cubre PRIMERO la habitacion, en orden efectivo -> nequi -> tarjeta.
+    //    Guardamos cuanto de cada metodo se lleva el cuarto (eso es lo que va a checkIn).
+    var restaHab=tot, habEf=0, habNq=0, habTa=0, uh;
+    uh=Math.min(bolsa.ef,restaHab); bolsa.ef-=uh; restaHab-=uh; habEf=uh;
+    uh=Math.min(bolsa.nq,restaHab); bolsa.nq-=uh; restaHab-=uh; habNq=uh;
+    uh=Math.min(bolsa.ta,restaHab); bolsa.ta-=uh; restaHab-=uh; habTa=uh;
+    // 2) El sobrante de cada metodo se aplica a los productos, uno por uno, mismo orden ef -> nq -> ta.
+    _ciProds.forEach(function(p){
+      var valor=p.precio*p.cant, aEf=0, aNq=0, aTa=0, u;
+      u=Math.min(bolsa.ef,valor); bolsa.ef-=u; valor-=u; aEf=u;   // efectivo primero
+      u=Math.min(bolsa.nq,valor); bolsa.nq-=u; valor-=u; aNq=u;   // luego nequi
+      u=Math.min(bolsa.ta,valor); bolsa.ta-=u; valor-=u; aTa=u;   // luego tarjeta
+      // Desglose del producto (amount_1=efectivo, amount_2=tarjeta, amount_3=nequi; igual que sales).
+      p.amount_1=aEf; p.amount_2=aTa; p.amount_3=aNq;
+      // pm resuelto: metodo concreto si cayo en uno solo, 'MIXTO' si quedo partido entre dos.
+      var mets=[]; if(aEf>0)mets.push('EFECTIVO'); if(aTa>0)mets.push('TARJETA'); if(aNq>0)mets.push('NEQUI');
+      if(mets.length<=1){ p.pm=mets[0]||'EFECTIVO'; p.pm2=''; }
+      else { p.pm='MIXTO'; p.pm2='MIXTO_EF_TJ_NQ'; }
+    });
+    // El cuarto va a checkIn con SU porcion del mixto (no la bolsa entera).
+    mixtoEf=habEf; mixtoTj=habTa; mixtoNq=habNq;
+  } else {
+    // Pago simple: cada producto hereda el metodo del cuarto, con su monto en ese metodo.
+    _ciProds.forEach(function(p){
+      var valor=p.precio*p.cant;
+      p.pm=selPay;
+      p.amount_1=selPay==='EFECTIVO'?valor:0;
+      p.amount_2=selPay==='TARJETA'?valor:0;
+      p.amount_3=selPay==='NEQUI'?valor:0;
+      p.pm2='';
+    });
   }
  
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
    rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
       function(res){
   toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
- _ciProds.forEach(function(p){p.pm=selPay||p.pm;});
 var prodsCI=[..._ciProds];_ciProds=[];
   var checkInMs=res.checkInMs||Date.now();
   function saveNext(i){
     if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
     var p=prodsCI[i];
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
+    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,payMethod2:p.pm2||'',amount_1:p.amount_1,amount_2:p.amount_2,amount_3:p.amount_3,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
       function(){saveNext(i+1);},function(){saveNext(i+1);});
   }
   saveNext(0);
