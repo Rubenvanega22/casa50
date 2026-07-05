@@ -408,6 +408,7 @@ module.exports = async function handler(req, res) {
       case 'marcarArreglo':     return await apiMarcarArreglo(payload, res);
       case 'verificarArreglo':  return await apiVerificarArreglo(payload, res);
       case 'rechazarArreglo':   return await apiRechazarArreglo(payload, res);
+      case 'cambiarPrioridadMant': return await apiCambiarPrioridadMant(payload, res);
       case 'resolverDanoZonaComun': return await apiResolverDanoZonaComun(payload, res);
       case 'marcarRevision':    return await apiMarcarRevision(payload, res);
       case 'marcarDanioVisto':  return await apiMarcarDanioVisto(payload, res);
@@ -3414,6 +3415,58 @@ async function apiRechazarArreglo(p, res) {
   }).eq('id', reporteId);
 
   return ok(res, { id: reporteId, estado: 'RECHAZADO_VERIFICACION' });
+}
+
+// ==================== CAMBIAR PRIORIDAD (reclasificar) ====================
+// ADMIN/RECEPTION reclasifica la prioridad de un reporte que ya está en el
+// flujo, SIN cambiar su estado. Deja rastro en revisiones (jsonb).
+// - Si SUBE a 'urgente' en una habitación, dispara el auto-bloqueo (G3).
+// - Si BAJA de 'urgente', NO se desbloquea: el desbloqueo sigue siendo manual.
+async function apiCambiarPrioridadMant(p, res) {
+  const userRole = String(p.userRole||'').toUpperCase();
+  if(!['ADMIN','RECEPTION'].includes(userRole)) return err(res, 'Solo ADMIN o RECEPTION');
+  const userName = String(p.userName||'').trim();
+  if(!userName) return err(res, 'Usuario requerido');
+
+  const reporteId = Number(p.reporteId || 0);
+  if(!reporteId) return err(res, 'reporteId requerido');
+
+  const prioridadInput = String(p.prioridad||'').toLowerCase().trim();
+  const prioridadesValidas = ['urgente','normal','baja'];
+  if(!prioridadesValidas.includes(prioridadInput)) {
+    return err(res,'Prioridad requerida (urgente, normal o baja)');
+  }
+
+  const { data: reporte } = await tSelect('room_issues','*').eq('id', reporteId).single();
+  if(!reporte) return err(res, 'Reporte no existe');
+  if(reporte.anulada) return err(res, 'Reporte anulado');
+  if(reporte.estado === 'VERIFICADO') {
+    return err(res, 'Reporte ya verificado, no se puede cambiar prioridad');
+  }
+
+  const prioridadPrev = reporte.prioridad || null;
+  if(prioridadPrev === prioridadInput) {
+    return err(res, 'La prioridad ya es '+prioridadInput);
+  }
+
+  const now = Date.now();
+  const prev = Array.isArray(reporte.revisiones) ? reporte.revisiones : [];
+  const entrada = { accion: 'cambio_prioridad', de: prioridadPrev, a: prioridadInput, por: userName, rol: userRole, ms: now, ts: now,
+                    motivo: 'Prioridad: '+(prioridadPrev||'—')+' → '+prioridadInput };
+  const nuevas = prev.concat([entrada]);
+
+  await tUpdate('room_issues',{
+    prioridad: prioridadInput,
+    revisiones: nuevas
+  }).eq('id', reporteId);
+
+  // Auto-bloqueo (G3): si SUBE a urgente en habitación, bloquear.
+  // Bajar de urgente NO desbloquea (desbloqueo siempre manual).
+  if(prioridadInput === 'urgente' && reporte.ubicacion_tipo === 'habitacion'){
+    await bloquearPorDanoUrgenteSiCorresponde(reporte.ubicacion_id, reporte.description, userName);
+  }
+
+  return ok(res, { id: reporteId, prioridad: prioridadInput, prioridadPrev: prioridadPrev, revisiones: nuevas });
 }
 
 // ==================== APROBAR REPORTE DE CAMARERA (Fase 6) ====================

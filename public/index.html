@@ -2510,6 +2510,17 @@ function buildRoomB(r){
       h+='</div>';
     }
     h+='</div>';
+    // Cambiar prioridad (ADMIN/RECEPTION) — no cambia el estado, deja rastro en revisiones
+    if(isR||isA){
+      h+='<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center">';
+      h+='<select id="cpPri'+d.id+'" style="flex:1;font-size:12px;padding:6px 9px">';
+      ['urgente','normal','baja'].forEach(function(po){
+        h+='<option value="'+po+'"'+((d.prioridad||'normal')===po?' selected':'')+'>'+po.toUpperCase()+'</option>';
+      });
+      h+='</select>';
+      h+='<button class="btn bk" style="flex:1;font-size:12px" onclick="doCambiarPrioridad('+d.id+')">🎚 Cambiar prioridad</button>';
+      h+='</div>';
+    }
     // Bloque "ARREGLO POR" — solo si el reporte está esperando verificación (Fase 4 cleanup)
     if(d.estado==='ESPERA_VERIFICACION'){
       var ams=Number(d.arregladoMs||0);
@@ -7636,6 +7647,25 @@ function doRechazarArreglo(){
       closeM('mRoom');
       window._rrReporteId = null;
       rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+      var maintTab=document.getElementById('pnl-maint');
+      if(maintTab&&maintTab.classList.contains('on'))loadDanosActivos();
+    },
+    function(e){toast(e.message||String(e),'err');}
+  );
+}
+
+// ---- CAMBIAR PRIORIDAD (ADMIN/RECEPTION): reclasifica sin cambiar estado ----
+function doCambiarPrioridad(reporteId){
+  if(!sess||(sess.userRole!=='ADMIN'&&sess.userRole!=='RECEPTION')){toast('Solo ADMIN o Recepcion','err');return;}
+  var sel=document.getElementById('cpPri'+reporteId);
+  if(!sel){toast('Sin selector de prioridad','err');return;}
+  var prioridad=sel.value;
+  rpc('cambiarPrioridadMant',{userRole:sess.userRole, userName:sess.userName, reporteId:reporteId, prioridad:prioridad},
+    function(){
+      toast('✓ Prioridad actualizada a '+prioridad.toUpperCase(),'ok');
+      rpc('getRooms',null,function(d){
+        if(d){rooms=d.rooms||[]; renderRooms(); if(curRoom){openRoom(curRoom.roomId);}}
+      });
       var maintTab=document.getElementById('pnl-maint');
       if(maintTab&&maintTab.classList.contains('on'))loadDanosActivos();
     },
