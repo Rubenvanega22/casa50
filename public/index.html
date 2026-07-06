@@ -94,6 +94,9 @@ hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .rc.CO{border-color:var(--info);background:linear-gradient(rgba(74,163,255,.07),rgba(74,163,255,.07)),var(--card)}
 .rc.RT{border-color:var(--clean);background:linear-gradient(rgba(160,96,224,.07),rgba(160,96,224,.07)),var(--card)}
 .rc.BL{border-color:var(--muted);background:linear-gradient(rgba(107,114,128,.07),rgba(107,114,128,.07)),var(--card)}
+/* Etapa A: reserva PAGADA sin activar. Rosa #ec4899, no colisiona con ningun estado. Parpadea (reusa @keyframes blink). */
+.rc.RV{border-color:#ec4899;background:linear-gradient(rgba(236,72,153,.10),rgba(236,72,153,.10)),var(--card);animation:blink 1.4s ease-in-out infinite}
+.rst.RV{background:rgba(236,72,153,.15);color:#ec4899;border-color:rgba(236,72,153,.4)}
 .rn{font-size:16px;font-weight:800;color:var(--text);line-height:1.1}
 .rcat{font-size:9px;color:var(--text-dim);margin-bottom:2px}
 .rst{display:inline-block;margin-top:2px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;border:1px solid transparent}
@@ -2304,7 +2307,9 @@ function renderRooms(){
 function mkCard(r){
   var now=Date.now();
   var eff=r.disabled?'BL':r.retoque?'RT':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':r.state==='CONTAMINATED'?'CO':'BL';
-  var lbl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
+  // Etapa A: reserva PAGADA sin activar pinta por encima de DISPONIBLE (la hab sigue AVAILABLE en rooms).
+  if(eff==='AV'&&r.reserva)eff='RV';
+  var lbl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque',RV:'Reservada'};
   var card=document.createElement('div');card.className='rc '+eff;
   var h='<div class="rn">'+r.roomId+'</div><div class="rcat">'+r.category+'</div><div class="rst '+eff+'">'+(lbl[eff]||eff)+'</div>';
   if(eff==='OC'){
@@ -2314,6 +2319,13 @@ function mkCard(r){
       var arrLabel=r.arrivalPlate?r.arrivalPlate:(r.arrivalType==='MOTO'?'MOTO':r.arrivalType==='CAR'?'CARRO':r.arrivalType==='WALK'?'A pie':r.arrivalType);
       h+='<div class="ri">'+r.people+'p '+esc(arrLabel)+'</div>';
     }
+  }
+  if(eff==='RV'&&r.reserva){
+    h+='<div class="ri">👤 <b>'+esc(r.reserva.clienteNombre||'—')+'</b></div>';
+    var restRV=Number(r.reserva.llegadaDeadlineMs||0)-now;
+    // Sin gracia: vencido sigue bloqueando; solo cambia a rojo "VENCIDA".
+    if(restRV>0){h+='<div class="rtm ok">⏱ '+fDur(restRV)+'</div><div class="ri">llega en</div>';}
+    else{h+='<div class="rtm over">VENCIDA</div>';}
   }
 if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs))/60000);h+='<div class="ri">Salio: <b>'+fT(r.lastCheckoutMs)+'</b></div><div class="ri warn">'+mD+' min sucia'+(r.maidInProgress?' — <span style="color:#a78bfa;animation:pulse 1s infinite">🧹 '+esc(r.maidNameProgress||'')+'</span>':'')+'</div>';}
   if(eff==='CO'){var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0);if(since){var mC=Math.round((now-since)/60000);h+='<div class="ri">Desde: <b>'+fT(since)+'</b></div><div class="ri" style="color:#3b82f6">'+mC+' min</div>';}}
@@ -2477,11 +2489,24 @@ h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-si
 function buildRoomB(r){
   var now=Date.now();
   var eff=r.disabled?'BL':r.retoque?'RT':r.state==='AVAILABLE'?'AV':r.state==='OCCUPIED'?'OC':r.state==='DIRTY'?'DI':'CO';
+  // Etapa A: reserva PAGADA sin activar pisa DISPONIBLE -> bloquea el form de venta (mismo overlay que mkCard).
+  if(eff==='AV'&&r.reserva)eff='RV';
   var isR=sess&&sess.userRole==='RECEPTION',isA=sess&&sess.userRole==='ADMIN';
   var cfg=MP[r.category]||MP['Junior'];
-  var sc={AV:'var(--ok)',OC:'var(--danger)',DI:'var(--warn)',CO:'var(--info)',BL:'var(--muted)',RT:'var(--clean)'};
-  var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque'};
+  var sc={AV:'var(--ok)',OC:'var(--danger)',DI:'var(--warn)',CO:'var(--info)',BL:'var(--muted)',RT:'var(--clean)',RV:'#ec4899'};
+  var sl={AV:'Disponible',OC:'Ocupada',DI:'Sucia',CO:'Contaminada',BL:'Bloqueada',RT:'Retoque',RV:'Reservada'};
   var h='';
+  // Etapa A: aviso de reserva (reemplaza el form de venta; recepcion NO puede vender hasta que se active).
+  if(eff==='RV'&&r.reserva){
+    var restB=Number(r.reserva.llegadaDeadlineMs||0)-now;
+    var cronB=restB>0?('llega en <b>'+fDur(restB)+'</b>'):'<b style="color:var(--danger)">llegada VENCIDA</b>';
+    h+='<div style="background:rgba(236,72,153,.1);border:1px solid #ec4899;border-radius:8px;padding:12px;margin-bottom:10px;text-align:center">';
+    h+='<div style="font-size:13px;font-weight:800;color:#ec4899;text-transform:uppercase;margin-bottom:4px">🔒 Reservada</div>';
+    h+='<div style="font-size:13px;color:var(--text)">por <b>'+esc(r.reserva.clienteNombre||'—')+'</b></div>';
+    h+='<div style="font-size:12px;color:var(--text-dim);margin-top:4px">'+cronB+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">No se puede vender hasta que el cliente active la reserva.</div>';
+    h+='</div>';
+  }
   // Seccion "Dano activo" (Fase 3 mantenimiento) - va ARRIBA de todo
   if(r.danoActivo){
     var d=r.danoActivo;
