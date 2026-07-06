@@ -247,6 +247,71 @@ function err(res, msg, status = 400) {
   res.status(status).json({ ok: false, error: msg });
 }
 
+// ==================== SUPERADMIN (Fase 5 - nucleo kill switch) ====================
+// Auth por secreto de env (SUPERADMIN_SECRET), no por PIN de motel ni rol del body.
+// Comparacion en tiempo constante para no filtrar el largo por timing.
+function checkSuperadmin(p) {
+  const secret = String((p && p.superadminSecret) || '');
+  const expected = String(process.env.SUPERADMIN_SECRET || '');
+  if (!expected) return { ok:false, msg:'SUPERADMIN_SECRET no configurado en el servidor' };
+  if (!secret) return { ok:false, msg:'Falta credencial de superadmin' };
+  const a = Buffer.from(secret);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return { ok:false, msg:'Credencial invalida' };
+  let match = false;
+  try { match = require('crypto').timingSafeEqual(a, b); } catch(e) { match = false; }
+  if (!match) return { ok:false, msg:'Credencial invalida' };
+  return { ok:true };
+}
+
+// Lista TODOS los moteles (sin filtro tenant): ve activos y suspendidos.
+async function apiListarMotelesSuperadmin(p, res) {
+  const chk = checkSuperadmin(p);
+  if (!chk.ok) return err(res, chk.msg, 403);
+  const { data, error } = await supabase
+    .from('app_moteles')
+    .select('id, slug, nombre, activo, creado')
+    .order('creado', { ascending: true });
+  if (error) return err(res, 'Error listando moteles: ' + error.message);
+  return ok(res, { moteles: data || [] });
+}
+
+// Kill switch: cambia app_moteles.activo + registra auditoria en app_motel_estado_historial.
+async function apiCambiarEstadoMotel(p, res) {
+  const chk = checkSuperadmin(p);
+  if (!chk.ok) return err(res, chk.msg, 403);
+  const motelId = String(p.motelId || '').trim();
+  const nuevoActivo = (p.activo === true || p.activo === 'true');
+  const motivo = String(p.motivo || '').trim();
+  const cambiadoPor = String(p.cambiadoPor || '').trim() || null;
+  if (!motelId) return err(res, 'motelId requerido');
+
+  const { data: motelActual, error: eGet } = await supabase
+    .from('app_moteles').select('id, activo').eq('id', motelId).single();
+  if (eGet || !motelActual) return err(res, 'Motel no encontrado');
+
+  const activoAnterior = motelActual.activo;
+  if (activoAnterior === nuevoActivo) {
+    return ok(res, { sinCambio:true, activo: nuevoActivo });
+  }
+
+  const { error: eUpd } = await supabase
+    .from('app_moteles').update({ activo: nuevoActivo }).eq('id', motelId);
+  if (eUpd) return err(res, 'Error actualizando estado: ' + eUpd.message);
+
+  const { error: eHist } = await supabase
+    .from('app_motel_estado_historial').insert({
+      motel_id: motelId,
+      activo_anterior: activoAnterior,
+      activo_nuevo: nuevoActivo,
+      motivo: motivo || null,
+      cambiado_por: cambiadoPor
+    });
+  if (eHist) return ok(res, { activo: nuevoActivo, avisoHistorial: 'Estado cambiado pero fallo el registro de auditoria: ' + eHist.message });
+
+  return ok(res, { activo: nuevoActivo, activoAnterior });
+}
+
 async function getSettings() {
   const { data } = await tSelect('settings','key, value');
   const map = {};
@@ -514,6 +579,8 @@ module.exports = async function handler(req, res) {
       case 'saveBitacoraMantenedor': return await apiSaveBitacoraMantenedor(payload, res);
       case 'lucianaChat':         return await apiLucianaChat(payload, res);
       case 'lucianaGastoMes':     return await apiLucianaGastoMes(payload, res);
+      case 'listarMotelesSuperadmin': return await apiListarMotelesSuperadmin(payload, res);
+      case 'cambiarEstadoMotel':      return await apiCambiarEstadoMotel(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -597,6 +664,16 @@ async function apiGetRooms(req, res) {
 // ==================== LOGIN ====================
 async function apiLogin(p, res) {
   const now = Date.now();
+  // KILL SWITCH (Fase 5 superadmin): si el motel de ESTE deploy (MOTEL_ID) esta
+  // suspendido, no dejar entrar a nadie. FAIL-OPEN: bloquea SOLO si app_moteles.activo
+  // === false explicito; ante cualquier duda (fila ausente, null, error de query, sin
+  // MOTEL_ID) deja pasar, para NO bloquear casa50 por un problema transitorio.
+  try {
+    const { data: motelRow } = await supabase.from('app_moteles').select('activo').eq('id', MOTEL_ID).maybeSingle();
+    if (motelRow && motelRow.activo === false) {
+      return err(res, 'Este motel está suspendido. Contactá al administrador de la plataforma.', 403);
+    }
+  } catch (e) { /* fail-open: si la verificacion falla, seguir con el login normal */ }
   let bDay = businessDay(now);
   // shiftRaw preserva el valor crudo del dropdown (puede ser SHIFT_1_12 o
   // SHIFT_2_12). Se devuelve en sess.shiftIdRaw para que el frontend pueda

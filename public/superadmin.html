@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Superadmin · Moteles</title>
+  <style>
+    /* Estilo minimo, fondo claro / texto oscuro, centrado, mobile-friendly */
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #f4f5f7; color: #1a1a1a; margin: 0;
+      padding: 24px 16px;
+    }
+    .wrap { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    .card {
+      background: #fff; border: 1px solid #e2e4e8; border-radius: 10px;
+      padding: 18px; margin-bottom: 14px;
+    }
+    label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+    input[type=password] {
+      width: 100%; padding: 10px 12px; font-size: 15px;
+      border: 1px solid #ccc; border-radius: 8px; margin-bottom: 12px;
+    }
+    button {
+      font-size: 14px; padding: 9px 14px; border-radius: 8px;
+      border: 1px solid #bbb; background: #fff; cursor: pointer;
+    }
+    button:hover { background: #f0f0f0; }
+    button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    button.primary:hover { background: #1d4ed8; }
+    button.danger  { background: #dc2626; color: #fff; border-color: #dc2626; }
+    button.danger:hover  { background: #b91c1c; }
+    button.ok      { background: #16a34a; color: #fff; border-color: #16a34a; }
+    button.ok:hover      { background: #15803d; }
+    /* Fila de motel */
+    .motel {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 0; border-bottom: 1px solid #eee;
+    }
+    .motel:last-child { border-bottom: 0; }
+    .motel .info { flex: 1; min-width: 0; }
+    .motel .nombre { font-weight: 600; }
+    .motel .sub { font-size: 12px; color: #777; }
+    .badge {
+      font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+      text-transform: uppercase; white-space: nowrap;
+    }
+    .badge.activo    { background: #dcfce7; color: #166534; }
+    .badge.suspendido{ background: #fee2e2; color: #991b1b; }
+    /* Div de estado / errores */
+    .estado { font-size: 13px; margin: 10px 0; min-height: 18px; }
+    .estado.error { color: #b91c1c; }
+    .estado.info  { color: #555; }
+    .barra { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Panel Superadmin · Moteles</h1>
+
+  <!-- ============ PANTALLA 1: CLAVE ============ -->
+  <!-- Se muestra al abrir. La clave NO se guarda en storage, solo en memoria. -->
+  <div class="card" id="pantallaClave">
+    <label for="claveInput">Clave de superadmin</label>
+    <input type="password" id="claveInput" placeholder="Clave" autocomplete="off">
+    <button class="primary" id="btnEntrar" onclick="entrar()">Entrar</button>
+    <div class="estado" id="estadoClave"></div>
+  </div>
+
+  <!-- ============ PANTALLA 2: LISTA DE MOTELES ============ -->
+  <!-- Oculta hasta autenticar. Se llena via JS. -->
+  <div class="card" id="pantallaLista" style="display:none">
+    <div class="barra">
+      <strong>Moteles</strong>
+      <button onclick="cargarMoteles()">Actualizar lista</button>
+    </div>
+    <div class="estado info" id="estadoLista"></div>
+    <div id="listaMoteles"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Superadmin · kill switch de moteles (pagina autonoma)
+// Vanilla JS, sin dependencias. Toda la logica vive aca.
+// ============================================================
+
+// Mismo backend que la app de recepcion (index.html).
+var API_URL = window.location.origin + '/api/index.js';
+
+// La clave vive SOLO en memoria mientras la pagina esta abierta.
+// NUNCA se guarda en storage, ni se loguea, ni va en la URL.
+var CLAVE = null;
+
+// ------------------------------------------------------------
+// Helper de llamada al backend. Devuelve una Promesa con el JSON.
+// La clave se manda unicamente en el body (nunca en la URL ni en logs).
+// ------------------------------------------------------------
+function llamar(fn, payload) {
+  return fetch(API_URL + '?fn=' + fn, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  }).then(function (r) { return r.json(); });
+}
+
+// ------------------------------------------------------------
+// Escapar texto para no romper el HTML al inyectar nombres/slug.
+// ------------------------------------------------------------
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ------------------------------------------------------------
+// PANTALLA 1: intentar entrar con la clave tipeada.
+// Prueba la clave llamando a listarMotelesSuperadmin. Si el backend
+// responde ok:true, guarda la clave en memoria y muestra la lista.
+// ------------------------------------------------------------
+function entrar() {
+  var input = document.getElementById('claveInput');
+  var clave = (input.value || '').trim();
+  var estado = document.getElementById('estadoClave');
+  estado.className = 'estado info';
+  estado.textContent = '';
+  if (!clave) { estado.className = 'estado error'; estado.textContent = 'Ingresa la clave.'; return; }
+
+  var btn = document.getElementById('btnEntrar');
+  btn.disabled = true; estado.textContent = 'Verificando...';
+
+  // Usamos la clave tipeada directamente en el body (sin guardarla aun).
+  llamar('listarMotelesSuperadmin', { superadminSecret: clave })
+    .then(function (r) {
+      btn.disabled = false;
+      if (r && r.ok) {
+        // Clave correcta: la guardamos en memoria y pasamos a la lista.
+        CLAVE = clave;
+        input.value = '';                 // limpiamos el input (no queda en el DOM)
+        document.getElementById('pantallaClave').style.display = 'none';
+        document.getElementById('pantallaLista').style.display = 'block';
+        pintarMoteles(r.moteles || []);
+      } else {
+        // 403 / ok:false -> clave incorrecta, dejar reintentar.
+        estado.className = 'estado error';
+        estado.textContent = 'Clave incorrecta';
+      }
+    })
+    .catch(function (e) {
+      // Error de red/servidor: mostrar, no romper en silencio.
+      btn.disabled = false;
+      estado.className = 'estado error';
+      estado.textContent = 'Error de conexion: ' + (e && e.message ? e.message : e);
+    });
+}
+
+// ------------------------------------------------------------
+// Recargar la lista (boton "Actualizar lista"). Reusa la clave en memoria.
+// ------------------------------------------------------------
+function cargarMoteles() {
+  var estado = document.getElementById('estadoLista');
+  estado.className = 'estado info';
+  estado.textContent = 'Cargando...';
+  llamar('listarMotelesSuperadmin', { superadminSecret: CLAVE })
+    .then(function (r) {
+      if (r && r.ok) { pintarMoteles(r.moteles || []); }
+      else {
+        estado.className = 'estado error';
+        estado.textContent = (r && r.error) ? r.error : 'No se pudo cargar la lista';
+      }
+    })
+    .catch(function (e) {
+      estado.className = 'estado error';
+      estado.textContent = 'Error de conexion: ' + (e && e.message ? e.message : e);
+    });
+}
+
+// ------------------------------------------------------------
+// Pintar la lista completa de moteles en el contenedor.
+// ------------------------------------------------------------
+function pintarMoteles(moteles) {
+  var estado = document.getElementById('estadoLista');
+  var cont = document.getElementById('listaMoteles');
+  if (!moteles.length) {
+    estado.className = 'estado info'; estado.textContent = 'No hay moteles.';
+    cont.innerHTML = ''; return;
+  }
+  estado.textContent = moteles.length + ' motel(es).';
+  var html = '';
+  moteles.forEach(function (m) { html += filaMotel(m); });
+  cont.innerHTML = html;
+}
+
+// ------------------------------------------------------------
+// HTML de una fila. El id del contenedor lleva el motelId para
+// poder actualizar SOLO esa fila tras suspender/reactivar.
+// ------------------------------------------------------------
+function filaMotel(m) {
+  var activo = (m.activo === true);
+  var badge = activo
+    ? '<span class="badge activo">Activo</span>'
+    : '<span class="badge suspendido">Suspendido</span>';
+  // Boton: Suspender si esta activo, Reactivar si esta suspendido.
+  var boton = activo
+    ? '<button class="danger" onclick="suspender(\'' + esc(m.id) + '\')">Suspender</button>'
+    : '<button class="ok" onclick="reactivar(\'' + esc(m.id) + '\')">Reactivar</button>';
+  return '<div class="motel" id="fila-' + esc(m.id) + '">' +
+           '<div class="info">' +
+             '<div class="nombre">' + esc(m.nombre) + '</div>' +
+             '<div class="sub">' + esc(m.slug || m.id) + '</div>' +
+           '</div>' +
+           badge + boton +
+         '</div>';
+}
+
+// ------------------------------------------------------------
+// Suspender: pide motivo con prompt(). Si cancela, no hace nada.
+// ------------------------------------------------------------
+function suspender(motelId) {
+  var motivo = prompt('Motivo de la suspension:');
+  if (motivo === null) return;            // cancelo -> no hacer nada
+  cambiarEstado(motelId, false, String(motivo || '').trim());
+}
+
+// ------------------------------------------------------------
+// Reactivar: sin pedir motivo (motivo opcional vacio).
+// ------------------------------------------------------------
+function reactivar(motelId) {
+  cambiarEstado(motelId, true, '');
+}
+
+// ------------------------------------------------------------
+// Llama al backend para cambiar el estado y actualiza SOLO esa fila.
+// ------------------------------------------------------------
+function cambiarEstado(motelId, nuevoActivo, motivo) {
+  var estado = document.getElementById('estadoLista');
+  estado.className = 'estado info';
+  estado.textContent = nuevoActivo ? 'Reactivando...' : 'Suspendiendo...';
+  llamar('cambiarEstadoMotel', {
+    superadminSecret: CLAVE,
+    motelId: motelId,
+    activo: nuevoActivo,
+    motivo: motivo,
+    cambiadoPor: null
+  })
+    .then(function (r) {
+      if (r && r.ok) {
+        // Actualizamos la fila en el DOM sin recargar toda la pagina.
+        actualizarFila(motelId, nuevoActivo);
+        estado.textContent = r.avisoHistorial
+          ? ('Estado cambiado. ' + r.avisoHistorial)   // update ok pero fallo la auditoria
+          : 'Estado actualizado.';
+      } else {
+        estado.className = 'estado error';
+        estado.textContent = (r && r.error) ? r.error : 'No se pudo cambiar el estado';
+      }
+    })
+    .catch(function (e) {
+      estado.className = 'estado error';
+      estado.textContent = 'Error de conexion: ' + (e && e.message ? e.message : e);
+    });
+}
+
+// ------------------------------------------------------------
+// Reemplaza el contenido de una sola fila con el nuevo estado.
+// ------------------------------------------------------------
+function actualizarFila(motelId, activo) {
+  var fila = document.getElementById('fila-' + motelId);
+  if (!fila) return;
+  // Reconstruimos la fila con el estado nuevo (conservamos nombre/slug visibles).
+  var nombre = fila.querySelector('.nombre') ? fila.querySelector('.nombre').textContent : '';
+  var sub = fila.querySelector('.sub') ? fila.querySelector('.sub').textContent : '';
+  fila.outerHTML = filaMotel({ id: motelId, nombre: nombre, slug: sub, activo: activo });
+}
+
+// Permitir entrar con Enter desde el input de clave.
+document.getElementById('claveInput').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') entrar();
+});
+</script>
+</body>
+</html>
