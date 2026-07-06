@@ -652,9 +652,35 @@ async function apiGetRooms(req, res) {
     };
   });
 
+  // Reservas PAGADAS sin activar (Etapa A reservas<->recepcion). La habitacion
+  // sigue AVAILABLE en rooms; la reserva se adjunta como overlay y el front la
+  // pinta por encima. app_reservas es multi-tenant (motel_id con DEFAULT casa50),
+  // por eso filtramos por MOTEL_ID. Join embebido a app_usuarios via FK
+  // app_reservas_usuario_id_fkey para traer el nombre del cliente.
+  const { data: reservas } = await supabase
+    .from('app_reservas')
+    .select('habitacion, pago_ms, activacion_ms, llegada_min, app_usuarios(nombre)')
+    .eq('motel_id', MOTEL_ID)
+    .eq('estado', 'PAGADA')
+    .is('activacion_ms', null);
+  const reservasMap = {};
+  (reservas || []).forEach(function(rv){
+    // Sin gracia: mientras siga PAGADA + activacion_ms null, bloquea. Al vencer
+    // el cronometro (pago_ms+llegada_min) la tarjeta pasa a VENCIDA pero NO libera
+    // (la auto-activacion llega en Etapa C). Si una hab tiene >1, gana la primera.
+    if (reservasMap[rv.habitacion]) return;
+    reservasMap[rv.habitacion] = {
+      clienteNombre: (rv.app_usuarios && rv.app_usuarios.nombre) || '',
+      pagoMs: Number(rv.pago_ms || 0),
+      llegadaMin: Number(rv.llegada_min || 0),
+      llegadaDeadlineMs: Number(rv.pago_ms || 0) + Number(rv.llegada_min || 0) * 60000
+    };
+  });
+
   const mapped = (rooms || []).map(function(r){
     const m = mapRoom(r);
     m.danoActivo = danosMap[r.room_id] || null;
+    m.reserva = reservasMap[r.room_id] || null;
     return m;
   });
 
@@ -928,6 +954,22 @@ async function apiCheckIn(p, res) {
   if (!room) return err(res, 'Habitacion no existe: ' + roomId);
   if (room.disabled) return err(res, 'Habitacion deshabilitada');
   if (room.state !== 'AVAILABLE') return err(res, `Hab ${roomId} no disponible (${room.state})`);
+
+  // Etapa A: una reserva PAGADA sin activar bloquea la venta manual. Punto de
+  // verdad en backend (el front tambien lo bloquea, pero esto cubre RPC forzada
+  // o UI desactualizada). Sin gracia: bloquea hasta que se active.
+  const { data: reservaViva } = await supabase
+    .from('app_reservas')
+    .select('habitacion, app_usuarios(nombre)')
+    .eq('motel_id', MOTEL_ID)
+    .eq('estado', 'PAGADA')
+    .is('activacion_ms', null)
+    .eq('habitacion', roomId)
+    .maybeSingle();
+  if (reservaViva) {
+    const cli = (reservaViva.app_usuarios && reservaViva.app_usuarios.nombre) || 'cliente';
+    return err(res, `Hab ${roomId} reservada por ${cli} — no se puede vender`);
+  }
 
   const PRICING = await getPricing(MOTEL_ID);
   const cfg = cfgFor(PRICING, room.category);
