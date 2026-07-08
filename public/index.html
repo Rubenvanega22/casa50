@@ -2504,7 +2504,9 @@ function buildRoomB(r){
     h+='<div style="font-size:13px;font-weight:800;color:#ec4899;text-transform:uppercase;margin-bottom:4px">🔒 Reservada</div>';
     h+='<div style="font-size:13px;color:var(--text)">por <b>'+esc(r.reserva.clienteNombre||'—')+'</b></div>';
     h+='<div style="font-size:12px;color:var(--text-dim);margin-top:4px">'+cronB+'</div>';
-    h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">No se puede vender hasta que el cliente active la reserva.</div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Escaneá el código del cliente o digitá la clave para activar.</div>';
+    h+='<input id="rvClave" maxlength="6" placeholder="CLAVE" style="text-transform:uppercase;text-align:center;letter-spacing:3px;margin-top:10px;width:100%;box-sizing:border-box" oninput="this.value=this.value.toUpperCase()">';
+    h+='<button class="btn bg full" style="margin-top:6px" onclick="doActivarReserva()">✅ Activar reserva</button>';
     h+='</div>';
   }
   // Seccion "Dano activo" (Fase 3 mantenimiento) - va ARRIBA de todo
@@ -12803,6 +12805,12 @@ function procesarCodigoBarras(codigo){
     }
     return;
   }
+  // Etapa B: código de reserva (RSV + clave). Acción global (como HAB), va ANTES de
+  // los modales y del fallback a producto.
+  if(codigo.startsWith('RSV')){
+    activarReservaRPC({clave:codigo.slice(3)});
+    return;
+  }
   // Si modal de ingreso bodega está abierto — buscar ahí
   var modalBodega=document.getElementById('mIngresoBodega');
   if(modalBodega&&modalBodega.classList.contains('op')){
@@ -12851,6 +12859,28 @@ function procesarCodigoBarras(codigo){
     buscarYProcesar(productosLista);
   },function(){toast('Error cargando productos.','err');});
 }
+
+// ==================== ACTIVAR RESERVA (Etapa B) ====================
+// Un solo camino de activación (escáner RSV y botón manual llaman acá).
+function activarReservaRPC(payload){
+  payload.userName=sess.userName; payload.userRole=sess.userRole;
+  payload.sessionShiftId=sess.shiftId; payload.sessionBusinessDay=sess.businessDay;
+  rpc('activarReserva',payload,function(res){activacionOk(res);},function(e){toast(e.message||'Reserva no válida','err');});
+}
+function activacionOk(res){
+  toast('✅ Hab '+res.roomId+' activada — '+(res.clienteNombre||''),'ok');
+  closeM('mRoom');
+  rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
+  if(res.printFactura){toast('🧾 Recordá imprimir la factura de la reserva','ok');imprimirFacturaReserva(res);}
+}
+function doActivarReserva(){
+  var el=document.getElementById('rvClave');
+  var clave=el&&el.value?el.value.toUpperCase().trim():'';
+  if(clave.length<6){toast('Digitá la clave de 6 caracteres','err');return;}
+  activarReservaRPC({clave:clave});
+}
+// Stub: el formato del recibo térmico de la reserva se diseña aparte.
+function imprimirFacturaReserva(res){ /* TODO Etapa B (factura): recibo de la reserva */ }
 
 function agregarProductoDesdeEscaner(prod){
   if(!curRoom)return;
