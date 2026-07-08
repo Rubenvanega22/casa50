@@ -5345,12 +5345,16 @@ return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:p
     const corTurno=(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia);
     resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.cantidad||0)*Number(s.precio_unit||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
   });
-  const ajustes=(ajustesDia||[]).map(function(a){return {
+  // Panel "Ajustes del dia" solo para ADMIN (decision Ruben): el detalle NO viaja al
+  // navegador de recepcion. OJO: turnosData[sid].ajusteRecepcion (arriba) SI se calcula
+  // para todos los roles -> la S de recepcion sigue cuadrando; aca solo se oculta el detalle.
+  const esAdminInv = String(p.userRole||'').toUpperCase()==='ADMIN';
+  const ajustes=esAdminInv ? (ajustesDia||[]).map(function(a){return {
     tsMs:Number(a.ts_ms||0), productName:a.product_name||'', cantidad:Number(a.cantidad||0),
     tipo:a.tipo||'', categoria:a.categoria||'', motivo:a.motivo||'',
     quien:a.admin_name||a.recep_name||'', shiftId:a.shift_id||'',
     deltaStock:signoDeltaAjuste(a)
-  };});
+  };}) : [];
   return ok(res,{rows,resumenTurnos,businessDay:bd,ajustes});
 }
 // ==================== SNAPSHOT INMUTABLE DE INVENTARIO POR TURNO ====================
