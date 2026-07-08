@@ -5269,6 +5269,20 @@ async function apiGetProductosMes(p, res) {
   const totalCortesias=(cors||[]).reduce((a,r)=>a+Number(r.cantidad||0)*Number(precioMap[r.product_id]||0),0);
   return ok(res,{yearMonth:ym,totalVentas,totalEf,totalTa,totalNq,totalCortesias});
 }
+// Pieza 3: delta de stock FIRMADO de un ajuste (fila de la tabla `ajustes`), para
+// pintar la evidencia (retiro rojo / ingreso verde). NO se puede usar el signo crudo
+// de `cantidad`: p.ej. roto/vencido/robo guardan cantidad positiva pero RESTAN stock.
+function signoDeltaAjuste(a) {
+  const tipo = String(a.tipo || '');
+  const cant = Number(a.cantidad || 0);
+  if (tipo === 'conteo') return cant;                                   // cantidad ya viene con signo (cantidad_signo)
+  if (tipo === 'ingreso_extra' || tipo === 'venta_duplicada') return Math.abs(cant);  // suman stock
+  if (tipo === 'roto' || tipo === 'vencido' || tipo === 'robo' || tipo === 'salida_extra' || tipo === 'venta_olvidada') return -Math.abs(cant); // restan
+  if (tipo === 'producto') return -Math.abs(cant);                      // cambio: el producto principal se resta
+  if (tipo === 'metodo_pago') return 0;                                 // no afecta stock
+  return cant;
+}
+
 async function apiGetInventarioByDay(p, res) {
   const bd=String(p.businessDay||businessDay(Date.now()));
   const {data:products}=await tSelect('products','*').eq('activo',true).order('categoria').order('nombre');
@@ -5277,6 +5291,8 @@ async function apiGetInventarioByDay(p, res) {
   const {data:sales}=await tSelect('room_products','*').eq('business_day',bd);
   const {data:obs}=await tSelect('product_shift_obs','*').eq('business_day',bd);
   const {data:movements}=await tSelect('stock_movements','*').eq('business_day',bd);
+  // Pieza 3: ajustes admin del dia (evidencia visible del descuadre).
+  const {data:ajustesDia}=await tSelect('ajustes','*').eq('business_day',bd).order('ts_ms',{ascending:false});
   const {data:snapsRows}=await tSelect('shift_inventory_start','shift_id,product_id,saldo_inicial').eq('business_day',bd);
   const snaps={};(snapsRows||[]).forEach(s=>{if(!snaps[s.shift_id])snaps[s.shift_id]={};snaps[s.shift_id][s.product_id]=Number(s.saldo_inicial);});
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
@@ -5313,6 +5329,13 @@ shifts.forEach(function(sid){
   var trasladoTurno=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
   var devolucionTurno=movsSid.filter(m=>m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
   turnosData[sid].trasladoRecepcion=trasladoTurno-devolucionTurno;
+  // Ajuste por CONTEO de recepcion en este turno: mueve stock_actual pero NO deja
+  // fila en room_products, asi que la reconstruccion de la S no lo veia -> descuadre
+  // falso. Solo 'conteo': venta_olvidada/venta_duplicada/producto YA entran por la V
+  // (escriben room_products). BODEGA no aplica a la S (afecta SALDO BOD, stock vivo).
+  turnosData[sid].ajusteRecepcion=(ajustesDia||[])
+    .filter(a=>a.product_id===prod.id&&a.shift_id===sid&&a.categoria==='RECEPCION'&&String(a.tipo||'')==='conteo')
+    .reduce((acc,a)=>acc+signoDeltaAjuste(a),0);
 });
 return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial:saldoInicialReal,saldoActual:Number(prod.stock_actual||0),stockBodega:Number(prod.stock_bodega||0),turnos:turnosData};
   });
@@ -5322,7 +5345,13 @@ return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:p
     const corTurno=(sales||[]).filter(s=>s.shift_id===sid&&s.is_cortesia);
     resumenTurnos[sid]={totalVendido:venTurno.reduce((a,s)=>a+Number(s.total||0),0),totalEf:venTurno.filter(s=>s.pay_method==='EFECTIVO').reduce((a,s)=>a+Number(s.total||0),0),totalTa:venTurno.filter(s=>s.pay_method==='TARJETA').reduce((a,s)=>a+Number(s.total||0),0),totalNq:venTurno.filter(s=>s.pay_method==='NEQUI').reduce((a,s)=>a+Number(s.total||0),0),totalCortesias:corTurno.reduce((a,s)=>a+Number(s.cantidad||0)*Number(s.precio_unit||0),0),cortesiasDetalle:corTurno.map(s=>({nombre:s.product_name||'',cantidad:Number(s.cantidad||0),destinatario:s.cortesia_destinatario||''})),observacion:((obs||[]).find(o=>o.shift_id===sid)||{}).observacion||''};
   });
-  return ok(res,{rows,resumenTurnos,businessDay:bd});
+  const ajustes=(ajustesDia||[]).map(function(a){return {
+    tsMs:Number(a.ts_ms||0), productName:a.product_name||'', cantidad:Number(a.cantidad||0),
+    tipo:a.tipo||'', categoria:a.categoria||'', motivo:a.motivo||'',
+    quien:a.admin_name||a.recep_name||'', shiftId:a.shift_id||'',
+    deltaStock:signoDeltaAjuste(a)
+  };});
+  return ok(res,{rows,resumenTurnos,businessDay:bd,ajustes});
 }
 // ==================== SNAPSHOT INMUTABLE DE INVENTARIO POR TURNO ====================
 // Invocado SOLO al primer LOGIN de RECEPTION de cada (business_day, shift_id).
@@ -8048,6 +8077,7 @@ async function apiAjusteInventarioV2(p, res) {
   const cantidad = Number(p.cantidad||0);
   const motivo = String(p.motivo||'').trim();
 
+  if(!motivo) return err(res,'Motivo requerido');  // decision Ruben: motivo obligatorio (punto de verdad)
   if(!['BODEGA','RECEPCION'].includes(categoria)) return err(res,'Categoria invalida (solo BODEGA o RECEPCION)');
   if(!tipo) return err(res,'Tipo requerido');
   if(!productId) return err(res,'Producto requerido');
@@ -8320,7 +8350,11 @@ async function apiAjusteInventarioV2(p, res) {
     cantidad: cantidad,
     afectaCuadre: afectaCuadre,
     valorAfectado: valorAfectado,
-    nuevoStockBodega: nuevoStockBod
+    nuevoStockBodega: nuevoStockBod,
+    // Pieza 1: dia/turno reales con que quedo estampado el movimiento, para que
+    // el front recargue ESE dia y avise si difiere del que se estaba mirando.
+    businessDay: businessDayAj,
+    shiftId: shiftAj
   });
 }
 
