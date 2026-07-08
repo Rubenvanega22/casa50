@@ -5329,6 +5329,13 @@ shifts.forEach(function(sid){
   var trasladoTurno=movsSid.filter(m=>m.tipo==='traslado_recepcion').reduce((a,m)=>a+Number(m.cantidad||0),0);
   var devolucionTurno=movsSid.filter(m=>m.tipo==='devolucion_bodega').reduce((a,m)=>a+Number(m.cantidad||0),0);
   turnosData[sid].trasladoRecepcion=trasladoTurno-devolucionTurno;
+  // Ajuste por CONTEO de recepcion en este turno: mueve stock_actual pero NO deja
+  // fila en room_products, asi que la reconstruccion de la S no lo veia -> descuadre
+  // falso. Solo 'conteo': venta_olvidada/venta_duplicada/producto YA entran por la V
+  // (escriben room_products). BODEGA no aplica a la S (afecta SALDO BOD, stock vivo).
+  turnosData[sid].ajusteRecepcion=(ajustesDia||[])
+    .filter(a=>a.product_id===prod.id&&a.shift_id===sid&&a.categoria==='RECEPCION'&&String(a.tipo||'')==='conteo')
+    .reduce((acc,a)=>acc+signoDeltaAjuste(a),0);
 });
 return{id:prod.id,nombre:prod.nombre,categoria:prod.categoria||'',codigoBarras:prod.codigo_barras||'',precio:Number(prod.precio||0),stockMinimo:Number(prod.stock_minimo||5),saldoInicial:saldoInicialReal,saldoActual:Number(prod.stock_actual||0),stockBodega:Number(prod.stock_bodega||0),turnos:turnosData};
   });

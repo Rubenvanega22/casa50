@@ -13514,6 +13514,8 @@ function renderInventario(inv,day){
       h+='<span style="color:#e5e7eb;font-weight:600;flex:1">'+esc(a.productName||'')+'</span>';
       h+='<span style="color:#9ca3af">'+hora+'</span>';
       h+='<span style="color:#9ca3af">'+esc(a.quien||'')+'</span>';
+      var lugar=a.categoria==='BODEGA'?'BOD':'REC';
+      h+='<span style="color:#6b7280;font-weight:700">['+lugar+']</span>';
       h+='<span style="color:#6b7280">'+(snAj[a.shiftId]||'')+'</span>';
       h+='</div>';
       if(a.motivo){h+='<div style="font-size:10px;color:#9ca3af;padding:2px 8px 6px 12px">'+esc(a.motivo)+'</div>';}
@@ -13560,8 +13562,9 @@ function renderInventario(inv,day){
     var sids=['SHIFT_1','SHIFT_2','SHIFT_3'];
     var keys=['S1','S2','S3'];
     for(var i=0;i<3;i++){
-      var td2=r.turnos[sids[i]]||{ventas:0,cortesias:0,trasladoRecepcion:0};
-      sa=sa+Number(td2.trasladoRecepcion||0)-Number(td2.ventas||0)-Number(td2.cortesias||0);
+      var td2=r.turnos[sids[i]]||{ventas:0,cortesias:0,trasladoRecepcion:0,ajusteRecepcion:0};
+      // + ajusteRecepcion (conteos RECEPCION del turno): misma formula que la S, para que la G cuadre con la suma de las S.
+      sa=sa+Number(td2.trasladoRecepcion||0)-Number(td2.ventas||0)-Number(td2.cortesias||0)+Number(td2.ajusteRecepcion||0);
       grp[fw][keys[i]]+=sa;
     }
   });
@@ -13601,7 +13604,8 @@ function renderInventario(inv,day){
        var traslado=td.trasladoRecepcion||0;
         var eTot=traslado;
         var eTotStr=eTot>0?'<span style="color:#22c55e;font-weight:700">+'+eTot+'</span>':'<span style="color:#2e2e3a">—</span>';
-       saldoAcum=saldoAcum+eTot-Number(td.ventas||0)-Number(td.cortesias||0);
+       // + ajusteRecepcion: ajuste por conteo de recepcion del turno (evita descuadre falso).
+       saldoAcum=saldoAcum+eTot-Number(td.ventas||0)-Number(td.cortesias||0)+Number(td.ajusteRecepcion||0);
         var saldoColor=saldoAcum<=0?'#ef4444':saldoAcum<=r.stockMinimo?'#f59e0b':'#22c55e';
         var shiftNum=shiftOrder[sh.id]||1;
         var sStr=shiftNum<=activeShiftNum?'<span style="color:'+saldoColor+';font-weight:700">'+saldoAcum+'</span>':'<span style="color:#2e2e3a">—</span>';
