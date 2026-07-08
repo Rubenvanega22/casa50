@@ -393,6 +393,7 @@ module.exports = async function handler(req, res) {
       case 'getRooms':          return await apiGetRooms(req, res);
       case 'login':             return await apiLogin(payload, res);
       case 'checkIn':           return await apiCheckIn(payload, res);
+      case 'activarReserva':    return await apiActivarReserva(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
       case 'extendTime':        return await apiExtendTime(payload, res);
       case 'horaGratis':        return await apiHoraGratis(payload, res);
@@ -1032,6 +1033,94 @@ async function apiCheckIn(p, res) {
 
   await openCashDrawer();
   return ok(res, { roomId, total, change: changeGiven, checkInMs: now, dueMs });
+}
+
+// ==================== ACTIVAR RESERVA (Etapa B reservas<->recepcion) ====================
+// RPC hermano de apiCheckIn. La reserva ya se pago online (Wompi); aca solo se ACTIVA:
+// transicion atomica de la habitacion (fix TOCTOU) + venta con origin='WOMPI' SIN cobro
+// en caja (el dinero ya entro online -> no debe inflar el efectivo esperado del turno).
+// El precio/duracion salen de la reserva: NO se re-cotiza (lo pagado es autoridad).
+async function apiActivarReserva(p, res) {
+  const now = Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
+  const userName = String(p.userName || '').trim();
+  const clave = String(p.clave || '').toUpperCase().trim();
+  const reservaId = String(p.reservaId || '').trim();
+  if (!userName) return err(res, 'Nombre requerido');
+  if (!clave && !reservaId) return err(res, 'Clave o reservaId requerido');
+
+  // 1) Reserva PAGADA sin activar, de ESTE motel. app_reservas NO es tenant -> motel_id explicito.
+  let q = supabase.from('app_reservas')
+    .select('id, habitacion, categoria, duracion, precio, clave, wompi_transaction_id, app_usuarios(nombre)')
+    .eq('motel_id', MOTEL_ID).eq('estado', 'PAGADA').is('activacion_ms', null);
+  q = reservaId ? q.eq('id', reservaId) : q.eq('clave', clave);
+  const { data: reservas } = await q.limit(2);
+  if (!reservas || !reservas.length) return err(res, 'Reserva no encontrada, ya activada o clave invalida');
+  if (reservas.length > 1) return err(res, 'Clave ambigua — contactar soporte'); // colision improbable
+  const reserva = reservas[0];
+
+  const roomId = String(reserva.habitacion || '').trim();
+  if (!roomId) return err(res, 'La reserva no tiene habitacion asignada');
+  const room = await getRoom(roomId);
+  if (!room) return err(res, 'Habitacion no existe: ' + roomId);
+  if (room.disabled) return err(res, 'Habitacion deshabilitada');
+
+  // 2) Duracion/precio DESDE la reserva (ya pagado online: no re-cotizar).
+  const durationHrs = parseInt(String(reserva.duracion||'').replace(/\D/g,''), 10) || 0;
+  if (![3,6,8,12].includes(durationHrs)) return err(res, 'Duracion de la reserva invalida: ' + reserva.duracion);
+  const precio = Number(reserva.precio || 0);
+  const dueMs = now + durationHrs * 3600000;
+
+  const PRICING = await getPricing(MOTEL_ID);
+  const cfg = cfgFor(PRICING, room.category);
+  const people = Number(cfg.included || 2);  // Decision 2: personas = default de la categoria (extras van por addExtraPerson).
+
+  // 3) Transicion ATOMICA (fix TOCTOU): el UPDATE solo pega si la hab SIGUE AVAILABLE.
+  //    .select() devuelve las filas afectadas: 0 = otra recepcionista la ocupo recien.
+  const { data: updated } = await tUpdate('rooms', {
+    state:'OCCUPIED', state_since_ms:now, people,
+    check_in_ms:now, due_ms:dueMs,
+    arrival_type:'RESERVA', arrival_plate:'',
+    alarm_silenced_ms:0, alarm_silenced_for_due_ms:0,
+    checkout_obs:'', contaminated_since_ms:0, retoque:false,
+    pay_method:'WOMPI',
+    updated_at:new Date().toISOString()
+  }).eq('room_id', roomId).eq('state', 'AVAILABLE').select('room_id');
+  if (!updated || !updated.length) {
+    return err(res, `Hab ${roomId} ya no esta disponible (se ocupo recien)`);
+  }
+
+  // 4) Venta origin='WOMPI' SIN campos de cobro (pago online). pay_method='WOMPI'
+  //    -> queda fuera de EF/TA/NQ del cuadre; total sigue sumando al revenue.
+  await tInsert('sales', {
+    ts_ms:now, business_day:bDay, shift_id:shift,
+    user_role:'RECEPTION', user_name:userName, type:'SALE',
+    room_id:roomId, category:room.category, duration_hrs:durationHrs,
+    base_price:precio, people, included_people:people,
+    extra_people:0, extra_people_value:0, extra_hours:0, extra_hours_value:0, total:precio,
+    arrival_type:'RESERVA', arrival_plate:'',
+    pay_method:'WOMPI', paid_with:0, change_given:0,
+    pay_method_2:'', amount_1:0, amount_2:0, amount_3:0,
+    check_in_ms:now, due_ms:dueMs,
+    origin:'WOMPI', reserva_id:reserva.id, wompi_transaction_id:reserva.wompi_transaction_id||''
+  });
+
+  // 5) Historial de estado.
+  await tInsert('state_history', {
+    ts_ms:now, business_day:bDay, shift_id:shift,
+    user_role:'RECEPTION', user_name:userName, room_id:roomId,
+    from_state:'AVAILABLE', to_state:'OCCUPIED', people,
+    meta_json: JSON.stringify({ origin:'WOMPI', reservaId:reserva.id, clave:reserva.clave, precio, durationHrs, dueMs, checkInMs:now })
+  });
+
+  // 6) Marcar la reserva activada (guarda condicional: solo si seguia sin activar).
+  await supabase.from('app_reservas')
+    .update({ activacion_ms: now })
+    .eq('id', reserva.id).eq('motel_id', MOTEL_ID).is('activacion_ms', null);
+
+  const clienteNombre = (reserva.app_usuarios && reserva.app_usuarios.nombre) || 'cliente';
+  return ok(res, { roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, printFactura:true });
 }
 
 // ==================== CHECK-OUT ====================
@@ -2548,7 +2637,7 @@ async function apiGetDailyCuadre(p, res) {
   const bDay=String(p.businessDay||defaultDay);
 
   const[salesRes,taxiRes,extraRes,barRes,gastoRes,shiftLogRes]=await Promise.all([
-    tSelect('sales','type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original').eq('business_day',bDay),
+    tSelect('sales','type,total,pay_method,extra_people_value,shift_id,room_id,amount_1,amount_2,amount_3,anulada,devolucion_efectivo,devolucion_metodo_original,origin').eq('business_day',bDay),
     tSelect('taxi_expenses','amount,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     tSelect('extra_staff','payment,shift_id,anulada').eq('business_day',bDay).eq('anulada',false),
     tSelect('bar_sales','amount_cash,amount_card,amount_nequi,shift_id').eq('business_day',bDay),
@@ -2570,6 +2659,9 @@ async function apiGetDailyCuadre(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
+    // Etapa B: venta WOMPI (pago online) NO entra al cuadre de caja — el dinero no
+    // paso por la recepcionista. El desglose visual "Online/Wompi" es Etapa D.
+    if(String(r.origin||'').toUpperCase()==='WOMPI') return;
     // Cortesia PRE-corte: excluir entero. POST-corte: la hab base aporta 0
     // (habVal=t-epv=0 tras Parte 1) y personas/horas suman. (Cuadre sin roomsSold.)
     if(cortesiaIds.has(String(r.room_id)) && String(bDay) < CORTESIA_COBRO_DESDE) return;
