@@ -14525,6 +14525,8 @@ function ajGuardar(){
   if(!tipo){toast('Selecciona un escenario','err');return;}
   var escObj = (AJ_ESCENARIOS[tab]||[]).find(function(e){return e.tipo===tipo;});
   if(!escObj){toast('Escenario inválido','err');return;}
+  // Decision Ruben: motivo obligatorio en todos los flujos de ajuste (motivo ya viene .trim()).
+  if(!motivo){toast('El motivo del ajuste es obligatorio','err');return;}
 
   // Flujo especial: cambio de metodo de pago de venta de bar — usa apiChangePaymentMethodBar
   if(escObj.pide === 'roomProductPicker'){

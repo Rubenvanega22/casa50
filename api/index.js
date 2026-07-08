@@ -8070,6 +8070,7 @@ async function apiAjusteInventarioV2(p, res) {
   const cantidad = Number(p.cantidad||0);
   const motivo = String(p.motivo||'').trim();
 
+  if(!motivo) return err(res,'Motivo requerido');  // decision Ruben: motivo obligatorio (punto de verdad)
   if(!['BODEGA','RECEPCION'].includes(categoria)) return err(res,'Categoria invalida (solo BODEGA o RECEPCION)');
   if(!tipo) return err(res,'Tipo requerido');
   if(!productId) return err(res,'Producto requerido');
