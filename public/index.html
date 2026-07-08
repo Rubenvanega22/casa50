@@ -13409,10 +13409,13 @@ function editPrecioCompra(productId, precioActual, nombre){
   );
 }
 function loadInventarioHoy(){
-  var day=sess.businessDay||'';
-  var el=document.getElementById('invDay');if(el)el.value=day;
-  var lbl=document.getElementById('invDayLabel');if(lbl)lbl.textContent='Inventario de hoy: '+day;
-  rpc('getInventarioByDay',{businessDay:day,userRole:sess.userRole},function(inv){renderInventario(inv,day);});
+  // Pieza 2: dia operativo VIVO (server), no sess.businessDay congelado en el login.
+  rpc('getInventarioByDay',{businessDay:'',userRole:sess.userRole},function(inv){
+    var day=inv.businessDay||sess.businessDay||'';
+    var el=document.getElementById('invDay');if(el)el.value=day;
+    var lbl=document.getElementById('invDayLabel');if(lbl)lbl.textContent='Inventario de hoy: '+day;
+    renderInventario(inv,day);
+  });
 }
 function loadInventarioFecha(){
   var day=(document.getElementById('invDay')||{}).value||sess.businessDay;
@@ -13437,14 +13440,15 @@ function loadProductos(){
     productosLista=data.products||[];
     renderProductos();
     if(isAdmin||sess.userRole==='RECEPTION'){
-    var day=sess.businessDay||'';
-      var el=document.getElementById('invDay');if(el)el.value=day;
-      var lbl=document.getElementById('invDayLabel');if(lbl)lbl.textContent='Inventario de hoy: '+day;
-      rpc('getInventarioByDay',{businessDay:day,userRole:sess.userRole},function(inv){
+      // Pieza 2: dia operativo VIVO (server), no sess.businessDay congelado.
+      rpc('getInventarioByDay',{businessDay:'',userRole:sess.userRole},function(inv){
+        var day=inv.businessDay||sess.businessDay||'';
+        var el=document.getElementById('invDay');if(el)el.value=day;
+        var lbl=document.getElementById('invDayLabel');if(lbl)lbl.textContent='Inventario de hoy: '+day;
         renderInventario(inv,day);
       });
-      // Cargar nombre recepcionista actual
-      rpc('metrics',{businessDay:day,shiftId:sess.shiftId},function(m){
+      // Cargar nombre recepcionista actual (usa el dia de sesion, no cambia inventario)
+      rpc('metrics',{businessDay:sess.businessDay,shiftId:sess.shiftId},function(m){
         var el=document.getElementById('invRecepNombre');
         if(el)el.textContent=(m.shiftUser||'—');
       });
@@ -13493,6 +13497,29 @@ function renderInventario(inv,day){
   h+='<div style="font-size:20px;font-weight:900;color:#f97316">Cargando...</div>';
   h+='</div>';
   h+='</div>';
+  // Pieza 3: evidencia visible de los ajustes del dia (retiros rojo / ingresos verde).
+  var ajs=inv.ajustes||[];
+  if(ajs.length){
+    var snAj={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
+    h+='<div style="background:#18181f;border:1px solid #3a3a45;border-radius:10px;padding:10px;margin-bottom:12px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#e5e7eb;text-transform:uppercase;margin-bottom:8px">🔧 Ajustes del día ('+ajs.length+')</div>';
+    ajs.forEach(function(a){
+      var delta=Number(a.deltaStock||0);
+      var col=delta<0?'#ef4444':(delta>0?'#22c55e':'#9ca3af');
+      var bg=delta<0?'rgba(239,68,68,.12)':(delta>0?'rgba(34,197,94,.1)':'rgba(107,114,128,.1)');
+      var signo=delta>0?'+'+delta:String(delta);
+      var hora=a.tsMs?new Date(a.tsMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'—';
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:'+(a.motivo?'0':'4px')+';background:'+bg+';border-left:3px solid '+col+';border-radius:0 6px 6px 0;font-size:11px">';
+      h+='<b style="color:'+col+';min-width:34px;font-size:12px">'+signo+'</b>';
+      h+='<span style="color:#e5e7eb;font-weight:600;flex:1">'+esc(a.productName||'')+'</span>';
+      h+='<span style="color:#9ca3af">'+hora+'</span>';
+      h+='<span style="color:#9ca3af">'+esc(a.quien||'')+'</span>';
+      h+='<span style="color:#6b7280">'+(snAj[a.shiftId]||'')+'</span>';
+      h+='</div>';
+      if(a.motivo){h+='<div style="font-size:10px;color:#9ca3af;padding:2px 8px 6px 12px">'+esc(a.motivo)+'</div>';}
+    });
+    h+='</div>';
+  }
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-bottom:10px">';
   h+='<span style="color:#9ca3af">Referencias:</span>';
   h+='<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:3px"></span>Efectivo</span>';
@@ -14550,9 +14577,16 @@ function ajGuardar(){
   conf('¿Confirmar este ajuste?',function(){
     rpc('ajusteInventarioV2', payload,
       function(res){
-        toast('✓ Ajuste registrado'+(res.afectaCuadre?' y cuadre actualizado':''),'ok');
+        // Pieza 1: comparar el dia real del movimiento con el que se estaba mirando.
+        var diaMirado = (document.getElementById('invDay')||{}).value || sess.businessDay;
+        var diaReal   = res.businessDay || diaMirado;
         closeM('mAjusteInv');
-        loadProductos();
+        loadProductos();  // con dia vivo (Pieza 2) recarga el dia real del ajuste
+        if(diaReal !== diaMirado){
+          toast('✓ Ajuste registrado en el día '+diaReal+' — estabas viendo '+diaMirado,'ok');
+        } else {
+          toast('✓ Ajuste registrado'+(res.afectaCuadre?' y cuadre actualizado':''),'ok');
+        }
       },
       function(e){toast(e.message||String(e),'err');}
     );
@@ -14852,7 +14886,7 @@ function openAnalisisProductos(){
   var ym=bDay?bDay.substring(0,7):'';
   Promise.all([
     new Promise(function(r){rpc('getProducts',{},r,function(){r({products:[]});});}),
-    new Promise(function(r){rpc('getInventarioByDay',{businessDay:bDay,userRole:sess.userRole},r,function(){r({rows:[]});});}),
+    new Promise(function(r){rpc('getInventarioByDay',{businessDay:'',userRole:sess.userRole},r,function(){r({rows:[]});});}),
     new Promise(function(r){rpc('monthMetrics',{yearMonth:ym},r,function(){r({});});})
   ]).then(function(res){
     var prods=res[0].products||[];
