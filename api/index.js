@@ -5932,7 +5932,12 @@ async function apiGetPrintTurno(p, res) {
       const entsUntil = (movements||[]).filter(m => m.product_id === prod.id && m.shift_id === s && m.tipo === 'traslado_recepcion').reduce((a,m) => a + Number(m.cantidad||0), 0);
       const venUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && !x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
       const corUntil = (salesDay||[]).filter(x => x.product_id === prod.id && x.shift_id === s && x.is_cortesia).reduce((a,x) => a + Number(x.cantidad||0), 0);
-      saldoTurno = saldoTurno + entsUntil - venUntil - corUntil;
+      // Ajuste por conteo de recepcion del turno: mueve stock_actual sin dejar venta,
+      // asi que la S del papel quedaba vieja (bug). Se suma igual que en renderInventario
+      // (papel == pantalla). Fuente: recepcion_conteo (ya cargado en movements), SIN corte
+      // de fecha para coincidir con la pantalla (la tabla `ajustes` guarda la misma cantidad).
+      const conteoUntil = (movements||[]).filter(m => m.product_id === prod.id && m.shift_id === s && m.tipo === 'recepcion_conteo').reduce((a,m) => a + Number(m.cantidad||0), 0);
+      saldoTurno = saldoTurno + entsUntil + conteoUntil - venUntil - corUntil;
     }
 
     return {
