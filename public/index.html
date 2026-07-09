@@ -5102,10 +5102,7 @@ sl.forEach(function(s){
     h+=_cRow('P. Adicional',tj_padd,'#3b82f6');
     h+=_cRow('H. Adicional',tj_hadd,'#3b82f6');
     h+=_cRow('Bar (productos)',barTj,'#3b82f6');
-    if(wompi>0){
-      h+=_cRow('↳ Reservas (app)',wompi,'#ec4899');
-      sl.filter(function(s){return s.payMethod==='WOMPI';}).forEach(function(s){h+='<div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;padding:1px 0 1px 16px"><span>Hab '+esc(s.roomId)+(s.category?' '+esc(s.category):'')+'</span><span style="color:#ec4899">'+fmt(Number(s.total||0))+'</span></div>';});
-    }
+    if(wompi>0) h+=_cRow('↳ Reservas (app)',wompi,'#ec4899');   // solo total; detalle en "Ver detalle" del Total Tarjeta
    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0)+wompi)+'</span><button class="btn bb xs" onclick="toggleDesgloseC(\'tj\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_tj" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'TARJETA',Number(barTj)||0,'#3b82f6');
@@ -5322,10 +5319,21 @@ function _desgloseRows(sl,pm,barVal,color){
       totalDevolucionesEfe+=Number(s.total||0);
     });
   }
+  // Etapa D: Reservas (app) / Wompi — sub-seccion DENTRO de Tarjeta (solo pm TARJETA).
+  // WOMPI nunca es MIXTO -> filtro estricto, sin colision con amount_3 (Nequi).
+  var wompiSales=(pm==='TARJETA')?sl.filter(function(s){return s.payMethod==='WOMPI';}):[];
+  var totWompi=0;
+  if(wompiSales.length){
+    h+='<div style="font-size:10px;font-weight:700;color:#ec4899;text-transform:uppercase;margin:8px 0 5px">Reservas (app)</div>';
+    wompiSales.forEach(function(s){
+      totWompi+=Number(s.total||0);
+      h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(46,46,58,.4)"><span style="color:#9ca3af">Hab '+s.roomId+(s.category?' — '+esc(s.category):'')+'</span><span style="color:#ec4899">'+fmt(Number(s.total||0))+'</span></div>';
+    });
+  }
   var tot=ventas.reduce(function(a,s){return a+Number(s.total||0);},0)+exts.reduce(function(a,s){return a+Number(s.total||0);},0)+barVal;
   // Sumar las cruzadas de esta seccion (TARJETA/NEQUI - banco tiene la plata) y restar las devoluciones (EFECTIVO - caja entrego)
   var totalCruzadasEnSeccion=cruzadasEnSeccion.reduce(function(a,s){return a+Number(s.total||0);},0);
-  tot+=totalCruzadasEnSeccion-totalDevolucionesEfe+totalRefundsManuales;
+  tot+=totalCruzadasEnSeccion-totalDevolucionesEfe+totalRefundsManuales+totWompi;   // Reservas (app) dentro del Total Tarjeta
   h+='<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:6px 0;margin-top:4px;border-top:1px solid rgba(46,46,58,.6)">';
   h+='<span>Total</span><span style="color:'+color+'">'+fmt(tot)+'</span>';
   h+='</div>';
@@ -9322,24 +9330,9 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#3b82f6');
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&s.type==='EXTENSION';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0);},'#3b82f6');
     dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).shiftBarTarjeta||0);},'#3b82f6');
-    // Etapa D: Reservas (app) / Wompi — sub-linea DENTRO de Tarjeta, con detalle por hab.
-    // Filtro ESTRICTO por payMethod==='WOMPI' (nunca es MIXTO) -> no colisiona con amount_3 (Nequi).
-    (function(){
-      _admDesKey++;
-      var vals=ms.map(function(m,i){return (m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i]&&s.payMethod==='WOMPI';}).reduce(function(a,s){return a+Number(s.total||0);},0);});
-      var total=vals.reduce(function(a,b){return a+b;},0);
-      h+='<tr><td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;font-weight:700;color:#ec4899">🧾 Reservas (app)</td>';
-      vals.forEach(function(v,i){
-        var sid=shifts[i];
-        var items=(ms[i].allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid&&s.payMethod==='WOMPI';});
-        var cellId='admW_'+_admDesKey+'_'+i;
-        var des='';items.forEach(function(s){des+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:#9ca3af">Hab '+esc(s.roomId)+' — '+esc(s.category||'')+'</span><span style="color:#ec4899">'+fmt(Number(s.total||0))+'</span></div>';});
-        h+='<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:#ec4899;vertical-align:top">'+fmt(v);
-        if(items.length){h+='<br><button onclick="toggleAdmDesCell(\''+cellId+'\')" style="font-size:9px;padding:2px 7px;margin-top:3px;background:rgba(236,72,153,.15);border:1px solid #ec4899;color:#ec4899;border-radius:4px;cursor:pointer">detalle</button><div id="'+cellId+'" style="display:none;text-align:left;margin-top:6px;padding:6px;background:#22222c;border-radius:6px">'+des+'</div>';}
-        h+='</td>';
-      });
-      h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;font-weight:800;color:#ec4899">'+fmt(total)+'</td></tr>';
-    })();
+    // Etapa D: Reservas (app) / Wompi — sub-fila DENTRO de Tarjeta (solo total; el detalle
+    // por hab vive en el popup "detalle" del Total Tarjeta, via _desgloseRows).
+    dataRow('🧾 Reservas (app)',function(m,sl){return sl.filter(function(s){return s.payMethod==='WOMPI';}).reduce(function(a,s){return a+Number(s.total||0);},0);},'#ec4899');
    dataRowTotal('Total Tarjeta','TARJETA',function(m){return Number((m.totals||{}).shiftBarTarjeta||0)+Number((m.totals||{}).shiftWompi||0);},'#3b82f6');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">📱 NEQUI</td></tr>';
     dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#a78bfa');
