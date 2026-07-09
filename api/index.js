@@ -627,7 +627,30 @@ async function apiBootstrap(req, res) {
   });
 }
 
+// Etapa C: auto-activacion por no-show. Disparo perezoso desde el polling de recepcion.
+// Cada apiGetRooms revisa las reservas PAGADAS sin activar cuyo cronometro ya vencio
+// (pago_ms + llegada_min) y las activa via el mismo nucleo (venta WOMPI, activada_por=
+// 'SISTEMA (no-show)'). El doble candado del core evita dobles activaciones entre pollers.
+async function autoActivarReservasVencidas(now) {
+  const { data: pend } = await supabase.from('app_reservas')
+    .select('id, pago_ms, llegada_min')
+    .eq('motel_id', MOTEL_ID).eq('estado', 'PAGADA').is('activacion_ms', null);
+  const vencidas = (pend || []).filter(rv => now >= Number(rv.pago_ms||0) + Number(rv.llegada_min||0) * 60000);
+  if (!vencidas.length) return;
+  const bDay = businessDay(now), shift = currentShiftId(now);
+  for (const rv of vencidas) {
+    // Resultado ignorado a proposito: si activo, el load de rooms de abajo lo refleja; si la
+    // hab no estaba disponible, el claim se revirtio y la reserva sigue viva (VENCIDA).
+    try { await activarReservaCore({ reservaId: rv.id, userName: 'SISTEMA (no-show)', bDay, shift, now }); }
+    catch (e) { /* nunca romper el getRooms por una activacion fallida */ }
+  }
+}
+
 async function apiGetRooms(req, res) {
+  // Etapa C: auto-activar las vencidas ANTES de leer el estado, para que la respuesta ya
+  // refleje la habitacion ocupada y la reserva ya no aparezca como pendiente.
+  await autoActivarReservasVencidas(Date.now());
+
   const { data: rooms } = await tSelect('rooms','*').eq('archived', false).order('floor').order('room_id');
 
   // Cargar danos activos por habitacion (Fase 3 mantenimiento)
@@ -1036,49 +1059,56 @@ async function apiCheckIn(p, res) {
   return ok(res, { roomId, total, change: changeGiven, checkInMs: now, dueMs });
 }
 
-// ==================== ACTIVAR RESERVA (Etapa B reservas<->recepcion) ====================
-// RPC hermano de apiCheckIn. La reserva ya se pago online (Wompi); aca solo se ACTIVA:
-// transicion atomica de la habitacion (fix TOCTOU) + venta con origin='WOMPI' SIN cobro
-// en caja (el dinero ya entro online -> no debe inflar el efectivo esperado del turno).
-// El precio/duracion salen de la reserva: NO se re-cotiza (lo pagado es autoridad).
-async function apiActivarReserva(p, res) {
-  const now = Date.now();
-  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
-  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
-  const userName = String(p.userName || '').trim();
-  const clave = String(p.clave || '').toUpperCase().trim();
-  const reservaId = String(p.reservaId || '').trim();
-  if (!userName) return err(res, 'Nombre requerido');
-  if (!clave && !reservaId) return err(res, 'Clave o reservaId requerido');
-
+// ==================== ACTIVAR RESERVA (Etapa B/C reservas<->recepcion) ====================
+// Nucleo compartido por la activacion MANUAL (apiActivarReserva, con clave) y la AUTO por
+// no-show (Etapa C, desde apiGetRooms, por reservaId). NO toca `res`: devuelve un objeto
+// resultado {ok:true, comprobante,...} o {ok:false, code, message}.
+// La reserva ya se pago online (Wompi): venta origin='WOMPI' SIN cobro en caja; precio y
+// duracion salen de la reserva (no se re-cotiza). Doble candado anti-concurrencia:
+//   1) CLAIM: UPDATE app_reservas activacion_ms=now WHERE activacion_ms IS NULL (filas
+//      afectadas). Serializa entre pollers -> solo uno reclama la reserva.
+//   2) UPDATE atomico de rooms WHERE state='AVAILABLE'. Cubre carreras con walk-ins.
+//   Si la hab no estaba disponible -> se REVIERTE el claim (activacion_ms=null) y la reserva
+//   queda viva (sigue vencida/parpadeando VENCIDA), reintentable en el proximo poll.
+async function activarReservaCore({ reservaId, clave, userName, bDay, shift, now }) {
   // 1) Reserva PAGADA sin activar, de ESTE motel. app_reservas NO es tenant -> motel_id explicito.
   let q = supabase.from('app_reservas')
     .select('id, habitacion, categoria, duracion, precio, clave, wompi_transaction_id, app_usuarios(nombre)')
     .eq('motel_id', MOTEL_ID).eq('estado', 'PAGADA').is('activacion_ms', null);
   q = reservaId ? q.eq('id', reservaId) : q.eq('clave', clave);
   const { data: reservas } = await q.limit(2);
-  if (!reservas || !reservas.length) return err(res, 'Reserva no encontrada, ya activada o clave invalida');
-  if (reservas.length > 1) return err(res, 'Clave ambigua — contactar soporte'); // colision improbable
+  if (!reservas || !reservas.length) return { ok:false, code:'NOT_FOUND', message:'Reserva no encontrada, ya activada o clave invalida' };
+  if (reservas.length > 1) return { ok:false, code:'AMBIGUOUS', message:'Clave ambigua — contactar soporte' };
   const reserva = reservas[0];
 
-  const roomId = String(reserva.habitacion || '').trim();
-  if (!roomId) return err(res, 'La reserva no tiene habitacion asignada');
-  const room = await getRoom(roomId);
-  if (!room) return err(res, 'Habitacion no existe: ' + roomId);
-  if (room.disabled) return err(res, 'Habitacion deshabilitada');
+  // 2) CANDADO 1 — CLAIM: activacion_ms=now solo si sigue NULL. 0 filas => otro poller/
+  //    recepcionista ya la reclamo -> abortar sin tocar nada mas.
+  const { data: claimed } = await supabase.from('app_reservas')
+    .update({ activacion_ms: now })
+    .eq('id', reserva.id).eq('motel_id', MOTEL_ID).is('activacion_ms', null)
+    .select('id');
+  if (!claimed || !claimed.length) return { ok:false, code:'ALREADY_CLAIMED', message:'La reserva ya se esta activando' };
+  const revertClaim = async () => {
+    await supabase.from('app_reservas').update({ activacion_ms: null }).eq('id', reserva.id).eq('motel_id', MOTEL_ID);
+  };
 
-  // 2) Duracion/precio DESDE la reserva (ya pagado online: no re-cotizar).
+  // Validar hab + duracion. Si no sirve, revertir el claim (reserva vuelve a estar viva).
+  const roomId = String(reserva.habitacion || '').trim();
   const durationHrs = parseInt(String(reserva.duracion||'').replace(/\D/g,''), 10) || 0;
-  if (![3,6,8,12].includes(durationHrs)) return err(res, 'Duracion de la reserva invalida: ' + reserva.duracion);
+  const room = roomId ? await getRoom(roomId) : null;
+  if (!room || room.disabled || ![3,6,8,12].includes(durationHrs)) {
+    await revertClaim();
+    const code = !room ? 'ROOM_NOT_FOUND' : room.disabled ? 'ROOM_DISABLED' : 'BAD_DURATION';
+    return { ok:false, code, message:'Habitacion o reserva no activable' };
+  }
+
   const precio = Number(reserva.precio || 0);
   const dueMs = now + durationHrs * 3600000;
-
   const PRICING = await getPricing(MOTEL_ID);
   const cfg = cfgFor(PRICING, room.category);
-  const people = Number(cfg.included || 2);  // Decision 2: personas = default de la categoria (extras van por addExtraPerson).
+  const people = Number(cfg.included || 2);  // personas = default de la categoria (extras van por addExtraPerson).
 
-  // 3) Transicion ATOMICA (fix TOCTOU): el UPDATE solo pega si la hab SIGUE AVAILABLE.
-  //    .select() devuelve las filas afectadas: 0 = otra recepcionista la ocupo recien.
+  // 3) CANDADO 2 — UPDATE atomico de rooms: solo pega si la hab SIGUE AVAILABLE.
   const { data: updated } = await tUpdate('rooms', {
     state:'OCCUPIED', state_since_ms:now, people,
     check_in_ms:now, due_ms:dueMs,
@@ -1089,13 +1119,11 @@ async function apiActivarReserva(p, res) {
     updated_at:new Date().toISOString()
   }).eq('room_id', roomId).eq('state', 'AVAILABLE').select('room_id');
   if (!updated || !updated.length) {
-    return err(res, `Hab ${roomId} ya no esta disponible (se ocupo recien)`);
+    await revertClaim();  // la reserva vuelve a estar viva (VENCIDA), reintentable.
+    return { ok:false, code:'ROOM_TAKEN', message:`Hab ${roomId} ya no esta disponible (se ocupo recien)` };
   }
 
-  // 4) Venta origin='WOMPI' SIN campos de cobro (pago online). pay_method='WOMPI'
-  //    -> queda fuera de EF/TA/NQ del cuadre; total sigue sumando al revenue.
-  // .select('id') -> el id de esta venta es el consecutivo del comprobante (RSV-NNNNNN,
-  // estable: la reimpresion consulta la misma fila -> mismo id -> mismo numero).
+  // 4) Venta origin='WOMPI' SIN cobro. .select('id') -> consecutivo del comprobante (RSV-NNNNNN).
   const { data: ventaRows } = await tInsert('sales', {
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:'RECEPTION', user_name:userName, type:'SALE',
@@ -1110,29 +1138,40 @@ async function apiActivarReserva(p, res) {
   }).select('id');
   const saleId = (ventaRows && ventaRows[0]) ? ventaRows[0].id : null;
 
-  // 5) Historial de estado.
+  // 5) Historial de estado (queda registrado quien activo: recepcionista o SISTEMA no-show).
   await tInsert('state_history', {
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:'RECEPTION', user_name:userName, room_id:roomId,
     from_state:'AVAILABLE', to_state:'OCCUPIED', people,
-    meta_json: JSON.stringify({ origin:'WOMPI', reservaId:reserva.id, clave:reserva.clave, precio, durationHrs, dueMs, checkInMs:now })
+    meta_json: JSON.stringify({ origin:'WOMPI', reservaId:reserva.id, clave:reserva.clave, precio, durationHrs, dueMs, checkInMs:now, activadoPor:userName })
   });
 
-  // 6) Marcar la reserva activada (guarda condicional: solo si seguia sin activar).
-  await supabase.from('app_reservas')
-    .update({ activacion_ms: now })
-    .eq('id', reserva.id).eq('motel_id', MOTEL_ID).is('activacion_ms', null);
-
   const clienteNombre = (reserva.app_usuarios && reserva.app_usuarios.nombre) || 'cliente';
-  // Comprobante interno de reserva (soporte para facturacion LOGGRO). Se arma con los
-  // datos de la activacion; el numero deriva del sales.id (estable en reimpresiones).
   const comprobante = {
     comprobanteNum: saleId, activacionMs: now, clave: reserva.clave||'',
     categoria: room.category, durationHrs, precio,
     wompiTransactionId: reserva.wompi_transaction_id||'', roomId,
     shiftId: shift, activadoPor: userName, clienteNombre
   };
-  return ok(res, { roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, printFactura:true, comprobante });
+  return { ok:true, roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, comprobante };
+}
+
+// Activacion MANUAL (recepcion escanea/digita clave). Wrapper fino sobre el nucleo.
+async function apiActivarReserva(p, res) {
+  const now = Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
+  const userName = String(p.userName || '').trim();
+  const clave = String(p.clave || '').toUpperCase().trim();
+  const reservaId = String(p.reservaId || '').trim();
+  if (!userName) return err(res, 'Nombre requerido');
+  if (!clave && !reservaId) return err(res, 'Clave o reservaId requerido');
+  const r = await activarReservaCore({ reservaId, clave, userName, bDay, shift, now });
+  if (!r.ok) {
+    if (r.code === 'ALREADY_CLAIMED') return err(res, 'La reserva ya se activó (o se está activando)');
+    return err(res, r.message || 'No se pudo activar la reserva');
+  }
+  return ok(res, { roomId:r.roomId, reservaId:r.reservaId, clienteNombre:r.clienteNombre, durationHrs:r.durationHrs, dueMs:r.dueMs, precio:r.precio, printFactura:true, comprobante:r.comprobante });
 }
 
 // Comprobante de una reserva ya activada, para REIMPRESION (mismo numero: deriva del
