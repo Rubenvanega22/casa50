@@ -5047,7 +5047,7 @@ function loadCuadre(){
     var loans=(loansData.loans||[]).filter(function(l){return l.shiftId===sess.shiftId&&(!fromMs||Number(l.tsMs||0)>=fromMs);});
     var extras=(extraData.extraStaff||[]).filter(function(e){return e.shiftId===sess.shiftId&&Number(e.payment||0)>0&&(!fromMs||Number(e.tsMs||0)>=fromMs);});
     var taxiList=(m.taxiList||[]).filter(function(tx){return tx.shiftId===sess.shiftId&&(!fromMs||Number(tx.tsMs||0)>=fromMs);});
-    var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0,nq_hab=0,nq_padd=0,nq_hadd=0;
+    var tj_hab=0,tj_padd=0,tj_hadd=0,ef_hab=0,ef_padd=0,ef_hadd=0,nq_hab=0,nq_padd=0,nq_hadd=0,wompi=0;
 sl.forEach(function(s){
       // Saltar cruzadas: el backend ya las sumo a TARJETA/NEQUI y resto del EFECTIVO
       if(s.devolucionEfectivo===true) return;
@@ -5058,6 +5058,7 @@ sl.forEach(function(s){
         // Devolucion: se descuenta de la seccion segun metodo de pago
         if(pm==='TARJETA') tj_hab+=tot;
         else if(pm==='NEQUI') nq_hab+=tot;
+        else if(pm==='WOMPI') wompi+=tot;   // Reservas app: dentro de Tarjeta, nunca efectivo
         else ef_hab+=tot;
         return;
       }
@@ -5065,6 +5066,7 @@ sl.forEach(function(s){
         // Horas adicionales
         if(pm==='TARJETA')tj_hadd+=tot;
         else if(pm==='NEQUI')nq_hadd+=tot;
+        else if(pm==='WOMPI')wompi+=tot;   // Reservas app: dentro de Tarjeta, nunca efectivo
         else if(pm==='MIXTO'){tj_hadd+=Number(s.amount_2||0);nq_hadd+=Number(s.amount_3||0);ef_hadd+=Number(s.amount_1||0);}
         else ef_hadd+=tot;
       } else {
@@ -5073,6 +5075,7 @@ sl.forEach(function(s){
         var base=tot-extraP;if(base<0)base=tot;extraP=base<tot?extraP:0;
         if(pm==='TARJETA'){tj_hab+=base;tj_padd+=extraP;}
         else if(pm==='NEQUI'){nq_hab+=base;nq_padd+=extraP;}
+        else if(pm==='WOMPI'){wompi+=base;}   // Reservas app: dentro de Tarjeta, nunca efectivo
         else if(pm==='MIXTO'){ef_hab+=Number(s.amount_1||0);tj_hab+=Number(s.amount_2||0);nq_hab+=Number(s.amount_3||0);}
         else{ef_hab+=base;ef_padd+=extraP;}
       }
@@ -5099,7 +5102,11 @@ sl.forEach(function(s){
     h+=_cRow('P. Adicional',tj_padd,'#3b82f6');
     h+=_cRow('H. Adicional',tj_hadd,'#3b82f6');
     h+=_cRow('Bar (productos)',barTj,'#3b82f6');
-   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0))+'</span><button class="btn bb xs" onclick="toggleDesgloseC(\'tj\')">Ver detalle</button></div></div>';
+    if(wompi>0){
+      h+=_cRow('↳ Reservas (app)',wompi,'#ec4899');
+      sl.filter(function(s){return s.payMethod==='WOMPI';}).forEach(function(s){h+='<div style="display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;padding:1px 0 1px 16px"><span>Hab '+esc(s.roomId)+(s.category?' '+esc(s.category):'')+'</span><span style="color:#ec4899">'+fmt(Number(s.total||0))+'</span></div>';});
+    }
+   h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><span style="font-weight:700">Total Tarjeta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:800;color:#3b82f6" id="totalTjDisp">'+fmt(tj_hab+tj_padd+tj_hadd+(Number(barTj)||0)+wompi)+'</span><button class="btn bb xs" onclick="toggleDesgloseC(\'tj\')">Ver detalle</button></div></div>';
 h+='<div id="desgloseC_tj" style="display:none;background:#22222c;border-radius:8px;padding:10px;margin-top:4px">';
 h+=_desgloseRows(sl,'TARJETA',Number(barTj)||0,'#3b82f6');
 h+='</div></div>';
@@ -5139,7 +5146,7 @@ h+='</div></div>';
     h+='<div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:#9ca3af;font-size:12px">Total productos</span><span style="font-weight:700;color:#f97316">'+fmt(totProd)+'</span></div>';
     h+='</div>';
    // Totales consolidados (nuevo diseño)
-    var totalTarjeta = tj_hab+tj_padd+tj_hadd+(Number(barTj)||0);
+    var totalTarjeta = tj_hab+tj_padd+tj_hadd+(Number(barTj)||0)+wompi;   // incluye Reservas (app)
     var totalEfNq = ef_hab+ef_padd+ef_hadd+(Number(barEf)||0)+nq_hab+nq_padd+nq_hadd+(Number(barNq)||0);
     var totalTurno = totalTarjeta + totalEfNq;
     h+='<div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);border-radius:10px;padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">';
@@ -5448,6 +5455,9 @@ function printC(){
         }
       } else if(s.payMethod === metodo){
         rows.push({label: prefix+label, monto: Number(s.total||0), neg: s.type==='REFUND'});
+      } else if(metodo==='TARJETA' && s.payMethod==='WOMPI'){
+        // Reservas (app) / Wompi: van DENTRO de Tarjeta en el recibo.
+        rows.push({label: prefix+label+' (Reservas app)', monto: Number(s.total||0), neg: s.type==='REFUND'});
       }
     });
     return rows;
@@ -9256,7 +9266,7 @@ function loadCuadreAdmin(){
       var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i];});
       var ventas=sl.reduce(function(a,s){
         if(s.payMethod==='MIXTO')return a+Number(s.amount_1||0)+Number(s.amount_2||0)+Number(s.amount_3||0);
-        if(s.payMethod==='EFECTIVO'||s.payMethod==='TARJETA'||s.payMethod==='NEQUI')return a+Number(s.total||0);
+        if(s.payMethod==='EFECTIVO'||s.payMethod==='TARJETA'||s.payMethod==='NEQUI'||s.payMethod==='WOMPI')return a+Number(s.total||0);
         return a;
       },0);
       var bar=Number((m.totals||{}).shiftBarEfectivo||0)+Number((m.totals||{}).shiftBarTarjeta||0)+Number((m.totals||{}).shiftBarNequi||0);
@@ -9355,7 +9365,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     dataRow('Total del Turno',function(m,sl,ls,ex){
       var ventas=sl.reduce(function(a,s){
         if(s.payMethod==='MIXTO')return a+Number(s.amount_1||0)+Number(s.amount_2||0)+Number(s.amount_3||0);
-        if(s.payMethod==='EFECTIVO'||s.payMethod==='TARJETA'||s.payMethod==='NEQUI')return a+Number(s.total||0);
+        if(s.payMethod==='EFECTIVO'||s.payMethod==='TARJETA'||s.payMethod==='NEQUI'||s.payMethod==='WOMPI')return a+Number(s.total||0);
         return a;
       },0);
       var bar=Number((m.totals||{}).shiftBarEfectivo||0)+Number((m.totals||{}).shiftBarTarjeta||0)+Number((m.totals||{}).shiftBarNequi||0);
@@ -9437,7 +9447,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid;});
       var ls=loans.filter(function(l){return l.shiftId===sid;});
       var ex=extras.filter(function(e){return e.shiftId===sid&&Number(e.payment||0)>0;});
-      var tj=sl.filter(function(s){return s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarTarjeta||0);
+      var tj=sl.filter(function(s){return s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarTarjeta||0)+Number((m.totals||{}).shiftWompi||0);   // Tarjeta incluye Reservas (app)
       var ef=sl.filter(function(s){return s.payMethod==='EFECTIVO'||(s.payMethod==='MIXTO'&&Number(s.amount_1||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_1||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarEfectivo||0);
       var nq=sl.filter(function(s){return s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0);}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):Number(s.total||0));},0)+Number((m.totals||{}).shiftBarNequi||0);
       var gastos=ls.reduce(function(a,l){return a+Number(l.amount||0);},0)+Number((m.totals||{}).shiftTaxi||0)+ex.reduce(function(a,e){return a+Number(e.payment||0);},0);

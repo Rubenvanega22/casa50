@@ -6999,6 +6999,7 @@ async function apiGetGastosMesResumen(p, res) {
       if(pm === 'EFECTIVO') ventasEfectivo += total;
       else if(pm === 'TARJETA') ventasTarjeta += total;
       else if(pm === 'NEQUI') ventasNequi += total;
+      else if(pm === 'WOMPI') ventasTarjeta += total;   // Reservas (app): dentro de Tarjeta
     }
   });
 
