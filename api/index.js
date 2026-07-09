@@ -394,6 +394,7 @@ module.exports = async function handler(req, res) {
       case 'login':             return await apiLogin(payload, res);
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'activarReserva':    return await apiActivarReserva(payload, res);
+      case 'getComprobanteReserva': return await apiGetComprobanteReserva(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
       case 'extendTime':        return await apiExtendTime(payload, res);
       case 'horaGratis':        return await apiHoraGratis(payload, res);
@@ -1093,7 +1094,9 @@ async function apiActivarReserva(p, res) {
 
   // 4) Venta origin='WOMPI' SIN campos de cobro (pago online). pay_method='WOMPI'
   //    -> queda fuera de EF/TA/NQ del cuadre; total sigue sumando al revenue.
-  await tInsert('sales', {
+  // .select('id') -> el id de esta venta es el consecutivo del comprobante (RSV-NNNNNN,
+  // estable: la reimpresion consulta la misma fila -> mismo id -> mismo numero).
+  const { data: ventaRows } = await tInsert('sales', {
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:'RECEPTION', user_name:userName, type:'SALE',
     room_id:roomId, category:room.category, duration_hrs:durationHrs,
@@ -1104,7 +1107,8 @@ async function apiActivarReserva(p, res) {
     pay_method_2:'', amount_1:0, amount_2:0, amount_3:0,
     check_in_ms:now, due_ms:dueMs,
     origin:'WOMPI', reserva_id:reserva.id, wompi_transaction_id:reserva.wompi_transaction_id||''
-  });
+  }).select('id');
+  const saleId = (ventaRows && ventaRows[0]) ? ventaRows[0].id : null;
 
   // 5) Historial de estado.
   await tInsert('state_history', {
@@ -1120,7 +1124,40 @@ async function apiActivarReserva(p, res) {
     .eq('id', reserva.id).eq('motel_id', MOTEL_ID).is('activacion_ms', null);
 
   const clienteNombre = (reserva.app_usuarios && reserva.app_usuarios.nombre) || 'cliente';
-  return ok(res, { roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, printFactura:true });
+  // Comprobante interno de reserva (soporte para facturacion LOGGRO). Se arma con los
+  // datos de la activacion; el numero deriva del sales.id (estable en reimpresiones).
+  const comprobante = {
+    comprobanteNum: saleId, activacionMs: now, clave: reserva.clave||'',
+    categoria: room.category, durationHrs, precio,
+    wompiTransactionId: reserva.wompi_transaction_id||'', roomId,
+    shiftId: shift, activadoPor: userName, clienteNombre
+  };
+  return ok(res, { roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, printFactura:true, comprobante });
+}
+
+// Comprobante de una reserva ya activada, para REIMPRESION (mismo numero: deriva del
+// sales.id de la venta WOMPI). Devuelve {comprobante:null} si la hab no ingreso por reserva.
+async function apiGetComprobanteReserva(p, res) {
+  const roomId = String(p.roomId||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  const { data: ventas } = await tSelect('sales','*')
+    .eq('room_id', roomId).eq('origin','WOMPI').eq('anulada', false)
+    .order('ts_ms',{ascending:false}).limit(1);
+  const venta = ventas && ventas[0];
+  if(!venta) return ok(res,{ comprobante:null });
+  let clave='', clienteNombre='cliente';
+  if(venta.reserva_id){
+    const { data: rv } = await supabase.from('app_reservas')
+      .select('clave, app_usuarios(nombre)').eq('id', venta.reserva_id).maybeSingle();
+    if(rv){ clave = rv.clave||''; clienteNombre = (rv.app_usuarios && rv.app_usuarios.nombre) || 'cliente'; }
+  }
+  const comprobante = {
+    comprobanteNum: venta.id, activacionMs: Number(venta.ts_ms||0), clave,
+    categoria: venta.category||'', durationHrs: Number(venta.duration_hrs||0), precio: Number(venta.total||0),
+    wompiTransactionId: venta.wompi_transaction_id||'', roomId,
+    shiftId: venta.shift_id||'', activadoPor: venta.user_name||'', clienteNombre
+  };
+  return ok(res,{ comprobante });
 }
 
 // ==================== CHECK-OUT ====================
@@ -2582,7 +2619,7 @@ async function apiRoomHistory(p, res) {
   return ok(res,{
     roomId,
     stateHistory:(stateRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,fromState:r.from_state,toState:r.to_state,userName:r.user_name,meta:(()=>{try{return JSON.parse(r.meta_json||'{}');}catch(e){return{};}})()})),
-    salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)})),
+    salesHistory:(salesRes.data||[]).map(r=>({id:r.id,origin:r.origin||'',tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)})),
     taxiHistory:(taxiRes.data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),amount:Number(r.amount||0)}))
   });
 }

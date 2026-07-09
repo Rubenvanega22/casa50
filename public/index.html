@@ -2481,6 +2481,10 @@ h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-
       h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px"><span style="color:#9ca3af">Productos</span><span style="color:#f97316;font-weight:700" id="resumenProdTotal">$0</span></div>';
 h+='<div id="resumenProdLineas" style="padding-left:8px"></div>';
 h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e" id="resumenTotalFinal">'+fmt(totalCobrado)+'</span></div>';
+      // Reimpresion del comprobante: solo si la estadia ingreso por reserva (origin WOMPI).
+      if(ventaBase && ventaBase.origin==='WOMPI'){
+        h+='<button class="btn bk sm" style="margin-top:8px;width:100%" onclick="reimprimirComprobante(\''+esc(curRoom.roomId)+'\')">🧾 Reimprimir comprobante de reserva</button>';
+      }
       var box=document.getElementById('resumenEstadia');
       if(box)box.innerHTML=h;
     });
@@ -12871,7 +12875,9 @@ function activacionOk(res){
   toast('✅ Hab '+res.roomId+' activada — '+(res.clienteNombre||''),'ok');
   closeM('mRoom');
   rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
-  if(res.printFactura){toast('🧾 Recordá imprimir la factura de la reserva','ok');imprimirFacturaReserva(res);}
+  // Disparo post-activacion NO bloqueante: el refresco ya corrio; la impresion abre
+  // su propia ventana y no frena el flujo.
+  if(res.printFactura && res.comprobante){toast('🧾 Comprobante de reserva','ok');imprimirFacturaReserva(res.comprobante);}
 }
 function doActivarReserva(){
   var el=document.getElementById('rvClave');
@@ -12879,8 +12885,71 @@ function doActivarReserva(){
   if(clave.length<6){toast('Digitá la clave de 6 caracteres','err');return;}
   activarReservaRPC({clave:clave});
 }
-// Stub: el formato del recibo térmico de la reserva se diseña aparte.
-function imprimirFacturaReserva(res){ /* TODO Etapa B (factura): recibo de la reserva */ }
+// Reimpresion del comprobante (mismo numero: deriva del sales.id). Solo estadias WOMPI.
+function reimprimirComprobante(roomId){
+  rpc('getComprobanteReserva',{roomId:roomId},function(d){
+    if(d&&d.comprobante) imprimirFacturaReserva(d.comprobante);
+    else toast('Esta habitación no ingresó por reserva','err');
+  },function(e){toast(e.message||'Error obteniendo comprobante','err');});
+}
+// COMPROBANTE DE RESERVA — soporte interno para facturacion electronica (LOGGRO).
+// NO es la factura legal (esa la emite LOGGRO con su CUFE). Termica 80mm.
+function imprimirFacturaReserva(c){
+  if(!c){toast('Sin datos del comprobante','err');return;}
+  var total=Number(c.precio||0);
+  // IVA por diferencia: base redondeada, IVA = total - base (base+IVA = total EXACTO, sin ajuste).
+  var base=Math.round(total/1.19*100)/100;
+  var iva=total-base;
+  var ref='RSV-'+String(c.comprobanteNum||0).padStart(6,'0');
+  var dAct=new Date(Number(c.activacionMs||Date.now()));
+  var fechaHora=dAct.toLocaleDateString('es-CO')+' '+dAct.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  var turnoLbl=({SHIFT_1:'Turno 1',SHIFT_2:'Turno 2',SHIFT_3:'Turno 3'})[c.shiftId]||c.shiftId||'—';
+  function m2(n){return '$'+Number(n).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+ref+'</title>';
+  html+='<style>@page{size:80mm auto;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
+  html+='body{margin:0;padding:4mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.45;color:#000;width:72mm;font-weight:600}';
+  html+='.c{text-align:center}.b{font-weight:800}.r{text-align:right}.dash{border-top:1px dashed #000;margin:5px 0}.solid{border-top:1px solid #000;margin:5px 0}';
+  html+='.row{display:flex;justify-content:space-between;padding:1px 0}.sm{font-size:10px}</style></head><body>';
+  // Encabezado legal (hardcodeado; motel_info aun no tiene estos campos fiscales)
+  html+='<div class="c b" style="font-size:14px">PELLAR S.A.S.</div>';
+  html+='<div class="c sm">NIT 900724959-1</div>';
+  html+='<div class="c b" style="font-size:12px;margin-top:2px">APARTAHOTEL CASA 50</div>';
+  html+='<div class="c sm">Calle 10 #49b-05, Cali</div>';
+  html+='<div class="c sm">Tel (57602) 3976184 · Responsable de IVA</div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="c b" style="font-size:13px">COMPROBANTE DE RESERVA</div>';
+  html+='<div class="c sm">(soporte interno para facturación electrónica)</div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="row"><span>Ref. interna:</span><span class="b">'+ref+'</span></div>';
+  html+='<div class="row"><span>Activación:</span><span>'+fechaHora+'</span></div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="b">Cliente: Consumidor Final</div>';
+  html+='<div class="sm">CC 222222222222</div>';
+  html+='<div class="sm">Reserva app — Clave: '+esc(c.clave||'—')+'</div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="b">Habitación '+esc(c.categoria||'')+' '+Number(c.durationHrs||0)+' horas</div>';
+  html+='<div class="row"><span>Cant 1.00</span><span class="b">'+fmt(total)+'</span></div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="row"><span>Base gravable</span><span>'+m2(base)+'</span></div>';
+  html+='<div class="row"><span>IVA 19%</span><span>'+m2(iva)+'</span></div>';
+  html+='<div class="solid"></div>';
+  html+='<div class="row b" style="font-size:13px"><span>TOTAL</span><span>'+m2(total)+'</span></div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="row"><span>Forma de pago:</span><span>Contado</span></div>';
+  html+='<div class="row"><span>Medio de pago:</span><span>Wompi (online)</span></div>';
+  html+='<div class="sm">Transacción: '+esc(c.wompiTransactionId||'—')+'</div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="sm">Habitación '+esc(c.roomId||'')+' · '+turnoLbl+'</div>';
+  html+='<div class="sm">Activó: '+esc(c.activadoPor||'—')+'</div>';
+  html+='<div class="dash"></div>';
+  html+='<div class="c b" style="margin-top:4px">⚠ Pendiente facturar en LOGGRO</div>';
+  html+='<div style="height:8mm"></div>';
+  html+='<script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);};<\/script>';
+  html+='</body></html>';
+  var w=window.open('','_blank','width=400,height=600');
+  if(!w){toast('Permite ventanas emergentes para imprimir','err');return;}
+  w.document.write(html);w.document.close();
+}
 
 function agregarProductoDesdeEscaner(prod){
   if(!curRoom)return;
