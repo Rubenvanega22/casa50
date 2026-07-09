@@ -395,6 +395,7 @@ module.exports = async function handler(req, res) {
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'activarReserva':    return await apiActivarReserva(payload, res);
       case 'getComprobanteReserva': return await apiGetComprobanteReserva(payload, res);
+      case 'marcarComprobanteImpreso': return await apiMarcarComprobanteImpreso(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
       case 'extendTime':        return await apiExtendTime(payload, res);
       case 'horaGratis':        return await apiHoraGratis(payload, res);
@@ -702,10 +703,19 @@ async function apiGetRooms(req, res) {
     };
   });
 
+  // Etapa D: habitaciones OCUPADAS con venta WOMPI cuyo comprobante NO se imprimio ->
+  // marca visible para que recepcion sepa que hay uno pendiente. Match por
+  // room_id + check_in_ms (la estadia actual, no una vieja).
+  const { data: wompiPend } = await tSelect('sales','room_id,check_in_ms')
+    .eq('origin','WOMPI').eq('anulada', false).is('comprobante_impreso_ms', null);
+  const compPendSet = new Set();
+  (wompiPend || []).forEach(function(s){ compPendSet.add(String(s.room_id)+'|'+Number(s.check_in_ms||0)); });
+
   const mapped = (rooms || []).map(function(r){
     const m = mapRoom(r);
     m.danoActivo = danosMap[r.room_id] || null;
     m.reserva = reservasMap[r.room_id] || null;
+    m.comprobantePendiente = (m.state==='OCCUPIED') && compPendSet.has(String(r.room_id)+'|'+Number(r.check_in_ms||0));
     return m;
   });
 
@@ -1197,6 +1207,17 @@ async function apiGetComprobanteReserva(p, res) {
     shiftId: venta.shift_id||'', activadoPor: venta.user_name||'', clienteNombre
   };
   return ok(res,{ comprobante });
+}
+
+// Etapa D: marca el comprobante como impreso (apaga la marca 🧾). Se llama al abrir la
+// ventana de impresion (auto de la activacion manual o via Reimprimir).
+async function apiMarcarComprobanteImpreso(p, res) {
+  const comprobanteNum = Number(p.comprobanteNum||0);
+  if(!comprobanteNum) return err(res,'comprobanteNum requerido');
+  const now = Date.now();
+  await tUpdate('sales',{ comprobante_impreso_ms: now })
+    .eq('id', comprobanteNum).eq('origin','WOMPI').is('comprobante_impreso_ms', null);
+  return ok(res,{ comprobanteNum, impresoMs: now });
 }
 
 // ==================== CHECK-OUT ====================
@@ -2030,8 +2051,9 @@ async function apiCloseShift(p, res) {
 
   const cortesiaIds = await getCortesiaIds();
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
-  let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
+  let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0, totalWompi=0;
   let totalProductos=0, totalProductosEf=0, totalProductosTa=0, totalProductosNq=0;
+  const reservasApp=[];  // Etapa D: detalle por habitacion de las ventas WOMPI (reservas app) del turno.
 
   (salesRes.data || []).forEach(r => {
     if (r.anulada) return;
@@ -2040,7 +2062,7 @@ async function apiCloseShift(p, res) {
     // es siempre del turno actual -> post-corte, no necesita el cutoff por fecha.)
     const esCortesia = cortesiaIds.has(String(r.room_id));
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
-    if (r.type === 'SALE') { totalSales+=t; if(!esCortesia)roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
+    if (r.type === 'SALE') { totalSales+=t; if(!esCortesia)roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; else if(pm==='WOMPI'){totalTarjeta+=t; totalWompi+=t; reservasApp.push({roomId:String(r.room_id||''),total:t});/* Reservas app: dentro de Tarjeta */} }
     if (r.type === 'REFUND') { totalRefunds += t; if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; else totalEfectivo+=t; }
     if (r.type === 'RENEWAL') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'EXTENSION') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
@@ -2069,7 +2091,7 @@ async function apiCloseShift(p, res) {
     cash_billetes: Number(p.cashBilletes||0),
     cash_monedas: Number(p.cashMonedas||0),
     notes: String(p.notes||''), total_efectivo: totalEfectivo,
-    total_tarjeta: totalTarjeta, total_nequi: totalNequi,
+    total_tarjeta: totalTarjeta, total_nequi: totalNequi, total_wompi: totalWompi,
     total_productos: totalProductos,
     total_productos_ef: totalProductosEf,
     total_productos_ta: totalProductosTa,
@@ -2090,7 +2112,7 @@ async function apiCloseShift(p, res) {
   });
 
   // Bar bar_sales removido - duplicaba valores de room_products
-  return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
+  return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi, totalWompi, reservasApp } });
 }
 
 // ==================== METRICAS ====================
@@ -2114,8 +2136,8 @@ async function apiMetrics(p, res) {
   const dailyGoal=Number(settings.DAILY_GOAL||0);
   const cortesiaIds=await getCortesiaIds();
   let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
-  let dayEfe=0,dayTar=0,dayNeq=0;
-  let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
+  let dayEfe=0,dayTar=0,dayNeq=0,dayWompi=0;
+  let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftWompi=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
   const allSalesList=[];
 
   (salesRes.data||[]).forEach(r=>{
@@ -2138,7 +2160,7 @@ async function apiMetrics(p, res) {
           dayEfe -= t; // Resta porque salio de caja
         } else {
           dayTotal+=t;
-          if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
+          if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='WOMPI'){dayTar+=t;dayWompi+=t;/* Reservas app: dentro de Tarjeta */}else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
         }
       }
       if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal,isCortesia:cortesiaIds.has(String(r.room_id))});
@@ -2150,7 +2172,7 @@ async function apiMetrics(p, res) {
             shiftEfe -= t;
           } else {
             shiftSales+=t;
-            if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
+            if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='WOMPI'){shiftTar+=t;shiftWompi+=t;/* Reservas app: dentro de Tarjeta */}else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
             if(type==='SALE'){if(!esCortesia)shiftRooms++;shiftPeople+=Number(r.people||0);}
           }
         }
@@ -2211,10 +2233,10 @@ const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay
     businessDay:bDay,
     totals:{
       sales:dayTotal,bar:dayBar,refunds:dayRefunds,taxi:dayTaxi,loans:dayLoans,extraStaff:dayExtraStaff,gastos:dayGastos,net:dayNet,
-      totalEfectivo:dayEfe,totalTarjeta:dayTar,totalNequi:dayNeq,
+      totalEfectivo:dayEfe,totalTarjeta:dayTar,totalNequi:dayNeq,totalWompi:dayWompi,
       barEfectivo:dayBarEfe,barTarjeta:dayBarTar,barNequi:dayBarNeq,
       shiftNet,shiftSales,shiftRoomsSold:shiftRooms,shiftPeople,shiftBar,shiftTaxi,shiftGastos,
-      shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,
+      shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,shiftWompi,
       shiftBarEfectivo:shiftBarEfe,shiftBarTarjeta:shiftBarTar,shiftBarNequi:shiftBarNeq,
       totalProductos,totalCortesiasProds,totalProductosEf,totalProductosTa,totalProductosNq,
       salidasHoy:salidasHoy||0
@@ -2291,6 +2313,7 @@ async function apiMonthMetrics(p, res) {
     tj_hab:0,tj_padd:0,tj_had:0,tj_bar:0,
     ef_hab:0,ef_padd:0,ef_had:0,ef_bar:0,
     nq_hab:0,nq_padd:0,nq_had:0,nq_bar:0,
+    wo_hab:0,wo_padd:0,wo_had:0,   // Etapa D: Reservas (app) / Wompi
     gastos:0,taxis:0,turnos:0,
     roomsSold:0
   });
@@ -2349,12 +2372,14 @@ async function apiMonthMetrics(p, res) {
       const base=t-epv;
       if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
       else if(pm==='NEQUI'){s.nq_hab+=base;s.nq_padd+=epv;}
+      else if(pm==='WOMPI'){s.wo_hab+=base;s.wo_padd+=epv;}   // Reservas (app): NO cae en efectivo.
       else if(pm==='MIXTO'){s.ef_hab+=Number(r.amount_1||0);s.tj_hab+=Number(r.amount_2||0);s.nq_hab+=Number(r.amount_3||0);}
       else{s.ef_hab+=base;s.ef_padd+=epv;}
     }
     if(r.type==='EXTENSION'){
       if(pm==='TARJETA')s.tj_had+=t;
       else if(pm==='NEQUI')s.nq_had+=t;
+      else if(pm==='WOMPI')s.wo_had+=t;   // Reservas (app): NO cae en efectivo.
       else if(pm==='MIXTO'){s.ef_had+=Number(r.amount_1||0);s.tj_had+=Number(r.amount_2||0);s.nq_had+=Number(r.amount_3||0);}
       else s.ef_had+=t;
     }
@@ -2403,10 +2428,11 @@ async function apiMonthMetrics(p, res) {
 
   // Calcular netos por turno y totales por día
   days.forEach(d=>{
-    d.totalTarjeta=0;d.totalEfectivo=0;d.totalNequi=0;d.totalGastos=0;d.netodia=0;
+    d.totalTarjeta=0;d.totalEfectivo=0;d.totalNequi=0;d.totalWompi=0;d.totalGastos=0;d.netodia=0;
     SHIFTS.forEach(sid=>{
       const s=d[sid];
-      s.totalTarjeta=s.tj_hab+s.tj_padd+s.tj_had+s.tj_bar;
+      s.totalWompi=s.wo_hab+s.wo_padd+s.wo_had;   // Etapa D: Reservas (app) — sub de Tarjeta
+      s.totalTarjeta=s.tj_hab+s.tj_padd+s.tj_had+s.tj_bar+s.totalWompi;   // Tarjeta INCLUYE reservas (app)
       s.totalEfectivo=s.ef_hab+s.ef_padd+s.ef_had+s.ef_bar;
       s.totalNequi=s.nq_hab+s.nq_padd+s.nq_had+s.nq_bar;
       s.totalGastos=s.gastos+s.taxis+s.turnos;
@@ -2414,22 +2440,24 @@ async function apiMonthMetrics(p, res) {
       d.totalTarjeta+=s.totalTarjeta;
       d.totalEfectivo+=s.totalEfectivo;
       d.totalNequi+=s.totalNequi;
+      d.totalWompi+=s.totalWompi;
       d.totalGastos+=s.totalGastos;
     });
-    d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;
+    d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;   // Wompi ya va dentro de totalTarjeta
   });
 
-  const monthTotals={sales:0,tarjeta:0,efectivo:0,nequi:0,gastos:0,neto:0,roomsSold:0,people:0,expenses:0};
+  const monthTotals={sales:0,tarjeta:0,efectivo:0,nequi:0,wompi:0,gastos:0,neto:0,roomsSold:0,people:0,expenses:0};
   days.forEach(d=>{
     monthTotals.tarjeta+=d.totalTarjeta;
     monthTotals.efectivo+=d.totalEfectivo;
     monthTotals.nequi+=d.totalNequi;
+    monthTotals.wompi+=d.totalWompi;
     monthTotals.gastos+=d.totalGastos;
     monthTotals.neto+=d.netodia;
     monthTotals.roomsSold+=d.roomsSold;
     monthTotals.people+=d.people||0;
   });
-  monthTotals.sales=monthTotals.tarjeta+monthTotals.efectivo+monthTotals.nequi;
+  monthTotals.sales=monthTotals.tarjeta+monthTotals.efectivo+monthTotals.nequi;   // tarjeta ya incluye wompi
   monthTotals.expenses=monthTotals.gastos;
 
   // Rankings
@@ -2726,7 +2754,7 @@ async function apiGetDailyCuadre(p, res) {
 
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
   const c={};
-  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiHab:0,nequiPersonas:0,nequiHoras:0,nequiBar:0,gastos:0,taxis:0,turnos:0};});
+  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiHab:0,nequiPersonas:0,nequiHoras:0,nequiBar:0,gastos:0,taxis:0,turnos:0,reservasApp:0,reservasAppDetalle:[]};});
 
   const cortesiaIds = await getCortesiaIds();
   (salesRes.data||[]).forEach(r=>{
@@ -2735,9 +2763,15 @@ async function apiGetDailyCuadre(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    // Etapa B: venta WOMPI (pago online) NO entra al cuadre de caja — el dinero no
-    // paso por la recepcionista. El desglose visual "Online/Wompi" es Etapa D.
-    if(String(r.origin||'').toUpperCase()==='WOMPI') return;
+    // Etapa D: venta WOMPI (pago online) NO entra al cuadre de caja (el dinero no paso
+    // por la recepcionista), pero SI se muestra como linea propia "Reservas (app)" con
+    // detalle por habitacion. No suma a la entrega (entrega = solo lo que ella recibio).
+    if(String(r.origin||'').toUpperCase()==='WOMPI'){
+      const tW=Number(r.total||0);
+      c[sid].reservasApp+=tW;
+      c[sid].reservasAppDetalle.push({roomId:String(r.room_id||''),total:tW});
+      return;
+    }
     // Cortesia PRE-corte: excluir entero. POST-corte: la hab base aporta 0
     // (habVal=t-epv=0 tras Parte 1) y personas/horas suman. (Cuadre sin roomsSold.)
     if(cortesiaIds.has(String(r.room_id)) && String(bDay) < CORTESIA_COBRO_DESDE) return;
@@ -2777,13 +2811,13 @@ async function apiGetDailyCuadre(p, res) {
   const cuadre={};let diaTotal=0;
   shifts.forEach(sid=>{
     const x=c[sid];
-    const totTarjeta=x.tarjetaHab+x.tarjetaPersonas+x.tarjetaHoras+x.tarjetaBar;
+    const totTarjeta=x.tarjetaHab+x.tarjetaPersonas+x.tarjetaHoras+x.tarjetaBar+x.reservasApp;  // Tarjeta INCLUYE reservas (app)
     const totNequi=x.nequiBar;
     const totEfectivo=x.efectivoHab+x.efectivoPersonas+x.efectivoHoras+x.efectivoBar;
     const totGastos=x.gastos+x.taxis+x.turnos;
     const entrega=totTarjeta+totEfectivo+totNequi-totGastos;
     diaTotal+=entrega;
-    cuadre[sid]={responsable:x.responsable,tarjeta:{hab:x.tarjetaHab,personas:x.tarjetaPersonas,horas:x.tarjetaHoras,bar:x.tarjetaBar,total:totTarjeta},efectivo:{hab:x.efectivoHab,personas:x.efectivoPersonas,horas:x.efectivoHoras,bar:x.efectivoBar,total:totEfectivo},nequi:{bar:x.nequiBar,total:totNequi},gastos:{generales:x.gastos,taxis:x.taxis,turnos:x.turnos,total:totGastos},entregaDiaria:entrega};
+    cuadre[sid]={responsable:x.responsable,tarjeta:{hab:x.tarjetaHab,personas:x.tarjetaPersonas,horas:x.tarjetaHoras,bar:x.tarjetaBar,reservasApp:{total:x.reservasApp,detalle:x.reservasAppDetalle},total:totTarjeta},efectivo:{hab:x.efectivoHab,personas:x.efectivoPersonas,horas:x.efectivoHoras,bar:x.efectivoBar,total:totEfectivo},nequi:{bar:x.nequiBar,total:totNequi},gastos:{generales:x.gastos,taxis:x.taxis,turnos:x.turnos,total:totGastos},entregaDiaria:entrega};
   });
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }

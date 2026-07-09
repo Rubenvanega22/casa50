@@ -2330,6 +2330,7 @@ function mkCard(r){
 if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs))/60000);h+='<div class="ri">Salio: <b>'+fT(r.lastCheckoutMs)+'</b></div><div class="ri warn">'+mD+' min sucia'+(r.maidInProgress?' — <span style="color:#a78bfa;animation:pulse 1s infinite">🧹 '+esc(r.maidNameProgress||'')+'</span>':'')+'</div>';}
   if(eff==='CO'){var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0);if(since){var mC=Math.round((now-since)/60000);h+='<div class="ri">Desde: <b>'+fT(since)+'</b></div><div class="ri" style="color:#3b82f6">'+mC+' min</div>';}}
   if(r.noteMinor)h+='<div style="font-size:10px;font-weight:800;color:#f59e0b;margin-top:2px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">📝 NOTA</div>';
+  if(r.comprobantePendiente)h+='<div style="font-size:10px;font-weight:800;color:#ec4899;margin-top:2px;background:rgba(236,72,153,.18);border:1px solid #ec4899;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">🧾 COMPROBANTE</div>';
   card.innerHTML=h;
   // Bombillito de daño activo (Fase 3 mantenimiento)
   if(r.danoActivo){
@@ -2483,7 +2484,15 @@ h+='<div id="resumenProdLineas" style="padding-left:8px"></div>';
 h+='<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:800;border-top:1px solid #2e2e3a;margin-top:4px"><span>Total cobrado</span><span style="color:#22c55e" id="resumenTotalFinal">'+fmt(totalCobrado)+'</span></div>';
       // Reimpresion del comprobante: solo si la estadia ingreso por reserva (origin WOMPI).
       if(ventaBase && ventaBase.origin==='WOMPI'){
-        h+='<button class="btn bk sm" style="margin-top:8px;width:100%" onclick="reimprimirComprobante(\''+esc(curRoom.roomId)+'\')">🧾 Reimprimir comprobante de reserva</button>';
+        if(curRoom && curRoom.comprobantePendiente){
+          // Etapa D: comprobante SIN imprimir -> aviso destacado + boton resaltado.
+          h+='<div style="margin-top:10px;background:rgba(236,72,153,.12);border:1px solid #ec4899;border-radius:8px;padding:8px;text-align:center">';
+          h+='<div style="font-size:11px;font-weight:800;color:#ec4899;text-transform:uppercase;margin-bottom:6px">🧾 Comprobante SIN imprimir</div>';
+          h+='<button class="btn full" style="width:100%;background:#ec4899;color:#fff;font-weight:700" onclick="reimprimirComprobante(\''+esc(curRoom.roomId)+'\')">Imprimir comprobante</button>';
+          h+='</div>';
+        } else {
+          h+='<button class="btn bk sm" style="margin-top:8px;width:100%" onclick="reimprimirComprobante(\''+esc(curRoom.roomId)+'\')">🧾 Reimprimir comprobante de reserva</button>';
+        }
       }
       var box=document.getElementById('resumenEstadia');
       if(box)box.innerHTML=h;
@@ -3681,7 +3690,7 @@ function loadVentas(){
     var resumen={SHIFT_1:{count:0,total:0},SHIFT_2:{count:0,total:0},SHIFT_3:{count:0,total:0}};
     sl.forEach(function(s){var sid=s.shiftId||'SHIFT_1';if(resumen[sid]){resumen[sid].count++;resumen[sid].total+=Number(s.total||0);}});
     var h='<div class="pay-row"><div class="pay-item"><div class="pay-lbl">Efectivo</div><div class="pay-val" style="color:#22c55e">'+fmt(t.totalEfectivo||0)+'</div></div>';
-    h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(t.totalTarjeta||0)+'</div></div>';
+    h+='<div class="pay-item"><div class="pay-lbl">Tarjeta</div><div class="pay-val" style="color:#3b82f6">'+fmt(t.totalTarjeta||0)+'</div>'+(Number(t.totalWompi||0)>0?'<div style="font-size:9px;color:#ec4899;margin-top:2px">🧾 Reservas '+fmt(t.totalWompi)+'</div>':'')+'</div>';
     h+='<div class="pay-item"><div class="pay-lbl">Nequi</div><div class="pay-val" style="color:#a78bfa">'+fmt(t.totalNequi||0)+'</div></div>';
     h+='<div class="pay-item"><div class="pay-lbl">Total dia</div><div class="pay-val" style="color:#22c55e">'+fmt(t.sales||0)+'</div></div></div>';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">';
@@ -5390,8 +5399,10 @@ function doCierre(){
         turnoAlertaMostrada=true;turnoVencidoMostrado=true;
         var m=document.getElementById('mTurnoAlert');if(m)m.classList.remove('op');
         var neto=fmt((res.summary&&res.summary.net)||0);
+        var wompiTurno=Number((res.summary&&res.summary.totalWompi)||0);
+        var wompiLine=wompiTurno>0?'<div style="font-size:12px;color:#ec4899;margin-bottom:14px">🧾 Incluye Reservas (app): <b>'+fmt(wompiTurno)+'</b> (dentro de Tarjeta)</div>':'';
         var div=document.createElement('div');div.className='ov op';div.id='mCierreOk';
-        div.innerHTML='<div class="modal"><div style="text-align:center;padding:10px"><div style="font-size:48px;margin-bottom:10px">&#x2705;</div><div style="font-size:18px;font-weight:900;color:#22c55e;margin-bottom:8px">¡Envío de Cuadre Exitoso!</div><div style="font-size:13px;color:#9ca3af;margin-bottom:6px">Turno cerrado correctamente</div><div style="font-size:13px;color:#9ca3af;margin-bottom:16px">Recepcionista: <b style="color:#e5e7eb">'+sess.userName+'</b></div><div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:16px"><div style="font-size:11px;color:#9ca3af">Neto del turno</div><div style="font-size:28px;font-weight:900;color:#22c55e">'+neto+'</div></div><button class="btn bg full" onclick="document.getElementById(\'mCierreOk\').remove()">Aceptar</button></div></div>';
+        div.innerHTML='<div class="modal"><div style="text-align:center;padding:10px"><div style="font-size:48px;margin-bottom:10px">&#x2705;</div><div style="font-size:18px;font-weight:900;color:#22c55e;margin-bottom:8px">¡Envío de Cuadre Exitoso!</div><div style="font-size:13px;color:#9ca3af;margin-bottom:6px">Turno cerrado correctamente</div><div style="font-size:13px;color:#9ca3af;margin-bottom:16px">Recepcionista: <b style="color:#e5e7eb">'+sess.userName+'</b></div><div style="background:#22222c;border-radius:10px;padding:12px;margin-bottom:16px"><div style="font-size:11px;color:#9ca3af">Neto del turno</div><div style="font-size:28px;font-weight:900;color:#22c55e">'+neto+'</div></div>'+wompiLine+'<button class="btn bg full" onclick="document.getElementById(\'mCierreOk\').remove()">Aceptar</button></div></div>';
         document.body.appendChild(div);
       },
       function(e){toast(e.message||String(e),'err');}
@@ -9297,11 +9308,29 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
       h+='<td style="padding:7px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;font-weight:800;color:'+color+'">'+fmt(total)+'</td></tr>';
     }
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#3b82f6;border:1px solid #2e2e3a">💳 TARJETA</td></tr>';
-    dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#3b82f6');
+    dataRow('Habitaciones (datáfono)',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#3b82f6');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='TARJETA'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#3b82f6');
     dataRow('H. Adicional',function(m,sl){return sl.filter(function(s){return (s.payMethod==='TARJETA'||(s.payMethod==='MIXTO'&&Number(s.amount_2||0)>0))&&s.type==='EXTENSION';}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_2||0):Number(s.total||0));},0);},'#3b82f6');
     dataRow('Bar Tarjeta',function(m){return Number((m.totals||{}).shiftBarTarjeta||0);},'#3b82f6');
-   dataRowTotal('Total Tarjeta','TARJETA',function(m){return Number((m.totals||{}).shiftBarTarjeta||0);},'#3b82f6');
+    // Etapa D: Reservas (app) / Wompi — sub-linea DENTRO de Tarjeta, con detalle por hab.
+    // Filtro ESTRICTO por payMethod==='WOMPI' (nunca es MIXTO) -> no colisiona con amount_3 (Nequi).
+    (function(){
+      _admDesKey++;
+      var vals=ms.map(function(m,i){return (m.allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===shifts[i]&&s.payMethod==='WOMPI';}).reduce(function(a,s){return a+Number(s.total||0);},0);});
+      var total=vals.reduce(function(a,b){return a+b;},0);
+      h+='<tr><td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:11px;font-weight:700;color:#ec4899">🧾 Reservas (app)</td>';
+      vals.forEach(function(v,i){
+        var sid=shifts[i];
+        var items=(ms[i].allSalesList||[]).filter(function(s){return !s.anulada&&s.shiftId===sid&&s.payMethod==='WOMPI';});
+        var cellId='admW_'+_admDesKey+'_'+i;
+        var des='';items.forEach(function(s){des+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:#9ca3af">Hab '+esc(s.roomId)+' — '+esc(s.category||'')+'</span><span style="color:#ec4899">'+fmt(Number(s.total||0))+'</span></div>';});
+        h+='<td style="padding:3px 6px;border:1px solid #2e2e3a;font-size:11px;text-align:right;color:#ec4899;vertical-align:top">'+fmt(v);
+        if(items.length){h+='<br><button onclick="toggleAdmDesCell(\''+cellId+'\')" style="font-size:9px;padding:2px 7px;margin-top:3px;background:rgba(236,72,153,.15);border:1px solid #ec4899;color:#ec4899;border-radius:4px;cursor:pointer">detalle</button><div id="'+cellId+'" style="display:none;text-align:left;margin-top:6px;padding:6px;background:#22222c;border-radius:6px">'+des+'</div>';}
+        h+='</td>';
+      });
+      h+='<td style="padding:5px 8px;border:1px solid #2e2e3a;font-size:12px;text-align:right;font-weight:800;color:#ec4899">'+fmt(total)+'</td></tr>';
+    })();
+   dataRowTotal('Total Tarjeta','TARJETA',function(m){return Number((m.totals||{}).shiftBarTarjeta||0)+Number((m.totals||{}).shiftWompi||0);},'#3b82f6');
     h+='<tr><td colspan="5" style="padding:2px 6px;background:#18181f;font-size:10px;font-weight:700;color:#a78bfa;border:1px solid #2e2e3a">📱 NEQUI</td></tr>';
     dataRow('Habitaciones',function(m,sl){return sl.filter(function(s){return (s.payMethod==='NEQUI'||(s.payMethod==='MIXTO'&&Number(s.amount_3||0)>0))&&(s.type==='SALE'||s.type==='RENEWAL');}).reduce(function(a,s){return a+(s.payMethod==='MIXTO'?Number(s.amount_3||0):(Number(s.total||0)-Number(s.extraPeopleValue||0)));},0);},'#a78bfa');
     dataRow('P. Adicional',function(m,sl){return sl.filter(function(s){return s.payMethod==='NEQUI'&&s.type==='SALE';}).reduce(function(a,s){return a+Number(s.extraPeopleValue||0);},0);},'#a78bfa');
@@ -11738,6 +11767,7 @@ function renderMo(data,ym){
   h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#3b82f6;text-transform:uppercase;margin-bottom:3px">Tarjeta</div><div style="font-size:14px;font-weight:700;color:#3b82f6">'+fmt(mt.tarjeta||0)+'</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#22c55e;text-transform:uppercase;margin-bottom:3px">Efectivo</div><div style="font-size:14px;font-weight:700;color:#22c55e">'+fmt(mt.efectivo||0)+'</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#a78bfa;text-transform:uppercase;margin-bottom:3px">Nequi</div><div style="font-size:14px;font-weight:700;color:#a78bfa">'+fmt(mt.nequi||0)+'</div></div>';
+  if(Number(mt.wompi||0)>0)h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#ec4899;text-transform:uppercase;margin-bottom:3px">Reservas (en tarjeta)</div><div style="font-size:14px;font-weight:700;color:#ec4899">'+fmt(mt.wompi||0)+'</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#ef4444;text-transform:uppercase;margin-bottom:3px">Gastos mes</div><div style="font-size:14px;font-weight:700;color:#ef4444">'+fmt(mt.gastos||0)+'</div></div>';
   h+='<div style="background:#22222c;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;color:#f59e0b;text-transform:uppercase;margin-bottom:3px">Neto mes</div><div style="font-size:14px;font-weight:700;color:#f59e0b">'+fmt(mt.neto||0)+'</div></div>';
   h+='</div>';
@@ -12949,6 +12979,13 @@ function imprimirFacturaReserva(c){
   var w=window.open('','_blank','width=400,height=600');
   if(!w){toast('Permite ventanas emergentes para imprimir','err');return;}
   w.document.write(html);w.document.close();
+  // Etapa D: marcar impreso (apaga la marca 🧾) y refrescar el tablero. Solo si la
+  // ventana se abrio (si el popup estaba bloqueado, se corto arriba y queda pendiente).
+  if(c.comprobanteNum){
+    rpc('marcarComprobanteImpreso',{comprobanteNum:c.comprobanteNum},function(){
+      rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
+    },function(){});
+  }
 }
 
 function agregarProductoDesdeEscaner(prod){
