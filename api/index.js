@@ -394,6 +394,8 @@ module.exports = async function handler(req, res) {
       case 'login':             return await apiLogin(payload, res);
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'activarReserva':    return await apiActivarReserva(payload, res);
+      case 'getComprobanteReserva': return await apiGetComprobanteReserva(payload, res);
+      case 'marcarComprobanteImpreso': return await apiMarcarComprobanteImpreso(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
       case 'extendTime':        return await apiExtendTime(payload, res);
       case 'horaGratis':        return await apiHoraGratis(payload, res);
@@ -626,7 +628,30 @@ async function apiBootstrap(req, res) {
   });
 }
 
+// Etapa C: auto-activacion por no-show. Disparo perezoso desde el polling de recepcion.
+// Cada apiGetRooms revisa las reservas PAGADAS sin activar cuyo cronometro ya vencio
+// (pago_ms + llegada_min) y las activa via el mismo nucleo (venta WOMPI, activada_por=
+// 'SISTEMA (no-show)'). El doble candado del core evita dobles activaciones entre pollers.
+async function autoActivarReservasVencidas(now) {
+  const { data: pend } = await supabase.from('app_reservas')
+    .select('id, pago_ms, llegada_min')
+    .eq('motel_id', MOTEL_ID).eq('estado', 'PAGADA').is('activacion_ms', null);
+  const vencidas = (pend || []).filter(rv => now >= Number(rv.pago_ms||0) + Number(rv.llegada_min||0) * 60000);
+  if (!vencidas.length) return;
+  const bDay = businessDay(now), shift = currentShiftId(now);
+  for (const rv of vencidas) {
+    // Resultado ignorado a proposito: si activo, el load de rooms de abajo lo refleja; si la
+    // hab no estaba disponible, el claim se revirtio y la reserva sigue viva (VENCIDA).
+    try { await activarReservaCore({ reservaId: rv.id, userName: 'SISTEMA (no-show)', bDay, shift, now }); }
+    catch (e) { /* nunca romper el getRooms por una activacion fallida */ }
+  }
+}
+
 async function apiGetRooms(req, res) {
+  // Etapa C: auto-activar las vencidas ANTES de leer el estado, para que la respuesta ya
+  // refleje la habitacion ocupada y la reserva ya no aparezca como pendiente.
+  await autoActivarReservasVencidas(Date.now());
+
   const { data: rooms } = await tSelect('rooms','*').eq('archived', false).order('floor').order('room_id');
 
   // Cargar danos activos por habitacion (Fase 3 mantenimiento)
@@ -678,10 +703,19 @@ async function apiGetRooms(req, res) {
     };
   });
 
+  // Etapa D: habitaciones OCUPADAS con venta WOMPI cuyo comprobante NO se imprimio ->
+  // marca visible para que recepcion sepa que hay uno pendiente. Match por
+  // room_id + check_in_ms (la estadia actual, no una vieja).
+  const { data: wompiPend } = await tSelect('sales','room_id,check_in_ms')
+    .eq('origin','WOMPI').eq('anulada', false).is('comprobante_impreso_ms', null);
+  const compPendSet = new Set();
+  (wompiPend || []).forEach(function(s){ compPendSet.add(String(s.room_id)+'|'+Number(s.check_in_ms||0)); });
+
   const mapped = (rooms || []).map(function(r){
     const m = mapRoom(r);
     m.danoActivo = danosMap[r.room_id] || null;
     m.reserva = reservasMap[r.room_id] || null;
+    m.comprobantePendiente = (m.state==='OCCUPIED') && compPendSet.has(String(r.room_id)+'|'+Number(r.check_in_ms||0));
     return m;
   });
 
@@ -1035,49 +1069,56 @@ async function apiCheckIn(p, res) {
   return ok(res, { roomId, total, change: changeGiven, checkInMs: now, dueMs });
 }
 
-// ==================== ACTIVAR RESERVA (Etapa B reservas<->recepcion) ====================
-// RPC hermano de apiCheckIn. La reserva ya se pago online (Wompi); aca solo se ACTIVA:
-// transicion atomica de la habitacion (fix TOCTOU) + venta con origin='WOMPI' SIN cobro
-// en caja (el dinero ya entro online -> no debe inflar el efectivo esperado del turno).
-// El precio/duracion salen de la reserva: NO se re-cotiza (lo pagado es autoridad).
-async function apiActivarReserva(p, res) {
-  const now = Date.now();
-  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
-  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
-  const userName = String(p.userName || '').trim();
-  const clave = String(p.clave || '').toUpperCase().trim();
-  const reservaId = String(p.reservaId || '').trim();
-  if (!userName) return err(res, 'Nombre requerido');
-  if (!clave && !reservaId) return err(res, 'Clave o reservaId requerido');
-
+// ==================== ACTIVAR RESERVA (Etapa B/C reservas<->recepcion) ====================
+// Nucleo compartido por la activacion MANUAL (apiActivarReserva, con clave) y la AUTO por
+// no-show (Etapa C, desde apiGetRooms, por reservaId). NO toca `res`: devuelve un objeto
+// resultado {ok:true, comprobante,...} o {ok:false, code, message}.
+// La reserva ya se pago online (Wompi): venta origin='WOMPI' SIN cobro en caja; precio y
+// duracion salen de la reserva (no se re-cotiza). Doble candado anti-concurrencia:
+//   1) CLAIM: UPDATE app_reservas activacion_ms=now WHERE activacion_ms IS NULL (filas
+//      afectadas). Serializa entre pollers -> solo uno reclama la reserva.
+//   2) UPDATE atomico de rooms WHERE state='AVAILABLE'. Cubre carreras con walk-ins.
+//   Si la hab no estaba disponible -> se REVIERTE el claim (activacion_ms=null) y la reserva
+//   queda viva (sigue vencida/parpadeando VENCIDA), reintentable en el proximo poll.
+async function activarReservaCore({ reservaId, clave, userName, bDay, shift, now }) {
   // 1) Reserva PAGADA sin activar, de ESTE motel. app_reservas NO es tenant -> motel_id explicito.
   let q = supabase.from('app_reservas')
     .select('id, habitacion, categoria, duracion, precio, clave, wompi_transaction_id, app_usuarios(nombre)')
     .eq('motel_id', MOTEL_ID).eq('estado', 'PAGADA').is('activacion_ms', null);
   q = reservaId ? q.eq('id', reservaId) : q.eq('clave', clave);
   const { data: reservas } = await q.limit(2);
-  if (!reservas || !reservas.length) return err(res, 'Reserva no encontrada, ya activada o clave invalida');
-  if (reservas.length > 1) return err(res, 'Clave ambigua — contactar soporte'); // colision improbable
+  if (!reservas || !reservas.length) return { ok:false, code:'NOT_FOUND', message:'Reserva no encontrada, ya activada o clave invalida' };
+  if (reservas.length > 1) return { ok:false, code:'AMBIGUOUS', message:'Clave ambigua — contactar soporte' };
   const reserva = reservas[0];
 
-  const roomId = String(reserva.habitacion || '').trim();
-  if (!roomId) return err(res, 'La reserva no tiene habitacion asignada');
-  const room = await getRoom(roomId);
-  if (!room) return err(res, 'Habitacion no existe: ' + roomId);
-  if (room.disabled) return err(res, 'Habitacion deshabilitada');
+  // 2) CANDADO 1 — CLAIM: activacion_ms=now solo si sigue NULL. 0 filas => otro poller/
+  //    recepcionista ya la reclamo -> abortar sin tocar nada mas.
+  const { data: claimed } = await supabase.from('app_reservas')
+    .update({ activacion_ms: now })
+    .eq('id', reserva.id).eq('motel_id', MOTEL_ID).is('activacion_ms', null)
+    .select('id');
+  if (!claimed || !claimed.length) return { ok:false, code:'ALREADY_CLAIMED', message:'La reserva ya se esta activando' };
+  const revertClaim = async () => {
+    await supabase.from('app_reservas').update({ activacion_ms: null }).eq('id', reserva.id).eq('motel_id', MOTEL_ID);
+  };
 
-  // 2) Duracion/precio DESDE la reserva (ya pagado online: no re-cotizar).
+  // Validar hab + duracion. Si no sirve, revertir el claim (reserva vuelve a estar viva).
+  const roomId = String(reserva.habitacion || '').trim();
   const durationHrs = parseInt(String(reserva.duracion||'').replace(/\D/g,''), 10) || 0;
-  if (![3,6,8,12].includes(durationHrs)) return err(res, 'Duracion de la reserva invalida: ' + reserva.duracion);
+  const room = roomId ? await getRoom(roomId) : null;
+  if (!room || room.disabled || ![3,6,8,12].includes(durationHrs)) {
+    await revertClaim();
+    const code = !room ? 'ROOM_NOT_FOUND' : room.disabled ? 'ROOM_DISABLED' : 'BAD_DURATION';
+    return { ok:false, code, message:'Habitacion o reserva no activable' };
+  }
+
   const precio = Number(reserva.precio || 0);
   const dueMs = now + durationHrs * 3600000;
-
   const PRICING = await getPricing(MOTEL_ID);
   const cfg = cfgFor(PRICING, room.category);
-  const people = Number(cfg.included || 2);  // Decision 2: personas = default de la categoria (extras van por addExtraPerson).
+  const people = Number(cfg.included || 2);  // personas = default de la categoria (extras van por addExtraPerson).
 
-  // 3) Transicion ATOMICA (fix TOCTOU): el UPDATE solo pega si la hab SIGUE AVAILABLE.
-  //    .select() devuelve las filas afectadas: 0 = otra recepcionista la ocupo recien.
+  // 3) CANDADO 2 — UPDATE atomico de rooms: solo pega si la hab SIGUE AVAILABLE.
   const { data: updated } = await tUpdate('rooms', {
     state:'OCCUPIED', state_since_ms:now, people,
     check_in_ms:now, due_ms:dueMs,
@@ -1088,12 +1129,12 @@ async function apiActivarReserva(p, res) {
     updated_at:new Date().toISOString()
   }).eq('room_id', roomId).eq('state', 'AVAILABLE').select('room_id');
   if (!updated || !updated.length) {
-    return err(res, `Hab ${roomId} ya no esta disponible (se ocupo recien)`);
+    await revertClaim();  // la reserva vuelve a estar viva (VENCIDA), reintentable.
+    return { ok:false, code:'ROOM_TAKEN', message:`Hab ${roomId} ya no esta disponible (se ocupo recien)` };
   }
 
-  // 4) Venta origin='WOMPI' SIN campos de cobro (pago online). pay_method='WOMPI'
-  //    -> queda fuera de EF/TA/NQ del cuadre; total sigue sumando al revenue.
-  await tInsert('sales', {
+  // 4) Venta origin='WOMPI' SIN cobro. .select('id') -> consecutivo del comprobante (RSV-NNNNNN).
+  const { data: ventaRows } = await tInsert('sales', {
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:'RECEPTION', user_name:userName, type:'SALE',
     room_id:roomId, category:room.category, duration_hrs:durationHrs,
@@ -1104,23 +1145,79 @@ async function apiActivarReserva(p, res) {
     pay_method_2:'', amount_1:0, amount_2:0, amount_3:0,
     check_in_ms:now, due_ms:dueMs,
     origin:'WOMPI', reserva_id:reserva.id, wompi_transaction_id:reserva.wompi_transaction_id||''
-  });
+  }).select('id');
+  const saleId = (ventaRows && ventaRows[0]) ? ventaRows[0].id : null;
 
-  // 5) Historial de estado.
+  // 5) Historial de estado (queda registrado quien activo: recepcionista o SISTEMA no-show).
   await tInsert('state_history', {
     ts_ms:now, business_day:bDay, shift_id:shift,
     user_role:'RECEPTION', user_name:userName, room_id:roomId,
     from_state:'AVAILABLE', to_state:'OCCUPIED', people,
-    meta_json: JSON.stringify({ origin:'WOMPI', reservaId:reserva.id, clave:reserva.clave, precio, durationHrs, dueMs, checkInMs:now })
+    meta_json: JSON.stringify({ origin:'WOMPI', reservaId:reserva.id, clave:reserva.clave, precio, durationHrs, dueMs, checkInMs:now, activadoPor:userName })
   });
 
-  // 6) Marcar la reserva activada (guarda condicional: solo si seguia sin activar).
-  await supabase.from('app_reservas')
-    .update({ activacion_ms: now })
-    .eq('id', reserva.id).eq('motel_id', MOTEL_ID).is('activacion_ms', null);
-
   const clienteNombre = (reserva.app_usuarios && reserva.app_usuarios.nombre) || 'cliente';
-  return ok(res, { roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, printFactura:true });
+  const comprobante = {
+    comprobanteNum: saleId, activacionMs: now, clave: reserva.clave||'',
+    categoria: room.category, durationHrs, precio,
+    wompiTransactionId: reserva.wompi_transaction_id||'', roomId,
+    shiftId: shift, activadoPor: userName, clienteNombre
+  };
+  return { ok:true, roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, comprobante };
+}
+
+// Activacion MANUAL (recepcion escanea/digita clave). Wrapper fino sobre el nucleo.
+async function apiActivarReserva(p, res) {
+  const now = Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
+  const userName = String(p.userName || '').trim();
+  const clave = String(p.clave || '').toUpperCase().trim();
+  const reservaId = String(p.reservaId || '').trim();
+  if (!userName) return err(res, 'Nombre requerido');
+  if (!clave && !reservaId) return err(res, 'Clave o reservaId requerido');
+  const r = await activarReservaCore({ reservaId, clave, userName, bDay, shift, now });
+  if (!r.ok) {
+    if (r.code === 'ALREADY_CLAIMED') return err(res, 'La reserva ya se activó (o se está activando)');
+    return err(res, r.message || 'No se pudo activar la reserva');
+  }
+  return ok(res, { roomId:r.roomId, reservaId:r.reservaId, clienteNombre:r.clienteNombre, durationHrs:r.durationHrs, dueMs:r.dueMs, precio:r.precio, printFactura:true, comprobante:r.comprobante });
+}
+
+// Comprobante de una reserva ya activada, para REIMPRESION (mismo numero: deriva del
+// sales.id de la venta WOMPI). Devuelve {comprobante:null} si la hab no ingreso por reserva.
+async function apiGetComprobanteReserva(p, res) {
+  const roomId = String(p.roomId||'').trim();
+  if(!roomId) return err(res,'roomId requerido');
+  const { data: ventas } = await tSelect('sales','*')
+    .eq('room_id', roomId).eq('origin','WOMPI').eq('anulada', false)
+    .order('ts_ms',{ascending:false}).limit(1);
+  const venta = ventas && ventas[0];
+  if(!venta) return ok(res,{ comprobante:null });
+  let clave='', clienteNombre='cliente';
+  if(venta.reserva_id){
+    const { data: rv } = await supabase.from('app_reservas')
+      .select('clave, app_usuarios(nombre)').eq('id', venta.reserva_id).maybeSingle();
+    if(rv){ clave = rv.clave||''; clienteNombre = (rv.app_usuarios && rv.app_usuarios.nombre) || 'cliente'; }
+  }
+  const comprobante = {
+    comprobanteNum: venta.id, activacionMs: Number(venta.ts_ms||0), clave,
+    categoria: venta.category||'', durationHrs: Number(venta.duration_hrs||0), precio: Number(venta.total||0),
+    wompiTransactionId: venta.wompi_transaction_id||'', roomId,
+    shiftId: venta.shift_id||'', activadoPor: venta.user_name||'', clienteNombre
+  };
+  return ok(res,{ comprobante });
+}
+
+// Etapa D: marca el comprobante como impreso (apaga la marca 🧾). Se llama al abrir la
+// ventana de impresion (auto de la activacion manual o via Reimprimir).
+async function apiMarcarComprobanteImpreso(p, res) {
+  const comprobanteNum = Number(p.comprobanteNum||0);
+  if(!comprobanteNum) return err(res,'comprobanteNum requerido');
+  const now = Date.now();
+  await tUpdate('sales',{ comprobante_impreso_ms: now })
+    .eq('id', comprobanteNum).eq('origin','WOMPI').is('comprobante_impreso_ms', null);
+  return ok(res,{ comprobanteNum, impresoMs: now });
 }
 
 // ==================== CHECK-OUT ====================
@@ -1954,8 +2051,9 @@ async function apiCloseShift(p, res) {
 
   const cortesiaIds = await getCortesiaIds();
   let totalSales=0, totalRefunds=0, totalTaxi=0, totalLoans=0, totalExtraStaff=0;
-  let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0;
+  let roomsSold=0, people=0, totalEfectivo=0, totalTarjeta=0, totalNequi=0, totalWompi=0;
   let totalProductos=0, totalProductosEf=0, totalProductosTa=0, totalProductosNq=0;
+  const reservasApp=[];  // Etapa D: detalle por habitacion de las ventas WOMPI (reservas app) del turno.
 
   (salesRes.data || []).forEach(r => {
     if (r.anulada) return;
@@ -1964,7 +2062,7 @@ async function apiCloseShift(p, res) {
     // es siempre del turno actual -> post-corte, no necesita el cutoff por fecha.)
     const esCortesia = cortesiaIds.has(String(r.room_id));
     const t = Number(r.total||0), pm = String(r.pay_method||'').toUpperCase();
-    if (r.type === 'SALE') { totalSales+=t; if(!esCortesia)roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
+    if (r.type === 'SALE') { totalSales+=t; if(!esCortesia)roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; else if(pm==='WOMPI'){totalTarjeta+=t; totalWompi+=t; reservasApp.push({roomId:String(r.room_id||''),total:t});/* Reservas app: dentro de Tarjeta */} }
     if (r.type === 'REFUND') { totalRefunds += t; if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; else totalEfectivo+=t; }
     if (r.type === 'RENEWAL') { totalSales+=t; roomsSold++; people+=Number(r.people||0); if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
     if (r.type === 'EXTENSION') { totalSales+=t; if(pm==='EFECTIVO')totalEfectivo+=t; else if(pm==='TARJETA')totalTarjeta+=t; else if(pm==='NEQUI')totalNequi+=t; }
@@ -1993,7 +2091,7 @@ async function apiCloseShift(p, res) {
     cash_billetes: Number(p.cashBilletes||0),
     cash_monedas: Number(p.cashMonedas||0),
     notes: String(p.notes||''), total_efectivo: totalEfectivo,
-    total_tarjeta: totalTarjeta, total_nequi: totalNequi,
+    total_tarjeta: totalTarjeta, total_nequi: totalNequi, total_wompi: totalWompi,
     total_productos: totalProductos,
     total_productos_ef: totalProductosEf,
     total_productos_ta: totalProductosTa,
@@ -2014,7 +2112,7 @@ async function apiCloseShift(p, res) {
   });
 
   // Bar bar_sales removido - duplicaba valores de room_products
-  return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi } });
+  return ok(res, { summary: { bizDay: bDay, shiftId: shift, totalSales, totalRefunds, totalTaxi, totalLoans, totalExtraStaff, net, roomsSold, people, totalEfectivo, totalTarjeta, totalNequi, totalWompi, reservasApp } });
 }
 
 // ==================== METRICAS ====================
@@ -2038,8 +2136,8 @@ async function apiMetrics(p, res) {
   const dailyGoal=Number(settings.DAILY_GOAL||0);
   const cortesiaIds=await getCortesiaIds();
   let dayTotal=0,dayRefunds=0,dayTaxi=0,dayBar=0,dayGastos=0,dayLoans=0,dayExtraStaff=0;
-  let dayEfe=0,dayTar=0,dayNeq=0;
-  let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
+  let dayEfe=0,dayTar=0,dayNeq=0,dayWompi=0;
+  let shiftSales=0,shiftRooms=0,shiftPeople=0,shiftEfe=0,shiftTar=0,shiftNeq=0,shiftWompi=0,shiftTaxi=0,shiftBar=0,shiftGastos=0;
   const allSalesList=[];
 
   (salesRes.data||[]).forEach(r=>{
@@ -2062,7 +2160,7 @@ async function apiMetrics(p, res) {
           dayEfe -= t; // Resta porque salio de caja
         } else {
           dayTotal+=t;
-          if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
+          if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='WOMPI'){dayTar+=t;dayWompi+=t;/* Reservas app: dentro de Tarjeta */}else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
         }
       }
       if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal,isCortesia:cortesiaIds.has(String(r.room_id))});
@@ -2074,7 +2172,7 @@ async function apiMetrics(p, res) {
             shiftEfe -= t;
           } else {
             shiftSales+=t;
-            if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
+            if(pm==='EFECTIVO')shiftEfe+=t;else if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else if(pm==='WOMPI'){shiftTar+=t;shiftWompi+=t;/* Reservas app: dentro de Tarjeta */}else if(pm==='MIXTO'){shiftEfe+=Number(r.amount_1||0);shiftTar+=Number(r.amount_2||0);shiftNeq+=Number(r.amount_3||0);}
             if(type==='SALE'){if(!esCortesia)shiftRooms++;shiftPeople+=Number(r.people||0);}
           }
         }
@@ -2135,10 +2233,10 @@ const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay
     businessDay:bDay,
     totals:{
       sales:dayTotal,bar:dayBar,refunds:dayRefunds,taxi:dayTaxi,loans:dayLoans,extraStaff:dayExtraStaff,gastos:dayGastos,net:dayNet,
-      totalEfectivo:dayEfe,totalTarjeta:dayTar,totalNequi:dayNeq,
+      totalEfectivo:dayEfe,totalTarjeta:dayTar,totalNequi:dayNeq,totalWompi:dayWompi,
       barEfectivo:dayBarEfe,barTarjeta:dayBarTar,barNequi:dayBarNeq,
       shiftNet,shiftSales,shiftRoomsSold:shiftRooms,shiftPeople,shiftBar,shiftTaxi,shiftGastos,
-      shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,
+      shiftEfectivo:shiftEfe,shiftTarjeta:shiftTar,shiftNequi:shiftNeq,shiftWompi,
       shiftBarEfectivo:shiftBarEfe,shiftBarTarjeta:shiftBarTar,shiftBarNequi:shiftBarNeq,
       totalProductos,totalCortesiasProds,totalProductosEf,totalProductosTa,totalProductosNq,
       salidasHoy:salidasHoy||0
@@ -2215,6 +2313,7 @@ async function apiMonthMetrics(p, res) {
     tj_hab:0,tj_padd:0,tj_had:0,tj_bar:0,
     ef_hab:0,ef_padd:0,ef_had:0,ef_bar:0,
     nq_hab:0,nq_padd:0,nq_had:0,nq_bar:0,
+    wo_hab:0,wo_padd:0,wo_had:0,   // Etapa D: Reservas (app) / Wompi
     gastos:0,taxis:0,turnos:0,
     roomsSold:0
   });
@@ -2273,12 +2372,14 @@ async function apiMonthMetrics(p, res) {
       const base=t-epv;
       if(pm==='TARJETA'){s.tj_hab+=base;s.tj_padd+=epv;}
       else if(pm==='NEQUI'){s.nq_hab+=base;s.nq_padd+=epv;}
+      else if(pm==='WOMPI'){s.wo_hab+=base;s.wo_padd+=epv;}   // Reservas (app): NO cae en efectivo.
       else if(pm==='MIXTO'){s.ef_hab+=Number(r.amount_1||0);s.tj_hab+=Number(r.amount_2||0);s.nq_hab+=Number(r.amount_3||0);}
       else{s.ef_hab+=base;s.ef_padd+=epv;}
     }
     if(r.type==='EXTENSION'){
       if(pm==='TARJETA')s.tj_had+=t;
       else if(pm==='NEQUI')s.nq_had+=t;
+      else if(pm==='WOMPI')s.wo_had+=t;   // Reservas (app): NO cae en efectivo.
       else if(pm==='MIXTO'){s.ef_had+=Number(r.amount_1||0);s.tj_had+=Number(r.amount_2||0);s.nq_had+=Number(r.amount_3||0);}
       else s.ef_had+=t;
     }
@@ -2327,10 +2428,11 @@ async function apiMonthMetrics(p, res) {
 
   // Calcular netos por turno y totales por día
   days.forEach(d=>{
-    d.totalTarjeta=0;d.totalEfectivo=0;d.totalNequi=0;d.totalGastos=0;d.netodia=0;
+    d.totalTarjeta=0;d.totalEfectivo=0;d.totalNequi=0;d.totalWompi=0;d.totalGastos=0;d.netodia=0;
     SHIFTS.forEach(sid=>{
       const s=d[sid];
-      s.totalTarjeta=s.tj_hab+s.tj_padd+s.tj_had+s.tj_bar;
+      s.totalWompi=s.wo_hab+s.wo_padd+s.wo_had;   // Etapa D: Reservas (app) — sub de Tarjeta
+      s.totalTarjeta=s.tj_hab+s.tj_padd+s.tj_had+s.tj_bar+s.totalWompi;   // Tarjeta INCLUYE reservas (app)
       s.totalEfectivo=s.ef_hab+s.ef_padd+s.ef_had+s.ef_bar;
       s.totalNequi=s.nq_hab+s.nq_padd+s.nq_had+s.nq_bar;
       s.totalGastos=s.gastos+s.taxis+s.turnos;
@@ -2338,22 +2440,24 @@ async function apiMonthMetrics(p, res) {
       d.totalTarjeta+=s.totalTarjeta;
       d.totalEfectivo+=s.totalEfectivo;
       d.totalNequi+=s.totalNequi;
+      d.totalWompi+=s.totalWompi;
       d.totalGastos+=s.totalGastos;
     });
-    d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;
+    d.netodia=d.totalTarjeta+d.totalEfectivo+d.totalNequi-d.totalGastos;   // Wompi ya va dentro de totalTarjeta
   });
 
-  const monthTotals={sales:0,tarjeta:0,efectivo:0,nequi:0,gastos:0,neto:0,roomsSold:0,people:0,expenses:0};
+  const monthTotals={sales:0,tarjeta:0,efectivo:0,nequi:0,wompi:0,gastos:0,neto:0,roomsSold:0,people:0,expenses:0};
   days.forEach(d=>{
     monthTotals.tarjeta+=d.totalTarjeta;
     monthTotals.efectivo+=d.totalEfectivo;
     monthTotals.nequi+=d.totalNequi;
+    monthTotals.wompi+=d.totalWompi;
     monthTotals.gastos+=d.totalGastos;
     monthTotals.neto+=d.netodia;
     monthTotals.roomsSold+=d.roomsSold;
     monthTotals.people+=d.people||0;
   });
-  monthTotals.sales=monthTotals.tarjeta+monthTotals.efectivo+monthTotals.nequi;
+  monthTotals.sales=monthTotals.tarjeta+monthTotals.efectivo+monthTotals.nequi;   // tarjeta ya incluye wompi
   monthTotals.expenses=monthTotals.gastos;
 
   // Rankings
@@ -2582,7 +2686,7 @@ async function apiRoomHistory(p, res) {
   return ok(res,{
     roomId,
     stateHistory:(stateRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,fromState:r.from_state,toState:r.to_state,userName:r.user_name,meta:(()=>{try{return JSON.parse(r.meta_json||'{}');}catch(e){return{};}})()})),
-    salesHistory:(salesRes.data||[]).map(r=>({tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)})),
+    salesHistory:(salesRes.data||[]).map(r=>({id:r.id,origin:r.origin||'',tsMs:Number(r.ts_ms),businessDay:r.business_day,shiftId:r.shift_id||'',type:r.type,durationHrs:Number(r.duration_hrs||0),total:Number(r.total||0),people:Number(r.people||0),extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',userName:r.user_name,payMethod:r.pay_method||'',checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0)})),
     taxiHistory:(taxiRes.data||[]).map(r=>({id:r.id,tsMs:Number(r.ts_ms),amount:Number(r.amount||0)}))
   });
 }
@@ -2650,7 +2754,7 @@ async function apiGetDailyCuadre(p, res) {
 
   const shifts=['SHIFT_1','SHIFT_2','SHIFT_3'];
   const c={};
-  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiHab:0,nequiPersonas:0,nequiHoras:0,nequiBar:0,gastos:0,taxis:0,turnos:0};});
+  shifts.forEach(sid=>{c[sid]={responsable:responsables[sid],tarjetaHab:0,tarjetaPersonas:0,tarjetaHoras:0,tarjetaBar:0,efectivoHab:0,efectivoPersonas:0,efectivoHoras:0,efectivoBar:0,nequiHab:0,nequiPersonas:0,nequiHoras:0,nequiBar:0,gastos:0,taxis:0,turnos:0,reservasApp:0,reservasAppDetalle:[]};});
 
   const cortesiaIds = await getCortesiaIds();
   (salesRes.data||[]).forEach(r=>{
@@ -2659,9 +2763,15 @@ async function apiGetDailyCuadre(p, res) {
     const esCruzada = r.anulada && r.devolucion_efectivo;
     const metodoOriginal = String(r.devolucion_metodo_original||'').toUpperCase();
     if(r.anulada && !esCruzada) return;  // Anulada normal: ignorar
-    // Etapa B: venta WOMPI (pago online) NO entra al cuadre de caja — el dinero no
-    // paso por la recepcionista. El desglose visual "Online/Wompi" es Etapa D.
-    if(String(r.origin||'').toUpperCase()==='WOMPI') return;
+    // Etapa D: venta WOMPI (pago online) NO entra al cuadre de caja (el dinero no paso
+    // por la recepcionista), pero SI se muestra como linea propia "Reservas (app)" con
+    // detalle por habitacion. No suma a la entrega (entrega = solo lo que ella recibio).
+    if(String(r.origin||'').toUpperCase()==='WOMPI'){
+      const tW=Number(r.total||0);
+      c[sid].reservasApp+=tW;
+      c[sid].reservasAppDetalle.push({roomId:String(r.room_id||''),total:tW});
+      return;
+    }
     // Cortesia PRE-corte: excluir entero. POST-corte: la hab base aporta 0
     // (habVal=t-epv=0 tras Parte 1) y personas/horas suman. (Cuadre sin roomsSold.)
     if(cortesiaIds.has(String(r.room_id)) && String(bDay) < CORTESIA_COBRO_DESDE) return;
@@ -2701,13 +2811,13 @@ async function apiGetDailyCuadre(p, res) {
   const cuadre={};let diaTotal=0;
   shifts.forEach(sid=>{
     const x=c[sid];
-    const totTarjeta=x.tarjetaHab+x.tarjetaPersonas+x.tarjetaHoras+x.tarjetaBar;
+    const totTarjeta=x.tarjetaHab+x.tarjetaPersonas+x.tarjetaHoras+x.tarjetaBar+x.reservasApp;  // Tarjeta INCLUYE reservas (app)
     const totNequi=x.nequiBar;
     const totEfectivo=x.efectivoHab+x.efectivoPersonas+x.efectivoHoras+x.efectivoBar;
     const totGastos=x.gastos+x.taxis+x.turnos;
     const entrega=totTarjeta+totEfectivo+totNequi-totGastos;
     diaTotal+=entrega;
-    cuadre[sid]={responsable:x.responsable,tarjeta:{hab:x.tarjetaHab,personas:x.tarjetaPersonas,horas:x.tarjetaHoras,bar:x.tarjetaBar,total:totTarjeta},efectivo:{hab:x.efectivoHab,personas:x.efectivoPersonas,horas:x.efectivoHoras,bar:x.efectivoBar,total:totEfectivo},nequi:{bar:x.nequiBar,total:totNequi},gastos:{generales:x.gastos,taxis:x.taxis,turnos:x.turnos,total:totGastos},entregaDiaria:entrega};
+    cuadre[sid]={responsable:x.responsable,tarjeta:{hab:x.tarjetaHab,personas:x.tarjetaPersonas,horas:x.tarjetaHoras,bar:x.tarjetaBar,reservasApp:{total:x.reservasApp,detalle:x.reservasAppDetalle},total:totTarjeta},efectivo:{hab:x.efectivoHab,personas:x.efectivoPersonas,horas:x.efectivoHoras,bar:x.efectivoBar,total:totEfectivo},nequi:{bar:x.nequiBar,total:totNequi},gastos:{generales:x.gastos,taxis:x.taxis,turnos:x.turnos,total:totGastos},entregaDiaria:entrega};
   });
   return ok(res,{businessDay:bDay,cuadre,entregaTotalDia:diaTotal});
 }
@@ -6889,6 +6999,7 @@ async function apiGetGastosMesResumen(p, res) {
       if(pm === 'EFECTIVO') ventasEfectivo += total;
       else if(pm === 'TARJETA') ventasTarjeta += total;
       else if(pm === 'NEQUI') ventasNequi += total;
+      else if(pm === 'WOMPI') ventasTarjeta += total;   // Reservas (app): dentro de Tarjeta
     }
   });
 
