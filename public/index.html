@@ -2457,6 +2457,8 @@ function openRoom(rid){
       var ventaBase=sales.find(function(s){return s.type==='SALE';});
       var extensiones=sales.filter(function(s){return s.type==='EXTENSION';});
       var horaGratis=allSales.some(function(s){return s.type==='HORA_GRATIS'&&Number(s.checkInMs||0)===anclaMs;});
+      // + Horas: solo AUMENTAR — filtra el selector a duraciones mayores a la venta base.
+      aplicarChgHrsFiltro(ventaBase?Number(ventaBase.durationHrs||0):0);
       if(ventaBase){
         var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
         var turnoEl=document.getElementById('turnoVentaDisp');
@@ -2613,7 +2615,7 @@ function buildRoomB(r){
    h+='<div id="resumenEstadia" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:var(--title);margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:var(--muted)">Cargando...</p></div>';
     if(isR){
      h+='<button class="btn br full" onclick="showCO()">Registrar Salida</button>';
-     h+='<div class="row" style="margin-top:8px"><button class="btn bp sm" onclick="showCambiarHoras()">⏱ + Horas</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
+     h+='<div class="row" style="margin-top:8px"><button class="btn bp sm" id="btnChgHrs" onclick="showCambiarHoras()">⏱ + Horas</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
       // FRANJA PRODUCTOS
       h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -2781,7 +2783,7 @@ h+='</div>';
 }
 
 var selExtPayMode='EFECTIVO',selRewPayMode='EFECTIVO';
-var selChgDur=8,selChgPayMode='EFECTIVO';   // ⏱ + Horas
+var selChgDur=8,selChgPayMode='EFECTIVO',curBaseDur=0;   // ⏱ + Horas
 
 function setExtMode(mode){
   selExtMode=mode;
@@ -2804,10 +2806,29 @@ function selRewDur(h,cat){
 function showCO(){var p=document.getElementById('coF');if(p)p.style.display=p.style.display==='none'?'block':'none';}
 function showExt(){var p=document.getElementById('extP');if(p)p.style.display=p.style.display==='none'?'block':'none';}
 function showCambiarHoras(){var p=document.getElementById('chgHrsP');if(p)p.style.display=p.style.display==='none'?'block':'none';}
+// + Horas SOLO AUMENTAR: oculta las opciones <= duración base y esconde el botón si ya está al máximo.
+function aplicarChgHrsFiltro(baseDur){
+  curBaseDur=Number(baseDur||0);
+  var panel=document.getElementById('chgHrsP'),btn=document.getElementById('btnChgHrs');
+  if(!panel)return;
+  var primeraValida=0;
+  panel.querySelectorAll('.po').forEach(function(o){
+    var hhr=Number((o.id||'').replace('chg',''))||0;
+    var mayor=hhr>curBaseDur;
+    o.style.display=mayor?'':'none';
+    o.classList.remove('on');
+    if(mayor&&!primeraValida)primeraValida=hhr;
+  });
+  if(!primeraValida){ if(btn)btn.style.display='none'; panel.style.display='none'; return; }
+  if(btn)btn.style.display='';
+  selChgDur=(selChgDur>curBaseDur)?selChgDur:primeraValida;
+  var sel=document.getElementById('chg'+selChgDur);if(sel)sel.classList.add('on');
+}
 function selChgPm(pm){selChgPayMode=pm;['EF','TA','NE'].forEach(function(k){var el=document.getElementById('chgPm'+k);if(el)el.classList.toggle('on',{EF:'EFECTIVO',TA:'TARJETA',NE:'NEQUI'}[k]===pm);});}
 function setChgDur(h,cat){selChgDur=h;document.querySelectorAll('[id^="chg"]').forEach(function(e){if(e.classList.contains('po'))e.classList.remove('on');});var el=document.getElementById('chg'+h);if(el)el.classList.add('on');}
 function doCambiarDuracion(){
   if(!curRoom)return;
+  if(curBaseDur&&selChgDur<=curBaseDur){toast('Solo se puede AUMENTAR (la duración ya es '+curBaseDur+'h)','err');return;}
   conf('Cambiar duración a '+selChgDur+'h (desde la entrada)? Se cobra la diferencia con lo pagado.',function(){
     rpc('cambiarDuracion',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,nuevaDur:selChgDur,payMethod:selChgPayMode},
       function(res){toast('Duración '+res.origDur+'h→'+res.nuevaDur+'h — cobrado '+fmt(res.diff),'ok');closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});},
