@@ -395,6 +395,7 @@ module.exports = async function handler(req, res) {
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'activarReserva':    return await apiActivarReserva(payload, res);
       case 'getComprobanteReserva': return await apiGetComprobanteReserva(payload, res);
+      case 'getComprobantesPendientes': return await apiGetComprobantesPendientes(payload, res);
       case 'marcarComprobanteImpreso': return await apiMarcarComprobanteImpreso(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
       case 'extendTime':        return await apiExtendTime(payload, res);
@@ -1185,6 +1186,25 @@ async function apiActivarReserva(p, res) {
   return ok(res, { roomId:r.roomId, reservaId:r.reservaId, clienteNombre:r.clienteNombre, durationHrs:r.durationHrs, dueMs:r.dueMs, precio:r.precio, printFactura:true, comprobante:r.comprobante });
 }
 
+// Arma el objeto comprobante (para imprimir) desde una venta WOMPI. Join a app_reservas
+// para clave/nombre. Reusado por la reimpresion por hab y por el listado de pendientes.
+async function buildComprobante(venta){
+  if(!venta) return null;
+  let clave='', clienteNombre='cliente';
+  if(venta.reserva_id){
+    const { data: rv } = await supabase.from('app_reservas')
+      .select('clave, app_usuarios(nombre)').eq('id', venta.reserva_id).maybeSingle();
+    if(rv){ clave = rv.clave||''; clienteNombre = (rv.app_usuarios && rv.app_usuarios.nombre) || 'cliente'; }
+  }
+  return {
+    comprobanteNum: venta.id, activacionMs: Number(venta.ts_ms||0), clave,
+    categoria: venta.category||'', durationHrs: Number(venta.duration_hrs||0), precio: Number(venta.total||0),
+    wompiTransactionId: venta.wompi_transaction_id||'', roomId: String(venta.room_id||''),
+    shiftId: venta.shift_id||'', activadoPor: venta.user_name||'', clienteNombre,
+    businessDay: venta.business_day||'', checkoutMs: Number(venta.checkout_ms||0)
+  };
+}
+
 // Comprobante de una reserva ya activada, para REIMPRESION (mismo numero: deriva del
 // sales.id de la venta WOMPI). Devuelve {comprobante:null} si la hab no ingreso por reserva.
 async function apiGetComprobanteReserva(p, res) {
@@ -1193,21 +1213,20 @@ async function apiGetComprobanteReserva(p, res) {
   const { data: ventas } = await tSelect('sales','*')
     .eq('room_id', roomId).eq('origin','WOMPI').eq('anulada', false)
     .order('ts_ms',{ascending:false}).limit(1);
-  const venta = ventas && ventas[0];
-  if(!venta) return ok(res,{ comprobante:null });
-  let clave='', clienteNombre='cliente';
-  if(venta.reserva_id){
-    const { data: rv } = await supabase.from('app_reservas')
-      .select('clave, app_usuarios(nombre)').eq('id', venta.reserva_id).maybeSingle();
-    if(rv){ clave = rv.clave||''; clienteNombre = (rv.app_usuarios && rv.app_usuarios.nombre) || 'cliente'; }
-  }
-  const comprobante = {
-    comprobanteNum: venta.id, activacionMs: Number(venta.ts_ms||0), clave,
-    categoria: venta.category||'', durationHrs: Number(venta.duration_hrs||0), precio: Number(venta.total||0),
-    wompiTransactionId: venta.wompi_transaction_id||'', roomId,
-    shiftId: venta.shift_id||'', activadoPor: venta.user_name||'', clienteNombre
-  };
-  return ok(res,{ comprobante });
+  return ok(res,{ comprobante: await buildComprobante(ventas && ventas[0]) });
+}
+
+// Comprobante obligatorio no-bloqueante: TODOS los comprobantes de reserva (venta WOMPI)
+// que aun NO se imprimieron, SIN filtro de turno/dia -> para que ninguno se pierda tras el
+// checkout ni entre turnos. Solo lectura. Lo usan el cierre de recepcion y el cuadre ADMIN
+// (el admin factura en LOGGRO y necesita ver pendientes de dias/turnos anteriores).
+async function apiGetComprobantesPendientes(p, res) {
+  const { data: ventas } = await tSelect('sales','*')
+    .eq('origin','WOMPI').eq('anulada', false).is('comprobante_impreso_ms', null)
+    .order('ts_ms',{ascending:true});
+  const lista = [];
+  for(const v of (ventas||[])){ const c = await buildComprobante(v); if(c) lista.push(c); }
+  return ok(res,{ pendientes: lista });
 }
 
 // Etapa D: marca el comprobante como impreso (apaga la marca 🧾). Se llama al abrir la
