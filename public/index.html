@@ -5248,6 +5248,7 @@ h+='</div></div>';
         h+='<div class="sale-det"><span>Ent: '+fT(s.checkInMs)+'</span><span>Sal: '+fT(s.dueMs)+'</span><span>'+s.durationHrs+'h — '+s.people+'p'+extraI+'</span><span class="badge '+arrB+'">'+s.arrivalType+(s.arrivalPlate?' '+s.arrivalPlate:'')+'</span></div></div>';
       });
     }
+    h+='<div id="pendientesCierre"></div>';
     h+='<div class="sec">Cierre de Turno</div><label>Efectivo en billetes</label><input type="number" id="cashBilletes" placeholder="Total en billetes" min="0" oninput="calcFaltante()"><label>Efectivo en monedas</label><input type="number" id="cashMonedas" placeholder="Total en monedas" min="0" oninput="calcFaltante()"><input type="hidden" id="cashIn2"><input type="hidden" id="_esperadoEfectivo" value="0"><div id="faltanteBox" style="display:none;margin-top:8px;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:500"></div><label>Notas del turno</label><textarea id="closeN2" placeholder="Observaciones..."></textarea>';
     h+='<div class="row"><button class="btn br sm" onclick="doCierre()">Cerrar Turno</button><button class="btn bb sm" onclick="printC()">Imprimir</button></div>';
     window._cuadrePrintData={
@@ -5262,6 +5263,7 @@ h+='</div></div>';
       billetes:0,monedas:0,notas:''
     };
     el.innerHTML=h;
+    cargarPendientes('pendientesCierre');
   });
 }
 function toggleDetalleCuadreAdm(){
@@ -5465,7 +5467,9 @@ function doCierre(){
   var barTjEl=document.getElementById('barTjInput');
   var n=(document.getElementById('closeN2')||{}).value||'';
   var ca=Number((document.getElementById('cashIn2')||{}).value||0);
-  conf('Confirmar cierre del turno?',function(){
+  var _pend=_pendientesCache.length;
+  var msgCierre=_pend>0?('Hay '+_pend+' comprobante'+(_pend>1?'s':'')+' de reserva SIN imprimir. Se pueden imprimir después desde el cuadre. ¿Cerrar turno igual?'):'Confirmar cierre del turno?';
+  conf(msgCierre,function(){
     var cashBilletes=Number((document.getElementById('cashBilletes')||{}).value||0);
     var cashMonedas=Number((document.getElementById('cashMonedas')||{}).value||0);
     var barEfVal=Number((document.getElementById('_ef_bar_auto')||{}).value||0);
@@ -9619,7 +9623,8 @@ h+='</div>';
         num++;
       });
     }
- el.innerHTML=h;
+ el.innerHTML='<div id="pendientesAdmin"></div>'+h;
+ cargarPendientes('pendientesAdmin');
   });
 }
 // ---- DASHBOARD METRICAS NUEVO (en construccion) ----
@@ -13046,13 +13051,65 @@ function imprimirFacturaReserva(c){
   var w=window.open('','_blank','width=400,height=600');
   if(!w){toast('Permite ventanas emergentes para imprimir','err');return;}
   w.document.write(html);w.document.close();
-  // Etapa D: marcar impreso (apaga la marca 🧾) y refrescar el tablero. Solo si la
-  // ventana se abrio (si el popup estaba bloqueado, se corto arriba y queda pendiente).
+  // Comprobante obligatorio no-bloqueante: NO marcar al abrir. Preguntar si la impresion
+  // salio bien; SOLO el "Si" marca impreso. "Reintentar" reabre. Cerrar -> queda pendiente.
   if(c.comprobanteNum){
-    rpc('marcarComprobanteImpreso',{comprobanteNum:c.comprobanteNum},function(){
-      rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
-    },function(){});
+    confImpresion(ref, function(){
+      rpc('marcarComprobanteImpreso',{comprobanteNum:c.comprobanteNum},function(){
+        toast('Comprobante '+ref+' marcado como impreso','ok');
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
+        refrescarPendientesUI();
+      },function(){});
+    }, function(){ imprimirFacturaReserva(c); });
   }
+}
+// Modal de confirmacion de impresion (2 acciones): Si -> callback; Reintentar -> reabre.
+function confImpresion(ref,onSi,onReintentar){
+  var prev=document.getElementById('mConfImpr');if(prev)prev.remove();
+  var div=document.createElement('div');div.className='ov op';div.id='mConfImpr';
+  div.innerHTML='<div class="modal" style="max-width:320px"><div style="text-align:center;padding:6px">'
+    +'<div style="font-size:40px;margin-bottom:8px">🧾</div>'
+    +'<div style="font-size:16px;font-weight:800;color:#e5e7eb;margin-bottom:6px">¿Salió bien la impresión?</div>'
+    +'<div style="font-size:12px;color:#9ca3af;margin-bottom:16px">Comprobante <b style="color:#ec4899">'+esc(ref)+'</b></div>'
+    +'<button class="btn bg full" id="_ciSi">✓ Sí, imprimió</button>'
+    +'<button class="btn bk full" id="_ciRe" style="margin-top:8px">✗ Reintentar</button>'
+    +'</div></div>';
+  document.body.appendChild(div);
+  document.getElementById('_ciSi').onclick=function(){div.remove();if(onSi)onSi();};
+  document.getElementById('_ciRe').onclick=function(){div.remove();if(onReintentar)onReintentar();};
+}
+// Listado de comprobantes pendientes (compartido: cierre de recepcion + cuadre ADMIN).
+var _pendientesCache=[];
+function htmlPendientes(pend){
+  if(!pend||!pend.length)return '';
+  var h='<div style="background:rgba(236,72,153,.10);border:1px solid #ec4899;border-radius:10px;padding:12px;margin-bottom:12px">';
+  h+='<div style="font-size:13px;font-weight:800;color:#ec4899;margin-bottom:6px">🧾 '+pend.length+' comprobante'+(pend.length>1?'s':'')+' de reserva SIN imprimir</div>';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:8px">No bloquea el cierre. Imprimí cada uno cuando puedas.</div>';
+  pend.forEach(function(c){
+    var ref='RSV-'+String(c.comprobanteNum||0).padStart(6,'0');
+    var estado=Number(c.checkoutMs||0)>0?'ya hizo checkout':'ocupada';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid rgba(236,72,153,.25)">';
+    h+='<div style="font-size:12px;color:#e5e7eb"><b>'+ref+'</b> · Hab '+esc(c.roomId)+' · '+fmt(c.precio)+'<div style="font-size:10px;color:#9ca3af">'+esc(c.businessDay||'')+' · '+estado+'</div></div>';
+    h+='<button class="btn bp xs" onclick="imprimirPendiente('+Number(c.comprobanteNum)+')">Imprimir</button>';
+    h+='</div>';
+  });
+  h+='</div>';
+  return h;
+}
+function imprimirPendiente(num){
+  var c=_pendientesCache.find(function(x){return Number(x.comprobanteNum)===Number(num);});
+  if(c)imprimirFacturaReserva(c);
+}
+function cargarPendientes(containerId,cb){
+  rpc('getComprobantesPendientes',null,function(d){
+    _pendientesCache=(d&&d.pendientes)||[];
+    var el=document.getElementById(containerId);
+    if(el)el.innerHTML=htmlPendientes(_pendientesCache);
+    if(cb)cb(_pendientesCache);
+  },function(){if(cb)cb([]);});
+}
+function refrescarPendientesUI(){
+  ['pendientesCierre','pendientesAdmin'].forEach(function(id){ if(document.getElementById(id))cargarPendientes(id); });
 }
 
 function agregarProductoDesdeEscaner(prod){
