@@ -398,6 +398,7 @@ module.exports = async function handler(req, res) {
       case 'marcarComprobanteImpreso': return await apiMarcarComprobanteImpreso(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
       case 'extendTime':        return await apiExtendTime(payload, res);
+      case 'cambiarDuracion':   return await apiCambiarDuracion(payload, res);
       case 'horaGratis':        return await apiHoraGratis(payload, res);
       case 'renewTime':         return await apiRenewTime(payload, res);
       case 'silenceAlarm':      return await apiSilenceAlarm(payload, res);
@@ -1324,6 +1325,60 @@ async function apiExtendTime(p, res) {
   });
   await openCashDrawer();
   return ok(res, { roomId, extraCost, newDueMs });
+}
+
+// ==================== CAMBIAR DURACION (+ HORAS) ====================
+// Sube la duracion de una venta activa MANTENIENDO la hora de ENTRADA original
+// (3h entro 4pm -> 8h = sale 12am). Solo AUMENTAR. NO toca apiExtendTime/apiRenewTime.
+// Regla de Oro: la venta original queda INTACTA; la diferencia se cobra en una FILA
+// NUEVA con el turno del MOMENTO. La fila reusa type='EXTENSION' (para que entre a
+// todos los agregadores del cuadre sin tocarlos) + marca en note='CAMBIO DURACION'.
+async function apiCambiarDuracion(p, res) {
+  const now = Date.now();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
+  const userName = String(p.userName || '').trim();
+  const roomId = String(p.roomId || '').trim();
+  const nuevaDur = Number(p.nuevaDur || 0);
+  if (![3,6,8,12].includes(nuevaDur)) return err(res, 'Duracion invalida (3/6/8/12)');
+  const room = await getRoom(roomId);
+  if (!room) return err(res, 'Habitacion no existe');
+  if (room.state !== 'OCCUPIED') return err(res, 'Solo si OCUPADA');
+  const checkInMs = Number(room.check_in_ms || 0);
+  if (!checkInMs) return err(res, 'La habitacion no tiene hora de ingreso');
+
+  // Venta base original de ESTA estadia (para saber la duracion y el precio ya pagado).
+  const { data: ventaBase } = await tSelect('sales','base_price,duration_hrs')
+    .eq('room_id', roomId).eq('type', 'SALE').eq('check_in_ms', checkInMs)
+    .order('ts_ms', { ascending: true }).limit(1).maybeSingle();
+  if (!ventaBase) return err(res, 'No se encontro la venta base de la estadia');
+  const origDur = Number(ventaBase.duration_hrs || 0);
+  const origBase = Number(ventaBase.base_price || 0);
+  if (nuevaDur <= origDur) return err(res, `Solo se puede AUMENTAR (la duracion ya es ${origDur}h)`);
+
+  const PRICING = await getPricing(MOTEL_ID);
+  const cfg = cfgFor(PRICING, room.category);
+  const precioNuevo = calcPrice(nuevaDur, cfg);
+  if (!precioNuevo) return err(res, 'Precio no definido para esa duracion');
+  const diff = precioNuevo - origBase;   // diferencia de duracion (se cobra aun en cortesia: la cortesia es solo la hab base)
+  if (diff <= 0) return err(res, 'La diferencia a cobrar debe ser positiva');
+
+  const nuevoDue = checkInMs + nuevaDur * 3600000;   // recalcula la SALIDA desde la ENTRADA
+  if (nuevoDue <= Number(room.due_ms || 0)) return err(res, 'La nueva salida debe ser posterior a la actual (hay extensiones que ya cubren ese tiempo)');
+  const payMethod = String(p.payMethod || 'EFECTIVO').toUpperCase();
+
+  await tUpdate('rooms',{ due_ms: nuevoDue, alarm_silenced_ms: 0, alarm_silenced_for_due_ms: 0, updated_at: new Date().toISOString() }).eq('room_id', roomId);
+  await tInsert('sales',{
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName, type: 'EXTENSION',
+    room_id: roomId, category: room.category, duration_hrs: (nuevaDur - origDur),
+    base_price: diff, people: Number(room.people || 0),
+    extra_hours: (nuevaDur - origDur), extra_hours_value: diff, total: diff,
+    pay_method: payMethod, check_in_ms: checkInMs, due_ms: nuevoDue,
+    note: 'CAMBIO DURACION ' + origDur + 'h->' + nuevaDur + 'h'
+  });
+  await openCashDrawer();
+  return ok(res, { roomId, diff, nuevoDue, nuevaDur, origDur });
 }
 
 async function apiHoraGratis(p, res) {
@@ -2681,7 +2736,7 @@ async function apiRoomHistory(p, res) {
   const[stateRes,salesRes,taxiRes]=await Promise.all([
     tSelect('state_history','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(limit),
     tSelect('sales','*').eq('room_id',roomId).in('type',['SALE','EXTENSION','RENEWAL','HORA_GRATIS']).order('ts_ms',{ascending:false}).limit(limit),
-    tSelect('taxi_expenses','*').eq('room_id',roomId).order('ts_ms',{ascending:false}).limit(10)
+    tSelect('taxi_expenses','*').eq('room_id',roomId).eq('anulada',false).order('ts_ms',{ascending:false}).limit(10)
   ]);
   return ok(res,{
     roomId,
