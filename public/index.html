@@ -13054,39 +13054,48 @@ function imprimirFacturaReserva(c){
   // Comprobante obligatorio no-bloqueante: NO marcar al abrir. Preguntar si la impresion
   // salio bien; SOLO el "Si" marca impreso. "Reintentar" reabre. Cerrar/X -> queda pendiente.
   if(c.comprobanteNum){
+    // Marca comprobante_impreso_ms (misma marca para Impreso y PDF; solo cambia el toast).
+    function marcar(msg){
+      rpc('marcarComprobanteImpreso',{comprobanteNum:c.comprobanteNum},function(){
+        toast(msg,'ok');
+        rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
+        refrescarPendientesUI();
+      },function(){});
+    }
     // Leve delay: desacopla el banner del window.print() del popup (que puede congelar el
     // hilo un instante). El banner NO tiene backdrop -> el tablero nunca queda atrapado.
     setTimeout(function(){
-      confImpresion(ref, function(){
-        rpc('marcarComprobanteImpreso',{comprobanteNum:c.comprobanteNum},function(){
-          toast('Comprobante '+ref+' marcado como impreso','ok');
-          rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
-          refrescarPendientesUI();
-        },function(){});
-      }, function(){ imprimirFacturaReserva(c); });
+      confImpresion(ref,
+        function(){ marcar('Comprobante '+ref+' marcado como impreso'); },       // ✓ Impreso
+        function(){ imprimirFacturaReserva(c); },                                 // ✗ Reintentar
+        function(){ marcar('Comprobante '+ref+' guardado como PDF'); }            // 💾 Guardé PDF
+      );
     }, 350);
   }
 }
 // Confirmacion de impresion — BANNER flotante, NO modal (sin backdrop): el tablero queda
-// SIEMPRE usable. 3 salidas: Si -> onSi; Reintentar -> onReintentar; X/afuera -> pendiente.
-function confImpresion(ref,onSi,onReintentar){
+// SIEMPRE usable. 4 salidas: Impreso -> onSi; Guarde PDF -> onPdf (misma marca); Reintentar
+// -> onReintentar; X/afuera -> pendiente. onPdf opcional (si falta, cae en onSi).
+function confImpresion(ref,onSi,onReintentar,onPdf){
   var prev=document.getElementById('mConfImpr');if(prev)prev.remove();
   var box=document.createElement('div');box.id='mConfImpr';
   box.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483000;'
     +'background:var(--card);border:1px solid #ec4899;border-radius:12px;padding:12px 14px;'
     +'box-shadow:0 10px 34px rgba(0,0,0,.6);max-width:360px;width:calc(100% - 24px)';
   box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">'
-    +'<div style="font-size:14px;font-weight:800;color:#e5e7eb">🧾 ¿Salió bien la impresión?</div>'
+    +'<div style="font-size:14px;font-weight:800;color:#e5e7eb">🧾 ¿Comprobante listo?</div>'
     +'<button id="_ciX" aria-label="Cerrar" style="background:none;border:none;color:#9ca3af;font-size:22px;line-height:1;cursor:pointer;padding:0 2px">&times;</button>'
     +'</div>'
-    +'<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Comprobante <b style="color:#ec4899">'+esc(ref)+'</b>. Si cerrás, queda pendiente.</div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button class="btn bg" id="_ciSi" style="flex:1">✓ Sí, imprimió</button>'
-    +'<button class="btn bk" id="_ciRe" style="flex:1">✗ Reintentar</button>'
-    +'</div>';
+    +'<div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Comprobante <b style="color:#ec4899">'+esc(ref)+'</b>. Imprimí o guardá el PDF (destino "Guardar como PDF"). Si cerrás, queda pendiente.</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:8px">'
+    +'<button class="btn bg" id="_ciSi" style="flex:1">✓ Impreso</button>'
+    +'<button class="btn ba" id="_ciPdf" style="flex:1">💾 Guardé PDF</button>'
+    +'</div>'
+    +'<div style="display:flex"><button class="btn bk" id="_ciRe" style="flex:1">✗ Reintentar</button></div>';
   document.body.appendChild(box);
   function cerrar(){var b=document.getElementById('mConfImpr');if(b)b.remove();}
   document.getElementById('_ciSi').onclick=function(){cerrar();if(onSi)onSi();};
+  document.getElementById('_ciPdf').onclick=function(){cerrar();if(onPdf)onPdf();else if(onSi)onSi();};
   document.getElementById('_ciRe').onclick=function(){cerrar();if(onReintentar)onReintentar();};
   document.getElementById('_ciX').onclick=function(){cerrar();};  // X = queda pendiente
 }
