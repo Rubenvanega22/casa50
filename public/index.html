@@ -47,6 +47,26 @@ select option{background:var(--card-2)}
 .bb{background:var(--info);color:#fff}.by{background:var(--warn);color:#000}.bp{background:#7c3aed;color:#fff}
 .bk{background:var(--card-2);color:var(--text);border:1px solid var(--border)}.bo{background:#f97316;color:#fff}
 .sm{padding:6px 11px;font-size:12px}.xs{padding:3px 8px;font-size:11px;border-radius:6px}
+/* ===== Modal habitación OCUPADA — botones rediseñados (solo estilo, sin cambio funcional) ===== */
+.btn-salida{display:flex;align-items:center;gap:10px;width:100%;height:56px;padding:0 16px;background:var(--danger);color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 18px rgba(216,58,58,.38),inset 0 1px 0 rgba(255,255,255,.12);transition:transform .1s,box-shadow .15s}
+.btn-salida:active{transform:translateY(1px)}
+.btn-salida .bs-ico{font-size:19px;line-height:1}
+.btn-salida .bs-txt{flex:1;text-align:left;letter-spacing:.3px}
+.btn-salida .bs-arw{font-size:22px;font-weight:700;opacity:.9;line-height:1}
+.grid-acc{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.acc-btn{display:flex;align-items:center;gap:9px;height:52px;padding:0 11px;background:#141c30;border:1px solid var(--border);border-radius:14px;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;text-align:left;transition:transform .1s,box-shadow .15s}
+.acc-btn:active{transform:translateY(1px)}
+.acc-btn .acc-ico{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;font-size:15px;flex-shrink:0}
+.acc-btn .acc-txt{flex:1;line-height:1.12}
+.acc-btn .acc-arw{font-size:17px;font-weight:800;flex-shrink:0;line-height:1}
+.acc-morado{border-color:rgba(124,58,237,.5);box-shadow:0 0 0 1px rgba(124,58,237,.10),0 3px 12px rgba(124,58,237,.20)}
+.acc-morado .acc-ico{background:#7c3aed}.acc-morado .acc-arw{color:#a78bfa}
+.acc-azul{border-color:rgba(74,163,255,.5);box-shadow:0 0 0 1px rgba(74,163,255,.10),0 3px 12px rgba(74,163,255,.20)}
+.acc-azul .acc-ico{background:var(--info)}.acc-azul .acc-arw{color:var(--info)}
+.acc-ambar{border-color:rgba(232,160,32,.5);box-shadow:0 0 0 1px rgba(232,160,32,.10),0 3px 12px rgba(232,160,32,.20)}
+.acc-ambar .acc-ico{background:var(--warn)}.acc-ambar .acc-arw{color:var(--warn)}
+.acc-cyan{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.10),0 3px 12px rgba(34,211,238,.20)}
+.acc-cyan .acc-ico{background:#22d3ee}.acc-cyan .acc-arw{color:#22d3ee}
 .btn.bbb{background:transparent;color:#93c5fd;border-left:3px solid var(--info);border-radius:0 6px 6px 0;font-weight:600}
 .btn.bby{background:transparent;color:#fcd34d;border-left:3px solid var(--warn);border-radius:0 6px 6px 0;font-weight:600}
 .btn.bbg{background:transparent;color:#86efac;border-left:3px solid var(--ok);border-radius:0 6px 6px 0;font-weight:600}
@@ -2614,8 +2634,13 @@ function buildRoomB(r){
     h+='</div>';
    h+='<div id="resumenEstadia" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:var(--title);margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:var(--muted)">Cargando...</p></div>';
     if(isR){
-     h+='<button class="btn br full" onclick="showCO()">Registrar Salida</button>';
-     h+='<div class="row" style="margin-top:8px"><button class="btn bp sm" id="btnChgHrs" onclick="showCambiarHoras()">⏱ + Horas</button><button class="btn bb sm" onclick="showExt()">Extender/Renovar</button><button class="btn by sm" onclick="doAddPerson()">+ Persona</button><button class="btn bk sm" onclick="doRoomChange()">🔄 Cambio Hab</button></div>';
+     h+='<button class="btn-salida" onclick="showCO()"><span class="bs-ico">🚪</span><span class="bs-txt">Registrar Salida</span><span class="bs-arw">›</span></button>';
+     h+='<div class="grid-acc">';
+     h+='<button class="acc-btn acc-morado" id="btnChgHrs" onclick="showCambiarHoras()"><span class="acc-ico">⏱</span><span class="acc-txt">+ Horas</span><span class="acc-arw">›</span></button>';
+     h+='<button class="acc-btn acc-azul" onclick="showExt()"><span class="acc-ico">⏳</span><span class="acc-txt">Extender / Renovar</span><span class="acc-arw">›</span></button>';
+     h+='<button class="acc-btn acc-ambar" onclick="doAddPerson()"><span class="acc-ico">👤</span><span class="acc-txt">+ Persona</span><span class="acc-arw">›</span></button>';
+     h+='<button class="acc-btn acc-cyan" onclick="doRoomChange()"><span class="acc-ico">🔄</span><span class="acc-txt">Cambio Hab</span><span class="acc-arw">›</span></button>';
+     h+='</div>';
       // FRANJA PRODUCTOS
       h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:10px">';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
