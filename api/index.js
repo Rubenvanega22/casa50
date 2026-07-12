@@ -395,6 +395,7 @@ module.exports = async function handler(req, res) {
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'activarReserva':    return await apiActivarReserva(payload, res);
       case 'getComprobanteReserva': return await apiGetComprobanteReserva(payload, res);
+      case 'getComprobante':    return await apiGetComprobante(payload, res);
       case 'getComprobantesPendientes': return await apiGetComprobantesPendientes(payload, res);
       case 'marcarComprobanteImpreso': return await apiMarcarComprobanteImpreso(payload, res);
       case 'checkOut':          return await apiCheckOut(payload, res);
@@ -1159,11 +1160,15 @@ async function activarReservaCore({ reservaId, clave, userName, bDay, shift, now
   });
 
   const clienteNombre = (reserva.app_usuarios && reserva.app_usuarios.nombre) || 'cliente';
+  // Mismo shape que buildComprobante (este se arma a mano porque la venta recien nace):
+  // origin/payMethod van explicitos o la tirilla saldria como VTA- y sin medio de pago.
   const comprobante = {
     comprobanteNum: saleId, activacionMs: now, clave: reserva.clave||'',
     categoria: room.category, durationHrs, precio,
     wompiTransactionId: reserva.wompi_transaction_id||'', roomId,
-    shiftId: shift, activadoPor: userName, clienteNombre
+    shiftId: shift, activadoPor: userName, clienteNombre,
+    origin: 'WOMPI', payMethod: 'WOMPI',
+    amountEf: 0, amountTj: 0, amountNq: 0
   };
   return { ok:true, roomId, reservaId:reserva.id, clienteNombre, durationHrs, dueMs, precio, comprobante };
 }
@@ -1186,8 +1191,13 @@ async function apiActivarReserva(p, res) {
   return ok(res, { roomId:r.roomId, reservaId:r.reservaId, clienteNombre:r.clienteNombre, durationHrs:r.durationHrs, dueMs:r.dueMs, precio:r.precio, printFactura:true, comprobante:r.comprobante });
 }
 
-// Arma el objeto comprobante (para imprimir) desde una venta WOMPI. Join a app_reservas
-// para clave/nombre. Reusado por la reimpresion por hab y por el listado de pendientes.
+// Arma el objeto comprobante (para imprimir) desde CUALQUIER venta: reserva WOMPI o venta
+// de recepcion (efectivo/tarjeta/nequi/mixto). Join a app_reservas para clave/nombre solo
+// si la venta vino de reserva. Reusado por la reimpresion por hab, el listado de pendientes
+// y el boton Imprimir del cierre.
+// amountEf/Tj/Nq: reparto YA guardado del MIXTO (amount_1/2/3). Es el mismo que lee el
+// cuadre. No recalcular con calcRepartoMixto: esa funcion PRODUCE estas columnas en doCI,
+// y volver a correrla al imprimir daria una segunda fuente que puede divergir.
 async function buildComprobante(venta){
   if(!venta) return null;
   let clave='', clienteNombre='cliente';
@@ -1201,7 +1211,9 @@ async function buildComprobante(venta){
     categoria: venta.category||'', durationHrs: Number(venta.duration_hrs||0), precio: Number(venta.total||0),
     wompiTransactionId: venta.wompi_transaction_id||'', roomId: String(venta.room_id||''),
     shiftId: venta.shift_id||'', activadoPor: venta.user_name||'', clienteNombre,
-    businessDay: venta.business_day||'', checkoutMs: Number(venta.checkout_ms||0)
+    businessDay: venta.business_day||'', checkoutMs: Number(venta.checkout_ms||0),
+    origin: venta.origin||'', payMethod: String(venta.pay_method||'').toUpperCase(),
+    amountEf: Number(venta.amount_1||0), amountTj: Number(venta.amount_2||0), amountNq: Number(venta.amount_3||0)
   };
 }
 
@@ -1214,6 +1226,18 @@ async function apiGetComprobanteReserva(p, res) {
     .eq('room_id', roomId).eq('origin','WOMPI').eq('anulada', false)
     .order('ts_ms',{ascending:false}).limit(1);
   return ok(res,{ comprobante: await buildComprobante(ventas && ventas[0]) });
+}
+
+// Comprobante de CUALQUIER venta, por su id. A diferencia de getComprobanteReserva (que
+// busca la ultima venta de una HABITACION), este apunta a la venta exacta -> lo usa el
+// boton Imprimir del listado del cierre/cuadre, donde cada fila es una venta puntual.
+async function apiGetComprobante(p, res) {
+  const saleId = Number(p.saleId||0);
+  if(!saleId) return err(res,'saleId requerido');
+  const { data: ventas } = await tSelect('sales','*').eq('id', saleId).limit(1);
+  const venta = ventas && ventas[0];
+  if(!venta) return err(res,'Venta no encontrada');
+  return ok(res,{ comprobante: await buildComprobante(venta) });
 }
 
 // Comprobante obligatorio no-bloqueante: TODOS los comprobantes de reserva (venta WOMPI)
@@ -2237,7 +2261,7 @@ async function apiMetrics(p, res) {
           if(pm==='EFECTIVO')dayEfe+=t;else if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else if(pm==='WOMPI'){dayTar+=t;dayWompi+=t;/* Reservas app: dentro de Tarjeta */}else if(pm==='MIXTO'){dayEfe+=Number(r.amount_1||0);dayTar+=Number(r.amount_2||0);dayNeq+=Number(r.amount_3||0);}
         }
       }
-      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal,isCortesia:cortesiaIds.has(String(r.room_id))});
+      if(type==='SALE'||type==='RENEWAL'||type==='EXTENSION')allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category,type,durationHrs:Number(r.duration_hrs||0),people:Number(r.people||0),total:t,extraPeople:Number(r.extra_people||0),extraPeopleValue:Number(r.extra_people_value||0),arrivalType:r.arrival_type||'',arrivalPlate:r.arrival_plate||'',payMethod:pm,paidWith:Number(r.paid_with||0),change:Number(r.change_given||0),userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:Number(r.due_ms||0),amount_1:Number(r.amount_1||0),amount_2:Number(r.amount_2||0),amount_3:Number(r.amount_3||0),note:String(r.note||''),checkoutMs:Number(r.checkout_ms||0),anulada:r.anulada,devolucionEfectivo:r.devolucion_efectivo,metodoOriginal:metodoOriginal,isCortesia:cortesiaIds.has(String(r.room_id)),origin:r.origin||'',comprobanteImpresoMs:Number(r.comprobante_impreso_ms||0)});
       if(!shiftFilter||sid===shiftFilter){
         if(!skip304){
           if(esCruzada){
@@ -2252,7 +2276,7 @@ async function apiMetrics(p, res) {
         }
       }
     }
-    if(type==='REFUND'){dayRefunds+=t;if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else dayEfe+=t;if(!shiftFilter||sid===shiftFilter){shiftSales+=t;if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else shiftEfe+=t;}allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||''});}
+    if(type==='REFUND'){dayRefunds+=t;if(pm==='TARJETA')dayTar+=t;else if(pm==='NEQUI')dayNeq+=t;else dayEfe+=t;if(!shiftFilter||sid===shiftFilter){shiftSales+=t;if(pm==='TARJETA')shiftTar+=t;else if(pm==='NEQUI')shiftNeq+=t;else shiftEfe+=t;}allSalesList.push({id:r.id,tsMs:Number(r.ts_ms),shiftId:sid,roomId:r.room_id,category:r.category||'',type:'REFUND',durationHrs:0,people:0,total:t,payMethod:pm,userName:r.user_name,checkInMs:Number(r.check_in_ms||r.ts_ms),dueMs:0,amount_1:0,amount_2:0,amount_3:0,note:r.refund_reason||'',origin:r.origin||'',comprobanteImpresoMs:Number(r.comprobante_impreso_ms||0)});}
   });
 const {data:prodSales}=await tSelect('room_products','*').eq('business_day',bDay);
   const prodSalesFilt=(prodSales||[]).filter(s=>!shiftFilter||s.shift_id===shiftFilter);
