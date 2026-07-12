@@ -63,7 +63,14 @@ const TENANT_TABLES = new Set([
   'shift_log','shift_notes','staff','staff_vacaciones_historial','state_history','stock_entries',
   'stock_movements','taxi_expenses','ventas_diarias_manuales','ventas_gastos_anuales',
   // Fase 4 (Parte 2): PINs + settings ahora scopeados por motel
-  'admin_pins','reception_pins','maintenance_pins','settings'
+  'admin_pins','reception_pins','maintenance_pins','settings',
+  // Pieza 7: las dos fuentes de la bandeja de Quejas y Reclamos.
+  // app_calificaciones ya existia (Pieza 6) pero NO estaba aca: quien escribiera
+  // tSelect('app_calificaciones',...) creyendo que filtraba por motel, leia las
+  // fichas de TODOS los moteles. Hoy no hay fuga porque cerrarEstadiaReserva usa
+  // supabase.from(...) con motel_id explicito; esto desarma la trampa para el
+  // proximo que toque la tabla.
+  'app_calificaciones','app_quejas'
 ]);
 
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
