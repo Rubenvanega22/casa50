@@ -271,6 +271,76 @@ function checkSuperadmin(p) {
   return { ok:true };
 }
 
+// ==================== MINI-SESION FIRMADA (Pieza 7) ====================
+// EL PROBLEMA QUE ARREGLA
+//   Los 41 handlers de admin se protegen con
+//       if (String(p.userRole||'').toUpperCase() !== 'ADMIN') return err(...)
+//   pero ese userRole viene del BODY del POST. Un curl -d '{"userRole":"ADMIN"}'
+//   pasa el chequeo. apiLogin SI valida el PIN contra admin_pins, pero devuelve
+//   un objeto plano sin firma que el navegador reenvia tal cual.
+//
+// LA SOLUCION (aditiva: NO toca ninguno de esos 41)
+//   Cuando el PIN valida, apiLogin emite ademas un token firmado con HMAC-SHA256
+//   contra POS_SESSION_SECRET (secreto de env, jamas en el bundle del navegador).
+//   El token lleva nombre + rol + vencimiento; el servidor lo verifica
+//   recalculando la firma. Los endpoints NUEVOS exigen ese token.
+//
+// POR QUE UN TOKEN Y NO REVALIDAR EL adminCode EN CADA LLAMADA
+//   Para revalidar el PIN, el navegador tendria que RETENERLO, y la sesion del
+//   admin vive en localStorage -> el PIN del dueno quedaria en texto plano, en
+//   reposo, en el computador compartido de recepcion. Seria cambiar un candado
+//   falso por una llave tirada en el mostrador. El token, en cambio, caduca solo
+//   y no sirve para loguearse.
+//
+//   Cuando llegue el bloque de seguridad completo, los 41 viejos cambian
+//   p.userRole por requireAdmin(p) y este archivo ya tiene el molde.
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // 12h = un turno
+
+function firmaHmac(dato) {
+  const secret = String(process.env.POS_SESSION_SECRET || '');
+  if (!secret) return '';                     // sin secreto no se puede firmar NI verificar
+  return require('crypto').createHmac('sha256', secret).update(dato).digest('base64url');
+}
+
+function firmarSesion(userName, userRole, now) {
+  const payload = Buffer.from(JSON.stringify({
+    n: String(userName || ''), r: String(userRole || ''), exp: now + SESSION_TTL_MS
+  })).toString('base64url');
+  const firma = firmaHmac(payload);
+  if (!firma) return '';
+  return payload + '.' + firma;
+}
+
+// Devuelve el payload {n, r, exp} o null. FALLA CERRADO: si POS_SESSION_SECRET
+// no esta configurado, firmaHmac devuelve '' y aca todo token se rechaza.
+function verificarSesion(token) {
+  const t = String(token || '');
+  const i = t.indexOf('.');
+  if (i <= 0) return null;
+  const payload = t.slice(0, i);
+  const firma   = t.slice(i + 1);
+  const esperada = firmaHmac(payload);
+  if (!esperada || !firma) return null;
+  const a = Buffer.from(firma);
+  const b = Buffer.from(esperada);
+  if (a.length !== b.length) return null;
+  let match = false;
+  try { match = require('crypto').timingSafeEqual(a, b); } catch (e) { match = false; }
+  if (!match) return null;                    // firma invalida -> payload adulterado
+  let datos = null;
+  try { datos = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')); } catch (e) { return null; }
+  if (!datos || Number(datos.exp || 0) < Date.now()) return null;   // vencido
+  return datos;
+}
+
+// Gate REAL de admin. El rechazo es SECO (punto 4 de la REGLA DE ORO): no dice
+// si falto el token, si vencio o si el rol no alcanza.
+function requireAdmin(p) {
+  const s = verificarSesion(p && p.token);
+  if (!s || String(s.r || '').toUpperCase() !== 'ADMIN') return null;
+  return s;
+}
+
 // Lista TODOS los moteles (sin filtro tenant): ve activos y suspendidos.
 async function apiListarMotelesSuperadmin(p, res) {
   const chk = checkSuperadmin(p);
@@ -594,6 +664,9 @@ module.exports = async function handler(req, res) {
       case 'lucianaGastoMes':     return await apiLucianaGastoMes(payload, res);
       case 'listarMotelesSuperadmin': return await apiListarMotelesSuperadmin(payload, res);
       case 'cambiarEstadoMotel':      return await apiCambiarEstadoMotel(payload, res);
+      // Pieza 7: exigen token firmado (requireAdmin), no el userRole del body.
+      case 'getQuejas':           return await apiGetQuejas(payload, res);
+      case 'marcarQueja':         return await apiMarcarQueja(payload, res);
       default: return err(res, 'Funcion desconocida: ' + fn);
     }
   } catch (e) {
@@ -863,7 +936,10 @@ async function apiLogin(p, res) {
       verLuciana = true;
     }
     await tInsert('shift_log',{ ts_ms: now, business_day: bDay, shift_id: shift, user_role: 'ADMIN', user_name: adminName, action: 'LOGIN' });
-    return ok(res, { session: { userName: adminName, userRole: 'ADMIN', verLuciana: verLuciana, shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now } });
+    // El PIN acaba de validar contra admin_pins -> recien aqui se emite el token
+    // firmado. El PIN NO vuelve a salir del login: lo que el navegador guarda es
+    // este token, que caduca solo y no sirve para loguearse.
+    return ok(res, { session: { userName: adminName, userRole: 'ADMIN', verLuciana: verLuciana, shiftId: shift, shiftIdRaw: shiftRaw, businessDay: bDay, serverNowMs: now, token: firmarSesion(adminName, 'ADMIN', now) } });
   }
 
   if (userRole === 'RECEPTION') {
@@ -9793,4 +9869,111 @@ async function apiLucianaGastoMes(p, res) {
     tokensIn: totIn, tokensOut: totOut,
     cacheRead: totCR, cacheWrite: totCW
   });
+}
+
+// ============== BANDEJA DE QUEJAS Y RECLAMOS (Pieza 7) ==============
+// UNA bandeja, DOS fuentes, ETIQUETADAS distinto porque no valen lo mismo:
+//
+//   VERIFICADA (app_calificaciones) -> la ficha la creo el POS en el checkout
+//     con los datos REALES de la venta. Solo entran las YA calificadas
+//     (estrellas IS NOT NULL): las de estrellas en NULL son fichas pendientes
+//     que el cliente todavia no lleno, no opiniones, y no van a la bandeja.
+//
+//   DECLARADA (app_quejas) -> queja libre. Habitacion, nombre y fecha los DICE
+//     el cliente y el sistema NO los puede verificar.
+//
+// Las metricas serias (promedio de estrellas) salen SOLO de las verificadas.
+// Mezclar las declaradas ahi seria inventar un dato: cualquiera con una cuenta
+// podria hundir el promedio del motel sin haberse hospedado nunca.
+async function apiGetQuejas(p, res) {
+  if (!requireAdmin(p)) return err(res, 'No autorizado', 403);
+
+  const { data: cal } = await tSelect('app_calificaciones',
+      'id, habitacion, comprobante_num, entrada_ms, duracion_hrs, recepcionista, estrellas, resena, calificado_ms, creado')
+    .not('estrellas', 'is', null)
+    .order('calificado_ms', { ascending: false })
+    .limit(200);
+
+  const { data: qj } = await tSelect('app_quejas',
+      'id, habitacion_dicha, nombre_dicho, estadia_dicha_ms, texto, estrellas, estado, atendida_por, atendida_ms, nota_interna, creado')
+    .order('creado', { ascending: false })
+    .limit(200);
+
+  const verificadas = (cal || []).map(function(r) {
+    return {
+      tipo: 'VERIFICADA',
+      id: r.id,
+      fechaMs: Number(r.calificado_ms || 0) || new Date(r.creado).getTime(),
+      habitacion: String(r.habitacion || ''),
+      nombre: '',
+      texto: String(r.resena || ''),
+      estrellas: r.estrellas == null ? null : Number(r.estrellas),
+      estadiaMs: Number(r.entrada_ms || 0),
+      duracionHrs: Number(r.duracion_hrs || 0),
+      comprobanteNum: r.comprobante_num == null ? null : Number(r.comprobante_num),
+      recepcionista: String(r.recepcionista || ''),
+      estado: null, notaInterna: '', atendidaPor: '', atendidaMs: 0
+    };
+  });
+
+  const declaradas = (qj || []).map(function(r) {
+    return {
+      tipo: 'DECLARADA',
+      id: r.id,
+      fechaMs: new Date(r.creado).getTime(),
+      habitacion: String(r.habitacion_dicha || ''),
+      nombre: String(r.nombre_dicho || ''),
+      texto: String(r.texto || ''),
+      estrellas: r.estrellas == null ? null : Number(r.estrellas),
+      estadiaMs: Number(r.estadia_dicha_ms || 0),
+      duracionHrs: 0, comprobanteNum: null, recepcionista: '',
+      estado: String(r.estado || 'NUEVA'),
+      notaInterna: String(r.nota_interna || ''),
+      atendidaPor: String(r.atendida_por || ''),
+      atendidaMs: Number(r.atendida_ms || 0)
+    };
+  });
+
+  const bandeja = verificadas.concat(declaradas).sort(function(a, b) { return b.fechaMs - a.fechaMs; });
+
+  const conEstrellas = verificadas.filter(function(v) { return v.estrellas != null; });
+  const promedio = conEstrellas.length
+    ? Math.round((conEstrellas.reduce(function(s, v) { return s + v.estrellas; }, 0) / conEstrellas.length) * 10) / 10
+    : 0;
+
+  return ok(res, {
+    bandeja: bandeja,
+    metricas: {
+      promedioVerificadas: promedio,
+      totalVerificadas: verificadas.length,
+      totalDeclaradas: declaradas.length,
+      nuevasSinAtender: declaradas.filter(function(d) { return d.estado === 'NUEVA'; }).length
+    }
+  });
+}
+
+// Mueve el estado de una queja DECLARADA (NUEVA -> LEIDA -> RESUELTA) y guarda
+// la nota interna. Esto lo escribe SOLO el POS: el cliente no tiene UPDATE
+// sobre app_quejas. atendida_por sale del TOKEN, no del body, para que la
+// auditoria no se pueda falsear.
+async function apiMarcarQueja(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+
+  const id = String(p.quejaId || '');
+  const estado = String(p.estado || '').toUpperCase();
+  if (!id) return err(res, 'Falta la queja');
+  if (['NUEVA','LEIDA','RESUELTA'].indexOf(estado) < 0) return err(res, 'Estado invalido');
+
+  const patch = {
+    estado: estado,
+    atendida_por: String(s.n || ''),
+    atendida_ms: Date.now()
+  };
+  if (p.notaInterna !== undefined) patch.nota_interna = String(p.notaInterna || '').slice(0, 1000);
+
+  // tUpdate scopea por motel_id: nadie puede tocar la queja de otro motel.
+  const { error } = await tUpdate('app_quejas', patch).eq('id', id);
+  if (error) return err(res, 'Error actualizando la queja: ' + error.message);
+  return ok(res, {});
 }
