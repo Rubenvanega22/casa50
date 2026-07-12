@@ -22,3 +22,10 @@ que alguien intentará abusarlo.
    anon el 11jul26).
 6. Antes de vender a otros moteles: revisión de seguridad completa de punta a
    punta como bloque propio.
+7. TODA migración que cree una tabla debe incluir, en el MISMO archivo, su
+   `REVOKE` + `ENABLE ROW LEVEL SECURITY` + policies explícitas. En este
+   proyecto las tablas nuevas de `public` nacen ABIERTAS: el `pg_default_acl`
+   les da INSERT/SELECT/UPDATE/DELETE a `anon` y `authenticated`. Así nacieron
+   las 44 tablas expuestas. Crear una tabla sin cerrarla es abrir un agujero.
+   Recordar además que RLS es por FILA, no por columna: para limitar qué
+   columnas puede escribir el cliente hay que usar `GRANT UPDATE (col1, col2)`.
