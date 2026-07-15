@@ -394,6 +394,7 @@ module.exports = async function handler(req, res) {
       case 'login':             return await apiLogin(payload, res);
       case 'checkIn':           return await apiCheckIn(payload, res);
       case 'activarReserva':    return await apiActivarReserva(payload, res);
+      case 'verificarLlegadaReserva': return await apiVerificarLlegadaReserva(payload, res);
       case 'getComprobanteReserva': return await apiGetComprobanteReserva(payload, res);
       case 'getComprobante':    return await apiGetComprobante(payload, res);
       case 'getComprobantesPendientes': return await apiGetComprobantesPendientes(payload, res);
@@ -706,19 +707,31 @@ async function apiGetRooms(req, res) {
     };
   });
 
-  // Etapa D: habitaciones OCUPADAS con venta WOMPI cuyo comprobante NO se imprimio ->
-  // marca visible para que recepcion sepa que hay uno pendiente. Match por
-  // room_id + check_in_ms (la estadia actual, no una vieja).
-  const { data: wompiPend } = await tSelect('sales','room_id,check_in_ms')
-    .eq('origin','WOMPI').eq('anulada', false).is('comprobante_impreso_ms', null);
+  // Ventas WOMPI vivas -> alimentan DOS marcas distintas de la tarjeta. Una sola query;
+  // los flags se derivan abajo, cada uno con SU condicion. Match por room_id + check_in_ms
+  // (la estadia actual, no una vieja).
+  //   - comprobantePendiente (Etapa D): comprobante_impreso_ms IS NULL.
+  //   - sinCliente (Pieza 2): no-show (user_name 'SISTEMA...') que aun no verifico llegada.
+  // OJO: el filtro de comprobante_impreso_ms NO puede ir en el WHERE. Si fuera, imprimir el
+  // comprobante sacaria la fila de la query y apagaria tambien el badge SIN CLIENTE, aunque
+  // el cliente nunca hubiera llegado. Por eso viene como columna y se filtra en memoria.
+  const { data: wompiVivas } = await tSelect('sales','room_id,check_in_ms,user_name,comprobante_impreso_ms,cliente_llego_ms')
+    .eq('origin','WOMPI').eq('anulada', false);
   const compPendSet = new Set();
-  (wompiPend || []).forEach(function(s){ compPendSet.add(String(s.room_id)+'|'+Number(s.check_in_ms||0)); });
+  const sinClienteSet = new Set();
+  (wompiVivas || []).forEach(function(s){
+    const k = String(s.room_id)+'|'+Number(s.check_in_ms||0);
+    if (s.comprobante_impreso_ms == null) compPendSet.add(k);
+    if (String(s.user_name||'').startsWith('SISTEMA') && s.cliente_llego_ms == null) sinClienteSet.add(k);
+  });
 
   const mapped = (rooms || []).map(function(r){
     const m = mapRoom(r);
+    const k = String(r.room_id)+'|'+Number(r.check_in_ms||0);
     m.danoActivo = danosMap[r.room_id] || null;
     m.reserva = reservasMap[r.room_id] || null;
-    m.comprobantePendiente = (m.state==='OCCUPIED') && compPendSet.has(String(r.room_id)+'|'+Number(r.check_in_ms||0));
+    m.comprobantePendiente = (m.state==='OCCUPIED') && compPendSet.has(k);
+    m.sinCliente = (m.state==='OCCUPIED') && sinClienteSet.has(k);
     return m;
   });
 
@@ -1189,6 +1202,75 @@ async function apiActivarReserva(p, res) {
     return err(res, r.message || 'No se pudo activar la reserva');
   }
   return ok(res, { roomId:r.roomId, reservaId:r.reservaId, clienteNombre:r.clienteNombre, durationHrs:r.durationHrs, dueMs:r.dueMs, precio:r.precio, printFactura:true, comprobante:r.comprobante });
+}
+
+// Pieza 2 — LLEGADA TARDIA. El cliente no se presento a tiempo, el poller ocupo la
+// habitacion por no-show (user_name 'SISTEMA (no-show)') y la tarjeta quedo con el badge
+// ambar SIN CLIENTE. Cuando el cliente aparece, dicta su clave y recepcion la verifica aca.
+//
+// NO pasa por activarReservaCore a proposito: esa reserva YA esta activada (activacion_ms
+// seteado) y su rechazo es correcto — evita dobles activaciones. Este es un camino aparte
+// que NO activa nada: solo estampa cliente_llego_ms para apagar el badge.
+//
+// roomId es OPCIONAL:
+//   - con roomId (modal de la habitacion): la clave tiene que ser la de ESA habitacion.
+//   - sin roomId (escaner global RSV): se resuelve la habitacion a partir de la clave.
+// Clave que no corresponde -> rechazo SECO. Nunca se revela a que habitacion pertenece:
+// la clave es verificacion de identidad, el mensaje de error no regala informacion.
+async function apiVerificarLlegadaReserva(p, res) {
+  const now = Date.now();
+  const clave = String(p.clave || '').toUpperCase().trim();
+  const roomId = String(p.roomId || '').trim();
+  const userName = String(p.userName || '').trim();
+  const bDay = String(p.sessionBusinessDay||p.businessDay||'').trim() || businessDay(now);
+  const shift = String(p.sessionShiftId||p.shiftId||'').trim() || currentShiftId(now);
+  if (!clave) return err(res, 'Clave requerida');
+  if (!userName) return err(res, 'Nombre requerido');
+  const RECHAZO = roomId ? 'Clave incorrecta para esta habitación' : 'Clave incorrecta';
+
+  // 1) Candidatas: ventas WOMPI vivas activadas por SISTEMA que aun no verificaron llegada.
+  let q = tSelect('sales','id,room_id,check_in_ms,reserva_id')
+    .eq('origin','WOMPI').eq('anulada', false)
+    .like('user_name','SISTEMA%').is('cliente_llego_ms', null);
+  if (roomId) {
+    // Modal: solo la estadia ACTUAL de esa habitacion (no una vieja del mismo cuarto).
+    const room = await getRoom(roomId);
+    if (!room || room.state !== 'OCCUPIED') return err(res, 'La habitación no está ocupada');
+    q = q.eq('room_id', roomId).eq('check_in_ms', Number(room.check_in_ms||0));
+  }
+  const { data: ventas } = await q;
+  if (!ventas || !ventas.length) return err(res, RECHAZO);
+
+  // 2) De esas candidatas, cual tiene ESTA clave. Se compara contra app_reservas via
+  //    reserva_id: la clave nunca sale de la BD hacia el front.
+  let venta = null, reserva = null;
+  for (const v of ventas) {
+    if (!v.reserva_id) continue;
+    const { data: rv } = await supabase.from('app_reservas')
+      .select('id, clave, app_usuarios(nombre)')
+      .eq('id', v.reserva_id).eq('motel_id', MOTEL_ID).maybeSingle();
+    if (rv && String(rv.clave||'').toUpperCase().trim() === clave) { venta = v; reserva = rv; break; }
+  }
+  if (!venta) return err(res, RECHAZO);
+
+  // 3) Estampar. El .is(null) hace la operacion idempotente: un doble click no vuelve a
+  //    escribir ni duplica la fila de auditoria (0 filas -> salimos sin tocar nada mas).
+  const { data: stamped } = await tUpdate('sales', { cliente_llego_ms: now })
+    .eq('id', venta.id).is('cliente_llego_ms', null).select('id');
+  if (!stamped || !stamped.length) return err(res, 'La llegada ya fue verificada');
+
+  // 4) Auditoria: queda registrado QUIEN verifico la llegada (cliente_llego_ms solo guarda
+  //    el cuando). No cambia el estado de la habitacion: sigue OCUPADA de punta a punta.
+  const clienteNombre = (reserva.app_usuarios && reserva.app_usuarios.nombre) || 'cliente';
+  await tInsert('state_history', {
+    ts_ms: now, business_day: bDay, shift_id: shift,
+    user_role: 'RECEPTION', user_name: userName, room_id: venta.room_id,
+    from_state: 'OCCUPIED', to_state: 'OCCUPIED', people: 0,
+    meta_json: JSON.stringify({ evento:'LLEGADA_TARDIA', reservaId:reserva.id, saleId:venta.id,
+      clienteNombre, verificadoPor:userName, clienteLlegoMs:now })
+  });
+
+  return ok(res, { roomId: venta.room_id, clienteNombre, clienteLlegoMs: now });
 }
 
 // Arma el objeto comprobante (para imprimir) desde CUALQUIER venta: reserva WOMPI o venta

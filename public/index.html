@@ -2351,6 +2351,9 @@ if(eff==='DI'&&r.lastCheckoutMs){var mD=Math.round((now-Number(r.lastCheckoutMs)
   if(eff==='CO'){var since=Number(r.contaminatedSinceMs||r.stateSinceMs||0);if(since){var mC=Math.round((now-since)/60000);h+='<div class="ri">Desde: <b>'+fT(since)+'</b></div><div class="ri" style="color:#3b82f6">'+mC+' min</div>';}}
   if(r.noteMinor)h+='<div style="font-size:10px;font-weight:800;color:#f59e0b;margin-top:2px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">📝 NOTA</div>';
   if(r.comprobantePendiente)h+='<div style="font-size:10px;font-weight:800;color:#ec4899;margin-top:2px;background:rgba(236,72,153,.18);border:1px solid #ec4899;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">🧾 COMPROBANTE</div>';
+  // Pieza 2: la hab se abrio por no-show y el cliente todavia no aparecio. Se apaga SOLO
+  // cuando recepcion verifica la clave (doVerificarLlegada) — nunca con un boton manual.
+  if(r.sinCliente)h+='<div style="font-size:10px;font-weight:800;color:#f59e0b;margin-top:2px;background:rgba(245,158,11,.18);border:1px solid #f59e0b;border-radius:4px;padding:1px 4px;display:inline-block;animation:pulse 1s infinite">⚠ SIN CLIENTE</div>';
   card.innerHTML=h;
   // Bombillito de daño activo (Fase 3 mantenimiento)
   if(r.danoActivo){
@@ -2632,6 +2635,17 @@ function buildRoomB(r){
     h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Método pago</span><div style="display:flex;align-items:center;gap:6px"><b>'+esc(r.payMethod||'EFECTIVO')+'</b>'+(isR?'<button class="btn bk xs" onclick="doEditPayMethod()">✏ Pago</button>':'')+'</div></div>';
     h+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--text-dim)">Turno venta</span><b style="color:var(--title)" id="turnoVentaDisp">—</b></div>';
     h+='</div>';
+    // Pieza 2: no-show sin llegada verificada. Va ARRIBA del resumen: es lo primero que
+    // recepcion tiene que resolver si el cliente aparece. La clave la muestra el cliente
+    // en su celular; verificarla es lo unico que apaga el badge SIN CLIENTE.
+    if(r.sinCliente){
+      h+='<div style="background:rgba(245,158,11,.10);border:1px solid #f59e0b;border-radius:10px;padding:10px;margin-bottom:9px">';
+      h+='<div style="font-size:12px;font-weight:800;color:#f59e0b;text-transform:uppercase;margin-bottom:4px">⚠ Sin cliente</div>';
+      h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">La habitación se abrió por no-show. Si el cliente llegó, pedile la clave de su reserva (la tiene en el celular).</div>';
+      h+='<input type="text" id="vlClave" placeholder="Clave de 6 caracteres" maxlength="6" style="text-transform:uppercase;margin-bottom:6px">';
+      h+='<button class="btn by full sm" onclick="doVerificarLlegada()">✅ Verificar llegada</button>';
+      h+='</div>';
+    }
    h+='<div id="resumenEstadia" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:9px"><div style="font-size:11px;font-weight:700;color:var(--title);margin-bottom:8px;text-transform:uppercase">📋 Resumen de esta estadía</div><p style="font-size:11px;color:var(--muted)">Cargando...</p></div>';
     if(isR){
      h+='<button class="btn-salida" onclick="showCO()"><span class="bs-ico">🚪</span><span class="bs-txt">Registrar Salida</span><span class="bs-arw">›</span></button>';
@@ -12914,7 +12928,7 @@ function procesarCodigoBarras(codigo){
   // Etapa B: código de reserva (RSV + clave). Acción global (como HAB), va ANTES de
   // los modales y del fallback a producto.
   if(codigo.startsWith('RSV')){
-    activarReservaRPC({clave:codigo.slice(3)});
+    escanearCodigoReserva(codigo.slice(3));   // activa; si ya estaba activada por no-show, verifica llegada
     return;
   }
   // Si modal de ingreso bodega está abierto — buscar ahí
@@ -12986,6 +13000,41 @@ function doActivarReserva(){
   var clave=el&&el.value?el.value.toUpperCase().trim():'';
   if(clave.length<6){toast('Digitá la clave de 6 caracteres','err');return;}
   activarReservaRPC({clave:clave});
+}
+// ==================== LLEGADA TARDIA (Pieza 2) ====================
+// La reserva YA esta activada (la ocupo el poller por no-show). Esto NO activa nada: solo
+// verifica la clave y estampa la llegada, que es lo unico que apaga el badge SIN CLIENTE.
+function llegadaOk(res){
+  toast('✅ Llegada verificada — Hab '+res.roomId+(res.clienteNombre?' · '+res.clienteNombre:''),'ok');
+  rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole!=='MAID')renderRooms();}});
+}
+// Modal de la habitacion: match ESTRICTO contra esta habitacion. Una clave de otra hab
+// se rechaza seco, sin decir de cual es.
+function doVerificarLlegada(){
+  if(!curRoom)return;
+  var el=document.getElementById('vlClave');
+  var clave=el&&el.value?el.value.toUpperCase().trim():'';
+  if(clave.length<6){toast('Digitá la clave de 6 caracteres','err');return;}
+  rpc('verificarLlegadaReserva',{roomId:curRoom.roomId,clave:clave,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay},
+    function(res){closeM('mRoom');llegadaOk(res);},
+    function(e){toast(e.message||'Clave incorrecta','err');}   // mensaje seco del backend, tal cual
+  );
+}
+// Escaner global RSV. La ACTIVACION va SIEMPRE primero: es el caso normal (reserva pagada
+// esperando al cliente) y no se toca. Solo si el backend la rechaza probamos la llegada
+// tardia — sin roomId, porque el escaner no sabe de que habitacion se trata: la resuelve
+// el backend a partir de la clave. Si tampoco hay match, ahi si mostramos el error.
+function escanearCodigoReserva(clave){
+  var payload={clave:clave,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay};
+  rpc('activarReserva',payload,
+    function(res){activacionOk(res);},
+    function(){
+      rpc('verificarLlegadaReserva',payload,
+        function(res){llegadaOk(res);},
+        function(e){toast(e.message||'Clave incorrecta','err');}
+      );
+    }
+  );
 }
 // Reimpresion del comprobante (mismo numero: deriva del sales.id). Solo estadias WOMPI.
 function reimprimirComprobante(roomId){
