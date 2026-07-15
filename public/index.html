@@ -1521,8 +1521,6 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="schedCont"></div>
 </div>
-```
-
 
 <!-- NOTAS -->
 <div class="pnl" id="pnl-notes">
@@ -1671,6 +1669,25 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <div id="productosCont"><p style="color:#9ca3af">Cargando...</p></div>
 </div>
+<!-- QUEJAS Y RECLAMOS (admin) -->
+<div class="pnl" id="pnl-quejas">
+<div id="qjMetricas"></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;align-items:center">
+<select id="qjFuente" onchange="renderQuejas()" style="width:auto;margin:0">
+<option value="TODAS">Todas las fuentes</option>
+<option value="VERIFICADA">✅ Solo verificadas</option>
+<option value="DECLARADA">✍️ Solo declaradas</option>
+</select>
+<select id="qjEstado" onchange="renderQuejas()" style="width:auto;margin:0">
+<option value="TODAS">Nuevas y atendidas</option>
+<option value="NUEVA">Solo sin atender</option>
+<option value="ATENDIDA">Solo atendidas</option>
+</select>
+<button class="btn ba sm" onclick="loadQuejas()">Actualizar</button>
+</div>
+<div id="qjCont"><p style="color:#9ca3af">Cargando...</p></div>
+</div>
+
 <!-- CONFIG (admin) -->
 <div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
@@ -2040,6 +2057,7 @@ function buildTabs(){
  if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-cash'},{id:'cuadre',l:'Cierre de caja',i:'ti-receipt-2'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'productos',l:'Inventario',i:'ti-box'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
 if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
   if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-stats'},{id:'gastosmes',l:'Gastos',i:'ti-cash'},{id:'maids',l:'Limpieza',i:'ti-spray'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-receipt-2'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-box'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
+  if(r==='ADMIN')tabs.push({id:'quejas',l:'Clientes',i:'ti-message-report'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Configuración',i:'ti-settings'});
   tabs.forEach(function(t){
     var b=document.createElement('button');b.className='tab';
@@ -2094,6 +2112,150 @@ function sw(id){
   if(id==='metrics')loadM();
   if(id==='ventas')loadVentas();
   if(id==='productos')loadProductos();
+  if(id==='quejas')loadQuejas();
+}
+
+// ============ QUEJAS Y RECLAMOS (Pieza 7) ============
+// UNA bandeja, DOS fuentes que NO valen lo mismo:
+//   ✅ VERIFICADA -> ficha de app_calificaciones. La creó el POS con los datos
+//      REALES de la venta (habitación, comprobante, quién cerró).
+//   ✍️ DECLARADA  -> queja libre. Habitación, nombre y fecha los DICE el
+//      cliente y el sistema NO los puede verificar.
+// Se pintan visualmente distinto A PROPÓSITO (color del borde + badge + pie de
+// tarjeta): de un vistazo nunca se deben confundir. El promedio de estrellas se
+// rotula "SOLO VERIFICADAS" por lo mismo.
+//
+// XSS: todo lo que escribió el cliente (texto, nombre, habitación) pasa por
+// esc(). Este render es concatenación a innerHTML, así que un <script> en una
+// reseña se ejecutaría acá, en el panel del dueño. Y ojo: esc() NO escapa
+// comillas -> nada de texto del cliente dentro de un atributo HTML.
+var qjBandeja=[];
+
+function loadQuejas(){
+  if(!sess)return;
+  var c=document.getElementById('qjCont');if(!c)return;
+  c.innerHTML='<p style="color:#9ca3af;text-align:center;padding:30px">Cargando...</p>';
+  rpc('getQuejas',{token:sess.token},function(d){
+    qjBandeja=d.bandeja||[];
+    pintarMetricasQuejas(d.metricas||{});
+    renderQuejas();
+  },function(e){
+    c.innerHTML='<p style="color:#ef4444;text-align:center;padding:30px">Error: '+esc(e.message||'?')+'</p>';
+  });
+}
+
+function pintarMetricasQuejas(m){
+  var el=document.getElementById('qjMetricas');if(!el)return;
+  var prom=Number(m.promedioVerificadas||0);
+  var sin=Number(m.nuevasSinAtender||0);
+  function tile(valor,rotulo,color){
+    return '<div class="ei" style="text-align:center">'+
+             '<div style="font-size:20px;font-weight:700'+(color?';color:'+color:'')+'">'+valor+'</div>'+
+             '<div style="color:#9ca3af;font-size:10px;margin-top:2px">'+rotulo+'</div>'+
+           '</div>';
+  }
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
+    tile(prom?prom.toFixed(1)+' ★':'--','Promedio · SOLO VERIFICADAS','#fbbf24')+
+    tile(Number(m.totalVerificadas||0),'✅ Verificadas','')+
+    tile(Number(m.totalDeclaradas||0),'✍️ Declaradas','')+
+    tile(sin,'Sin atender',sin?'#f59e0b':'')+
+  '</div>';
+}
+
+function qjEstrellas(n){
+  if(n==null)return '';
+  var s='';for(var i=1;i<=5;i++)s+=(i<=n?'★':'☆');
+  return s;
+}
+function qjFecha(ms){
+  if(!ms||Number(ms)===0)return '--';
+  return new Date(Number(ms)).toLocaleString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+function renderQuejas(){
+  var c=document.getElementById('qjCont');if(!c)return;
+  var fFuente=(document.getElementById('qjFuente')||{}).value||'TODAS';
+  var fEstado=(document.getElementById('qjEstado')||{}).value||'TODAS';
+
+  var lista=qjBandeja.filter(function(q){
+    if(fFuente!=='TODAS'&&q.tipo!==fFuente)return false;
+    // El estado (nueva/atendida) solo existe en las declaradas: una calificación
+    // no se "atiende". Al filtrar por estado, las verificadas quedan fuera.
+    if(fEstado==='NUEVA')   return q.tipo==='DECLARADA'&&q.estado==='NUEVA';
+    if(fEstado==='ATENDIDA')return q.tipo==='DECLARADA'&&q.estado!=='NUEVA';
+    return true;
+  });
+
+  if(!lista.length){
+    c.innerHTML='<p style="color:#9ca3af;text-align:center;padding:30px">Nada para este filtro.</p>';
+    return;
+  }
+
+  var h='';
+  lista.forEach(function(q){
+    var verif=(q.tipo==='VERIFICADA');
+    var color=verif?'#22c55e':'#f59e0b';
+    var badge=verif
+      ? '<span class="badge" style="background:rgba(34,197,94,.13);color:#22c55e">✅ Verificada</span>'
+      : '<span class="badge" style="background:rgba(245,158,11,.13);color:#f59e0b">✍️ Declarada</span>';
+
+    h+='<div class="ei" style="border-left:3px solid '+color+';margin-bottom:8px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">';
+    h+='<span>'+badge+' <b>Hab '+esc(q.habitacion||'?')+'</b>'+(q.nombre?' · '+esc(q.nombre):'')+'</span>';
+    h+='<span style="color:#9ca3af;font-size:11px">'+qjFecha(q.fechaMs)+'</span>';
+    h+='</div>';
+
+    if(q.estrellas!=null)h+='<div style="color:#fbbf24;letter-spacing:2px;margin-bottom:5px">'+qjEstrellas(q.estrellas)+'</div>';
+
+    h+='<div style="white-space:pre-wrap;line-height:1.45">'+
+       (q.texto?esc(q.texto):'<i style="color:#9ca3af">Sin comentario</i>')+'</div>';
+
+    if(verif){
+      // Pie con los datos REALES del POS.
+      h+='<div style="color:#9ca3af;font-size:10px;margin-top:7px">Datos reales del POS'+
+         (q.comprobanteNum?' · RSV-'+String(q.comprobanteNum).padStart(6,'0'):'')+
+         (q.estadiaMs?' · entrada '+qjFecha(q.estadiaMs):'')+
+         (q.duracionHrs?' · '+q.duracionHrs+'h':'')+
+         (q.recepcionista?' · cerró '+esc(q.recepcionista):'')+
+         '</div>';
+    }else{
+      h+='<div style="color:#9ca3af;font-size:10px;margin-top:7px">⚠ Datos DICHOS por el cliente, sin verificar'+
+         (q.estadiaMs?' · estadía declarada: '+qjFecha(q.estadiaMs):'')+
+         '</div>';
+
+      if(q.estado==='NUEVA'){
+        h+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
+           '<input id="qjNota_'+q.id+'" placeholder="Nota interna (opcional)" style="flex:1;min-width:140px;margin:0">'+
+           '<button class="btn bb sm" onclick="marcarQuejaUI(\''+q.id+'\',\'LEIDA\')">Marcar leída</button>'+
+           '<button class="btn bg sm" onclick="marcarQuejaUI(\''+q.id+'\',\'RESUELTA\')">Resolver</button>'+
+           '</div>';
+      }else{
+        var et=(q.estado==='RESUELTA')
+          ? '<span class="badge" style="background:rgba(34,197,94,.13);color:#22c55e">RESUELTA</span>'
+          : '<span class="badge" style="background:rgba(59,130,246,.13);color:#3b82f6">LEÍDA</span>';
+        h+='<div style="margin-top:8px;font-size:11px;color:#9ca3af">'+et+
+           (q.atendidaPor?' · '+esc(q.atendidaPor):'')+
+           (q.atendidaMs?' · '+qjFecha(q.atendidaMs):'')+'</div>';
+        if(q.notaInterna)h+='<div style="margin-top:5px;font-size:11px;color:#d1d5db;white-space:pre-wrap"><b>Nota:</b> '+esc(q.notaInterna)+'</div>';
+        if(q.estado==='LEIDA'){
+          h+='<div style="margin-top:6px"><button class="btn bg sm" onclick="marcarQuejaUI(\''+q.id+'\',\'RESUELTA\')">Resolver</button></div>';
+        }
+      }
+    }
+    h+='</div>';
+  });
+  c.innerHTML=h;
+}
+
+// El backend saca atendida_por del TOKEN, no de acá: la auditoría no se falsea
+// desde el navegador.
+function marcarQuejaUI(id,estado){
+  var inp=document.getElementById('qjNota_'+id);
+  var nota=inp?String(inp.value||'').trim():'';
+  rpc('marcarQueja',{token:sess.token,quejaId:id,estado:estado,notaInterna:nota},function(){
+    toast(estado==='RESUELTA'?'Queja resuelta':'Queja marcada como leída','ok');
+    loadQuejas();
+  });
 }
 
 function salir(){
