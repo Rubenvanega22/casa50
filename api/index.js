@@ -1160,6 +1160,7 @@ async function activarReservaCore({ reservaId, clave, userName, bDay, shift, now
     pay_method:'WOMPI', paid_with:0, change_given:0,
     pay_method_2:'', amount_1:0, amount_2:0, amount_3:0,
     check_in_ms:now, due_ms:dueMs,
+    cliente_llego_ms: String(userName||'').startsWith('SISTEMA') ? null : now,  // Pieza 6: activar con clave ES la llegada -> ficha al checkout. Poller no-show queda null hasta verificarLlegadaReserva.
     origin:'WOMPI', reserva_id:reserva.id, wompi_transaction_id:reserva.wompi_transaction_id||''
   }).select('id');
   const saleId = (ventaRows && ventaRows[0]) ? ventaRows[0].id : null;
@@ -1346,6 +1347,61 @@ async function apiMarcarComprobanteImpreso(p, res) {
   return ok(res,{ comprobanteNum, impresoMs: now });
 }
 
+// ==================== PIEZA 6 — CIERRE + CALIFICACION ====================
+// Mientras la estadia esta viva, la app cliente muestra una pantalla persistente con el
+// cronometro. Lo unico que la saca de ahi es app_reservas.salida_ms. Este helper es el que
+// la escribe, y de paso crea la ficha de calificacion cuando corresponde.
+//
+// ORDEN OBLIGATORIO: primero la FICHA, DESPUES salida_ms. Nunca al reves.
+//   La app decide si pedir calificacion por la EXISTENCIA de la ficha (no hay flag aparte).
+//   Si salida_ms se escribiera primero, el cliente podria hacer polling justo en el hueco:
+//   veria salida_ms, buscaria la ficha, no la encontraria todavia, y se saltearia la
+//   calificacion PARA SIEMPRE. Con este orden, salida_ms significa "todo listo".
+//
+// SIN FICHA en dos casos (el cliente sale igual de la pantalla, pero no se le pide calificar
+// una estadia que no existio):
+//   - no-show que nunca llego  -> sales.cliente_llego_ms IS NULL
+//   - venta anulada            -> crearFicha=false desde apiAnularVenta
+//
+// La habitacion de la ficha sale de sales.room_id, NO de app_reservas.habitacion: si hubo
+// cambio de habitacion a mitad de estadia, la venta se mudo al cuarto nuevo y la reserva
+// quedo con el original (apiRoomChange mueve la venta, no la reserva).
+//
+// El llamador SIEMPRE lo envuelve en try/catch: un fallo aca no puede tumbar el checkout ni
+// la anulacion. La habitacion ya quedo liberada antes de llegar a este punto.
+async function cerrarEstadiaReserva({ venta, now, userName, crearFicha }) {
+  if (!venta) return;
+  if (String(venta.origin || '') !== 'WOMPI' || !venta.reserva_id) return;   // venta de mostrador: nada que hacer
+
+  // 1) FICHA (solo si la estadia realmente ocurrio).
+  if (crearFicha && !venta.anulada && venta.cliente_llego_ms != null) {
+    const { data: rv } = await supabase.from('app_reservas')
+      .select('usuario_id').eq('id', venta.reserva_id).eq('motel_id', MOTEL_ID).maybeSingle();
+    if (rv && rv.usuario_id) {
+      // upsert ignoreDuplicates: reserva_id es UNIQUE -> reintentos no duplican la ficha.
+      await supabase.from('app_calificaciones').upsert({
+        motel_id: MOTEL_ID,
+        reserva_id: venta.reserva_id,
+        usuario_id: rv.usuario_id,
+        habitacion: String(venta.room_id || ''),
+        comprobante_num: venta.id,
+        entrada_ms: Number(venta.check_in_ms || venta.ts_ms || 0),
+        salida_ms: now,
+        duracion_hrs: Number(venta.duration_hrs || 0),
+        valor: Number(venta.total || 0),
+        recepcionista: userName || '',
+        estrellas: null, resena: null, calificado_ms: null
+      }, { onConflict: 'reserva_id', ignoreDuplicates: true });
+    }
+  }
+
+  // 2) SALIDA (siempre, aunque no haya ficha: el cliente tiene que salir de la pantalla).
+  //    El .is(null) lo hace idempotente: si ya se cerro, no se pisa la fecha original.
+  await supabase.from('app_reservas')
+    .update({ salida_ms: now })
+    .eq('id', venta.reserva_id).eq('motel_id', MOTEL_ID).is('salida_ms', null);
+}
+
 // ==================== CHECK-OUT ====================
 async function apiCheckOut(p, res) {
   const now = Date.now();
@@ -1384,12 +1440,39 @@ async function apiCheckOut(p, res) {
     meta_json: JSON.stringify({ lastCheckoutMs: now, checkoutObs: obs })
   });
 
+  const VENTA_COLS = 'id, reserva_id, origin, user_name, cliente_llego_ms, room_id, category, duration_hrs, total, ts_ms, check_in_ms, anulada';
   const checkInMs = Number(room.check_in_ms || 0);
+  let ventaEstadia = null;
   if (checkInMs > 0) {
-    await tUpdate('sales', { checkout_ms: now })
+    // Mismo UPDATE de siempre; el .select() solo pide de vuelta las filas que toco, para
+    // saber si la estadia vino de reserva (Pieza 6). No agrega una query.
+    const { data: filas } = await tUpdate('sales', { checkout_ms: now })
       .eq('room_id', roomId)
       .eq('type', 'SALE')
-      .eq('check_in_ms', checkInMs);
+      .eq('check_in_ms', checkInMs)
+      .select(VENTA_COLS);
+    ventaEstadia = (filas && filas[0]) || null;
+
+    // RESCATE: si el UPDATE no matcheo nada, la venta pudo haberse anulado desde el modulo
+    // de ajustes (apiAnularVentaModulo la deja en type='ANULADA' y NO libera la habitacion,
+    // asi que el checkout llega igual). Sin esto, salida_ms nunca se escribiria y el cliente
+    // quedaria atrapado en la pantalla persistente para siempre. Solo corre cuando el UPDATE
+    // fallo -> nunca en el flujo normal.
+    if (!ventaEstadia) {
+      const { data: resc } = await tSelect('sales', VENTA_COLS)
+        .eq('room_id', roomId).eq('check_in_ms', checkInMs).eq('origin', 'WOMPI').limit(1);
+      ventaEstadia = (resc && resc[0]) || null;
+    }
+  }
+
+  // Pieza 6: liberar al cliente de la pantalla persistente + crear su ficha de calificacion.
+  // NO bloqueante: la habitacion ya quedo en DIRTY y el historial ya se escribio arriba, asi
+  // que un fallo de Supabase aca no puede impedirle a recepcion cerrar la habitacion.
+  // Una venta de mostrador (origin distinto de WOMPI) sale del helper en la primera linea.
+  try {
+    await cerrarEstadiaReserva({ venta: ventaEstadia, now, userName, crearFicha: true });
+  } catch (e) {
+    console.error('apiCheckOut cierre de reserva (no bloqueante):', e);
   }
 
   // Auto-bloqueo (G3): si la habitación que recién hizo checkout tiene un daño
@@ -6153,7 +6236,11 @@ async function apiAnularVenta(p, res) {
     devolucion_efectivo: devolucionEfectivo,
     devolucion_metodo_original: metodoOriginal
   };
-  await tUpdate('sales',updateData).eq('room_id',roomId).eq('check_in_ms',checkInMs);
+  // El .select() devuelve TODAS las ventas de la estadia que se anularon (habitacion +
+  // extras). De ahi sacamos la de reserva, si la hubo (Pieza 6). No agrega una query.
+  const { data: ventasAnuladas } = await tUpdate('sales',updateData)
+    .eq('room_id',roomId).eq('check_in_ms',checkInMs)
+    .select('id, reserva_id, origin, anulada');
   // Devolver habitacion a disponible
   await tUpdate('rooms',{
     state:'AVAILABLE', state_since_ms:now, people:0,
@@ -6170,6 +6257,17 @@ async function apiAnularVenta(p, res) {
     from_state:'OCCUPIED', to_state:'AVAILABLE', people:0,
     meta_json:JSON.stringify({accion:'ANULADA',motivo,checkInMs,userName})
   });
+
+  // Pieza 6: la anulacion NO pasa por apiCheckOut, asi que sin esto el cliente se quedaria
+  // en la pantalla persistente para siempre. Se escribe salida_ms (sale de la pantalla) pero
+  // SIN ficha: no se le pide calificar una estadia que se anulo. NO bloqueante.
+  try {
+    const ventaReserva = (ventasAnuladas||[]).find(v => String(v.origin||'')==='WOMPI' && v.reserva_id);
+    await cerrarEstadiaReserva({ venta: ventaReserva, now, userName, crearFicha: false });
+  } catch (e) {
+    console.error('apiAnularVenta cierre de reserva (no bloqueante):', e);
+  }
+
   return ok(res,{roomId,anulada:true});
 }
 async function apiSaveRoomBarcode(p, res) {
