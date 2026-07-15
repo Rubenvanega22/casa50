@@ -1147,6 +1147,7 @@ async function activarReservaCore({ reservaId, clave, userName, bDay, shift, now
     pay_method:'WOMPI', paid_with:0, change_given:0,
     pay_method_2:'', amount_1:0, amount_2:0, amount_3:0,
     check_in_ms:now, due_ms:dueMs,
+    cliente_llego_ms: String(userName||'').startsWith('SISTEMA') ? null : now,  // Pieza 6: activar con clave ES la llegada -> ficha al checkout. Poller no-show queda null hasta verificarLlegadaReserva.
     origin:'WOMPI', reserva_id:reserva.id, wompi_transaction_id:reserva.wompi_transaction_id||''
   }).select('id');
   const saleId = (ventaRows && ventaRows[0]) ? ventaRows[0].id : null;
