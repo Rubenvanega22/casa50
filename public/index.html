@@ -346,6 +346,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="ov" id="mRoom"><div class="modal"><div class="mh"><div class="mt" id="mRoomT">Hab</div><button class="mc" onclick="closeM('mRoom')">✕</button></div><div id="mRoomB"></div></div></div>
 <div class="ov" id="mHist"><div class="modal"><div class="mh"><div class="mt" id="mHistT">Historial</div><button class="mc" onclick="closeM('mHist')">✕</button></div><div id="mHistB"></div></div></div>
 <div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
+<!-- Modal bloqueante de venta no guardada (capa a). SIN ✕ y con data-nodismiss: no se cierra por accidente. -->
+<div class="ov" id="mFail" data-nodismiss><div class="modal"><div class="mh"><div class="mt" style="color:#f87171">⚠️ VENTA NO GUARDADA</div></div><div id="mFailB" style="margin-bottom:14px;font-size:15px;line-height:1.45"></div><div class="row"><button class="btn br" id="mFailRetry">Reintentar</button><button class="btn bk" id="mFailCancel">Cerrar sin guardar</button></div></div></div>
 <div class="ov" id="mChangePay"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">🔧 Ajuste</div><button class="mc" onclick="closeM('mChangePay')">✕</button></div>
 <div style="font-size:12px;color:#9ca3af;margin-bottom:10px" id="mcpSubtitle">Selecciona la venta y el nuevo método</div>
 <div id="mcpAdmCtrl" style="display:none;margin-bottom:10px">
@@ -1750,11 +1752,15 @@ var ZONAS_COMUNES=['Recepción','Pasillo piso 2','Pasillo piso 3','Pasillo piso 
 
 // ---- UTILS ----
 var API_URL=window.location.origin+'/api/index.js';
+var RPC_TIMEOUT_MS=12000; // corta cuelgues de red sin respuesta (capa a: fallo visible)
 function rpc(fn,p,ok,er){
-  fetch(API_URL+'?fn='+fn,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p||{})})
+  var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+  var timedOut=false;
+  var t=setTimeout(function(){timedOut=true;if(ctrl)ctrl.abort();},RPC_TIMEOUT_MS);
+  fetch(API_URL+'?fn='+fn,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p||{}),signal:ctrl?ctrl.signal:undefined})
   .then(function(r){return r.json();})
-  .then(function(r){if(r.ok===false){var e=new Error(r.error||'Error');if(er)er(e);else toast(e.message,'err');}else{if(ok)ok(r);}})
-  .catch(function(e){if(er)er(e);else toast(e.message||String(e),'err');});
+  .then(function(r){clearTimeout(t);if(r.ok===false){var e=new Error(r.error||'Error');if(er)er(e);else toast(e.message,'err');}else{if(ok)ok(r);}})
+  .catch(function(e){clearTimeout(t);var err=timedOut?new Error('El servidor no respondió a tiempo (sin conexión)'):new Error((e&&e.message)||'Sin conexión');if(er)er(err);else toast(err.message,'err');});
 }
 function fmt(n){return '$'+Number(n||0).toLocaleString('es-CO');}
 // Espejo exacto de businessDay() del backend (api/index.js línea 30).
@@ -1799,7 +1805,19 @@ function toast(msg,type){var e=document.getElementById('toast');e.textContent=ms
 function openM(id){document.getElementById(id).classList.add('op');}
 function closeM(id){document.getElementById(id).classList.remove('op');}
 function conf(msg,cb){document.body.appendChild(document.getElementById('mConf'));document.getElementById('mConfB').textContent=msg;confCb=cb;openM('mConf');document.getElementById('mConfOk').onclick=function(){closeM('mConf');if(confCb)confCb();};}
-document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this)closeM(this.id);});});
+document.querySelectorAll('.ov').forEach(function(el){el.addEventListener('click',function(e){if(e.target===this && !this.hasAttribute('data-nodismiss'))closeM(this.id);});});
+// Modal bloqueante de fallo (capa a). onRetry: si viene, muestra "Reintentar"; si no, solo "Entendido".
+function failVenta(msg,onRetry){
+  document.body.appendChild(document.getElementById('mFail')); // al body, como conf(), para que quede por encima de todo
+  document.getElementById('mFailB').innerHTML=msg;
+  var rb=document.getElementById('mFailRetry');
+  if(onRetry){rb.style.display='';rb.onclick=function(){closeM('mFail');onRetry();};}
+  else{rb.style.display='none';}
+  var cb=document.getElementById('mFailCancel');
+  cb.textContent=onRetry?'Cerrar sin guardar':'Entendido';
+  cb.onclick=function(){closeM('mFail');};
+  openM('mFail');
+}
 
 // ---- SESION ----
 // Recep usa sessionStorage (se borra al cerrar tab) porque su sess.shiftId
@@ -3177,22 +3195,39 @@ var mixtoEf=0,mixtoTj=0,mixtoNq=0;
   }
  
  conf('Check-In Hab '+curRoom.roomId+' — '+selDur+'h — '+selPpl+' personas — '+fmt(tot)+'?',function(){
-   rpc('checkIn',{roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq},
+   // payload construido UNA vez para que Reintentar re-envíe exactamente lo mismo
+   var payload={roomId:curRoom.roomId,userName:sess.userName,userRole:sess.userRole,shiftId:sess.shiftId,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,durationHrs:selDur,people:selPpl,arrivalType:selArr,arrivalPlate:plate.trim().toUpperCase(),payMethod:selPay,paidWith:pw,mixtoEf:mixtoEf,mixtoTj:mixtoTj,mixtoNq:mixtoNq};
+   function intentarCheckIn(){
+     rpc('checkIn',payload,
       function(res){
-  toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
-var prodsCI=[..._ciProds];_ciProds=[];
-  var checkInMs=res.checkInMs||Date.now();
-  function saveNext(i){
-    if(i>=prodsCI.length){closeM('mRoom');rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});return;}
-    var p=prodsCI[i];
-    rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,payMethod2:p.pm2||'',amount_1:p.amount_1,amount_2:p.amount_2,amount_3:p.amount_3,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
-      function(){saveNext(i+1);},function(){saveNext(i+1);});
-  }
-  saveNext(0);
-},
-      function(e){toast(e.message||String(e),'err');}
-    );
-  });
+        toast('Check-In OK — Cambio: '+fmt(res.change||0),'ok');
+        var prodsCI=[..._ciProds];_ciProds=[];
+        var checkInMs=res.checkInMs||Date.now();
+        var prodFail=[];
+        function saveNext(i){
+          if(i>=prodsCI.length){
+            closeM('mRoom');
+            rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];renderRooms();}});
+            if(prodFail.length){ // los productos ya NO se pierden en silencio
+              failVenta('La habitación quedó registrada, pero <b>estos productos NO se guardaron</b>:<br>'+prodFail.map(function(x){return '• '+esc(x);}).join('<br>')+'<br><br>Agrégalos manualmente desde la habitación.', null);
+            }
+            return;
+          }
+          var p=prodsCI[i];
+          rpc('addRoomProduct',{roomId:curRoom.roomId,productId:p.id,cantidad:p.cant,payMethod:p.pm,payMethod2:p.pm2||'',amount_1:p.amount_1,amount_2:p.amount_2,amount_3:p.amount_3,isCortesia:false,userName:sess.userName,userRole:sess.userRole,sessionShiftId:sess.shiftId,sessionBusinessDay:sess.businessDay,checkInMs:checkInMs},
+            function(){saveNext(i+1);},
+            function(){prodFail.push((p.nombre||('#'+p.id))+' x'+p.cant);saveNext(i+1);});
+        }
+        saveNext(0);
+      },
+      function(e){
+        // NO continúa como exitoso: modal bloqueante, mRoom sigue abierto, carrito intacto
+        failVenta('⚠️ <b>LA VENTA NO SE GUARDÓ</b><br>'+esc(e.message||'Sin conexión')+'<br><br>Revisá el internet y volvé a intentar.<br><b>No entregues la habitación sin registrarla.</b>', intentarCheckIn);
+      }
+     );
+   }
+   intentarCheckIn();
+ });
 }
  var addPersonCount=1,addPersonPay='EFECTIVO';
  function doHoraGratis(){
