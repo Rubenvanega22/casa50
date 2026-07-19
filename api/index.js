@@ -593,6 +593,7 @@ module.exports = async function handler(req, res) {
       case 'getObservacionesTurno':  return await apiGetObservacionesTurno(payload, res);
       case 'getProductosMes':        return await apiGetProductosMes(payload, res);
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
+      case 'getCortesiasByShift':    return await apiGetCortesiasByShift(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
       case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
@@ -5829,6 +5830,28 @@ function signoDeltaAjuste(a) {
   if (tipo === 'producto') return -Math.abs(cant);                      // cambio: el producto principal se resta
   if (tipo === 'metodo_pago') return 0;                                 // no afecta stock
   return cant;
+}
+
+// Pieza 1 (read-only): lista las cortesias ORIGINALES de un business_day+turno.
+// ADMIN-only por consistencia con el modal de ajuste. Las Piezas 2/3 (escritura)
+// naceran con verificacion de sesion firmada, NO con p.userRole.
+async function apiGetCortesiasByShift(p, res) {
+  if (String(p.userRole || '').toUpperCase() !== 'ADMIN') return err(res, 'Solo ADMIN', 403);
+  const bDay = String(p.businessDay || '').trim();
+  const sid  = String(p.shiftId || '').trim();
+  if (!bDay || !sid) return err(res, 'Falta fecha o turno', 400);
+  const { data, error } = await tSelect('room_products',
+      'id, ts_ms, product_id, product_name, cantidad, cortesia_destinatario, user_name')
+    .eq('business_day', bDay).eq('shift_id', sid)
+    .eq('is_cortesia', true).is('tipo_ajuste', null)
+    .order('ts_ms', { ascending: true });
+  if (error) return err(res, error.message, 500);
+  const items = (data || []).map(r => ({
+    id: r.id, tsMs: Number(r.ts_ms || 0), productId: r.product_id,
+    productName: r.product_name, cantidad: Number(r.cantidad || 0),
+    destinatario: r.cortesia_destinatario || '', userName: r.user_name || ''
+  }));
+  return ok(res, { items });
 }
 
 async function apiGetInventarioByDay(p, res) {

@@ -14661,7 +14661,8 @@ var AJ_ESCENARIOS = {
     {tipo:'producto',         icon:'🔄', titulo:'Cambiar producto vendido', desc:'Vendió un producto por otro (cambiar A por B)', cuadre:true, stock:'ambos',     pide:'productoViejo'},
     {tipo:'metodo_pago',      icon:'💳', titulo:'Cambiar método de pago',   desc:'Selecciona la venta del bar y cambia su método',cuadre:true, stock:'ninguno',   pide:'roomProductPicker'},
     {tipo:'venta_duplicada',  icon:'➖', titulo:'Quitar venta (vendió de más)', desc:'Registró 2 cuando era 1',                cuadre:true, stock:'recepcion', pide:'payMethod'},
-    {tipo:'venta_olvidada',   icon:'➕', titulo:'Agregar venta olvidada',   desc:'Vendió pero no registró',                       cuadre:true, stock:'recepcion', pide:'payMethod'}
+    {tipo:'venta_olvidada',   icon:'➕', titulo:'Agregar venta olvidada',   desc:'Vendió pero no registró',                       cuadre:true, stock:'recepcion', pide:'payMethod'},
+    {tipo:'cortesia',         icon:'🎁', titulo:'Ajuste de cortesías',       desc:'Quitar o agregar una cortesía de un turno',      cuadre:false, stock:'recepcion', pide:'cortesiaPicker'}
   ]
 };
 
@@ -14860,6 +14861,17 @@ function ajRenderConfig(){
     h += '<select id="ajRecep" style="width:100%;margin-bottom:10px"><option value="">— Elegir —</option></select>';
   }
 
+  // Cortesias: selector fecha/turno + lista (Pieza 1 = solo lectura)
+  if(e.pide === 'cortesiaPicker'){
+    var todayC = (sess.businessDay||'').substring(0,10);
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Fecha</label><input type="date" id="ajCorFecha" value="'+todayC+'" onchange="ajLoadCortesias()" style="width:100%"></div>';
+    h += '<div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Turno</label><select id="ajCorTurno" onchange="ajLoadCortesias()" style="width:100%"><option value="SHIFT_1">T1 (6am-2pm)</option><option value="SHIFT_2" selected>T2 (2pm-9pm)</option><option value="SHIFT_3">T3 (9pm-6am)</option></select></div>';
+    h += '</div>';
+    h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Cortesías de ese turno</label>';
+    h += '<div id="ajCorList" style="background:#18181f;border-radius:6px;max-height:200px;overflow-y:auto;font-size:11px;color:#9ca3af;padding:6px">Elegí fecha + turno para listar las cortesías…</div>';
+  }
+
   // Producto viejo (cambiar producto)
   if(e.pide === 'productoViejo'){
     h += '<div style="background:rgba(239,68,68,.05);border-left:3px solid #ef4444;padding:8px 10px;border-radius:0 6px 6px 0;margin-bottom:10px">';
@@ -14890,16 +14902,18 @@ function ajRenderConfig(){
   }
 
   // Cantidad (oculta para roomProductPicker: la cantidad viene del registro seleccionado)
-  if(e.pide !== 'roomProductPicker'){
+  if(e.pide !== 'roomProductPicker' && e.pide !== 'cortesiaPicker'){
     var cantLabel = (e.pide==='cantidad_signo') ? 'Cantidad (+ suma, − resta)' : 'Cantidad';
     var cantMin = (e.pide==='cantidad_signo') ? '' : 'min="1"';
     h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">'+cantLabel+'</label>';
     h += '<input type="number" id="ajCantidad" value="1" '+cantMin+' oninput="ajChCant(this.value)" style="width:100%;margin-bottom:10px;font-size:16px;font-weight:700">';
   }
 
-  // Motivo
-  h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Motivo (obligatorio)</label>';
-  h += '<textarea id="ajMotivo" rows="2" placeholder="Describe brevemente el motivo del ajuste..." oninput="ajToggleBtnGuardar()" style="width:100%;background:#18181f;border:1px solid #3a3a45;color:#e5e7eb;padding:8px;border-radius:6px;font-size:12px;resize:vertical"></textarea>';
+  // Motivo (obligatorio para escritura; se omite en cortesiaPicker read-only de la Pieza 1)
+  if(e.pide !== 'cortesiaPicker'){
+    h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Motivo (obligatorio)</label>';
+    h += '<textarea id="ajMotivo" rows="2" placeholder="Describe brevemente el motivo del ajuste..." oninput="ajToggleBtnGuardar()" style="width:100%;background:#18181f;border:1px solid #3a3a45;color:#e5e7eb;padding:8px;border-radius:6px;font-size:12px;resize:vertical"></textarea>';
+  }
 
   h += '</div>';
   cont.innerHTML = h;
@@ -14908,6 +14922,7 @@ function ajRenderConfig(){
   ajRenderPreview();
   ajActualizarWarning();
   if(e.pide === 'roomProductPicker') ajLoadRoomProducts();
+  if(e.pide === 'cortesiaPicker') ajLoadCortesias();
 }
 
 function ajFillRecep(){
@@ -15188,6 +15203,29 @@ function ajLoadRoomProducts(){
     });
     cont.innerHTML = h;
   }, function(e){ cont.innerHTML = '<div style="padding:6px;color:#fca5a5">Error: '+(e.message||'?')+'</div>'; });
+}
+
+// Pieza 1 (read-only): lista las cortesias del turno elegido. Sin acciones aun.
+function ajLoadCortesias(){
+  var cont = document.getElementById('ajCorList');
+  if(!cont) return;
+  var bDay = (document.getElementById('ajCorFecha')||{}).value||'';
+  var sid  = (document.getElementById('ajCorTurno')||{}).value||'';
+  if(!bDay || !sid){ cont.innerHTML='<div style="padding:6px;color:#9ca3af">Elegí fecha + turno…</div>'; return; }
+  cont.innerHTML='<div style="padding:6px;color:#9ca3af">Cargando…</div>';
+  rpc('getCortesiasByShift', { userRole: sess.userRole, businessDay: bDay, shiftId: sid }, function(d){
+    var items = d.items||[];
+    if(!items.length){ cont.innerHTML='<div style="padding:6px;color:#9ca3af">No hay cortesías en ese turno.</div>'; return; }
+    var h='';
+    items.forEach(function(c){
+      var hora = new Date(c.tsMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      h += '<div style="padding:7px 8px;border-bottom:1px solid rgba(46,46,58,.5);display:flex;justify-content:space-between;align-items:center">';
+      h += '<div style="color:#e5e7eb"><b>'+hora+'</b> · '+esc(c.productName)+' ×'+c.cantidad+(c.destinatario?' — '+esc(c.destinatario):'')+'</div>';
+      h += '<div style="color:#9ca3af;font-size:11px">'+esc(c.userName)+'</div>';
+      h += '</div>';
+    });
+    cont.innerHTML = h;
+  }, function(e){ cont.innerHTML='<div style="padding:6px;color:#fca5a5">Error: '+(e.message||'?')+'</div>'; });
 }
 
 function ajSelRoomProduct(rpId){
