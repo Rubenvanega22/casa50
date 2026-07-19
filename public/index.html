@@ -15671,6 +15671,7 @@ initBarcodeScanner();
         <div class="sub">ASISTENTE IA</div>
         <div id="luciGasto" class="luci-gasto">💰 Mes: ...</div>
       </div>
+      <button type="button" class="luci-nueva" onclick="lucianaNuevaConversacion()" title="Nueva conversación" style="background:none;border:none;cursor:pointer;font-size:17px;opacity:.85;padding:0 4px">🆕</button>
       <button class="luci-x" onclick="lucianaToggle()" title="Cerrar">×</button>
     </div>
     <div class="luci-msgs" id="luciMsgs"></div>
@@ -15807,6 +15808,20 @@ function lucianaClearFoto(){
   document.getElementById('luciFotoPreview').classList.add('h');
   document.getElementById('luciFotoBtn').classList.remove('activa');
 }
+function lucianaConvId(){
+  // Id del hilo actual. Vive en sessionStorage (se limpia al cerrar la pestana,
+  // igual que la sesion de recepcion). El backend acota el contexto por este id.
+  var id = sessionStorage.getItem('luciConv');
+  if(!id){ id = 'conv-' + Date.now(); sessionStorage.setItem('luciConv', id); }
+  return id;
+}
+function lucianaNuevaConversacion(){
+  // Corta el contexto: id nuevo + limpia la pantalla. Las viejas quedan en
+  // luciana_chats con su id anterior (auditadas, solo no se cargan como contexto).
+  sessionStorage.setItem('luciConv', 'conv-' + Date.now());
+  var msgs = document.getElementById('luciMsgs'); if(msgs) msgs.innerHTML = '';
+  var inp = document.getElementById('luciIn'); if(inp) inp.focus();
+}
 function lucianaSend(){
   var inp = document.getElementById('luciIn');
   var btn = document.getElementById('luciBtn');
@@ -15844,7 +15859,8 @@ function lucianaSend(){
       userRole: sess.userRole,
       userName: sess.userName,
       pregunta: txt,
-      fotoUrl: fotoUrl || null
+      fotoUrl: fotoUrl || null,
+      conversacionId: lucianaConvId()
     }, function(r){
       if(pensando) pensando.remove();
       lucianaAddMsg(r.respuesta || '(respuesta vacia)', 'bot');
