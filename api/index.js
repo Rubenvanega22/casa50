@@ -9742,6 +9742,7 @@ async function apiLucianaChat(p, res) {
   const bDay = businessDay(now);
   const userName = String(p.userName || 'admin').slice(0, 100);
   const fotoUrl = String(p.fotoUrl || '').trim() || null;
+  const convId = String(p.conversacionId || '').slice(0, 64) || null;
 
   // Si vino foto, fetchear y convertir a base64 para vision.
   // Restringimos a URLs del propio bucket por seguridad (evita SSRF).
@@ -9776,8 +9777,10 @@ async function apiLucianaChat(p, res) {
   // re-fetchean. Si falla, seguimos sin historial.
   let historial = [];
   try {
-    const { data: prevs } = await tSelect('luciana_chats', 'pregunta, respuesta')
-      .eq('business_day', bDay)
+    let q = tSelect('luciana_chats', 'pregunta, respuesta');
+    q = convId ? q.eq('conversacion_id', convId)   // hilo actual
+               : q.eq('business_day', bDay);        // fallback compat clientes viejos
+    const { data: prevs } = await q
       .order('ts_ms', { ascending: false })
       .limit(10);
     historial = (prevs || []).reverse().flatMap(c => [
@@ -9936,7 +9939,8 @@ async function apiLucianaChat(p, res) {
       tokens_cache_read: totCR,
       tokens_cache_write: totCW,
       costo_usd: costoUsd,
-      mood
+      mood,
+      conversacion_id: convId
     });
   } catch (e) {
     console.error('luciana_chats insert error:', e);
