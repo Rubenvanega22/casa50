@@ -348,6 +348,8 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="ov" id="mConf"><div class="modal"><div class="mh"><div class="mt">Confirmar</div><button class="mc" onclick="closeM('mConf')">✕</button></div><div id="mConfB" style="margin-bottom:12px;font-size:14px"></div><div class="row"><button class="btn br" id="mConfOk">Confirmar</button><button class="btn bk" onclick="closeM('mConf')">Cancelar</button></div></div></div>
 <!-- Modal bloqueante de venta no guardada (capa a). SIN ✕ y con data-nodismiss: no se cierra por accidente. -->
 <div class="ov" id="mFail" data-nodismiss><div class="modal"><div class="mh"><div class="mt" style="color:#f87171">⚠️ VENTA NO GUARDADA</div></div><div id="mFailB" style="margin-bottom:14px;font-size:15px;line-height:1.45"></div><div class="row"><button class="btn br" id="mFailRetry">Reintentar</button><button class="btn bk" id="mFailCancel">Cerrar sin guardar</button></div></div></div>
+<!-- Mini-modal: motivo para quitar una cortesia (Pieza 2) -->
+<div class="ov" id="mQuitarCor"><div class="modal"><div class="mh"><div class="mt">🎁 Quitar cortesía</div><button class="mc" onclick="closeM('mQuitarCor')">✕</button></div><div id="qcInfo" style="font-size:13px;color:#e5e7eb;margin-bottom:10px"></div><label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Motivo (obligatorio)</label><textarea id="qcMotivo" rows="2" oninput="qcToggle()" placeholder="Por qué se quita esta cortesía..." style="width:100%;background:#18181f;border:1px solid #3a3a45;color:#e5e7eb;padding:8px;border-radius:6px;font-size:12px;resize:vertical"></textarea><div class="row" style="margin-top:12px"><button class="btn br" id="qcBtn" disabled onclick="qcConfirmar()">Quitar</button><button class="btn bk" onclick="closeM('mQuitarCor')">Cancelar</button></div></div></div>
 <div class="ov" id="mChangePay"><div class="modal" style="max-width:560px;max-height:92vh;overflow-y:auto"><div class="mh"><div class="mt">🔧 Ajuste</div><button class="mc" onclick="closeM('mChangePay')">✕</button></div>
 <div style="font-size:12px;color:#9ca3af;margin-bottom:10px" id="mcpSubtitle">Selecciona la venta y el nuevo método</div>
 <div id="mcpAdmCtrl" style="display:none;margin-bottom:10px">
@@ -15215,17 +15217,44 @@ function ajLoadCortesias(){
   cont.innerHTML='<div style="padding:6px;color:#9ca3af">Cargando…</div>';
   rpc('getCortesiasByShift', { userRole: sess.userRole, businessDay: bDay, shiftId: sid }, function(d){
     var items = d.items||[];
+    window._ajCorItems = items;   // para el modal de quitar
     if(!items.length){ cont.innerHTML='<div style="padding:6px;color:#9ca3af">No hay cortesías en ese turno.</div>'; return; }
     var h='';
     items.forEach(function(c){
       var hora = new Date(c.tsMs).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
       h += '<div style="padding:7px 8px;border-bottom:1px solid rgba(46,46,58,.5);display:flex;justify-content:space-between;align-items:center">';
       h += '<div style="color:#e5e7eb"><b>'+hora+'</b> · '+esc(c.productName)+' ×'+c.cantidad+(c.destinatario?' — '+esc(c.destinatario):'')+'</div>';
-      h += '<div style="color:#9ca3af;font-size:11px">'+esc(c.userName)+'</div>';
+      h += '<div style="display:flex;gap:6px;align-items:center"><span style="color:#9ca3af;font-size:11px">'+esc(c.userName)+'</span>';
+      h += '<button onclick="ajQuitarCortesia('+c.id+')" style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:11px">Quitar</button></div>';
       h += '</div>';
     });
     cont.innerHTML = h;
   }, function(e){ cont.innerHTML='<div style="padding:6px;color:#fca5a5">Error: '+(e.message||'?')+'</div>'; });
+}
+
+// Pieza 2: mini-modal de motivo para quitar una cortesia (patron textarea del modal).
+var _qcId = 0;
+function ajQuitarCortesia(id){
+  _qcId = id;
+  var c = (window._ajCorItems||[]).find(function(x){return x.id===id;});
+  var label = c ? (c.productName+' ×'+c.cantidad+(c.destinatario?' — '+c.destinatario:'')) : ('#'+id);
+  document.getElementById('qcInfo').innerHTML = 'Vas a quitar: <b>'+esc(label)+'</b>.<br>El producto vuelve al inventario del turno original.';
+  document.getElementById('qcMotivo').value = '';
+  document.getElementById('qcBtn').disabled = true;
+  document.body.appendChild(document.getElementById('mQuitarCor'));
+  openM('mQuitarCor');
+}
+function qcToggle(){
+  var m = (document.getElementById('qcMotivo').value||'').trim();
+  document.getElementById('qcBtn').disabled = m.length < 3;
+}
+function qcConfirmar(){
+  var motivo = (document.getElementById('qcMotivo').value||'').trim();
+  if(motivo.length < 3){ toast('Motivo obligatorio (min 3)','err'); return; }
+  var btn = document.getElementById('qcBtn'); btn.disabled = true;
+  rpc('quitarCortesia', { token: sess.token, roomProductId: _qcId, motivo: motivo },
+    function(){ closeM('mQuitarCor'); toast('Cortesía quitada — producto repuesto','ok'); ajLoadCortesias(); },
+    function(e){ btn.disabled = false; toast(e.message||'Error','err'); });
 }
 
 function ajSelRoomProduct(rpId){
