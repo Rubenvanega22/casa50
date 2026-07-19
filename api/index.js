@@ -594,6 +594,7 @@ module.exports = async function handler(req, res) {
       case 'getProductosMes':        return await apiGetProductosMes(payload, res);
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
       case 'getCortesiasByShift':    return await apiGetCortesiasByShift(payload, res);
+      case 'quitarCortesia':         return await apiQuitarCortesia(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
       case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
@@ -5846,12 +5847,73 @@ async function apiGetCortesiasByShift(p, res) {
     .eq('is_cortesia', true).is('tipo_ajuste', null)
     .order('ts_ms', { ascending: true });
   if (error) return err(res, error.message, 500);
-  const items = (data || []).map(r => ({
+  // Netear: excluir las cortesias ya quitadas (fila compensatoria con ajuste_ref_id)
+  const { data: quitadas } = await tSelect('room_products', 'ajuste_ref_id')
+    .eq('business_day', bDay).eq('shift_id', sid).eq('tipo_ajuste', 'cortesia_quitada');
+  const quitadasSet = new Set((quitadas || []).map(q => Number(q.ajuste_ref_id)));
+  const items = (data || []).filter(r => !quitadasSet.has(Number(r.id))).map(r => ({
     id: r.id, tsMs: Number(r.ts_ms || 0), productId: r.product_id,
     productName: r.product_name, cantidad: Number(r.cantidad || 0),
     destinatario: r.cortesia_destinatario || '', userName: r.user_name || ''
   }));
   return ok(res, { items });
+}
+
+// Pieza 2 (escritura): quita una cortesia. NACE CERRADA: exige carnet firmado
+// (requireAdmin), NO p.userRole. Inserta la fila compensatoria negativa
+// estampada al business_day+shift_id ORIGINAL (espejo triple room_products +
+// cortesias + stock_movements), repone stock, y audita en `ajustes`.
+async function apiQuitarCortesia(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const rpId = Number(p.roomProductId || 0);
+  const motivo = String(p.motivo || '').trim();
+  if (!rpId) return err(res, 'Falta la cortesía', 400);
+  if (motivo.length < 3) return err(res, 'Motivo obligatorio (min 3)', 400);
+
+  // Cargar la cortesia ORIGINAL (de este motel, no es fila de ajuste)
+  const { data: orig } = await tSelect('room_products', '*')
+    .eq('id', rpId).eq('is_cortesia', true).is('tipo_ajuste', null).maybeSingle();
+  if (!orig) return err(res, 'Cortesía no encontrada', 404);
+
+  // Guard doble-quita
+  const { data: yaQ } = await tSelect('room_products', 'id')
+    .eq('ajuste_ref_id', rpId).eq('tipo_ajuste', 'cortesia_quitada').maybeSingle();
+  if (yaQ) return err(res, 'Esta cortesía ya fue quitada', 409);
+
+  const now = Date.now();
+  const bDay = orig.business_day, sid = orig.shift_id;   // estampado al ORIGINAL
+  const n = Number(orig.cantidad || 0);
+  const { data: prod } = await tSelect('products', 'precio').eq('id', orig.product_id).maybeSingle();
+  const precio = Number((prod && prod.precio) || orig.precio_unit || 0);
+
+  await tInsert('room_products', {
+    ts_ms: now, business_day: bDay, shift_id: sid, room_id: 'AJUSTE',
+    product_id: orig.product_id, product_name: orig.product_name,
+    cantidad: -n, precio_unit: precio, total: 0, pay_method: 'EFECTIVO',
+    user_name: s.n, is_cortesia: true, cortesia_destinatario: orig.cortesia_destinatario || '',
+    created_by_admin: true, tipo_ajuste: 'cortesia_quitada', motivo_ajuste: motivo,
+    ajuste_ref_id: rpId
+  });
+  await tInsert('cortesias', {
+    ts_ms: now, business_day: bDay, shift_id: sid, product_id: orig.product_id,
+    product_name: orig.product_name, cantidad: -n, precio_unit: precio,
+    total: -(precio * n), user_name: s.n, destinatario: orig.cortesia_destinatario || ''
+  });
+  await tInsert('stock_movements', {
+    ts_ms: now, business_day: bDay, shift_id: sid, user_name: s.n, user_role: 'ADMIN',
+    product_id: orig.product_id, product_name: orig.product_name,
+    tipo: 'cortesia_ajuste_entrada', cantidad: n, nota: 'Quita cortesía #' + rpId + ' — ' + motivo
+  });
+  await supabase.rpc('apply_stock_actual_delta', { p_product_id: orig.product_id, p_delta: n });
+
+  await tInsert('ajustes', {
+    ts_ms: now, categoria: 'RECEPCION', tipo: 'cortesia_quitada',
+    product_id: orig.product_id, product_name: orig.product_name, cantidad: n,
+    afecta_stock: 'recepcion', afecta_cuadre: false, business_day: bDay, shift_id: sid,
+    valor_afectado: precio * n, motivo, admin_name: s.n
+  });
+  return ok(res, { ok: true, repuesto: n });
 }
 
 async function apiGetInventarioByDay(p, res) {
