@@ -14872,6 +14872,16 @@ function ajRenderConfig(){
     h += '</div>';
     h += '<label style="font-size:10px;color:#9ca3af;display:block;margin-bottom:3px">Cortesías de ese turno</label>';
     h += '<div id="ajCorList" style="background:#18181f;border-radius:6px;max-height:200px;overflow-y:auto;font-size:11px;color:#9ca3af;padding:6px">Elegí fecha + turno para listar las cortesías…</div>';
+    h += '<div style="border-top:1px solid #2e2e3a;margin-top:10px;padding-top:10px">';
+    h += '<div style="font-size:10px;color:#86efac;font-weight:700;margin-bottom:6px">➕ Agregar cortesía a este turno</div>';
+    h += '<select id="ajAgProd" style="width:100%;margin-bottom:6px"><option value="">— Producto —</option>'+
+         (productosLista||[]).filter(function(x){return x.activo;}).map(function(x){return '<option value="'+x.id+'">'+esc(x.nombre)+' ('+fmt(x.precio)+')</option>';}).join('')+'</select>';
+    h += '<div style="display:grid;grid-template-columns:1fr 2fr;gap:6px;margin-bottom:6px">';
+    h += '<input type="number" id="ajAgCant" min="1" value="1" placeholder="Cant" style="width:100%">';
+    h += '<input type="text" id="ajAgDest" placeholder="Destinatario" style="width:100%"></div>';
+    h += '<textarea id="ajAgMotivo" rows="2" placeholder="Motivo (obligatorio)" style="width:100%;background:#18181f;border:1px solid #3a3a45;color:#e5e7eb;padding:8px;border-radius:6px;font-size:12px;margin-bottom:6px"></textarea>';
+    h += '<button class="btn br" onclick="ajAgregarCortesia()" style="width:100%">Agregar cortesía</button>';
+    h += '</div>';
   }
 
   // Producto viejo (cambiar producto)
@@ -15255,6 +15265,25 @@ function qcConfirmar(){
   rpc('quitarCortesia', { token: sess.token, roomProductId: _qcId, motivo: motivo },
     function(){ closeM('mQuitarCor'); toast('Cortesía quitada — producto repuesto','ok'); ajLoadCortesias(); },
     function(e){ btn.disabled = false; toast(e.message||'Error','err'); });
+}
+
+// Pieza 3: agrega una cortesia al turno elegido (con carnet). Bloquea si stock no alcanza.
+function ajAgregarCortesia(){
+  var productId = Number((document.getElementById('ajAgProd')||{}).value||0);
+  var cantidad  = Number((document.getElementById('ajAgCant')||{}).value||0);
+  var dest = ((document.getElementById('ajAgDest')||{}).value||'').trim();
+  var motivo = ((document.getElementById('ajAgMotivo')||{}).value||'').trim();
+  var bDay = (document.getElementById('ajCorFecha')||{}).value||'';
+  var sid  = (document.getElementById('ajCorTurno')||{}).value||'';
+  if(!productId){ toast('Elegí un producto','err'); return; }
+  if(cantidad < 1){ toast('Cantidad inválida','err'); return; }
+  if(!dest){ toast('Falta el destinatario','err'); return; }
+  if(motivo.length < 3){ toast('Motivo obligatorio (min 3)','err'); return; }
+  rpc('agregarCortesia', { token: sess.token, productId: productId, cantidad: cantidad, destinatario: dest, motivo: motivo, businessDay: bDay, shiftId: sid },
+    function(){ toast('Cortesía agregada','ok'); ajLoadCortesias();
+      document.getElementById('ajAgProd').value=''; document.getElementById('ajAgCant').value='1';
+      document.getElementById('ajAgDest').value=''; document.getElementById('ajAgMotivo').value=''; },
+    function(e){ toast(e.message||'Error','err'); });
 }
 
 function ajSelRoomProduct(rpId){

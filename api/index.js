@@ -595,6 +595,7 @@ module.exports = async function handler(req, res) {
       case 'getInventarioByDay':     return await apiGetInventarioByDay(payload, res);
       case 'getCortesiasByShift':    return await apiGetCortesiasByShift(payload, res);
       case 'quitarCortesia':         return await apiQuitarCortesia(payload, res);
+      case 'agregarCortesia':        return await apiAgregarCortesia(payload, res);
       case 'getProducts':            return await apiGetProducts(payload, res);
       case 'saveProduct':            return await apiSaveProduct(payload, res);
       case 'saveCategoriaPrecios':   return await apiSaveCategoriaPrecios(payload, res);
@@ -5914,6 +5915,64 @@ async function apiQuitarCortesia(p, res) {
     valor_afectado: precio * n, motivo, admin_name: s.n
   });
   return ok(res, { ok: true, repuesto: n });
+}
+
+// Pieza 3 (escritura): agrega una cortesia a un turno (posible pasado). NACE
+// CERRADA (requireAdmin). BLOQUEA si el stock no alcanza (como todo el sistema
+// y el piso duro de apply_stock_actual_delta): descuento atomico PRIMERO, y
+// recien si pasa, inserta el espejo triple estampado al dia/turno elegido.
+async function apiAgregarCortesia(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const productId = Number(p.productId || 0);
+  const cantidad  = Math.floor(Number(p.cantidad || 0));
+  const dest   = String(p.destinatario || '').trim();
+  const motivo = String(p.motivo || '').trim();
+  const bDay = String(p.businessDay || '').trim();
+  const sid  = String(p.shiftId || '').trim();
+  if (!productId || cantidad < 1) return err(res, 'Producto y cantidad válidos', 400);
+  if (!dest) return err(res, 'Falta el destinatario', 400);
+  if (motivo.length < 3) return err(res, 'Motivo obligatorio (min 3)', 400);
+  if (!bDay || !sid) return err(res, 'Falta fecha o turno', 400);
+
+  const { data: prod } = await tSelect('products', 'id, nombre, precio, stock_actual').eq('id', productId).maybeSingle();
+  if (!prod) return err(res, 'Producto no encontrado', 404);
+  const precio = Number(prod.precio || 0);
+
+  // BLOQUEO: stock insuficiente. Pre-check + descuento atomico primero.
+  if (Number(prod.stock_actual || 0) < cantidad)
+    return err(res, 'Stock insuficiente: hay ' + Number(prod.stock_actual || 0) + '. Registrá una entrada o ajuste de inventario antes de agregar la cortesía.', 409);
+  try {
+    await supabase.rpc('apply_stock_actual_delta', { p_product_id: productId, p_delta: -cantidad });
+  } catch (e) {
+    return err(res, 'Stock insuficiente para agregar la cortesía', 409);
+  }
+
+  const now = Date.now();
+  await tInsert('room_products', {
+    ts_ms: now, business_day: bDay, shift_id: sid, room_id: 'AJUSTE',
+    product_id: productId, product_name: prod.nombre,
+    cantidad: cantidad, precio_unit: precio, total: 0, pay_method: 'EFECTIVO',
+    user_name: s.n, is_cortesia: true, cortesia_destinatario: dest,
+    created_by_admin: true, tipo_ajuste: null, motivo_ajuste: motivo
+  });
+  await tInsert('cortesias', {
+    ts_ms: now, business_day: bDay, shift_id: sid, product_id: productId,
+    product_name: prod.nombre, cantidad: cantidad, precio_unit: precio,
+    total: precio * cantidad, user_name: s.n, destinatario: dest
+  });
+  await tInsert('stock_movements', {
+    ts_ms: now, business_day: bDay, shift_id: sid, user_name: s.n, user_role: 'ADMIN',
+    product_id: productId, product_name: prod.nombre,
+    tipo: 'cortesia_ajuste_salida', cantidad: -cantidad, nota: 'Cortesía agregada (admin) — ' + motivo
+  });
+  await tInsert('ajustes', {
+    ts_ms: now, categoria: 'RECEPCION', tipo: 'cortesia_agregada',
+    product_id: productId, product_name: prod.nombre, cantidad: cantidad,
+    afecta_stock: 'recepcion', afecta_cuadre: false, business_day: bDay, shift_id: sid,
+    valor_afectado: precio * cantidad, motivo, admin_name: s.n
+  });
+  return ok(res, { ok: true });
 }
 
 async function apiGetInventarioByDay(p, res) {
