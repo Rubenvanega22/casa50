@@ -1521,8 +1521,12 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <h2 style="font-size:14px">Personal</h2>
 <button class="btn ba sm" onclick="openAddStaff()">+ Agregar</button>
 </div>
-<div id="extrasPendCont"></div>
-<div id="staffCont"></div>
+<div class="staffTabs" style="display:flex;gap:6px;margin-bottom:12px">
+<button id="stabNomina" class="btn ba sm" style="flex:1" onclick="staffTab('nomina')">👥 Nómina</button>
+<button id="stabExtras" class="btn bk sm" style="flex:1" onclick="staffTab('extras')">⚡ Extras</button>
+</div>
+<div id="staffTabNomina"><div id="staffCont"></div></div>
+<div id="staffTabExtras" style="display:none"><div id="extrasPendCont"></div><div id="staffExtrasCont"></div></div>
 </div>
 <!-- CALENDARIO (admin) -->
 <div class="pnl" id="pnl-sched">
@@ -9229,13 +9233,15 @@ function clearMaintHistory(){
   });
 }
 // ---- PERSONAL (admin) ----
-function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});loadExtrasPendientes();}
+function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();renderExtras();});loadExtrasPendientes();}
 
 // ---- FASE 2 · 2c: extras pendientes + reset de PIN (admin) ----
 var staffPendientes=[];
 function loadExtrasPendientes(){
   rpc('getExtrasPendientes',{token:sess.token},function(d){
     staffPendientes=d.pendientes||[];
+    var stab=document.getElementById('stabExtras');
+    if(stab) stab.innerHTML='⚡ Extras'+(staffPendientes.length?' <span style="background:#f59e0b;color:#111;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700">'+staffPendientes.length+'</span>':'');
     var el=document.getElementById('extrasPendCont');
     if(!el)return;
     if(!staffPendientes.length){el.innerHTML='';return;}
@@ -9323,14 +9329,96 @@ function doGuardarVacaciones(){
     toast('Error: '+(e.message||String(e)),'err');
   });
 }
+// Tarjeta de un colaborador (reutilizada por Nómina y Extras)
+function staffCardHtml(s, hoy){
+  var active=s.active!=='false'&&s.active!==false&&String(s.active||'')!=='0';
+  var edadStr='';
+  if(s.fechaNacimiento){
+    var nac=new Date(s.fechaNacimiento);
+    var edad=hoy.getFullYear()-nac.getFullYear();
+    var mv=hoy.getMonth()-nac.getMonth();
+    if(mv<0||(mv===0&&hoy.getDate()<nac.getDate()))edad--;
+    edadStr=edad+' años';
+  }
+  var salidaStr = s.fechaVacaciones || '';
+  if(!salidaStr && s.fechaIngreso){
+    var sal=new Date(s.fechaIngreso);sal.setFullYear(sal.getFullYear()+1);
+    salidaStr=sal.getFullYear()+'-'+String(sal.getMonth()+1).padStart(2,'0')+'-'+String(sal.getDate()).padStart(2,'0');
+  }
+  var alertaMes = false;
+  if(salidaStr){
+    var hoyYM = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+    alertaMes = (salidaStr.slice(0,7) === hoyYM);
+  }
+  var h='';
+  h+='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:7px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">';
+  h+='<div><span style="font-weight:700;font-size:13px;'+(active?'':'opacity:.5;text-decoration:line-through')+'">'+esc(s.name)+'</span>';
+  h+='<span style="font-size:10px;color:'+(active?'#22c55e':'#ef4444')+';margin-left:6px">'+(active?'Activo':'Inactivo')+'</span></div>';
+  h+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">';
+  h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button>';
+  h+='<button class="btn bk xs" style="background:#16a34a;color:#fff" onclick="openVacacionesModal(\''+esc(s.id)+'\')">🌴 Vacaciones</button>';
+  h+='<button class="btn bk xs" style="background:#7c3aed;color:#fff" onclick="openResetPin(\''+esc(s.id)+'\')">🔑 PIN</button>';
+  h+='</div></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
+  if(s.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(s.cedula)+'</b></span>';
+  if(s.celular)h+='<span>📱 <b style="color:#e5e7eb">'+esc(s.celular)+'</b></span>';
+  if(edadStr)h+='<span>Edad: <b style="color:#a78bfa">'+edadStr+'</b></span>';
+  if(s.fechaNacimiento)h+='<span>Nac: <b style="color:#e5e7eb">'+esc(s.fechaNacimiento)+'</b></span>';
+  if(s.fechaIngreso)h+='<span style="grid-column:span 2">Ingreso: <b style="color:#e5e7eb">'+esc(s.fechaIngreso)+'</b></span>';
+  if(s.direccion)h+='<span style="grid-column:span 2">📍 Dirección: <b style="color:#e5e7eb">'+esc(s.direccion)+'</b></span>';
+  if(s.contactoEmergencia)h+='<span style="grid-column:span 2">🚨 Emergencia: <b style="color:#f59e0b">'+esc(s.contactoEmergencia)+'</b></span>';
+  h+='</div>';
+  var accInfo = s.tienePin
+    ? '<span style="color:#22c55e">🔓 App: con acceso</span>'
+    : '<span style="color:#6b675f">🔒 App: sin clave</span>';
+  if(s.estadoRegistro==='RECHAZADO') accInfo='<span style="color:#ef4444">⛔ Registro rechazado</span>';
+  if(s.pinResetMs) accInfo+=' · <span style="color:#9ca3af">PIN reseteado por '+esc(s.pinResetPor||'?')+'</span>';
+  h+='<div style="font-size:10px;margin-top:5px">'+accInfo+'</div>';
+  if(salidaStr){
+    var historial = s.vacacionesHistorial || [];
+    var hasHist = historial.length > 0;
+    var expand = hasHist && !!(window._vacExpand && window._vacExpand[s.id]);
+    var camp = alertaMes ? '<span style="animation:pulse 1.2s ease-in-out infinite;display:inline-block">🔔</span> ' : '';
+    var headerStyle = 'margin-top:6px;padding:6px 8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:6px;display:flex;justify-content:space-between;align-items:center'+(hasHist?';cursor:pointer':'');
+    var clickAttr = hasHist ? ' onclick="_vacToggle(\''+esc(s.id)+'\')"' : '';
+    h += '<div style="'+headerStyle+'"'+clickAttr+'>';
+    h += '<span style="font-size:11px;color:#9ca3af">'+camp+'🌴 Tentativa vacaciones: <b style="color:#22c55e">'+salidaStr+'</b></span>';
+    if(hasHist) h += '<span style="font-size:11px;color:#9ca3af">'+(expand?'▼':'▶')+' ('+historial.length+')</span>';
+    h += '</div>';
+    if(expand){
+      h += '<div style="margin-top:4px;padding:4px 8px;display:flex;flex-direction:column;gap:3px">';
+      historial.forEach(function(v){
+        h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#ef4444">';
+        h += '<span>Ingreso: <b style="color:#fca5a5">'+esc(v.fechaIngreso||'—')+'</b></span>';
+        h += '<span>Vacaciones: <b style="color:#fca5a5">'+esc(v.fechaSalidaVacaciones||'—')+'</b></span>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+  }
+  h+='</div>';
+  return h;
+}
+
+// Pestañas Nómina / Extras del panel Personal
+function staffTab(t){
+  var nom=(t==='nomina');
+  document.getElementById('staffTabNomina').style.display=nom?'block':'none';
+  document.getElementById('staffTabExtras').style.display=nom?'none':'block';
+  document.getElementById('stabNomina').className='btn sm '+(nom?'ba':'bk');
+  document.getElementById('stabExtras').className='btn sm '+(nom?'bk':'ba');
+}
+
+// NÓMINA: cumpleaños del mes + listado por las áreas de siempre (sin extras)
 function renderStaff(){
-  var areas=['Recepcion','Camarera','Patiero','Mantenimiento','Administrador','Servicios'];
+  var areas=['Recepcion','Camarera','Patiero','Mantenimiento','Administrador'];
   var hoy=new Date();
   var mesActual=hoy.getMonth()+1;
   var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-  // --- Bloque cumpleaños del mes ---
   var cumples=staffList.filter(function(s){
+    if(s.type==='extra')return false;
     if(!s.fechaNacimiento)return false;
     var mes=Number(s.fechaNacimiento.split('-')[1]);
     return mes===mesActual;
@@ -9358,87 +9446,29 @@ function renderStaff(){
     h+='</div>';
   }
 
-  // --- Listado por área ---
   areas.forEach(function(area){
-    var members=staffList.filter(function(s){return String(s.area||'')===area;});
+    var members=staffList.filter(function(s){return String(s.area||'')===area && s.type!=='extra';});
     if(!members.length)return;
     h+='<div class="cfg"><h3>'+area+'</h3>';
-    members.forEach(function(s){
-      var active=s.active!=='false'&&s.active!==false&&String(s.active||'')!=='0';
-      // Calcular edad
-      var edadStr='';
-      if(s.fechaNacimiento){
-        var nac=new Date(s.fechaNacimiento);
-        var edad=hoy.getFullYear()-nac.getFullYear();
-        var mv=hoy.getMonth()-nac.getMonth();
-        if(mv<0||(mv===0&&hoy.getDate()<nac.getDate()))edad--;
-        edadStr=edad+' años';
-      }
-      // Tentativa de vacaciones: usar staff.fechaVacaciones. Fallback: +1 año del ingreso.
-      var salidaStr = s.fechaVacaciones || '';
-      if(!salidaStr && s.fechaIngreso){
-        var sal=new Date(s.fechaIngreso);sal.setFullYear(sal.getFullYear()+1);
-        salidaStr=sal.getFullYear()+'-'+String(sal.getMonth()+1).padStart(2,'0')+'-'+String(sal.getDate()).padStart(2,'0');
-      }
-      // Alerta si la tentativa cae en el mes actual
-      var alertaMes = false;
-      if(salidaStr){
-        var hoyYM = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
-        alertaMes = (salidaStr.slice(0,7) === hoyYM);
-      }
-      h+='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:7px">';
-      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">';
-      h+='<div><span style="font-weight:700;font-size:13px;'+(active?'':'opacity:.5;text-decoration:line-through')+'">'+esc(s.name)+'</span>';
-      h+='<span style="font-size:10px;color:'+(active?'#22c55e':'#ef4444')+';margin-left:6px">'+(active?'Activo':'Inactivo')+'</span></div>';
-      h+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">';
-      h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button>';
-      h+='<button class="btn bk xs" style="background:#16a34a;color:#fff" onclick="openVacacionesModal(\''+esc(s.id)+'\')">🌴 Vacaciones</button>';
-      h+='<button class="btn bk xs" style="background:#7c3aed;color:#fff" onclick="openResetPin(\''+esc(s.id)+'\')">🔑 PIN</button>';
-      h+='</div></div>';
-      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
-      if(s.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(s.cedula)+'</b></span>';
-      if(s.celular)h+='<span>📱 <b style="color:#e5e7eb">'+esc(s.celular)+'</b></span>';
-      if(edadStr)h+='<span>Edad: <b style="color:#a78bfa">'+edadStr+'</b></span>';
-      if(s.fechaNacimiento)h+='<span>Nac: <b style="color:#e5e7eb">'+esc(s.fechaNacimiento)+'</b></span>';
-      if(s.fechaIngreso)h+='<span style="grid-column:span 2">Ingreso: <b style="color:#e5e7eb">'+esc(s.fechaIngreso)+'</b></span>';
-      if(s.direccion)h+='<span style="grid-column:span 2">📍 Dirección: <b style="color:#e5e7eb">'+esc(s.direccion)+'</b></span>';
-      if(s.contactoEmergencia)h+='<span style="grid-column:span 2">🚨 Emergencia: <b style="color:#f59e0b">'+esc(s.contactoEmergencia)+'</b></span>';
-      h+='</div>';
-      // Estado de acceso a la app + auditoría de reset de PIN
-      var accInfo = s.tienePin
-        ? '<span style="color:#22c55e">🔓 App: con acceso</span>'
-        : '<span style="color:#6b675f">🔒 App: sin clave</span>';
-      if(s.estadoRegistro==='RECHAZADO') accInfo='<span style="color:#ef4444">⛔ Registro rechazado</span>';
-      if(s.pinResetMs) accInfo+=' · <span style="color:#9ca3af">PIN reseteado por '+esc(s.pinResetPor||'?')+'</span>';
-      h+='<div style="font-size:10px;margin-top:5px">'+accInfo+'</div>';
-      // Bloque tentativa + historial colapsable
-      if(salidaStr){
-        var historial = s.vacacionesHistorial || [];
-        var hasHist = historial.length > 0;
-        var expand = hasHist && !!(window._vacExpand && window._vacExpand[s.id]);
-        var camp = alertaMes ? '<span style="animation:pulse 1.2s ease-in-out infinite;display:inline-block">🔔</span> ' : '';
-        var headerStyle = 'margin-top:6px;padding:6px 8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:6px;display:flex;justify-content:space-between;align-items:center'+(hasHist?';cursor:pointer':'');
-        var clickAttr = hasHist ? ' onclick="_vacToggle(\''+esc(s.id)+'\')"' : '';
-        h += '<div style="'+headerStyle+'"'+clickAttr+'>';
-        h += '<span style="font-size:11px;color:#9ca3af">'+camp+'🌴 Tentativa vacaciones: <b style="color:#22c55e">'+salidaStr+'</b></span>';
-        if(hasHist) h += '<span style="font-size:11px;color:#9ca3af">'+(expand?'▼':'▶')+' ('+historial.length+')</span>';
-        h += '</div>';
-        if(expand){
-          h += '<div style="margin-top:4px;padding:4px 8px;display:flex;flex-direction:column;gap:3px">';
-          historial.forEach(function(v){
-            h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#ef4444">';
-            h += '<span>Ingreso: <b style="color:#fca5a5">'+esc(v.fechaIngreso||'—')+'</b></span>';
-            h += '<span>Vacaciones: <b style="color:#fca5a5">'+esc(v.fechaSalidaVacaciones||'—')+'</b></span>';
-            h += '</div>';
-          });
-          h += '</div>';
-        }
-      }
-      h+='</div>';
-    });
+    members.forEach(function(s){ h+=staffCardHtml(s,hoy); });
     h+='</div>';
   });
-  document.getElementById('staffCont').innerHTML=h||'<p style="color:#9ca3af">Sin personal registrado.</p>';
+  document.getElementById('staffCont').innerHTML=h||'<p style="color:#9ca3af">Sin personal de nómina.</p>';
+}
+
+// EXTRAS aprobados (los pendientes van en #extrasPendCont). Orden: registro reciente
+// primero (id='S'+timestamp); a futuro, por actividad reciente cuando haya asistencia.
+function renderExtras(){
+  var hoy=new Date();
+  var extras=staffList.filter(function(s){return s.type==='extra' && s.estadoRegistro==='APROBADO';})
+    .sort(function(a,b){return String(b.id).localeCompare(String(a.id));});
+  var el=document.getElementById('staffExtrasCont');
+  if(!el)return;
+  if(!extras.length){ el.innerHTML='<p style="color:#9ca3af;font-size:12px">Sin extras aprobados todavía.</p>'; return; }
+  var h='<div class="cfg"><h3>Extras aprobados ('+extras.length+')</h3>';
+  extras.forEach(function(s){ h+=staffCardHtml(s,hoy); });
+  h+='</div>';
+  el.innerHTML=h;
 }
 function updEdad(){
   var fn=document.getElementById('sFechaNac').value;
