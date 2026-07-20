@@ -1706,17 +1706,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 
 <!-- CONFIG (admin) -->
-<div class="pnl" id="pnl-config">
-<div id="asistQrAdmin" style="background:#22222c;border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
-<div class="sec" style="text-align:left">QR de asistencia <span id="asistQrModo" style="font-size:11px;color:#9ca3af"></span></div>
-<div id="asistQrBox" style="background:#fff;padding:12px;border-radius:10px;display:inline-block;margin:6px auto;min-width:120px;min-height:120px"></div>
-<div style="font-size:11px;color:#9ca3af;margin:6px 0">Versión <b id="asistQrVer" style="color:#e5e7eb">—</b> · imprimí y pegá este código en la entrada del motel</div>
-<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
-<button class="btn ba sm" onclick="printQrAsistencia()">🖨 Imprimir</button>
-<button class="btn bk sm" onclick="regenerarQr()">♻ Regenerar</button>
-</div>
-</div>
-<div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
+<div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
 </div>
 
@@ -2144,7 +2134,7 @@ function sw(id){
      if(roomIssuesOpen) loadRoomIssuesGrid();
    }
  }
- if(id==='config'){loadCfg();loadQrAsistencia();}
+ if(id==='config')loadCfg();
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
   if(id==='sched'){setDefWk();loadSched();}
@@ -9307,12 +9297,12 @@ var _qrModo='IMAGEN', _qrRefreshT=null;
 function loadQrAsistencia(){
   rpc('getQrAsistencia',{token:sess.token},function(d){
     _qrModo=d.modo||'IMAGEN';
-    document.getElementById('asistQrModo').textContent='· modo '+_qrModo;
-    document.getElementById('asistQrVer').textContent=d.qrVersion;
+    var em=document.getElementById('asistQrModo'); if(em)em.textContent=_qrModo;
+    var ev=document.getElementById('asistQrVer'); if(ev)ev.textContent=d.qrVersion;
     renderQrInto('asistQrBox', d.token);
     if(_qrRefreshT){clearTimeout(_qrRefreshT);_qrRefreshT=null;}
     if(_qrModo==='ROTATIVO' && d.rotaSeg){
-      _qrRefreshT=setTimeout(function(){ var p=document.getElementById('pnl-config'); if(p&&p.classList.contains('on')) loadQrAsistencia(); }, (d.rotaSeg||60)*1000);
+      _qrRefreshT=setTimeout(function(){ var p=document.getElementById('pnl-config'),q=document.getElementById('cfgQr'); if(p&&p.classList.contains('on')&&q&&q.style.display!=='none') loadQrAsistencia(); }, (d.rotaSeg||60)*1000);
     }
   },function(e){
     document.getElementById('asistQrBox').innerHTML='<p style="color:#ef4444;font-size:11px;padding:20px">'+esc(e.message||'No se pudo cargar el QR')+'</p>';
@@ -12717,12 +12707,21 @@ function updNoteBadge(notes){
   h+='<button id="cfgTabHab" class="btn bk sm" onclick="cfgTab(\'habitaciones\')">🚪 Habitaciones</button>';
   h+='<button id="cfgTabMotel" class="btn bk sm" onclick="cfgTab(\'motel\')">🏨 Datos del motel</button>';
   h+='<button id="cfgTabOperacion" class="btn bk sm" onclick="cfgTab(\'operacion\')">⚙️ Operación</button>';
+  h+='<button id="cfgTabQr" class="btn bk sm" onclick="cfgTab(\'qr\')">📱 QR asistencia</button>';
   h+='</div>';
   h+='<div id="cfgUsuarios"><p style="color:#9ca3af">Cargando...</p></div>';
   h+='<div id="cfgPrecios" style="display:none"></div>';
   h+='<div id="cfgHabitaciones" style="display:none"></div>';
   h+='<div id="cfgMotel" style="display:none"></div>';
   h+='<div id="cfgOperacion" style="display:none"></div>';
+  h+='<div id="cfgQr" style="display:none"><div class="cfg"><h3>QR de asistencia</h3>';
+  h+='<div style="text-align:center;background:#22222c;border-radius:10px;padding:14px">';
+  h+='<div id="asistQrBox" style="background:#fff;padding:12px;border-radius:10px;display:inline-block;margin:6px auto;min-width:120px;min-height:120px"></div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin:8px 0">Modo <b id="asistQrModo" style="color:#e5e7eb">—</b> · versión <b id="asistQrVer" style="color:#e5e7eb">—</b><br>imprimí y pegá este código en la entrada del motel</div>';
+  h+='<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">';
+  h+='<button class="btn ba sm" onclick="printQrAsistencia()">🖨 Imprimir</button>';
+  h+='<button class="btn bk sm" onclick="regenerarQr()">♻ Regenerar</button>';
+  h+='</div></div></div>';
   document.getElementById('cfgCont').innerHTML=h;
   cfgTab('usuarios');
   loadCfgUsuarios();
@@ -12732,10 +12731,11 @@ function updNoteBadge(notes){
   renderOperacionEditor();
 }
 function cfgTab(t){
-  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',habitaciones:'cfgHabitaciones',motel:'cfgMotel',operacion:'cfgOperacion'};
+  var ids={usuarios:'cfgUsuarios',precios:'cfgPrecios',habitaciones:'cfgHabitaciones',motel:'cfgMotel',operacion:'cfgOperacion',qr:'cfgQr'};
   for(var k in ids){var el=document.getElementById(ids[k]); if(el)el.style.display=(k===t)?'':'none';}
-  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',habitaciones:'cfgTabHab',motel:'cfgTabMotel',operacion:'cfgTabOperacion'};
+  var btns={usuarios:'cfgTabUsuarios',precios:'cfgTabPrecios',habitaciones:'cfgTabHab',motel:'cfgTabMotel',operacion:'cfgTabOperacion',qr:'cfgTabQr'};
   for(var b in btns){var bt=document.getElementById(btns[b]); if(bt)bt.className='btn '+(b===t?'ba':'bk')+' sm';}
+  if(t==='qr') loadQrAsistencia();   // el QR se genera solo al abrir su pestaña
 }
 // ---- Editor de Habitaciones (Configuracion > Habitaciones) ----
 // Lee todas las habitaciones (incl. archivadas) via getRoomsAdmin + categorias
