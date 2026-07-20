@@ -1528,22 +1528,6 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="staffTabNomina"><div id="staffCont"></div></div>
 <div id="staffTabExtras" style="display:none"><div id="extrasPendCont"></div><div id="staffExtrasCont"></div></div>
 </div>
-<!-- ASISTENCIA (admin + recepción) -->
-<div class="pnl" id="pnl-asistencia">
-<div style="display:flex;justify-content:space-between;margin-bottom:10px;align-items:center">
-<h2 style="font-size:14px">Asistencia</h2>
-</div>
-<div id="asistQrAdmin" style="display:none;background:#22222c;border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
-<div class="sec" style="text-align:left">QR de asistencia <span id="asistQrModo" style="font-size:11px;color:#9ca3af"></span></div>
-<div id="asistQrBox" style="background:#fff;padding:12px;border-radius:10px;display:inline-block;margin:6px auto;min-width:120px;min-height:120px"></div>
-<div style="font-size:11px;color:#9ca3af;margin:6px 0">Versión <b id="asistQrVer" style="color:#e5e7eb">—</b> · imprimí y pegá este código en la entrada</div>
-<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
-<button class="btn ba sm" onclick="printQrAsistencia()">🖨 Imprimir</button>
-<button class="btn bk sm" onclick="regenerarQr()">♻ Regenerar</button>
-</div>
-</div>
-<div id="asistHoyCont"><p style="color:#9ca3af;font-size:12px">El tablero del día llega en la próxima entrega.</p></div>
-</div>
 <!-- CALENDARIO (admin) -->
 <div class="pnl" id="pnl-sched">
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
@@ -1722,7 +1706,17 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 
 <!-- CONFIG (admin) -->
-<div class="pnl" id="pnl-config"><div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
+<div class="pnl" id="pnl-config">
+<div id="asistQrAdmin" style="background:#22222c;border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
+<div class="sec" style="text-align:left">QR de asistencia <span id="asistQrModo" style="font-size:11px;color:#9ca3af"></span></div>
+<div id="asistQrBox" style="background:#fff;padding:12px;border-radius:10px;display:inline-block;margin:6px auto;min-width:120px;min-height:120px"></div>
+<div style="font-size:11px;color:#9ca3af;margin:6px 0">Versión <b id="asistQrVer" style="color:#e5e7eb">—</b> · imprimí y pegá este código en la entrada del motel</div>
+<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+<button class="btn ba sm" onclick="printQrAsistencia()">🖨 Imprimir</button>
+<button class="btn bk sm" onclick="regenerarQr()">♻ Regenerar</button>
+</div>
+</div>
+<div id="cfgCont"><p style="color:#9ca3af">Cargando...</p></div></div>
 </div>
 </div>
 
@@ -2104,9 +2098,9 @@ function buildTabs(){
   if(r!=='MAID'&&r!=='MAINTENANCE')tabs.push({id:'rooms',l:'Habitaciones',i:'ti-bed'});
   if(r==='MAID')tabs.push({id:'maid',l:'Mis Cuartos',i:'ti-broom'});
   if(r==='MAINTENANCE')tabs.push({id:'misdanos',l:'Mis Daños',i:'ti-tool'},{id:'aire',l:'Aire',i:'ti-snowflake'});
- if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-cash'},{id:'cuadre',l:'Cierre de caja',i:'ti-receipt-2'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'asistencia',l:'Asistencia',i:'ti-user-check'},{id:'productos',l:'Inventario',i:'ti-box'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
+ if(r==='RECEPTION')tabs.push({id:'ventas',l:'Ventas',i:'ti-shopping-cart'},{id:'extra',l:'P.Extra',i:'ti-user-plus'},{id:'loans',l:'Gastos',i:'ti-cash'},{id:'cuadre',l:'Cierre de caja',i:'ti-receipt-2'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'productos',l:'Inventario',i:'ti-box'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
 if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'maint',l:'Mantenimiento',i:'ti-tool'});
-  if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-stats'},{id:'gastosmes',l:'Gastos',i:'ti-cash'},{id:'maids',l:'Limpieza',i:'ti-spray'},{id:'staff',l:'Personal',i:'ti-users'},{id:'asistencia',l:'Asistencia',i:'ti-user-check'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-receipt-2'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-box'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
+  if(r==='ADMIN')tabs.push({id:'metrics',l:'Indicadores',i:'ti-chart-bar'},{id:'month',l:'Resumen mensual',i:'ti-calendar-stats'},{id:'gastosmes',l:'Gastos',i:'ti-cash'},{id:'maids',l:'Limpieza',i:'ti-spray'},{id:'staff',l:'Personal',i:'ti-users'},{id:'sched',l:'Turnos',i:'ti-clock-hour-4'},{id:'cuadre-admin',l:'Cierre de caja',i:'ti-receipt-2'},{id:'maint',l:'Mantenimiento',i:'ti-tool'},{id:'proyeccion',l:'Proyecciones',i:'ti-trending-up'},{id:'productos',l:'Inventario',i:'ti-box'});if(r!=='MAINTENANCE')tabs.push({id:'notes',l:'Informes',i:'ti-file-text'});
   if(r==='ADMIN')tabs.push({id:'quejas',l:'Clientes',i:'ti-message-report'});
   if(r==='ADMIN')tabs.push({id:'config',l:'Configuración',i:'ti-settings'});
   tabs.forEach(function(t){
@@ -2150,8 +2144,7 @@ function sw(id){
      if(roomIssuesOpen) loadRoomIssuesGrid();
    }
  }
- if(id==='config')loadCfg();
- if(id==='asistencia')loadAsistencia();
+ if(id==='config'){loadCfg();loadQrAsistencia();}
   if(id==='proyeccion'){loadProyeccion();}
   if(id==='staff')loadStaff();
   if(id==='sched'){setDefWk();loadSched();}
@@ -9309,15 +9302,8 @@ function openResetPin(id){
   },function(e){toast(e.message||String(e),'err');});
 }
 
-// ---- FASE 2 · 3.2: QR de asistencia (admin) ----
+// ---- FASE 2 · 3.2: QR de asistencia (dentro de Configuración, admin-only) ----
 var _qrModo='IMAGEN', _qrRefreshT=null;
-function loadAsistencia(){
-  var admin = sess && sess.userRole==='ADMIN';
-  var box=document.getElementById('asistQrAdmin');
-  if(box) box.style.display = admin?'':'none';
-  if(admin) loadQrAsistencia();
-  // Tablero del día: llega en 3.4 (loadAsistenciaHoy()).
-}
 function loadQrAsistencia(){
   rpc('getQrAsistencia',{token:sess.token},function(d){
     _qrModo=d.modo||'IMAGEN';
@@ -9326,7 +9312,7 @@ function loadQrAsistencia(){
     renderQrInto('asistQrBox', d.token);
     if(_qrRefreshT){clearTimeout(_qrRefreshT);_qrRefreshT=null;}
     if(_qrModo==='ROTATIVO' && d.rotaSeg){
-      _qrRefreshT=setTimeout(function(){ var p=document.getElementById('pnl-asistencia'); if(p&&p.classList.contains('on')) loadQrAsistencia(); }, (d.rotaSeg||60)*1000);
+      _qrRefreshT=setTimeout(function(){ var p=document.getElementById('pnl-config'); if(p&&p.classList.contains('on')) loadQrAsistencia(); }, (d.rotaSeg||60)*1000);
     }
   },function(e){
     document.getElementById('asistQrBox').innerHTML='<p style="color:#ef4444;font-size:11px;padding:20px">'+esc(e.message||'No se pudo cargar el QR')+'</p>';
