@@ -341,6 +341,24 @@ function requireAdmin(p) {
   return s;
 }
 
+// ===== FASE 2 · 3 — token del QR de asistencia (HMAC con QR_ASISTENCIA_SECRET) =====
+// El mismo secreto y formato los verifica el backend del colaborador al marcar.
+// Payload {m:motel_id, v:qr_version, md:'I'|'R', w:ventana(rotativo)} firmado.
+function firmaQrHmac(dato) {
+  const secret = String(process.env.QR_ASISTENCIA_SECRET || '');
+  if (!secret) return '';                     // sin secreto no se firma NI verifica
+  return require('crypto').createHmac('sha256', secret).update(dato).digest('base64url');
+}
+function generarTokenQr(motelId, qrVersion, modo, rotaSeg, now) {
+  const md = (String(modo || 'IMAGEN').toUpperCase() === 'ROTATIVO') ? 'R' : 'I';
+  const obj = { m: String(motelId), v: Number(qrVersion || 1), md: md };
+  if (md === 'R') obj.w = Math.floor((now || Date.now()) / 1000 / Math.max(1, Number(rotaSeg || 60)));
+  const payload = Buffer.from(JSON.stringify(obj)).toString('base64url');
+  const firma = firmaQrHmac(payload);
+  if (!firma) return '';
+  return payload + '.' + firma;
+}
+
 // Lista TODOS los moteles (sin filtro tenant): ve activos y suspendidos.
 async function apiListarMotelesSuperadmin(p, res) {
   const chk = checkSuperadmin(p);
@@ -515,6 +533,8 @@ module.exports = async function handler(req, res) {
       case 'aprobarExtra':           return await apiAprobarExtra(payload, res);
       case 'rechazarExtra':          return await apiRechazarExtra(payload, res);
       case 'resetearPinColaborador': return await apiResetearPin(payload, res);
+      case 'getQrAsistencia':        return await apiGetQrAsistencia(payload, res);
+      case 'regenerarQrAsistencia':  return await apiRegenerarQrAsistencia(payload, res);
       case 'saveVacacionesEvent': return await apiSaveVacacionesEvent(payload, res);
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
@@ -3005,6 +3025,32 @@ async function apiResetearPin(p, res) {
   if (error) return err(res, 'No se pudo resetear el PIN');
   await tUpdate('staff', { pin_reset_por: s.n || '', pin_reset_ms: Date.now() }).eq('id', id);
   return ok(res, { pin: pin, nombre: row.name });
+}
+
+// QR de asistencia: token actual (modo IMAGEN estático / ROTATIVO por ventana).
+async function apiGetQrAsistencia(p, res) {
+  if (!requireAdmin(p)) return err(res, 'No autorizado', 403);
+  const { data: cfg } = await tSelect('motel_config', 'qr_modo,qr_version,qr_rota_seg').maybeSingle();
+  if (!cfg) return err(res, 'motel_config no encontrada');
+  const modo = String(cfg.qr_modo || 'IMAGEN').toUpperCase();
+  const now = Date.now();
+  const token = generarTokenQr(MOTEL_ID, cfg.qr_version, modo, cfg.qr_rota_seg, now);
+  if (!token) return err(res, 'Falta configurar QR_ASISTENCIA_SECRET en el servidor');
+  const out = { token: token, modo: modo, qrVersion: Number(cfg.qr_version || 1) };
+  if (modo === 'ROTATIVO') {
+    const rota = Math.max(1, Number(cfg.qr_rota_seg || 60));
+    out.rotaSeg = rota;
+    out.expiraMs = (Math.floor(now / 1000 / rota) + 1) * rota * 1000;
+  }
+  return ok(res, out);
+}
+// Regenerar: sube qr_version -> el impreso viejo (v distinta) deja de servir.
+async function apiRegenerarQrAsistencia(p, res) {
+  if (!requireAdmin(p)) return err(res, 'No autorizado', 403);
+  const { data: cfg } = await tSelect('motel_config', 'qr_version').maybeSingle();
+  const nueva = Number((cfg && cfg.qr_version) || 1) + 1;
+  await tUpdate('motel_config', { qr_version: nueva, updated_at: new Date().toISOString() }).eq('motel_id', MOTEL_ID);
+  return ok(res, { qrVersion: nueva });
 }
 
 async function apiGetSchedule(p, res) {
