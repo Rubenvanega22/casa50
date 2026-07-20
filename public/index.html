@@ -741,6 +741,14 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div id="mEditarAnoBody"><div style="color:#9ca3af;text-align:center;padding:20px;font-size:12px">Cargando...</div></div>
 <div class="row" style="margin-top:12px"><button class="btn ba full" id="mEditarAnoSave" onclick="saveEditarAno()">Guardar año</button></div></div></div>
 <div class="ov" id="mLoan"><div class="modal"><div class="mh"><div class="mt">Nuevo Gasto</div><button class="mc" onclick="closeM('mLoan')">✕</button></div><label>A quien</label><input type="text" id="lnName" placeholder="Nombre"><label>Monto</label><input type="number" id="lnAmt" min="0"><label>Nota (opcional)</label><input type="text" id="lnNote" placeholder="Motivo"><button class="btn ba full" style="margin-top:8px" onclick="saveLoan()">Guardar Gasto</button></div></div>
+<div class="ov" id="mPinNuevo"><div class="modal"><div class="mh"><div class="mt">PIN nuevo</div><button class="mc" onclick="closeM('mPinNuevo')">✕</button></div>
+<div style="padding:16px;text-align:center">
+<p style="color:#9ca3af;font-size:12px;margin-bottom:12px">Clave temporal de <b id="pnNombre" style="color:#e5e7eb"></b>. Anótala y entrégasela ahora — <b style="color:#f59e0b">no se vuelve a mostrar</b>.</p>
+<div id="pnPin" style="font-size:40px;font-weight:800;letter-spacing:.35em;color:#f59e0b;font-family:monospace">----</div>
+<p style="color:#6b675f;font-size:11px;margin-top:12px">La sesión anterior de esa persona en la app quedó invalidada.</p>
+<button class="btn ba" style="margin-top:16px" onclick="closeM('mPinNuevo')">Listo</button>
+</div></div></div>
+
 <div class="ov" id="mExtra"><div class="modal"><div class="mh"><div class="mt">Registrar Personal Extra</div><button class="mc" onclick="closeM('mExtra')">✕</button></div>
 <label>Nombre</label><input type="text" id="exName" placeholder="Nombre completo">
 <label>Area</label><select id="exArea"><option value="Recepcion">Recepcion</option><option value="Camareria" selected>Camareria</option><option value="Patio">Patio</option></select>
@@ -1513,6 +1521,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <h2 style="font-size:14px">Personal</h2>
 <button class="btn ba sm" onclick="openAddStaff()">+ Agregar</button>
 </div>
+<div id="extrasPendCont"></div>
 <div id="staffCont"></div>
 </div>
 <!-- CALENDARIO (admin) -->
@@ -9220,7 +9229,61 @@ function clearMaintHistory(){
   });
 }
 // ---- PERSONAL (admin) ----
-function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});}
+function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();});loadExtrasPendientes();}
+
+// ---- FASE 2 · 2c: extras pendientes + reset de PIN (admin) ----
+var staffPendientes=[];
+function loadExtrasPendientes(){
+  rpc('getExtrasPendientes',{token:sess.token},function(d){
+    staffPendientes=d.pendientes||[];
+    var el=document.getElementById('extrasPendCont');
+    if(!el)return;
+    if(!staffPendientes.length){el.innerHTML='';return;}
+    var h='<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px;margin-bottom:14px">';
+    h+='<div style="font-size:12px;font-weight:700;color:#f59e0b;margin-bottom:8px">🙋 Extras pendientes de aprobación ('+staffPendientes.length+')</div>';
+    staffPendientes.forEach(function(x){
+      h+='<div style="background:#22222c;border-radius:8px;padding:10px;margin-bottom:8px">';
+      h+='<div style="font-weight:700;font-size:13px;margin-bottom:5px">'+esc(x.name)+'</div>';
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
+      if(x.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(x.cedula)+'</b></span>';
+      if(x.celular)h+='<span>📱 <b style="color:#e5e7eb">'+esc(x.celular)+'</b></span>';
+      if(x.fechaNacimiento)h+='<span>Nac: <b style="color:#e5e7eb">'+esc(x.fechaNacimiento)+'</b></span>';
+      if(x.correo)h+='<span>✉ <b style="color:#e5e7eb">'+esc(x.correo)+'</b></span>';
+      if(x.direccion)h+='<span style="grid-column:span 2">📍 <b style="color:#e5e7eb">'+esc(x.direccion)+'</b></span>';
+      var ce=[x.contactoEmergenciaNombre,x.contactoEmergenciaTelefono].filter(Boolean).join(' · ');
+      if(ce)h+='<span style="grid-column:span 2">🚨 Emergencia: <b style="color:#f59e0b">'+esc(ce)+'</b></span>';
+      h+='</div>';
+      h+='<div style="display:flex;gap:6px;margin-top:8px">';
+      h+='<button class="btn sm" style="flex:1;background:rgba(34,197,94,.15);color:#22c55e;border:1.5px solid #22c55e" onclick="aprobarExtra(\''+esc(x.id)+'\')">✓ Aprobar</button>';
+      h+='<button class="btn sm" style="flex:1;background:rgba(239,68,68,.12);color:#ef4444;border:1.5px solid #ef4444" onclick="rechazarExtra(\''+esc(x.id)+'\')">✕ Rechazar</button>';
+      h+='</div></div>';
+    });
+    h+='</div>';
+    el.innerHTML=h;
+  },function(e){/* silencioso: no romper Personal si falla */});
+}
+function _pendNombre(id){var x=staffPendientes.find(function(p){return String(p.id)===String(id);});return x?x.name:'este extra';}
+function aprobarExtra(id){
+  var nombre=_pendNombre(id);
+  if(!confirm('¿Aprobar a '+nombre+' como extra? Podrá iniciar sesión en la app.'))return;
+  rpc('aprobarExtra',{token:sess.token,id:id},function(){toast('✓ '+nombre+' aprobado','ok');loadStaff();},function(e){toast(e.message||String(e),'err');});
+}
+function rechazarExtra(id){
+  var nombre=_pendNombre(id);
+  if(!confirm('¿Rechazar a '+nombre+'? Quedará como RECHAZADO y no podrá entrar (no se borra).'))return;
+  rpc('rechazarExtra',{token:sess.token,id:id},function(){toast(nombre+' rechazado','ok');loadStaff();},function(e){toast(e.message||String(e),'err');});
+}
+function openResetPin(id){
+  var s=staffList.find(function(x){return String(x.id)===String(id);});
+  var nombre=s?s.name:'este colaborador';
+  if(!confirm('¿Resetear el PIN de '+nombre+'?\n\nSe genera una clave nueva de 4 dígitos y se invalida la sesión actual de esa persona en la app.'))return;
+  rpc('resetearPinColaborador',{token:sess.token,id:id},function(d){
+    document.getElementById('pnNombre').textContent=nombre;
+    document.getElementById('pnPin').textContent=d.pin||'----';
+    openM('mPinNuevo');
+    loadStaff();
+  },function(e){toast(e.message||String(e),'err');});
+}
 
 function _vacToggle(staffId){
   if(!window._vacExpand) window._vacExpand = {};
@@ -9261,7 +9324,7 @@ function doGuardarVacaciones(){
   });
 }
 function renderStaff(){
-  var areas=['Recepcion','Camarera','Patiero','Mantenimiento','Administrador'];
+  var areas=['Recepcion','Camarera','Patiero','Mantenimiento','Administrador','Servicios'];
   var hoy=new Date();
   var mesActual=hoy.getMonth()+1;
   var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -9330,6 +9393,7 @@ function renderStaff(){
       h+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">';
       h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button>';
       h+='<button class="btn bk xs" style="background:#16a34a;color:#fff" onclick="openVacacionesModal(\''+esc(s.id)+'\')">🌴 Vacaciones</button>';
+      h+='<button class="btn bk xs" style="background:#7c3aed;color:#fff" onclick="openResetPin(\''+esc(s.id)+'\')">🔑 PIN</button>';
       h+='</div></div>';
       h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
       if(s.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(s.cedula)+'</b></span>';
@@ -9340,6 +9404,13 @@ function renderStaff(){
       if(s.direccion)h+='<span style="grid-column:span 2">📍 Dirección: <b style="color:#e5e7eb">'+esc(s.direccion)+'</b></span>';
       if(s.contactoEmergencia)h+='<span style="grid-column:span 2">🚨 Emergencia: <b style="color:#f59e0b">'+esc(s.contactoEmergencia)+'</b></span>';
       h+='</div>';
+      // Estado de acceso a la app + auditoría de reset de PIN
+      var accInfo = s.tienePin
+        ? '<span style="color:#22c55e">🔓 App: con acceso</span>'
+        : '<span style="color:#6b675f">🔒 App: sin clave</span>';
+      if(s.estadoRegistro==='RECHAZADO') accInfo='<span style="color:#ef4444">⛔ Registro rechazado</span>';
+      if(s.pinResetMs) accInfo+=' · <span style="color:#9ca3af">PIN reseteado por '+esc(s.pinResetPor||'?')+'</span>';
+      h+='<div style="font-size:10px;margin-top:5px">'+accInfo+'</div>';
       // Bloque tentativa + historial colapsable
       if(salidaStr){
         var historial = s.vacacionesHistorial || [];
