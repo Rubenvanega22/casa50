@@ -511,6 +511,10 @@ module.exports = async function handler(req, res) {
       case 'maidPanel':         return await apiMaidPanel(payload, res);
       case 'getStaff':          return await apiGetStaff(payload, res);
       case 'saveStaff':         return await apiSaveStaff(payload, res);
+      case 'getExtrasPendientes':    return await apiGetExtrasPendientes(payload, res);
+      case 'aprobarExtra':           return await apiAprobarExtra(payload, res);
+      case 'rechazarExtra':          return await apiRechazarExtra(payload, res);
+      case 'resetearPinColaborador': return await apiResetearPin(payload, res);
       case 'saveVacacionesEvent': return await apiSaveVacacionesEvent(payload, res);
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
@@ -2893,6 +2897,8 @@ async function apiGetStaff(p, res) {
     cedula:r.cedula||'', celular:r.celular||'', direccion:r.direccion||'',
     contactoEmergencia:r.contacto_emergencia||'', fechaNacimiento:r.fecha_nacimiento||'',
     fechaIngreso:r.fecha_ingreso||'', fechaVacaciones:r.fecha_vacaciones||'',
+    estadoRegistro:r.estado_registro||'', tienePin: !!r.pin_hash,
+    pinResetPor:r.pin_reset_por||'', pinResetMs:r.pin_reset_ms||null,
     vacacionesHistorial: histByStaff[r.id] || []
   })) });
 }
@@ -2945,6 +2951,60 @@ async function apiSaveVacacionesEvent(p, res) {
   }).eq('id', staffId);
 
   return ok(res, { ok: true, fechaIngreso: fechaReingreso, fechaVacaciones: proximaStr });
+}
+
+// ===== FASE 2 · 2c — admin de colaboradores (extras pendientes + reset de PIN) =====
+// Todos con requireAdmin (carnet firmado, NO p.userRole) y motel-scoped (tSelect/tUpdate).
+
+async function apiGetExtrasPendientes(p, res) {
+  if (!requireAdmin(p)) return err(res, 'No autorizado', 403);
+  const { data } = await tSelect('staff', '*')
+    .eq('type', 'extra').eq('estado_registro', 'PENDIENTE').order('created_ms');
+  return ok(res, { pendientes: (data || []).map(r => ({
+    id: r.id, name: r.name, cedula: r.cedula || '', celular: r.celular || '',
+    direccion: r.direccion || '', fechaNacimiento: r.fecha_nacimiento || '', correo: r.correo || '',
+    contactoEmergenciaNombre: r.contacto_emergencia_nombre || '',
+    contactoEmergenciaTelefono: r.contacto_emergencia_telefono || '',
+    createdMs: r.created_ms || null
+  })) });
+}
+
+async function apiAprobarExtra(p, res) {
+  if (!requireAdmin(p)) return err(res, 'No autorizado', 403);
+  const id = String(p.id || '').trim();
+  const { data: row } = await tSelect('staff', 'id,type,estado_registro').eq('id', id).maybeSingle();
+  if (!row || row.type !== 'extra' || row.estado_registro !== 'PENDIENTE') return err(res, 'Extra no válido');
+  await tUpdate('staff', { estado_registro: 'APROBADO', active: true }).eq('id', id);
+  return ok(res, {});
+}
+
+async function apiRechazarExtra(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const id = String(p.id || '').trim();
+  const { data: row } = await tSelect('staff', 'id,type,estado_registro').eq('id', id).maybeSingle();
+  if (!row || row.type !== 'extra' || row.estado_registro !== 'PENDIENTE') return err(res, 'Extra no válido');
+  // Regla de oro: anular, nunca borrar. Queda RECHAZADO + auditoría, inactivo.
+  await tUpdate('staff', {
+    estado_registro: 'RECHAZADO', active: false,
+    rechazado_por: s.n || '', rechazado_ms: Date.now()
+  }).eq('id', id);
+  return ok(res, {});
+}
+
+async function apiResetearPin(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const id = String(p.id || '').trim();
+  const { data: row } = await tSelect('staff', 'id,name').eq('id', id).maybeSingle();  // solo de este motel
+  if (!row) return err(res, 'Colaborador no encontrado');
+  // PIN aleatorio de 4 dígitos (se muestra UNA vez al admin). set_staff_pin sube
+  // pin_version -> revoca los carnets viejos. Auditoría en pin_reset_por/_ms.
+  const pin = String(require('crypto').randomInt(0, 10000)).padStart(4, '0');
+  const { error } = await supabase.rpc('set_staff_pin', { p_staff_id: id, p_pin: pin });
+  if (error) return err(res, 'No se pudo resetear el PIN');
+  await tUpdate('staff', { pin_reset_por: s.n || '', pin_reset_ms: Date.now() }).eq('id', id);
+  return ok(res, { pin: pin, nombre: row.name });
 }
 
 async function apiGetSchedule(p, res) {
