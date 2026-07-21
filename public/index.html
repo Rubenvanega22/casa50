@@ -2059,6 +2059,8 @@ actualizarBtnCaja();
   sw(sess.userRole==='MAID'?'maid':sess.userRole==='MAINTENANCE'?'misdanos':'rooms');
   if(rooms.length)renderRooms();
   startPoll();startClock();
+  avisoEntradaTurno();   // aviso si el turno elegido no corresponde a la hora
+  checkTurnoAlert();     // banner inmediato si ya entró pasado el fin de su turno
   if(sess.userRole === 'MAINTENANCE') startMisDanosPoll();
   if(sess.userRole==='ADMIN'){
     var mDayEl=document.getElementById('mDay');if(mDayEl)mDayEl.value=sess.businessDay||'';
@@ -2428,81 +2430,91 @@ function checkAlarms(){
  // ---- ALERTA DE TURNO ----
 var turnoAlertaMostrada=false,turnoVencidoMostrado=false;
 try{turnoAlertaMostrada=sessionStorage.getItem('turnoAlerta')==='1';turnoVencidoMostrado=sessionStorage.getItem('turnoVencido')==='1';}catch(e){}
-function checkTurnoAlert(){
-  if(!sess||sess.userRole!=='RECEPTION')return;
-  // BUG 3: si recep ya envió cuadre y cerró su turno, no mostrar más el aviso.
-  // sess.cierreHecho lo setea loadCuadre cuando detecta m.shiftClose en metrics.
-  // sessionStorage lo persiste entre recargas/reentradas a la misma sesión-turno.
-  if(sess.cierreHecho) return;
-  try {
-    if(sessionStorage.getItem('cierreHecho_'+sess.shiftId+'_'+sess.businessDay) === '1'){
-      sess.cierreHecho = true;
-      return;
-    }
-  } catch(e){}
-  var now=Date.now();
-  var turnoFin={SHIFT_1:14,SHIFT_2:21,SHIFT_3:6};
-  var turnoNombre={SHIFT_1:'Turno 1 (6am-2pm)',SHIFT_2:'Turno 2 (2pm-9pm)',SHIFT_3:'Turno 3 (9pm-6am)'};
-  var sid=sess.shiftId;
-  var finH=turnoFin[sid];
-  var d=new Date(now);
-  var finMs;
-  if(sid==='SHIFT_3'){
-    var manana=new Date(d);
-    if(d.getHours()>=21)manana.setDate(manana.getDate()+1);
-    manana.setHours(6,0,0,0);
-    finMs=manana.getTime();
-  } else {
-    var hoy=new Date(d);
-    hoy.setHours(finH,0,0,0);
-    finMs=hoy.getTime();
+// ¿El business_day de la sesión cae en domingo? (turnos 12h: 1T12/2T12)
+function esDomingoBDay(){
+  var b=sess&&sess.businessDay;
+  return b ? new Date(b+'T12:00:00Z').getUTCDay()===0 : new Date().getDay()===0;
+}
+// Turno que CORRESPONDE por el reloj AHORA, con lógica dominical de 12h.
+// Cortes reales: 8h -> 6am / 2pm / 9pm ; domingo 12h -> 6am / 6pm.
+function turnoPorReloj(now){
+  var h=new Date(now).getHours();
+  if(esDomingoBDay()){
+    return (h>=6&&h<18) ? {shift:'SHIFT_1',label:'1T12 (6am-6pm)'}
+                        : {shift:'SHIFT_3',label:'2T12 (6pm-6am)'};
   }
-  var diff=finMs-now;
-  var modal=document.getElementById('mTurnoAlert');
-  // 15 minutos antes
-  if(diff>0&&diff<=15*60*1000&&!turnoAlertaMostrada){
-    turnoAlertaMostrada=true;
-    var mins=Math.round(diff/60000);
-    mostrarAlertaTurno('⏰ Tu turno termina en '+mins+' minutos',false,finMs);
-  }
-  // Turno vencido
-  if(diff<=0&&!turnoVencidoMostrado){
-    turnoVencidoMostrado=true;
-    mostrarAlertaTurno('🚨 Tu turno ha vencido. Debes cerrar para que tu compañera pueda entrar.',true,finMs);
-  }
+  if(h>=6&&h<14) return {shift:'SHIFT_1',label:'Turno 1 (6am-2pm)'};
+  if(h>=14&&h<21) return {shift:'SHIFT_2',label:'Turno 2 (2pm-9pm)'};
+  return {shift:'SHIFT_3',label:'Turno 3 (9pm-6am)'};
+}
+// Fin (ms) del turno de la SESIÓN. Usa shiftIdRaw para el 1T12/2T12 dominical.
+function finTurnoSesionMs(now){
+  var raw=sess.shiftIdRaw, sid=sess.shiftId, h=new Date(now).getHours();
+  var fin=new Date(now);
+  if(raw==='SHIFT_1_12'){ fin.setHours(18,0,0,0); return fin.getTime(); }                 // 1T12 termina 6pm
+  if(raw==='SHIFT_2_12'){ fin.setHours(6,0,0,0); if(h>=18)fin.setDate(fin.getDate()+1); return fin.getTime(); } // 2T12 termina 6am
+  if(sid==='SHIFT_1'){ fin.setHours(14,0,0,0); return fin.getTime(); }                     // T1 termina 2pm
+  if(sid==='SHIFT_2'){ fin.setHours(21,0,0,0); return fin.getTime(); }                     // T2 termina 9pm
+  fin.setHours(6,0,0,0); if(h>=21)fin.setDate(fin.getDate()+1); return fin.getTime();      // T3 termina 6am
 }
 
-function mostrarAlertaTurno(msg,urgente,finMs){
-  var modal=document.getElementById('mTurnoAlert');
-  if(!modal){
-    var div=document.createElement('div');
-    div.className='ov';div.id='mTurnoAlert';
-    div.innerHTML='<div class="modal"><div id="mTurnoAlertB"></div></div>';
-    document.body.appendChild(div);
+function checkTurnoAlert(){
+  if(!sess||sess.userRole!=='RECEPTION'){ ocultarBannerTurno(); return; }
+  // Si ya cerró su turno, no molestar (sess.cierreHecho lo setea loadCuadre).
+  if(sess.cierreHecho){ ocultarBannerTurno(); return; }
+  try{ if(sessionStorage.getItem('cierreHecho_'+sess.shiftId+'_'+sess.businessDay)==='1'){ sess.cierreHecho=true; ocultarBannerTurno(); return; } }catch(e){}
+  var now=Date.now();
+  var diff=finTurnoSesionMs(now)-now;
+  // Aviso suave 15 min antes (una sola vez, descartable).
+  if(diff>0 && diff<=15*60*1000 && !turnoAlertaMostrada){
+    turnoAlertaMostrada=true;
+    try{sessionStorage.setItem('turnoAlerta','1');}catch(e){}
+    headsUpTurno('⏰ Tu turno termina en '+Math.round(diff/60000)+' minutos');
   }
-  var h='<div style="text-align:center;padding:10px">';
-  h+='<div style="font-size:32px;margin-bottom:10px">'+(urgente?'🚨':'⏰')+'</div>';
-  h+='<div style="font-size:14px;font-weight:700;color:'+(urgente?'#ef4444':'#f59e0b')+';margin-bottom:16px">'+msg+'</div>';
-  if(urgente){
-    h+='<button class="btn br full" style="margin-bottom:8px" onclick="closeM(\'mTurnoAlert\');sw(\'cuadre\')">Ir a Cuadre para Cerrar</button>';
-  } else {
-    h+='<button class="btn bg full" style="margin-bottom:8px" onclick="closeM(\'mTurnoAlert\')">Entendido</button>';
-    h+='<button class="btn bb full" onclick="activarTurno12h('+finMs+')">Continuar Turno Extendido</button>';
+  // Banner PERSISTENTE si la hora ya cruzó el fin del turno de la sesión.
+  if(diff<=0) mostrarBannerTurno(now); else ocultarBannerTurno();
+}
+
+// Banner fijo, en TODAS las pantallas, NO descartable: solo se va al cerrar el
+// turno y reentrar con el correcto (o cuando la hora vuelve a estar en rango).
+function mostrarBannerTurno(now){
+  var b=document.getElementById('turnoBanner');
+  if(!b){
+    b=document.createElement('div'); b.id='turnoBanner';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#b91c1c,#dc2626);color:#fff;font-size:13px;font-weight:600;text-align:center;padding:11px 16px;line-height:1.35;box-shadow:0 3px 16px rgba(0,0,0,.55);cursor:pointer';
+    b.title='Ir a Cierre de caja';
+    b.onclick=function(){ sw('cuadre'); };
+    document.body.appendChild(b);
+    document.body.style.paddingTop='48px';
   }
-  h+='</div>';
-  document.getElementById('mTurnoAlertB').innerHTML=h;
+  var esperado=turnoPorReloj(now);
+  var hhmm=new Date(now).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  b.innerHTML='⚠️ Son las '+hhmm+': el <b>'+getShiftLabel()+'</b> terminó. Cerrá tu turno y entrá con el <b>'+esperado.label+'</b>.';
+}
+function ocultarBannerTurno(){
+  var b=document.getElementById('turnoBanner');
+  if(b){ b.remove(); document.body.style.paddingTop=''; }
+}
+// Aviso suave (heads-up 15 min antes): modal breve descartable.
+function headsUpTurno(msg){
+  if(!document.getElementById('mTurnoAlert')){
+    var div=document.createElement('div'); div.className='ov'; div.id='mTurnoAlert';
+    div.innerHTML='<div class="modal"><div id="mTurnoAlertB"></div></div>'; document.body.appendChild(div);
+  }
+  document.getElementById('mTurnoAlertB').innerHTML='<div style="text-align:center;padding:10px"><div style="font-size:32px;margin-bottom:10px">⏰</div><div style="font-size:14px;font-weight:700;color:#f59e0b;margin-bottom:16px">'+msg+'</div><button class="btn bg full" onclick="closeM(\'mTurnoAlert\')">Entendido</button></div>';
   openM('mTurnoAlert');
 }
-
-function activarTurno12h(finActual){
-  turnoAlertaMostrada=false;
-  turnoVencidoMostrado=false;
-  closeM('mTurnoAlert');
-  toast('Turno extendido. Cierra cuando termines.','ok');
-  setTimeout(function(){
-    turnoAlertaMostrada=false;
-    turnoVencidoMostrado=false;
-  },100);
+// Aviso AL ENTRAR: si el turno elegido no corresponde a la hora (no bloquea).
+function avisoEntradaTurno(){
+  if(!sess||sess.userRole!=='RECEPTION')return;
+  var esperado=turnoPorReloj(Date.now());
+  if(esperado.shift===sess.shiftId) return;   // coincide -> nada
+  if(!document.getElementById('mTurnoAlert')){
+    var div=document.createElement('div'); div.className='ov'; div.id='mTurnoAlert';
+    div.innerHTML='<div class="modal"><div id="mTurnoAlertB"></div></div>'; document.body.appendChild(div);
+  }
+  document.getElementById('mTurnoAlertB').innerHTML='<div style="text-align:center;padding:10px"><div style="font-size:32px;margin-bottom:10px">⏰</div><div style="font-size:14px;font-weight:700;color:#f59e0b;margin-bottom:8px">A esta hora corresponde el <b>'+esperado.label+'</b>.</div><div style="font-size:13px;color:#9ca3af;margin-bottom:16px">Estás entrando al <b>'+getShiftLabel()+'</b>. Verificá que sea el correcto.</div><button class="btn bg full" onclick="closeM(\'mTurnoAlert\')">Entendido, continuar</button></div>';
+  openM('mTurnoAlert');
 }
 function silA(rid,e){if(e)e.stopPropagation();rpc('silenceAlarm',{roomId:rid},function(){rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];if(sess&&sess.userRole==='MAID')renderMaid();else renderRooms();}});toast('Alarma silenciada','ok');});}
 
