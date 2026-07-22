@@ -6122,7 +6122,7 @@ function grillaRenderNueva(data){
     grillaLeyenda(GRILLA_COLORES.T1,'T1')+grillaLeyenda(GRILLA_COLORES.T2,'T2')+grillaLeyenda(GRILLA_COLORES.T3,'T3')+
     '<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:10px;height:10px;border-radius:2px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';display:inline-block"></i>Descanso</span>'+grillaLeyenda(GRILLA_COLORES.VACACIONES,'Vacaciones')+
     grillaLeyenda(GRILLA_COLORES.INCAPACIDAD,'Incapacidad')+grillaLeyenda(GRILLA_COLORES.PERMISO,'Permiso (propuesta)')+'</div>';
-  h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button>'+(isAdmin?' <button class="btn bg sm" onclick="grillaAbrirVacaciones()">🌴 Vacaciones</button>':'')+' <span class="muted" style="font-size:11px">'+(isAdmin?'Tocá una celda para editarla':'Solo lectura')+' · beta desde la tabla grilla.</span></div>';
+  h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button>'+(isAdmin?' <button class="btn bg sm" onclick="grillaAbrirVacaciones()">🌴 Vacaciones</button> <button class="btn bg sm" onclick="grillaAbrirCapacitacion()">🎓 Capacitaciones</button>':'')+' <span class="muted" style="font-size:11px">'+(isAdmin?'Tocá una celda para editarla':'Solo lectura')+' · beta desde la tabla grilla.</span></div>';
   AREAS.forEach(function(area){
     var personas=personasPorArea[area]||[];
     if(!personas.length)return;
@@ -6246,6 +6246,36 @@ function grillaGuardarVacaciones(){
   if(!desde||!hasta){toast('Poné primer y último día','err');return;}
   if(hasta<desde){toast('El último día no puede ser antes del primero','err');return;}
   rpc('grillaVacaciones',{token:sess.token,staffId:sid,desde:desde,hasta:hasta},function(d){toast('Vacaciones guardadas ('+(d.dias||'?')+' días) · registrado en Personal','ok');grillaCerrarMenu();grillaVerNueva();},function(e){toast(e.message||'Error','err');});
+}
+// ---- Capacitaciones (P4): programar fecha+hora+título+destinatarios ----
+function grillaAbrirCapacitacion(){
+  grillaCerrarMenu();
+  var dests=[['TODOS','Todos'],['RECEPCION','Recepción'],['CAMARERA','Camareras'],['PATIERO','Patio'],['MANTENIMIENTO','Mantenimiento'],['SERVICIOS','Servicios']];
+  window._capDest='TODOS';
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  ov.onclick=function(e){if(e.target===ov)grillaCerrarMenu();};
+  var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:14px;padding:18px;max-width:380px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.4)">';
+  h+='<div style="font-weight:700;font-size:15px;margin-bottom:2px;color:#e5e7eb">🎓 Programar capacitación</div>';
+  h+='<div style="color:#9ca3af;font-size:11px;margin-bottom:12px">Les llega push + novedad al abrir la app + 🎓 en su calendario.</div>';
+  h+='<label style="font-size:12px;color:#9ca3af">Título</label><input id="capTit" placeholder="Ej: Manejo de químicos" style="width:100%;margin:4px 0 10px;padding:8px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;color:#e5e7eb;font-size:13px">';
+  h+='<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#9ca3af">Fecha</label><input id="capFecha" type="date" style="width:100%;margin-top:4px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;color:#e5e7eb;padding:6px"></div><div style="flex:1"><label style="font-size:12px;color:#9ca3af">Hora</label><input id="capHora" type="time" style="width:100%;margin-top:4px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;color:#e5e7eb;padding:6px"></div></div>';
+  h+='<label style="font-size:12px;color:#9ca3af;display:block;margin-top:10px">Destinatarios</label><div id="capDests" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">';
+  dests.forEach(function(d){ h+='<button type="button" class="btn xs" data-d="'+d[0]+'" onclick="grillaSetCapDest(\''+d[0]+'\')" style="background:'+(d[0]==='TODOS'?'rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e':'#22222c;border:1px solid #3a3a45;color:#c9cdd6')+'">'+d[1]+'</button>'; });
+  h+='</div>';
+  h+='<button class="btn bg sm" style="width:100%;margin-top:14px" onclick="grillaGuardarCapacitacion()">Programar y avisar</button>';
+  h+='<button class="btn bb sm" style="width:100%;margin-top:6px" onclick="grillaCerrarMenu()">Cancelar</button></div>';
+  ov.innerHTML=h; document.body.appendChild(ov); _grillaMenu=ov;
+}
+function grillaSetCapDest(d){ window._capDest=d; document.querySelectorAll('#capDests [data-d]').forEach(function(b){ var on=b.getAttribute('data-d')===d; b.style.background=on?'rgba(34,197,94,.16)':'#22222c'; b.style.border='1px solid '+(on?'#22c55e':'#3a3a45'); b.style.color=on?'#22c55e':'#c9cdd6'; }); }
+function grillaGuardarCapacitacion(){
+  var tit=((document.getElementById('capTit')||{}).value||'').trim();
+  var fecha=(document.getElementById('capFecha')||{}).value, hora=(document.getElementById('capHora')||{}).value;
+  if(!tit){ toast('Poné el título','err'); return; }
+  if(!fecha){ toast('Poné la fecha','err'); return; }
+  rpc('crearCapacitacion',{token:sess.token,titulo:tit,fecha:fecha,hora:hora,destino:window._capDest||'TODOS'},function(d){
+    toast('🎓 Programada · avisadas '+(d.destinatarios||0)+' personas','ok'); grillaCerrarMenu(); grillaVerNueva();
+  },function(e){ toast(e.message||'Error','err'); });
 }
 
 function ncalRender(){

@@ -76,7 +76,9 @@ const TENANT_TABLES = new Set([
   // Pieza 6 + expediente (lado admin de Personal): chat/permisos/comunicados/documentos
   'staff_mensajes','staff_permisos','staff_comunicados','staff_documentos',
   // Etapa B: suscripciones Web Push
-  'push_subscriptions'
+  'push_subscriptions',
+  // Capacitaciones (P4)
+  'staff_capacitaciones'
 ]);
 
 // ===== ETAPA B (Web Push) — envío server-side =====
@@ -615,6 +617,8 @@ module.exports = async function handler(req, res) {
       case 'validarIncapacidad':  return await apiValidarIncapacidad(payload, res);
       case 'anularDocumento':     return await apiAnularDocumento(payload, res);
       case 'toggleCarpeta':       return await apiToggleCarpeta(payload, res);
+      case 'crearCapacitacion':   return await apiCrearCapacitacion(payload, res);
+      case 'getCapacitaciones':   return await apiGetCapacitaciones(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3621,6 +3625,48 @@ async function apiAnularDocumento(p, res) {
   if (!doc) return err(res, 'Documento no encontrado');
   await tUpdate('staff_documentos', { anulado: true, anulado_por: s.n || '', anulado_ms: Date.now() }).eq('id', docId);
   return ok(res, {});
+}
+
+// ===== CAPACITACIONES (P4) — crear (fan-out novedad + push) y listar =====
+async function apiCrearCapacitacion(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const fecha = String(p.fecha || '').trim();
+  const hora = String(p.hora || '').trim();
+  const titulo = String(p.titulo || '').trim();
+  const destino = String(p.destino || '').trim().toUpperCase();
+  const DESTINOS = ['TODOS', 'RECEPCION', 'CAMARERA', 'PATIERO', 'MANTENIMIENTO', 'SERVICIOS'];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res, 'Fecha inválida');
+  if (!titulo) return err(res, 'Falta el título');
+  if (DESTINOS.indexOf(destino) < 0) return err(res, 'Destinatarios inválidos');
+  if (hora && !/^\d{2}:\d{2}$/.test(hora)) return err(res, 'Hora inválida (HH:MM)');
+  const now = Date.now();
+  const { data: cap } = await tInsert('staff_capacitaciones', {
+    fecha, hora: hora || null, titulo, destino, created_por: s.n || '', created_ms: now
+  }).select('id').maybeSingle();
+  // fan-out: novedad + push a cada destinatario (nomina activa; por rol o TODOS). Puntería por persona.
+  const { data: staffAll } = await tSelect('staff', 'id,rol,type,active');
+  const targets = (staffAll || []).filter(st =>
+    st.active !== false && (st.type || 'nomina') !== 'extra' &&
+    (destino === 'TODOS' || String(st.rol || '').toUpperCase() === destino));
+  const cuerpo = '🎓 Capacitación: ' + titulo + ' · ' + fecha + (hora ? (' ' + hora) : '');
+  for (const st of targets) {
+    await novedadColab(s, st.id, 'CAPACITACION', cuerpo, 'CALENDARIO', fecha, 'Capacitación');
+  }
+  return ok(res, { creada: (cap && cap.id) || null, destinatarios: targets.length });
+}
+
+// apiGetCapacitaciones: lista del mes (para el admin en la grilla).
+async function apiGetCapacitaciones(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const mes = /^\d{4}-\d{2}$/.test(String(p.mes || '')) ? String(p.mes) : '';
+  if (!mes) return err(res, 'Mes requerido');
+  const [y, m] = mes.split('-').map(Number);
+  const sig = (m === 12) ? ((y + 1) + '-01-01') : (y + '-' + String(m + 1).padStart(2, '0') + '-01');
+  const { data } = await tSelect('staff_capacitaciones', 'id,fecha,hora,titulo,destino')
+    .eq('anulado', false).gte('fecha', mes + '-01').lt('fecha', sig).order('fecha');
+  return ok(res, { capacitaciones: (data || []).map(c => ({ id: c.id, fecha: c.fecha, hora: c.hora || '', titulo: c.titulo, destino: c.destino })) });
 }
 
 // apiToggleCarpeta: visibilidad POR CARPETA (todos los docs de empresa con ese titulo).
