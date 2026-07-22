@@ -6087,9 +6087,9 @@ function grillaVerNueva(){
   cont.innerHTML='<div class="muted" style="padding:16px">Cargando grilla nueva…</div>';
   rpc('grillaGetMes',{mes:mes},function(data){grillaRenderNueva(data);},function(e){cont.innerHTML='<div class="muted" style="padding:16px">No se pudo cargar. '+esc(e&&e.message||'')+' <button class="btn ba sm" onclick="grillaVerNueva()">Reintentar</button></div>';});
 }
-// Descanso = BLANCO TENUE (visible sobre el dark theme, distinto de una celda vacía). Una sola lengua visual.
-var GRILLA_DC_BG='rgba(255,255,255,.12)', GRILLA_DC_BD='rgba(255,255,255,.32)';
-function grillaCeldaDC(txt){ return '<div style="width:34px;min-height:30px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';color:#e8edf5">'+(txt?'<b style="font-size:8px">'+txt+'</b>':'')+'</div>'; }
+// Descanso = casilla BLANCA (resalta sobre el dark theme), con DC oscuro legible sobre el blanco.
+var GRILLA_DC_BG='#ffffff', GRILLA_DC_BD='#d1d5db';
+function grillaCeldaDC(txt){ return '<div style="width:34px;min-height:30px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';color:#222">'+(txt?'<b style="font-size:8px">'+txt+'</b>':'')+'</div>'; }
 function grillaCelda(c){
   if(!c) return grillaCeldaDC('');            // sin celda = descanso
   if(c.estado==='TRABAJO'){
