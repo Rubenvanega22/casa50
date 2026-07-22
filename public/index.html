@@ -6087,8 +6087,11 @@ function grillaVerNueva(){
   cont.innerHTML='<div class="muted" style="padding:16px">Cargando grilla nueva…</div>';
   rpc('grillaGetMes',{mes:mes},function(data){grillaRenderNueva(data);},function(e){cont.innerHTML='<div class="muted" style="padding:16px">No se pudo cargar. '+esc(e&&e.message||'')+' <button class="btn ba sm" onclick="grillaVerNueva()">Reintentar</button></div>';});
 }
+// Descanso = BLANCO TENUE (visible sobre el dark theme, distinto de una celda vacía). Una sola lengua visual.
+var GRILLA_DC_BG='rgba(255,255,255,.12)', GRILLA_DC_BD='rgba(255,255,255,.32)';
+function grillaCeldaDC(txt){ return '<div style="width:34px;min-height:30px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';color:#e8edf5">'+(txt?'<b style="font-size:8px">'+txt+'</b>':'')+'</div>'; }
 function grillaCelda(c){
-  if(!c) return '<div style="width:34px;height:30px;background:'+GRILLA_COLORES.DESCANSO+'22"></div>'; // sin celda = descanso (tenue)
+  if(!c) return grillaCeldaDC('');            // sin celda = descanso
   if(c.estado==='TRABAJO'){
     var t=grillaTurnoCode(c.shiftId), col=GRILLA_COLORES[t]||'#ccc';
     var horas=(c.area!=='Recepcion'&&c.horaEntrada)?('<div style="font-size:8px;line-height:1.1">'+esc(grillaHoraCorta(c.horaEntrada))+'-'+esc(grillaHoraCorta(c.horaSalida))+'</div>'):'';
@@ -6096,8 +6099,9 @@ function grillaCelda(c){
     var badge=c.esComodin?'<div style="font-size:7px;color:#3B82F6;font-weight:700">C</div>':(c.esMantenimiento?'<div style="font-size:7px;color:#F59E0B;font-weight:700">M</div>':'');
     return '<div style="position:relative;width:34px;min-height:30px;background:'+col+'33;border:1px solid '+col+';color:#222;padding:1px"><b style="font-size:9px">'+t+'</b>'+horas+badge+dotPerm+'</div>';
   }
-  var mapEst={DESCANSO:['DC','DESCANSO'],VACACIONES:['VAC','VACACIONES'],INCAPACIDAD:['INC','INCAPACIDAD'],PERMISO:['PER','PERMISO'],NO_VINO:['✕','INCAPACIDAD']};
-  var me=mapEst[c.estado]||['?','DESCANSO'], col=GRILLA_COLORES[me[1]]||'#9CA3AF';
+  if(c.estado==='DESCANSO') return grillaCeldaDC('DC');
+  var mapEst={VACACIONES:['VAC','VACACIONES'],INCAPACIDAD:['INC','INCAPACIDAD'],PERMISO:['PER','PERMISO'],NO_VINO:['✕','INCAPACIDAD']};
+  var me=mapEst[c.estado]||['?','VACACIONES'], col=GRILLA_COLORES[me[1]]||'#9CA3AF';
   return '<div style="width:34px;min-height:30px;background:'+col+'33;border:1px solid '+col+';color:#222"><b style="font-size:8px">'+me[0]+'</b></div>';
 }
 function grillaRenderNueva(data){
@@ -6115,7 +6119,7 @@ function grillaRenderNueva(data){
   });
   var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#555">'+
     grillaLeyenda(GRILLA_COLORES.T1,'T1')+grillaLeyenda(GRILLA_COLORES.T2,'T2')+grillaLeyenda(GRILLA_COLORES.T3,'T3')+
-    grillaLeyenda(GRILLA_COLORES.DESCANSO,'Descanso')+grillaLeyenda(GRILLA_COLORES.VACACIONES,'Vacaciones')+
+    '<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:10px;height:10px;border-radius:2px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';display:inline-block"></i>Descanso</span>'+grillaLeyenda(GRILLA_COLORES.VACACIONES,'Vacaciones')+
     grillaLeyenda(GRILLA_COLORES.INCAPACIDAD,'Incapacidad')+grillaLeyenda(GRILLA_COLORES.PERMISO,'Permiso (propuesta)')+'</div>';
   h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button>'+(isAdmin?' <button class="btn bg sm" onclick="grillaAbrirVacaciones()">🌴 Vacaciones</button>':'')+' <span class="muted" style="font-size:11px">'+(isAdmin?'Tocá una celda para editarla':'Solo lectura')+' · beta desde la tabla grilla.</span></div>';
   AREAS.forEach(function(area){
