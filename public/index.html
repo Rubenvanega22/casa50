@@ -2103,6 +2103,7 @@ if(r==='MAID')tabs.push({id:'listado',l:'Listado',i:'ti-list'},{id:'sched',l:'Tu
     b.onclick=function(){sw(t.id);};bar.appendChild(b);
   });
   if(sess && sess.userRole==='ADMIN') loadBadgeDanosNoVistos();
+  if(sess && sess.userRole==='ADMIN' && typeof startAvisoGlobalPoll==='function') startAvisoGlobalPoll();
 }
 
 function sw(id){
@@ -9647,7 +9648,11 @@ function chipChat(staffId,badge){
 }
 function refreshChatBadges(){
   renderStaff();renderExtras();
-  rpc('chatEstado',{token:sess.token},function(d){ window._chatBadges=d.porStaff||{}; window._chatEstado=d; renderStaff();renderExtras(); if(typeof renderAvisoGlobal==='function')renderAvisoGlobal(); },function(){});
+  rpc('chatEstado',{token:sess.token},function(d){
+    window._chatBadges=d.porStaff||{}; window._chatEstado=d; renderStaff();renderExtras();
+    if(typeof renderAvisoGlobal==='function')renderAvisoGlobal();
+    if(window._pendingOpenChat){ var sid=window._pendingOpenChat; window._pendingOpenChat=null; var box=document.getElementById('chat-'+sid); if(box){ toggleChat(sid); box.scrollIntoView({behavior:'smooth',block:'center'}); } }
+  },function(){});
 }
 var _chatPoll=null;
 function startChatPoll(staffId){ stopChatPoll(); _chatPoll=setInterval(function(){ var box=document.getElementById('chat-'+staffId); if(!box||box.style.display==='none'){ stopChatPoll(); return; } loadConversacionAdmin(staffId,true); },10000); }
@@ -9732,6 +9737,34 @@ function resolverPermiso(permisoId,decision,remunerado,staffId){
     toast(decision==='APROBADO'?('✓ Permiso aprobado'+(d.grillaAviso?' — '+d.grillaAviso:'')):'Permiso rechazado','ok');
     loadConversacionAdmin(staffId);
   },function(e){ toast(e.message||'Error','err'); });
+}
+
+// ===== Aviso global persistente (Parte 3): banner en CUALQUIER pantalla (solo ADMIN) =====
+// En flujo, justo debajo de la barra de tabs (no tapa la navegación). Se sondea cada 30s.
+function ensureAvisoGlobalEl(){
+  var el=document.getElementById('avisoGlobalChat');
+  if(!el){
+    el=document.createElement('div'); el.id='avisoGlobalChat';
+    el.style.cssText='display:none;background:linear-gradient(160deg,rgba(34,197,94,.22),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.5);border-radius:10px;padding:9px 14px;margin:8px 0;align-items:center;gap:10px;font-size:13px;color:#e5e7eb';
+    var bar=document.getElementById('tabBar');
+    if(bar&&bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling); else document.body.appendChild(el);
+  }
+  return el;
+}
+function renderAvisoGlobal(){
+  var el=ensureAvisoGlobalEl(); var est=window._chatEstado;
+  if(!est||!est.total||!est.ultimo){ el.style.display='none'; return; }
+  var u=est.ultimo;
+  el.innerHTML='<span style="font-size:16px">💬</span><span style="flex:1"><b>'+esc(u.nombre||'Un colaborador')+' te envió un mensaje</b>'+(u.preview?' · <span style="color:#9ca3af">"'+esc(u.preview)+'"</span>':'')+(est.total>1?' <span style="color:#9ca3af">(+'+(est.total-1)+' más)</span>':'')+'</span><button class="btn bg sm" onclick="abrirChatDesdeBanner(\''+esc(u.staffId)+'\')">Abrir chat</button>';
+  el.style.display='flex';
+}
+function abrirChatDesdeBanner(staffId){ window._pendingOpenChat=staffId; sw('staff'); }
+var _avisoGlobalPoll=null;
+function startAvisoGlobalPoll(){ if(!sess||sess.userRole!=='ADMIN')return; stopAvisoGlobalPoll(); checkChatGlobal(); _avisoGlobalPoll=setInterval(checkChatGlobal,30000); }
+function stopAvisoGlobalPoll(){ if(_avisoGlobalPoll){ clearInterval(_avisoGlobalPoll); _avisoGlobalPoll=null; } }
+function checkChatGlobal(){
+  if(!sess||sess.userRole!=='ADMIN'){ stopAvisoGlobalPoll(); var e0=document.getElementById('avisoGlobalChat'); if(e0)e0.style.display='none'; return; }
+  rpc('chatEstado',{token:sess.token},function(d){ window._chatEstado=d; renderAvisoGlobal(); },function(){});
 }
 
 // Pestañas Nómina / Extras del panel Personal
