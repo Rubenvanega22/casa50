@@ -74,8 +74,50 @@ const TENANT_TABLES = new Set([
   // Pieza 5a: read-model de la grilla (la app colaborador ya lee de aca; el POS la usa en Etapa 2)
   'grilla',
   // Pieza 6 + expediente (lado admin de Personal): chat/permisos/comunicados/documentos
-  'staff_mensajes','staff_permisos','staff_comunicados','staff_documentos'
+  'staff_mensajes','staff_permisos','staff_comunicados','staff_documentos',
+  // Etapa B: suscripciones Web Push
+  'push_subscriptions'
 ]);
+
+// ===== ETAPA B (Web Push) — envío server-side =====
+// VAPID: publico = el mismo del cliente; privado = SECRETO (env VAPID_PRIVATE). Si faltan
+// llaves o el paquete, getWebPush devuelve null y sendPushToStaff no-opea sin romper nada.
+let _webpush = null, _webpushTried = false;
+function getWebPush() {
+  if (_webpushTried) return _webpush;
+  _webpushTried = true;
+  try {
+    const wp = require('web-push');
+    const pub = String(process.env.VAPID_PUBLIC || ''), priv = String(process.env.VAPID_PRIVATE || '');
+    if (!pub || !priv) return null;
+    wp.setVapidDetails(String(process.env.VAPID_SUBJECT || 'mailto:admin@casa50.co'), pub, priv);
+    _webpush = wp;
+  } catch (e) { _webpush = null; }
+  return _webpush;
+}
+// Envia push a todos los dispositivos de un colaborador. Suscripciones vencidas (410/404) se borran.
+// GANCHO Etapa D: si no hay suscripcion activa, aca se marcaria para aviso por WhatsApp (casa50-whatsapp-bot).
+async function sendPushToStaff(staffId, payload) {
+  try {
+    const wp = getWebPush();
+    if (!wp) return;
+    const { data: subs } = await tSelect('push_subscriptions', 'id,endpoint,p256dh,auth').eq('staff_id', staffId);
+    if (!subs || !subs.length) {
+      // TODO Etapa D (fallback WhatsApp): sin suscripcion push activa -> encolar aviso por bot.
+      return;
+    }
+    const body = JSON.stringify(payload);
+    for (const sub of subs) {
+      try {
+        await wp.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body);
+      } catch (e) {
+        if (e && (e.statusCode === 410 || e.statusCode === 404)) {
+          try { await tDelete('push_subscriptions').eq('id', sub.id); } catch (er) {}
+        }
+      }
+    }
+  } catch (e) { /* nunca romper el flujo que dispara el push */ }
+}
 
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
 function tSelect(table, cols, opts){
@@ -3339,6 +3381,7 @@ async function apiStaffResponder(p, res) {
     autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now,
     leido_colab: false, created_ms: now
   });
+  await sendPushToStaff(staffId, { title: 'Administración', body: cuerpo.slice(0, 120), url: '/?abrir=chat', tag: 'chat-admin' });
   return ok(res, {});
 }
 
@@ -3372,6 +3415,7 @@ async function apiResolverPermiso(p, res) {
     autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now,
     leido_colab: false, created_ms: now
   });
+  await sendPushToStaff(perm.staff_id, { title: 'Respuesta de permiso', body: cuerpoNoti, url: '/?abrir=chat', tag: 'permiso-' + permisoId });
 
   // 3) conexion automatica a la grilla (solo aprobado)
   let grillaAviso = null;
@@ -3520,6 +3564,7 @@ async function apiValidarIncapacidad(p, res) {
     staff_id: doc.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti,
     autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now, leido_colab: false, created_ms: now
   });
+  await sendPushToStaff(doc.staff_id, { title: 'Incapacidad', body: cuerpoNoti, url: '/?abrir=chat', tag: 'incapacidad-' + docId });
 
   let grillaAviso = null;
   if (decision === 'VALIDADA') {
