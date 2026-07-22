@@ -72,7 +72,9 @@ const TENANT_TABLES = new Set([
   // proximo que toque la tabla.
   'app_calificaciones','app_quejas',
   // Pieza 5a: read-model de la grilla (la app colaborador ya lee de aca; el POS la usa en Etapa 2)
-  'grilla'
+  'grilla',
+  // Pieza 6 + expediente (lado admin de Personal): chat/permisos/comunicados/documentos
+  'staff_mensajes','staff_permisos','staff_comunicados','staff_documentos'
 ]);
 
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
@@ -543,6 +545,10 @@ module.exports = async function handler(req, res) {
       case 'grillaGetMes':      return await apiGrillaGetMes(payload, res);
       case 'grillaGuardarCelda': return await apiGrillaGuardarCelda(payload, res);
       case 'grillaVacaciones':   return await apiGrillaVacaciones(payload, res);
+      case 'chatEstado':          return await apiChatEstado(payload, res);
+      case 'staffConversacion':   return await apiStaffConversacion(payload, res);
+      case 'staffResponder':      return await apiStaffResponder(payload, res);
+      case 'resolverPermiso':     return await apiResolverPermiso(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3256,6 +3262,133 @@ async function apiGrillaVacaciones(p, res) {
   }
   if (rows.length) await supabase.from('grilla').upsert(rows, { onConflict: 'motel_id,staff_id,fecha' });
   return ok(res, { dias: rows.length, reingreso });
+}
+
+// ===== SUB-ETAPA 1 (lado admin de Personal) — Chat + Permisos =====
+// Todos gate REAL requireAdmin. Tablas ya en TENANT_TABLES (scope por motel via tSelect/tInsert/tUpdate).
+
+// apiChatEstado: badges por persona + aviso global (mensajes COLAB sin leer por admin).
+async function apiChatEstado(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const { data } = await tSelect('staff_mensajes', 'staff_id,cuerpo,autor,created_ms')
+    .eq('origen', 'COLAB').eq('leido_admin', false).eq('anulado', false)
+    .order('created_ms', { ascending: false });
+  const rows = data || [];
+  const porStaff = {};
+  rows.forEach(r => { porStaff[r.staff_id] = (porStaff[r.staff_id] || 0) + 1; });
+  const ultimo = rows.length ? { staffId: rows[0].staff_id, nombre: rows[0].autor || '', preview: String(rows[0].cuerpo || '').slice(0, 60) } : null;
+  return ok(res, { porStaff, total: rows.length, ultimo });
+}
+
+// apiStaffConversacion: hilo de esa persona; tarjetas PERMISO con estado vivo. Abrir = leer (leido_admin).
+async function apiStaffConversacion(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  const { data } = await tSelect('staff_mensajes', 'id,origen,tipo,cuerpo,permiso_id,autor,created_ms')
+    .eq('staff_id', staffId).eq('anulado', false).order('created_ms', { ascending: true });
+  const rows = data || [];
+  const permIds = rows.filter(r => r.tipo === 'PERMISO' && r.permiso_id).map(r => r.permiso_id);
+  const permMap = {};
+  if (permIds.length) {
+    const { data: perms } = await tSelect('staff_permisos',
+      'id,tipo,fecha,dia_completo,hora_desde,hora_hasta,motivo,estado,remunerado,respuesta_comentario,soporte_path')
+      .in('id', permIds);
+    (perms || []).forEach(pr => { permMap[pr.id] = pr; });
+  }
+  const mensajes = rows.map(r => {
+    const m = { id: r.id, origen: r.origen, tipo: r.tipo, cuerpo: r.cuerpo, autor: r.autor || '', createdMs: r.created_ms || null };
+    if (r.tipo === 'PERMISO' && permMap[r.permiso_id]) {
+      const pr = permMap[r.permiso_id];
+      m.permiso = {
+        id: pr.id, tipo: pr.tipo, fecha: pr.fecha, diaCompleto: pr.dia_completo,
+        horaDesde: pr.hora_desde, horaHasta: pr.hora_hasta, motivo: pr.motivo || '',
+        estado: pr.estado, remunerado: pr.remunerado, respuestaComentario: pr.respuesta_comentario || '',
+        tieneSoporte: !!pr.soporte_path
+      };
+    }
+    return m;
+  });
+  await tUpdate('staff_mensajes', { leido_admin: true, leido_admin_ms: Date.now() })
+    .eq('staff_id', staffId).eq('origen', 'COLAB').eq('leido_admin', false);
+  return ok(res, { mensajes });
+}
+
+// apiStaffResponder: admin escribe. leido_colab=false -> el colaborador lo ve como no leido.
+async function apiStaffResponder(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  const cuerpo = String(p.cuerpo || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  if (!cuerpo) return err(res, 'Escribe un mensaje');
+  if (cuerpo.length > 2000) return err(res, 'Mensaje muy largo');
+  const now = Date.now();
+  await tInsert('staff_mensajes', {
+    staff_id: staffId, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo,
+    autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now,
+    leido_colab: false, created_ms: now
+  });
+  return ok(res, {});
+}
+
+// apiResolverPermiso: TRIPLE accion -> permiso + notificacion + grilla automatica.
+async function apiResolverPermiso(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const permisoId = Number(p.permisoId || 0);
+  const decision = String(p.decision || '').trim().toUpperCase();
+  const comentario = String(p.comentario || '').trim();
+  if (!permisoId) return err(res, 'Falta el permiso');
+  if (decision !== 'APROBADO' && decision !== 'RECHAZADO') return err(res, 'Decision invalida');
+  const { data: perm } = await tSelect('staff_permisos', '*').eq('id', permisoId).maybeSingle();
+  if (!perm) return err(res, 'Permiso no encontrado');
+  if (perm.estado !== 'PENDIENTE') return err(res, 'Este permiso ya fue resuelto');
+  const remunerado = (decision === 'APROBADO') ? (p.remunerado === true || p.remunerado === 'true') : null;
+  const now = Date.now();
+
+  // 1) actualizar el permiso
+  await tUpdate('staff_permisos', {
+    estado: decision, remunerado, respuesta_comentario: comentario || null,
+    resuelto_por: s.n || '', resuelto_ms: now
+  }).eq('id', permisoId);
+
+  // 2) notificacion al colaborador (mensaje ADMIN, leido_colab=false)
+  const cuerpoNoti = (decision === 'APROBADO')
+    ? ('Permiso aprobado (' + (remunerado ? 'remunerado' : 'no remunerado') + ')' + (comentario ? ': ' + comentario : ''))
+    : ('Permiso no aprobado' + (comentario ? ': ' + comentario : ''));
+  await tInsert('staff_mensajes', {
+    staff_id: perm.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti,
+    autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now,
+    leido_colab: false, created_ms: now
+  });
+
+  // 3) conexion automatica a la grilla (solo aprobado)
+  let grillaAviso = null;
+  if (decision === 'APROBADO') {
+    try {
+      const { data: st } = await tSelect('staff', 'id,name,rol,area').eq('id', perm.staff_id).maybeSingle();
+      const area = areaGrillaDeStaff(st || {});
+      if (perm.dia_completo) {
+        await supabase.from('grilla').upsert({
+          motel_id: MOTEL_ID, staff_id: perm.staff_id, person_name: (st && st.name) || '',
+          fecha: perm.fecha, area, estado: 'PERMISO', novedad_ref: permisoId, anulado: false,
+          editado_por: s.n || '', editado_ms: now
+        }, { onConflict: 'motel_id,staff_id,fecha' });
+      } else {
+        const { data: cell } = await tSelect('grilla', 'id,estado')
+          .eq('staff_id', perm.staff_id).eq('fecha', perm.fecha).eq('anulado', false).maybeSingle();
+        if (cell && cell.estado === 'TRABAJO') {
+          await tUpdate('grilla', { novedad_ref: permisoId, editado_por: s.n || '', editado_ms: now }).eq('id', cell.id);
+        } else {
+          grillaAviso = 'Aprobado por horas, pero ese día no tiene turno en la grilla (no se marcó el puntito).';
+        }
+      }
+    } catch (e) { grillaAviso = 'El permiso se aprobó, pero no se pudo pintar la grilla.'; }
+  }
+  return ok(res, { estado: decision, grillaAviso });
 }
 
 // ==================== CONFIG ====================
