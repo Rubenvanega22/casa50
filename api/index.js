@@ -119,6 +119,22 @@ async function sendPushToStaff(staffId, payload) {
   } catch (e) { /* nunca romper el flujo que dispara el push */ }
 }
 
+// novedadColab (Plan B): registra UNA novedad para el colaborador (fila staff_mensajes ADMIN
+// no-leida, con destino para el flotante) + push. Puntería: llega SOLO a ese staffId.
+// El flotante lee no-leidas; la ✕ firma. (El armado inicial del mes NO llama esto: solo ajustes.)
+async function novedadColab(s, staffId, tipo, cuerpo, destino, destinoRef, pushTitle) {
+  try {
+    const now = Date.now();
+    await tInsert('staff_mensajes', {
+      staff_id: staffId, origen: 'ADMIN', tipo: tipo, cuerpo: cuerpo,
+      destino: destino, destino_ref: (destinoRef != null ? String(destinoRef) : null),
+      autor: (s && s.n) || 'Administración', leido_admin: true, leido_admin_ms: now,
+      leido_colab: false, created_ms: now
+    });
+    await sendPushToStaff(staffId, { title: pushTitle || 'Casa 50', body: String(cuerpo || '').slice(0, 120), url: '/?abrir=chat', tag: tipo + '-' + staffId });
+  } catch (e) { /* la novedad no debe romper el flujo que la dispara */ }
+}
+
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
 function tSelect(table, cols, opts){
   let q = supabase.from(table).select(cols, opts);
@@ -3268,6 +3284,12 @@ async function apiGrillaGuardarCelda(p, res) {
   if (!actual) { row.creado_por = s.n || ''; row.creado_ms = now; }
   const { error } = await supabase.from('grilla').upsert(row, { onConflict: 'motel_id,staff_id,fecha' });
   if (error) return err(res, 'No se pudo guardar la celda');
+  // Plan B: ajuste sobre un día ya montado -> novedad al colaborador (puntería 1 persona).
+  const turnoLbl = { SHIFT_1: 'Mañana (T1)', SHIFT_2: 'Tarde (T2)', SHIFT_3: 'Noche (T3)' };
+  const cuerpoNov = (estado === 'TRABAJO')
+    ? ('Te cambiaron el turno del ' + fecha + ': ' + (turnoLbl[shiftId] || shiftId) + (he ? ' ' + he + '-' + hs : ''))
+    : (estado === 'DESCANSO' ? ('Te pusieron descanso el ' + fecha) : ('Ajuste en tu horario del ' + fecha));
+  await novedadColab(s, staffId, 'TURNO', cuerpoNov, 'CALENDARIO', fecha, 'Cambio de horario');
   return ok(res, { estado, fecha, staffId });
 }
 
@@ -3311,6 +3333,8 @@ async function apiGrillaVacaciones(p, res) {
     cur.setDate(cur.getDate() + 1);
   }
   if (rows.length) await supabase.from('grilla').upsert(rows, { onConflict: 'motel_id,staff_id,fecha' });
+  // Plan B: novedad al colaborador (puntería 1 persona).
+  await novedadColab(s, staffId, 'TURNO', 'Te programaron vacaciones del ' + desde + ' al ' + hasta + ' (regresás el ' + reingreso + ')', 'CALENDARIO', desde, 'Vacaciones');
   return ok(res, { dias: rows.length, reingreso });
 }
 
@@ -3377,7 +3401,7 @@ async function apiStaffResponder(p, res) {
   if (cuerpo.length > 2000) return err(res, 'Mensaje muy largo');
   const now = Date.now();
   await tInsert('staff_mensajes', {
-    staff_id: staffId, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo,
+    staff_id: staffId, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo, destino: 'CHAT',
     autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now,
     leido_colab: false, created_ms: now
   });
@@ -3411,7 +3435,7 @@ async function apiResolverPermiso(p, res) {
     ? ('Permiso aprobado (' + (remunerado ? 'remunerado' : 'no remunerado') + ')' + (comentario ? ': ' + comentario : ''))
     : ('Permiso no aprobado' + (comentario ? ': ' + comentario : ''));
   await tInsert('staff_mensajes', {
-    staff_id: perm.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti,
+    staff_id: perm.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti, destino: 'CHAT',
     autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now,
     leido_colab: false, created_ms: now
   });
@@ -3502,6 +3526,8 @@ async function apiSubirDocumento(p, res) {
     staff_id: staffId, tipo: 'empresa', titulo, bucket: 'staff-docs', path, mime,
     visible, estado: null, subido_por: s.n || '', subido_rol: 'ADMIN', created_ms: now
   });
+  // Plan B: si es visible, novedad al colaborador (si está oculto no lo ve, no se avisa).
+  if (visible) await novedadColab(s, staffId, 'DOCUMENTO', 'Nuevo documento en tu expediente: ' + titulo, 'DOCUMENTO', null, 'Documento nuevo');
   return ok(res, {});
 }
 
@@ -3561,7 +3587,7 @@ async function apiValidarIncapacidad(p, res) {
     ? ('Incapacidad validada · ' + incDias + (incDias === 1 ? ' día' : ' días') + ' desde ' + incDesde + (comentario ? ': ' + comentario : ''))
     : ('Incapacidad rechazada' + (comentario ? ': ' + comentario : ''));
   await tInsert('staff_mensajes', {
-    staff_id: doc.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti,
+    staff_id: doc.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti, destino: 'CHAT',
     autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now, leido_colab: false, created_ms: now
   });
   await sendPushToStaff(doc.staff_id, { title: 'Incapacidad', body: cuerpoNoti, url: '/?abrir=chat', tag: 'incapacidad-' + docId });
