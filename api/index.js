@@ -556,6 +556,7 @@ module.exports = async function handler(req, res) {
       case 'toggleVisibilidadDoc': return await apiToggleVisibilidadDoc(payload, res);
       case 'validarIncapacidad':  return await apiValidarIncapacidad(payload, res);
       case 'anularDocumento':     return await apiAnularDocumento(payload, res);
+      case 'toggleCarpeta':       return await apiToggleCarpeta(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3549,6 +3550,19 @@ async function apiAnularDocumento(p, res) {
   if (!doc) return err(res, 'Documento no encontrado');
   await tUpdate('staff_documentos', { anulado: true, anulado_por: s.n || '', anulado_ms: Date.now() }).eq('id', docId);
   return ok(res, {});
+}
+
+// apiToggleCarpeta: visibilidad POR CARPETA (todos los docs de empresa con ese titulo).
+async function apiToggleCarpeta(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  const titulo = String(p.titulo || '').trim();
+  const visible = (p.visible === true || p.visible === 'true');
+  if (!staffId || !titulo) return err(res, 'Faltan datos');
+  await tUpdate('staff_documentos', { visible })
+    .eq('staff_id', staffId).eq('tipo', 'empresa').eq('titulo', titulo).eq('anulado', false);
+  return ok(res, { visible });
 }
 
 // ==================== CONFIG ====================

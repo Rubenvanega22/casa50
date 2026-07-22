@@ -9785,53 +9785,103 @@ function loadDocumentos(staffId){
 }
 function renderDocumentos(staffId,data){
   var box=document.getElementById('docs-'+staffId); if(!box)return;
+  window._docRaw=window._docRaw||{}; window._docRaw[staffId]=data;
   var emp=data.empresa||[], inc=data.incapacidades||[];
+  var pend=inc.filter(function(d){return d.estado==='EN_REVISION';});
+  var folders={}; emp.forEach(function(d){ if(!folders[d.titulo])folders[d.titulo]={docs:[],visible:false}; folders[d.titulo].docs.push(d); if(d.visible)folders[d.titulo].visible=true; });
+  window._docFolders=window._docFolders||{}; window._docFolders[staffId]=folders;
+  var openF=(window._docFolder||{})[staffId]||null;
   var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:10px;padding:10px">';
-  h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:6px">🤒 Incapacidades</div>';
-  if(!inc.length) h+='<div class="muted" style="font-size:11px;padding:2px 0 8px">Sin incapacidades.</div>';
-  inc.forEach(function(d){
-    var est=d.estado==='VALIDADA'?'<span style="color:#22c55e">✓ Validada</span>':(d.estado==='RECHAZADA'?'<span style="color:#f87171">✕ Rechazada</span>':'<span style="color:#f59e0b">⏳ En revisión</span>');
-    h+='<div style="background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
-    h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
-    h+='<div style="flex:1;min-width:120px"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+incRangoDoc(d.incDesde,d.incDias)+' · '+est+'</div></div>';
-    h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">👁 Ver</button>';
-    if(d.estado==='EN_REVISION'){
-      h+='<button class="btn xs" style="background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e" onclick="mostrarValInc('+d.id+')">✓ Validar</button>';
-      h+='<button class="btn xs" style="background:rgba(239,68,68,.13);border:1px solid #ef4444;color:#f87171" onclick="rechazarInc('+d.id+',\''+esc(staffId)+'\')">✕ Rechazar</button>';
-    }
-    h+='</div>';
-    if(d.estado==='EN_REVISION'){
-      h+='<div id="valinc-'+d.id+'" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #3a3a45">';
-      h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:5px">Corregí fecha/días si el colaborador los puso mal (esto pinta las celdas rojas):</div>';
-      h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
-      h+='<label style="font-size:10px;color:#c9cdd6">Desde <input type="date" id="vd-'+d.id+'" value="'+esc(d.incDesde||'')+'" style="background:#161b26;border:1px solid #3a3a45;border-radius:6px;padding:5px;color:#e5e7eb;font-size:11px"></label>';
-      h+='<label style="font-size:10px;color:#c9cdd6">Días <input type="number" id="vn-'+d.id+'" value="'+(d.incDias||'')+'" min="1" max="365" style="width:60px;background:#161b26;border:1px solid #3a3a45;border-radius:6px;padding:5px;color:#e5e7eb;font-size:11px"></label>';
-      h+='<button class="btn bg xs" onclick="confirmarValInc('+d.id+',\''+esc(staffId)+'\')">Confirmar validación</button>';
-      h+='<button class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#9ca3af" onclick="mostrarValInc('+d.id+',true)">Cancelar</button>';
-      h+='</div></div>';
-    }
-    h+='</div>';
-  });
-  h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin:10px 0 6px">📁 Documentos de empresa</div>';
-  if(!emp.length) h+='<div class="muted" style="font-size:11px;padding:2px 0 8px">Sin documentos.</div>';
-  emp.forEach(function(d){
-    var esPdf=(d.mime||'').indexOf('pdf')>=0;
-    h+='<div style="display:flex;align-items:center;gap:8px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
-    h+='<div style="flex:1"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+(esPdf?'PDF':'Imagen')+' · '+esc(fechaDocAdmin(d.createdMs))+'</div></div>';
-    h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">⬇</button>';
-    h+='<button class="btn xs" style="'+(d.visible?'background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e':'background:#22222c;border:1px solid #3a3a45;color:#9ca3af')+'" onclick="toggleVisDoc('+d.id+','+(d.visible?'false':'true')+',\''+esc(staffId)+'\')">'+(d.visible?'👁 Lo ve':'🚫 Oculto')+'</button>';
-    h+='</div>';
-  });
-  h+='<div style="border:1.5px dashed rgba(167,139,250,.4);border-radius:8px;padding:8px;margin-top:6px">';
-  h+='<input id="doctit-'+esc(staffId)+'" placeholder="Título del documento (ej: Contrato)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;padding:7px 9px;color:#e5e7eb;font-size:12px;margin-bottom:6px">';
-  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
-  h+='<label class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6;cursor:pointer">📎 Archivo<input type="file" accept="image/*,application/pdf" hidden onchange="onDocFile(\''+esc(staffId)+'\',this)"></label>';
-  h+='<span id="docfn-'+esc(staffId)+'" style="font-size:10px;color:#9ca3af;flex:1;min-width:60px"></span>';
-  h+='<label style="font-size:11px;color:#c9cdd6;display:flex;align-items:center;gap:4px"><input type="checkbox" id="docvis-'+esc(staffId)+'" checked> Lo ve</label>';
-  h+='<button class="btn bg xs" onclick="subirDocAdmin(\''+esc(staffId)+'\')">⬆ Subir</button>';
-  h+='</div></div>';
+  h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:6px">⏳ Incapacidades por revisar</div>';
+  if(!pend.length) h+='<div class="muted" style="font-size:11px;padding:2px 0 8px">Nada por revisar.</div>';
+  pend.forEach(function(d){ h+=incRevHtml(d,staffId); });
+  h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin:10px 0 6px">📁 Carpetas</div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+  h+=carpetaBtn(staffId,'INCAPACIDAD','🤒 Incapacidad',null,openF==='INCAPACIDAD');
+  Object.keys(folders).forEach(function(k){ h+=carpetaBtn(staffId,k,'📁 '+k,folders[k].visible,openF===k); });
+  h+='<button class="btn bk xs" style="background:#22222c;border:1px dashed #5a5a6a;color:#c9cdd6" onclick="nuevaCarpeta(\''+esc(staffId)+'\')">+ Nueva carpeta</button>';
+  h+='</div>';
+  if(openF==='__NUEVA__') h+=nuevaCarpetaFormHtml(staffId);
+  else if(openF) h+=carpetaContenidoHtml(staffId,openF);
   h+='</div>';
   box.innerHTML=h;
+}
+function incRevHtml(d,staffId){
+  var h='<div style="background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h+='<div style="flex:1;min-width:120px"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+incRangoDoc(d.incDesde,d.incDias)+' · ⏳ En revisión</div></div>';
+  h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">👁 Ver</button>';
+  h+='<button class="btn xs" style="background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e" onclick="mostrarValInc('+d.id+')">✓ Validar</button>';
+  h+='<button class="btn xs" style="background:rgba(239,68,68,.13);border:1px solid #ef4444;color:#f87171" onclick="rechazarInc('+d.id+',\''+esc(staffId)+'\')">✕ Rechazar</button>';
+  h+='</div>';
+  h+='<div id="valinc-'+d.id+'" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #3a3a45">';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:5px">Corregí fecha/días si el colaborador los puso mal (esto pinta las celdas rojas):</div>';
+  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  h+='<label style="font-size:10px;color:#c9cdd6">Desde <input type="date" id="vd-'+d.id+'" value="'+esc(d.incDesde||'')+'" style="background:#161b26;border:1px solid #3a3a45;border-radius:6px;padding:5px;color:#e5e7eb;font-size:11px"></label>';
+  h+='<label style="font-size:10px;color:#c9cdd6">Días <input type="number" id="vn-'+d.id+'" value="'+(d.incDias||'')+'" min="1" max="365" style="width:60px;background:#161b26;border:1px solid #3a3a45;border-radius:6px;padding:5px;color:#e5e7eb;font-size:11px"></label>';
+  h+='<button class="btn bg xs" onclick="confirmarValInc('+d.id+',\''+esc(staffId)+'\')">Confirmar validación</button>';
+  h+='<button class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#9ca3af" onclick="mostrarValInc('+d.id+',true)">Cancelar</button>';
+  h+='</div></div></div>';
+  return h;
+}
+function carpetaBtn(staffId,key,label,visible,active){
+  var h='<span style="display:inline-flex;align-items:center;gap:5px;background:'+(active?'rgba(167,139,250,.2)':'#22222c')+';border:1px solid '+(active?'#a78bfa':'#3a3a45')+';border-radius:8px;padding:4px 8px">';
+  h+='<button class="btn xs" style="background:none;border:none;color:#e5e7eb;padding:0;font-size:12px;cursor:pointer" onclick="abrirCarpeta(\''+esc(staffId)+'\',\''+esc(key)+'\')">'+esc(label)+'</button>';
+  if(visible!==null){
+    h+='<button title="'+(visible?'El colaborador la ve':'Oculta')+'" onclick="toggleCarpeta(\''+esc(staffId)+'\',\''+esc(key)+'\','+(visible?'false':'true')+')" style="width:30px;height:16px;border-radius:999px;border:none;cursor:pointer;position:relative;padding:0;background:'+(visible?'#3b82f6':'#39404f')+'"><span style="position:absolute;top:2px;'+(visible?'right:2px':'left:2px')+';width:12px;height:12px;border-radius:50%;background:#fff"></span></button>';
+  }
+  return h+'</span>';
+}
+function abrirCarpeta(staffId,key){ window._docFolder=window._docFolder||{}; window._docFolder[staffId]=(window._docFolder[staffId]===key?null:key); renderDocumentos(staffId,(window._docRaw||{})[staffId]||{empresa:[],incapacidades:[]}); }
+function carpetaContenidoHtml(staffId,key){
+  var raw=(window._docRaw||{})[staffId]||{empresa:[],incapacidades:[]};
+  var files = (key==='INCAPACIDAD') ? (raw.incapacidades||[]).slice() : (raw.empresa||[]).filter(function(d){return d.titulo===key;});
+  files.sort(function(a,b){ return (b.createdMs||0)-(a.createdMs||0); });
+  var h='<div style="background:#12161f;border:1px solid #2e2e3a;border-radius:8px;padding:8px;margin-top:2px">';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:6px">'+(key==='INCAPACIDAD'?'🤒 Incapacidad':'📁 '+esc(key))+' · archivos por fecha</div>';
+  if(!files.length) h+='<div class="muted" style="font-size:11px">Carpeta vacía.</div>';
+  files.forEach(function(d){
+    var meta = (key==='INCAPACIDAD')
+      ? (incRangoDoc(d.incDesde,d.incDias)+' · '+(d.estado==='VALIDADA'?'✓ Validada':(d.estado==='RECHAZADA'?'✕ Rechazada':'⏳ En revisión')))
+      : (((d.mime||'').indexOf('pdf')>=0?'PDF':'Imagen')+' · '+esc(fechaDocAdmin(d.createdMs)));
+    h+='<div style="display:flex;align-items:center;gap:8px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:7px 9px;margin-bottom:5px">';
+    h+='<div style="flex:1"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+meta+'</div></div>';
+    h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">👁</button>';
+    h+='<button class="btn xs" style="background:rgba(239,68,68,.13);border:1px solid #ef4444;color:#f87171" onclick="eliminarDoc('+d.id+',\''+esc(staffId)+'\')">🗑</button>';
+    h+='</div>';
+  });
+  if(key!=='INCAPACIDAD'){
+    h+='<label class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6;cursor:pointer;margin-top:4px;display:inline-block">📎 Agregar archivo a esta carpeta<input type="file" accept="image/*,application/pdf" hidden onchange="onDocFileCarpeta(\''+esc(staffId)+'\',\''+esc(key)+'\',this)"></label>';
+  } else { h+='<div style="font-size:10px;color:#6b7280;margin-top:4px">Las incapacidades las sube el colaborador desde su app.</div>'; }
+  return h+'</div>';
+}
+function nuevaCarpetaFormHtml(staffId){
+  var h='<div style="border:1.5px dashed rgba(167,139,250,.4);border-radius:8px;padding:8px;margin-top:2px">';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:6px">Nueva carpeta: título + primer archivo</div>';
+  h+='<input id="doctit-'+esc(staffId)+'" placeholder="Título (ej: Hoja de vida, Contrato)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;padding:7px 9px;color:#e5e7eb;font-size:12px;margin-bottom:6px">';
+  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  h+='<label class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6;cursor:pointer">📎 Archivo<input type="file" accept="image/*,application/pdf" hidden onchange="onDocFile(\''+esc(staffId)+'\',this)"></label>';
+  h+='<span id="docfn-'+esc(staffId)+'" style="font-size:10px;color:#9ca3af;flex:1;min-width:50px"></span>';
+  h+='<label style="font-size:11px;color:#c9cdd6;display:flex;align-items:center;gap:4px"><input type="checkbox" id="docvis-'+esc(staffId)+'" checked> Lo ve</label>';
+  h+='<button class="btn bg xs" onclick="subirDocAdmin(\''+esc(staffId)+'\')">Crear carpeta</button>';
+  h+='</div></div>';
+  return h;
+}
+function nuevaCarpeta(staffId){ window._docFolder=window._docFolder||{}; window._docFolder[staffId]='__NUEVA__'; renderDocumentos(staffId,(window._docRaw||{})[staffId]||{empresa:[],incapacidades:[]}); }
+function onDocFileCarpeta(staffId,titulo,input){
+  var f=input.files&&input.files[0]; if(!f)return;
+  if(f.size>10*1024*1024){ toast('Muy pesado (máx 10MB)','err'); return; }
+  var folder=((window._docFolders||{})[staffId]||{})[titulo]; var vis=folder?folder.visible:true;
+  var r=new FileReader();
+  r.onload=function(e){ toast('Subiendo…','ok'); rpc('subirDocumento',{token:sess.token,staffId:staffId,titulo:titulo,fileBase64:e.target.result,visible:vis},function(){ toast('Archivo agregado','ok'); loadDocumentos(staffId); },function(er){ toast(er.message||'Error','err'); }); };
+  r.readAsDataURL(f);
+}
+function toggleCarpeta(staffId,titulo,visible){
+  rpc('toggleCarpeta',{token:sess.token,staffId:staffId,titulo:titulo,visible:visible},function(){ loadDocumentos(staffId); },function(e){ toast(e.message||'Error','err'); });
+}
+function eliminarDoc(docId,staffId){
+  if(!confirm('¿Eliminar este archivo? Queda auditado (no se borra del registro), desaparece de la vista.')) return;
+  rpc('anularDocumento',{token:sess.token,docId:docId},function(){ toast('Archivo eliminado','ok'); loadDocumentos(staffId); },function(e){ toast(e.message||'Error','err'); });
 }
 function onDocFile(staffId,input){
   var f=input.files&&input.files[0]; if(!f)return;
@@ -9848,7 +9898,8 @@ function subirDocAdmin(staffId){
   if(!fobj){ toast('Elegí el archivo','err'); return; }
   toast('Subiendo…','ok');
   rpc('subirDocumento',{token:sess.token,staffId:staffId,titulo:tit,fileBase64:fobj.dataUrl,visible:vis},function(){
-    toast('Documento subido','ok'); if(window._docFiles) delete window._docFiles[staffId]; loadDocumentos(staffId);
+    toast('Carpeta creada','ok'); if(window._docFiles) delete window._docFiles[staffId];
+    window._docFolder=window._docFolder||{}; window._docFolder[staffId]=tit; loadDocumentos(staffId);
   },function(e){ toast(e.message||'Error','err'); });
 }
 function descargarDocAdmin(docId){
