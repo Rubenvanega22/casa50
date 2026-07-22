@@ -550,6 +550,12 @@ module.exports = async function handler(req, res) {
       case 'staffResponder':      return await apiStaffResponder(payload, res);
       case 'resolverPermiso':     return await apiResolverPermiso(payload, res);
       case 'verSoportePermiso':   return await apiVerSoportePermiso(payload, res);
+      case 'staffDocumentos':     return await apiStaffDocumentos(payload, res);
+      case 'subirDocumento':      return await apiSubirDocumento(payload, res);
+      case 'descargarDocumentoAdmin': return await apiDescargarDocumentoAdmin(payload, res);
+      case 'toggleVisibilidadDoc': return await apiToggleVisibilidadDoc(payload, res);
+      case 'validarIncapacidad':  return await apiValidarIncapacidad(payload, res);
+      case 'anularDocumento':     return await apiAnularDocumento(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3403,6 +3409,146 @@ async function apiVerSoportePermiso(p, res) {
   const { data: signed, error } = await supabase.storage.from(perm.soporte_bucket || 'permisos').createSignedUrl(perm.soporte_path, 60);
   if (error || !signed) return err(res, 'No se pudo generar el enlace');
   return ok(res, { url: signed.signedUrl });
+}
+
+// ===== SUB-ETAPA 2 (lado admin de Personal) — Documentos + Validar incapacidad =====
+
+// apiStaffDocumentos: TODOS los docs de esa persona (empresa visibles/ocultos + incapacidades con estado).
+async function apiStaffDocumentos(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  const { data } = await tSelect('staff_documentos',
+    'id,tipo,titulo,mime,visible,estado,inc_dias,inc_desde,subido_por,subido_rol,created_ms,validado_por,validado_ms')
+    .eq('staff_id', staffId).eq('anulado', false).order('created_ms', { ascending: false });
+  const docs = (data || []).map(d => ({
+    id: d.id, tipo: d.tipo, titulo: d.titulo, mime: d.mime || '', visible: !!d.visible,
+    estado: d.estado || null, incDias: d.inc_dias || null, incDesde: d.inc_desde || null,
+    subidoPor: d.subido_por || '', subidoRol: d.subido_rol || '', createdMs: d.created_ms || null,
+    validadoPor: d.validado_por || '', validadoMs: d.validado_ms || null
+  }));
+  return ok(res, { empresa: docs.filter(d => d.tipo === 'empresa'), incapacidades: docs.filter(d => d.tipo === 'incapacidad') });
+}
+
+// apiSubirDocumento: admin sube un doc de EMPRESA (bucket privado staff-docs). Imagen o PDF.
+async function apiSubirDocumento(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  const titulo = String(p.titulo || '').trim();
+  const visible = (p.visible === true || p.visible === 'true');
+  const file = String(p.fileBase64 || '');
+  if (!staffId) return err(res, 'Falta la persona');
+  if (!titulo) return err(res, 'Falta el título');
+  const m = file.match(/^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/);
+  if (!m) return err(res, 'Adjunta el archivo');
+  const mime = m[1];
+  if (!/^image\//.test(mime) && mime !== 'application/pdf') return err(res, 'Solo imágenes o PDF');
+  const buffer = Buffer.from(m[2], 'base64');
+  if (!buffer.length) return err(res, 'El archivo no se pudo leer');
+  if (buffer.length > 10 * 1024 * 1024) return err(res, 'El archivo es muy pesado (máx 10MB)');
+  const ext = (mime === 'application/pdf') ? 'pdf' : (mime === 'image/png' ? 'png' : 'jpg');
+  const now = Date.now();
+  const path = MOTEL_ID + '/' + staffId + '/doc_' + now + '.' + ext;
+  const up = await supabase.storage.from('staff-docs').upload(path, buffer, { contentType: mime, upsert: false });
+  if (up.error) return err(res, 'No se pudo subir el archivo');
+  await tInsert('staff_documentos', {
+    staff_id: staffId, tipo: 'empresa', titulo, bucket: 'staff-docs', path, mime,
+    visible, estado: null, subido_por: s.n || '', subido_rol: 'ADMIN', created_ms: now
+  });
+  return ok(res, {});
+}
+
+// apiDescargarDocumentoAdmin: signed URL 60s de cualquier doc (incl. soporte de incapacidad).
+async function apiDescargarDocumentoAdmin(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const docId = Number(p.docId || 0);
+  if (!docId) return err(res, 'Falta el documento');
+  const { data: doc } = await tSelect('staff_documentos', 'bucket,path,anulado').eq('id', docId).maybeSingle();
+  if (!doc || doc.anulado === true || !doc.path) return err(res, 'No disponible');
+  const { data: signed, error } = await supabase.storage.from(doc.bucket).createSignedUrl(doc.path, 60);
+  if (error || !signed) return err(res, 'No se pudo generar el enlace');
+  return ok(res, { url: signed.signedUrl });
+}
+
+// apiToggleVisibilidadDoc: "Lo ve" / "Oculto" — SOLO docs de empresa (la incapacidad la ve siempre el dueño).
+async function apiToggleVisibilidadDoc(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const docId = Number(p.docId || 0);
+  const visible = (p.visible === true || p.visible === 'true');
+  if (!docId) return err(res, 'Falta el documento');
+  const { data: doc } = await tSelect('staff_documentos', 'tipo').eq('id', docId).maybeSingle();
+  if (!doc) return err(res, 'Documento no encontrado');
+  if (doc.tipo !== 'empresa') return err(res, 'Solo los documentos de empresa cambian visibilidad');
+  await tUpdate('staff_documentos', { visible }).eq('id', docId);
+  return ok(res, { visible });
+}
+
+// apiValidarIncapacidad: TRIPLE accion -> corrige fecha/dias + notifica + celdas rojas a la grilla.
+async function apiValidarIncapacidad(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const docId = Number(p.docId || 0);
+  const decision = String(p.decision || '').trim().toUpperCase();
+  const comentario = String(p.comentario || '').trim();
+  if (!docId) return err(res, 'Falta el documento');
+  if (decision !== 'VALIDADA' && decision !== 'RECHAZADA') return err(res, 'Decision invalida');
+  const { data: doc } = await tSelect('staff_documentos', '*').eq('id', docId).maybeSingle();
+  if (!doc || doc.tipo !== 'incapacidad') return err(res, 'Incapacidad no encontrada');
+  if (doc.estado !== 'EN_REVISION') return err(res, 'Esta incapacidad ya fue resuelta');
+  const now = Date.now();
+  let incDesde = doc.inc_desde, incDias = doc.inc_dias;
+  if (decision === 'VALIDADA') {
+    const nd = String(p.incDesde || '').trim();
+    const ni = parseInt(p.incDias, 10);
+    if (nd) { if (!/^\d{4}-\d{2}-\d{2}$/.test(nd)) return err(res, 'Fecha inicio invalida'); incDesde = nd; }
+    if (Number.isInteger(ni) && ni >= 1 && ni <= 365) incDias = ni;
+    if (!incDesde || !incDias) return err(res, 'Faltan fecha inicio o dias');
+  }
+  await tUpdate('staff_documentos', {
+    estado: decision, inc_desde: incDesde, inc_dias: incDias, validado_por: s.n || '', validado_ms: now
+  }).eq('id', docId);
+
+  const cuerpoNoti = (decision === 'VALIDADA')
+    ? ('Incapacidad validada · ' + incDias + (incDias === 1 ? ' día' : ' días') + ' desde ' + incDesde + (comentario ? ': ' + comentario : ''))
+    : ('Incapacidad rechazada' + (comentario ? ': ' + comentario : ''));
+  await tInsert('staff_mensajes', {
+    staff_id: doc.staff_id, origen: 'ADMIN', tipo: 'MENSAJE', cuerpo: cuerpoNoti,
+    autor: s.n || 'Administración', leido_admin: true, leido_admin_ms: now, leido_colab: false, created_ms: now
+  });
+
+  let grillaAviso = null;
+  if (decision === 'VALIDADA') {
+    try {
+      const { data: st } = await tSelect('staff', 'id,name,rol,area').eq('id', doc.staff_id).maybeSingle();
+      const area = areaGrillaDeStaff(st || {});
+      const rows = [];
+      const cur = new Date(incDesde + 'T00:00:00');
+      for (let i = 0; i < incDias; i++) {
+        const f = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0') + '-' + String(cur.getDate()).padStart(2, '0');
+        rows.push({ motel_id: MOTEL_ID, staff_id: doc.staff_id, person_name: (st && st.name) || '', fecha: f, area,
+          estado: 'INCAPACIDAD', novedad_ref: docId, anulado: false, editado_por: s.n || '', editado_ms: now });
+        cur.setDate(cur.getDate() + 1);
+      }
+      if (rows.length) await supabase.from('grilla').upsert(rows, { onConflict: 'motel_id,staff_id,fecha' });
+    } catch (e) { grillaAviso = 'La incapacidad se validó, pero no se pudo pintar la grilla.'; }
+  }
+  return ok(res, { estado: decision, incDesde, incDias, grillaAviso });
+}
+
+// apiAnularDocumento: anular (nunca borrar), con auditoria.
+async function apiAnularDocumento(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const docId = Number(p.docId || 0);
+  if (!docId) return err(res, 'Falta el documento');
+  const { data: doc } = await tSelect('staff_documentos', 'id').eq('id', docId).maybeSingle();
+  if (!doc) return err(res, 'Documento no encontrado');
+  await tUpdate('staff_documentos', { anulado: true, anulado_por: s.n || '', anulado_ms: Date.now() }).eq('id', docId);
+  return ok(res, {});
 }
 
 // ==================== CONFIG ====================
