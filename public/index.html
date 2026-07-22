@@ -9423,7 +9423,7 @@ function clearMaintHistory(){
   });
 }
 // ---- PERSONAL (admin) ----
-function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];renderStaff();renderExtras();});loadExtrasPendientes();}
+function loadStaff(){rpc('getStaff',{userRole:sess.userRole},function(data){staffList=data.staff||[];refreshChatBadges();});loadExtrasPendientes();}
 
 // ---- FASE 2 · 2c: extras pendientes + reset de PIN (admin) ----
 var staffPendientes=[];
@@ -9584,11 +9584,7 @@ function staffCardHtml(s, hoy){
   h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">';
   h+='<div><span style="font-weight:700;font-size:13px;'+(active?'':'opacity:.5;text-decoration:line-through')+'">'+esc(s.name)+'</span>';
   h+='<span style="font-size:10px;color:'+(active?'#22c55e':'#ef4444')+';margin-left:6px">'+(active?'Activo':'Inactivo')+'</span></div>';
-  h+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">';
-  h+='<button class="btn bk xs" onclick="editStaff(\''+esc(s.id)+'\')">Editar</button>';
-  h+='<button class="btn bk xs" style="background:#16a34a;color:#fff" onclick="openVacacionesModal(\''+esc(s.id)+'\')">🌴 Vacaciones</button>';
-  h+='<button class="btn bk xs" style="background:#7c3aed;color:#fff" onclick="openResetPin(\''+esc(s.id)+'\')">🔑 PIN</button>';
-  h+='</div></div>';
+  h+='</div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:11px;color:#9ca3af">';
   if(s.cedula)h+='<span>CC: <b style="color:#e5e7eb">'+esc(s.cedula)+'</b></span>';
   if(s.celular)h+='<span>📱 <b style="color:#e5e7eb">'+esc(s.celular)+'</b></span>';
@@ -9626,8 +9622,101 @@ function staffCardHtml(s, hoy){
       h += '</div>';
     }
   }
+  // Fila única de chips (Sub-etapa 1): neutros, Chat SIEMPRE verde con badge. Extras: fila reducida.
+  var esExtra=(s.type==='extra');
+  var badge=(window._chatBadges&&window._chatBadges[s.id])?window._chatBadges[s.id]:0;
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">';
+  h+=chipBtn('✎ Editar',"editStaff('"+esc(s.id)+"')");
+  if(!esExtra) h+=chipBtn('🌴 Vacaciones',"openVacacionesModal('"+esc(s.id)+"')");
+  h+=chipBtn('🔑 PIN',"openResetPin('"+esc(s.id)+"')");
+  if(!esExtra) h+=chipBtn('📁 Documentos',"toast('Documentos: próximamente','ok')");
+  h+=chipChat(s.id,badge);
+  if(!esExtra) h+=chipBtn('📤 Liquidar',"toast('Liquidar: próximamente','ok')");
+  else h+=chipBtn('🗑 Eliminar',"toast('Eliminar: próximamente','ok')");
+  h+='</div>';
+  h+='<div id="chat-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
   h+='</div>';
   return h;
+}
+
+// ===== Fila de chips + Chat DENTRO de la celda (Sub-etapa 1) =====
+function chipBtn(label,onclick){ return '<button class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="'+onclick+'">'+label+'</button>'; }
+function chipChat(staffId,badge){
+  var b = badge>0 ? '<span style="background:#22c55e;color:#04140a;font-size:9px;font-weight:800;min-width:15px;height:15px;border-radius:999px;display:inline-grid;place-items:center;padding:0 4px;margin-left:4px">'+badge+'</span>' : '';
+  return '<button class="btn xs" id="chatchip-'+esc(staffId)+'" style="background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.5);color:#22c55e" onclick="toggleChat(\''+esc(staffId)+'\')">💬 Chat'+b+'</button>';
+}
+function refreshChatBadges(){
+  renderStaff();renderExtras();
+  rpc('chatEstado',{token:sess.token},function(d){ window._chatBadges=d.porStaff||{}; window._chatEstado=d; renderStaff();renderExtras(); if(typeof renderAvisoGlobal==='function')renderAvisoGlobal(); },function(){});
+}
+function toggleChat(staffId){
+  var box=document.getElementById('chat-'+staffId); if(!box)return;
+  if(box.style.display==='none'){
+    document.querySelectorAll('[id^="chat-"]').forEach(function(el){ if(el.id!=='chat-'+staffId) el.style.display='none'; });
+    box.style.display='block'; loadConversacionAdmin(staffId);
+  } else { box.style.display='none'; }
+}
+function loadConversacionAdmin(staffId){
+  var box=document.getElementById('chat-'+staffId); if(!box)return;
+  box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">Cargando…</div>';
+  rpc('staffConversacion',{token:sess.token,staffId:staffId},function(d){
+    renderConversacionAdmin(staffId,d.mensajes||[]);
+    var chip=document.getElementById('chatchip-'+staffId); if(chip){var b=chip.querySelector('span'); if(b)b.remove();}
+    if(window._chatBadges) delete window._chatBadges[staffId];
+    if(typeof renderAvisoGlobal==='function') rpc('chatEstado',{token:sess.token},function(d2){window._chatEstado=d2;renderAvisoGlobal();},function(){});
+  },function(e){ box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">No se pudo cargar. '+esc(e.message||'')+'</div>'; });
+}
+function horaCortaChat(ms){ if(!ms)return''; var d=new Date(Number(ms)); var H=d.getHours(),M=d.getMinutes(); var ap=H>=12?'p.m.':'a.m.'; H=H%12; if(H===0)H=12; return H+':'+String(M).padStart(2,'0')+' '+ap; }
+function permisoTipoLabel(t){ return {CITA_MEDICA:'Cita médica',CALAMIDAD:'Calamidad',DILIGENCIA:'Diligencia personal',LICENCIA:'Licencia',OTRO:'Otro'}[t]||t; }
+function permisoCardAdmin(p,staffId){
+  var dur=p.diaCompleto?'Día completo':((p.horaDesde||'').slice(0,5)+'-'+(p.horaHasta||'').slice(0,5));
+  var h='<div style="align-self:flex-start;max-width:94%;background:#1a1a24;border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:10px 12px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:5px">📋 Solicitud de permiso</div>';
+  h+='<div style="font-size:12px;color:#c9cdd6;line-height:1.6">Tipo: <b style="color:#e5e7eb">'+esc(permisoTipoLabel(p.tipo))+'</b><br>Fecha: <b style="color:#e5e7eb">'+esc(p.fecha)+'</b> · '+esc(dur)+(p.motivo?('<br>Motivo: <span style="color:#9ca3af">'+esc(p.motivo)+'</span>'):'')+'</div>';
+  if(p.estado==='PENDIENTE'){
+    h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">';
+    h+='<button class="btn xs" style="background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e" onclick="resolverPermiso('+p.id+',\'APROBADO\',true,\''+esc(staffId)+'\')">✓ Aprobar · Remunerado</button>';
+    h+='<button class="btn xs" style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.5);color:#22c55e" onclick="resolverPermiso('+p.id+',\'APROBADO\',false,\''+esc(staffId)+'\')">✓ Aprobar · No remun.</button>';
+    h+='<button class="btn xs" style="background:rgba(239,68,68,.13);border:1px solid #ef4444;color:#f87171" onclick="resolverPermiso('+p.id+',\'RECHAZADO\',null,\''+esc(staffId)+'\')">✕ Rechazar</button>';
+    h+='</div>';
+  } else {
+    var chip=p.estado==='APROBADO'?('<span style="color:#22c55e">✓ Aprobado</span> '+(p.remunerado?'<span style="color:#22c55e">· Remunerado</span>':'<span style="color:#f59e0b">· No remunerado</span>')):'<span style="color:#f87171">✕ No aprobado</span>';
+    h+='<div style="margin-top:7px;padding-top:7px;border-top:1px solid #2e2e3a;font-size:12px;font-weight:600">'+chip+'</div>';
+    if(p.respuestaComentario)h+='<div style="font-size:11px;color:#9ca3af;font-style:italic;margin-top:4px">"'+esc(p.respuestaComentario)+'"</div>';
+  }
+  return h+'</div>';
+}
+function renderConversacionAdmin(staffId,msgs){
+  var box=document.getElementById('chat-'+staffId); if(!box)return;
+  var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:10px;padding:10px">';
+  h+='<div id="chatscroll-'+esc(staffId)+'" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:8px">';
+  if(!msgs.length)h+='<div class="muted" style="font-size:12px;text-align:center;padding:10px">Sin mensajes todavía.</div>';
+  msgs.forEach(function(m){
+    if(m.tipo==='PERMISO'&&m.permiso){ h+=permisoCardAdmin(m.permiso,staffId); return; }
+    var mine=(m.origen==='ADMIN');
+    h+='<div style="align-self:'+(mine?'flex-end':'flex-start')+';max-width:78%;'+(mine?'background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3)':'background:#22222c;border:1px solid #3a3a45')+';border-radius:12px;padding:8px 11px;font-size:12px;color:#e5e7eb">'+esc(m.cuerpo)+'<div style="font-size:9px;color:#6b7280;margin-top:3px">'+esc(horaCortaChat(m.createdMs))+'</div></div>';
+  });
+  h+='</div>';
+  h+='<div style="display:flex;gap:6px"><input id="chatinp-'+esc(staffId)+'" placeholder="Escribe a la persona…" style="flex:1;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;color:#e5e7eb;font-size:12px" onkeydown="if(event.key===\'Enter\')enviarRespuestaAdmin(\''+esc(staffId)+'\')"><button class="btn bg sm" onclick="enviarRespuestaAdmin(\''+esc(staffId)+'\')">Enviar</button></div>';
+  h+='</div>';
+  box.innerHTML=h;
+  var sc=document.getElementById('chatscroll-'+staffId); if(sc)sc.scrollTop=sc.scrollHeight;
+}
+function enviarRespuestaAdmin(staffId){
+  var inp=document.getElementById('chatinp-'+staffId); if(!inp)return;
+  var cuerpo=(inp.value||'').trim(); if(!cuerpo)return;
+  inp.value='';
+  rpc('staffResponder',{token:sess.token,staffId:staffId,cuerpo:cuerpo},function(){ loadConversacionAdmin(staffId); },function(e){ toast(e.message||'Error','err'); inp.value=cuerpo; });
+}
+function resolverPermiso(permisoId,decision,remunerado,staffId){
+  var comentario='';
+  if(decision==='RECHAZADO'){ comentario=prompt('Comentario para el colaborador (por qué no se aprueba):','')||''; }
+  var body={token:sess.token,permisoId:permisoId,decision:decision,comentario:comentario};
+  if(decision==='APROBADO')body.remunerado=remunerado;
+  rpc('resolverPermiso',body,function(d){
+    toast(decision==='APROBADO'?('✓ Permiso aprobado'+(d.grillaAviso?' — '+d.grillaAviso:'')):'Permiso rechazado','ok');
+    loadConversacionAdmin(staffId);
+  },function(e){ toast(e.message||'Error','err'); });
 }
 
 // Pestañas Nómina / Extras del panel Personal
