@@ -6122,21 +6122,23 @@ function grillaRenderNueva(data){
     var personas=personasPorArea[area]||[];
     if(!personas.length)return;
     h+='<div style="font-weight:600;margin:14px 0 6px">'+esc(area)+'</div>';
-    h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;min-width:150px">Persona</th>';
-    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#c00':'#888')+'">'+DS[dow]+'<br>'+d+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#f0f0f0;color:#555;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
+    h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#141c30;color:#e8edf5;text-align:left;padding:4px 8px;min-width:150px">Persona</th>';
+    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#f87171':'#8a93a8')+'">'+DS[dow]+'<br>'+d+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#0d1322;color:#cbd5e1;border-left:1px solid #2e3850;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
+    h+='<th style="padding:2px 6px;text-align:center;background:#141c30;color:#e8edf5;border-left:2px solid #4a5a7a;font-size:10px" title="Horas del mes">Σ<br>mes</th>';
     h+='</tr></thead><tbody>';
     personas.forEach(function(sid){
-      h+='<tr><td style="position:sticky;left:0;background:#fff;padding:4px 8px;white-space:nowrap">'+esc(nombreDe[sid]||sid)+'</td>';
-      var wk=0;
+      h+='<tr><td style="position:sticky;left:0;background:#141c30;color:#e8edf5;padding:4px 8px;white-space:nowrap">'+esc(nombreDe[sid]||sid)+'</td>';
+      var wk=0, mesTot=0;
       for(var d=1;d<=ultimoDia;d++){
         var fecha=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
         var dow=new Date(y,m-1,d).getDay();
         var cc=idx[area+'|'+sid+'|'+fecha];
-        wk+=grillaHorasCelda(cc);
+        var hc=grillaHorasCelda(cc); wk+=hc; mesTot+=hc;
         var tdAttr=isAdmin?(' onclick="grillaAbrirMenuCelda(\''+area+'\',\''+sid+'\',\''+fecha+'\')" style="padding:0;text-align:center;cursor:pointer"'):' style="padding:0;text-align:center"';
         h+='<td'+tdAttr+'>'+grillaCelda(cc)+'</td>';
-        if(dow===0||d===ultimoDia){var ov=wk>42;h+='<td style="text-align:center;background:'+(ov?'#fde8e8':'#f0f0f0')+';font-size:10px;font-weight:700;color:'+(ov?'#c00':'#333')+';padding:2px 6px" title="Horas programadas de la semana'+(ov?' — supera 42h':'')+'">'+grillaFmtHoras(wk)+'</td>';wk=0;}
+        if(dow===0||d===ultimoDia){var ov=wk>42;h+='<td style="text-align:center;font-size:10px;font-weight:700;padding:2px 6px;border-left:1px solid #2e3850;background:'+(ov?'rgba(239,68,68,.20)':'#0d1322')+';color:'+(ov?'#ff8080':'#cbd5e1')+'" title="Horas programadas de la semana'+(ov?' — supera 42h':'')+'">'+grillaFmtHoras(wk)+'</td>';wk=0;}
       }
+      h+='<td style="text-align:center;font-size:10px;font-weight:800;padding:2px 6px;border-left:2px solid #4a5a7a;background:#141c30;color:#e8edf5" title="Horas programadas del mes">'+grillaFmtHoras(mesTot)+'</td>';
       h+='</tr>';
     });
     h+='</tbody></table></div>';
