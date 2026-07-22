@@ -70,7 +70,9 @@ const TENANT_TABLES = new Set([
   // fichas de TODOS los moteles. Hoy no hay fuga porque cerrarEstadiaReserva usa
   // supabase.from(...) con motel_id explicito; esto desarma la trampa para el
   // proximo que toque la tabla.
-  'app_calificaciones','app_quejas'
+  'app_calificaciones','app_quejas',
+  // Pieza 5a: read-model de la grilla (la app colaborador ya lee de aca; el POS la usa en Etapa 2)
+  'grilla'
 ]);
 
 // SELECT scopeado por motel. El caller sigue encadenando .eq/.order/.maybeSingle/etc.
@@ -538,6 +540,7 @@ module.exports = async function handler(req, res) {
       case 'saveVacacionesEvent': return await apiSaveVacacionesEvent(payload, res);
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
+      case 'grillaGetMes':      return await apiGrillaGetMes(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3121,6 +3124,28 @@ async function apiSaveSchedule(p, res) {
     console.warn('[grilla espejo] fallo:', e && e.message);
   }
   return ok(res,{saved:entries.length,weekStart:ws,grillaAviso});
+}
+
+// ===== PIEZA 5a (Etapa 2 · sub-1) — lectura de la grilla nueva desde `grilla` =====
+// Read-model limpio: 1 fila por celda (staff_id x fecha) ya resuelta. Motel-scoped (tSelect).
+// Sin gate de rol: la pestaña Turnos la ven RECEPTION/MAID igual que getSchedule.
+async function apiGrillaGetMes(p, res) {
+  const mes = /^\d{4}-\d{2}$/.test(String(p.mes || '')) ? String(p.mes) : '';
+  if (!mes) return err(res, 'Mes requerido (YYYY-MM)');
+  const [y, m] = mes.split('-').map(Number);
+  const primer = mes + '-01';
+  const sig = (m === 12) ? ((y + 1) + '-01-01') : (y + '-' + String(m + 1).padStart(2, '0') + '-01');
+  const { data } = await tSelect('grilla',
+    'staff_id,person_name,area,fecha,shift_id,hora_entrada,hora_salida,estado,es_comodin,es_mantenimiento,novedad_ref')
+    .gte('fecha', primer).lt('fecha', sig).eq('anulado', false)
+    .order('area').order('person_name').order('fecha');
+  const cells = (data || []).map(r => ({
+    staffId: r.staff_id, personName: r.person_name || '', area: r.area || '', fecha: r.fecha,
+    shiftId: r.shift_id || '', horaEntrada: r.hora_entrada || '', horaSalida: r.hora_salida || '',
+    estado: r.estado || 'TRABAJO', esComodin: !!r.es_comodin, esMantenimiento: !!r.es_mantenimiento,
+    novedadRef: r.novedad_ref || null
+  }));
+  return ok(res, { mes, cells });
 }
 
 // ==================== CONFIG ====================

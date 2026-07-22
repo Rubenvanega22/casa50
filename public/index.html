@@ -1535,6 +1535,7 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <button class="btn ba sm" onclick="loadSched()">Ver</button>
 <button class="btn bg sm" id="btnProgMes" onclick="ncalAbrirProg('')">+ Programar persona</button>
 <button class="btn bb sm" id="btnPrintSched" onclick="printSched()">🖨 Imprimir</button>
+<button class="btn bb sm" onclick="grillaVerNueva()">🆕 Grilla nueva (beta)</button>
 </div>
 <div id="schedCont"></div>
 </div>
@@ -6068,6 +6069,69 @@ var btnPrint=document.getElementById('btnPrintSched');if(btnPrint)btnPrint.style
 
 function ncalGetPersonas(area){
   return Object.keys(ncalDatos[ncalAnio+'-'+ncalMes+'-'+area]||{});
+}
+
+// ===== GRILLA NUEVA (Pieza 5a · Etapa 2 sub-1) — render de SOLO LECTURA desde `grilla` =====
+// Preview: NO toca la grilla vieja (Paola sigue editando ahí). Colores = sistema de la app.
+// PERMISO = cian #06B6D4 (propuesta, no choca con T3 morado). Vacaciones ámbar, incapacidad rojo.
+var GRILLA_COLORES = { T1:'#4ADE80', T2:'#3B82F6', T3:'#8B5CF6', DESCANSO:'#9CA3AF', VACACIONES:'#F59E0B', INCAPACIDAD:'#EF4444', PERMISO:'#06B6D4' };
+function grillaTurnoCode(sid){return {SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'}[sid]||'';}
+function grillaHoraCorta(h){h=(h||'').slice(0,5);if(!h)return'';var p=h.split(':');var H=parseInt(p[0]||0,10);return (parseInt(p[1]||0,10)===0)?String(H):h;}
+function grillaLeyenda(color,txt){return '<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:10px;height:10px;border-radius:2px;background:'+color+';display:inline-block"></i>'+txt+'</span>';}
+function grillaVerNueva(){
+  var mes=ncalGetYM();
+  var cont=document.getElementById('schedCont');
+  cont.innerHTML='<div class="muted" style="padding:16px">Cargando grilla nueva…</div>';
+  rpc('grillaGetMes',{mes:mes},function(data){grillaRenderNueva(data);},function(e){cont.innerHTML='<div class="muted" style="padding:16px">No se pudo cargar. '+esc(e&&e.message||'')+' <button class="btn ba sm" onclick="grillaVerNueva()">Reintentar</button></div>';});
+}
+function grillaCelda(c){
+  if(!c) return '<div style="width:34px;height:30px;background:'+GRILLA_COLORES.DESCANSO+'22"></div>'; // sin celda = descanso (tenue)
+  if(c.estado==='TRABAJO'){
+    var t=grillaTurnoCode(c.shiftId), col=GRILLA_COLORES[t]||'#ccc';
+    var horas=(c.area!=='Recepcion'&&c.horaEntrada)?('<div style="font-size:8px;line-height:1.1">'+esc(grillaHoraCorta(c.horaEntrada))+'-'+esc(grillaHoraCorta(c.horaSalida))+'</div>'):'';
+    var dotPerm=c.novedadRef?'<div style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:'+GRILLA_COLORES.PERMISO+'"></div>':'';
+    var badge=c.esComodin?'<div style="font-size:7px;color:#3B82F6;font-weight:700">C</div>':(c.esMantenimiento?'<div style="font-size:7px;color:#F59E0B;font-weight:700">M</div>':'');
+    return '<div style="position:relative;width:34px;min-height:30px;background:'+col+'33;border:1px solid '+col+';color:#222;padding:1px"><b style="font-size:9px">'+t+'</b>'+horas+badge+dotPerm+'</div>';
+  }
+  var mapEst={DESCANSO:['DC','DESCANSO'],VACACIONES:['VAC','VACACIONES'],INCAPACIDAD:['INC','INCAPACIDAD'],PERMISO:['PER','PERMISO'],NO_VINO:['✕','INCAPACIDAD']};
+  var me=mapEst[c.estado]||['?','DESCANSO'], col=GRILLA_COLORES[me[1]]||'#9CA3AF';
+  return '<div style="width:34px;min-height:30px;background:'+col+'33;border:1px solid '+col+';color:#222"><b style="font-size:8px">'+me[0]+'</b></div>';
+}
+function grillaRenderNueva(data){
+  var cont=document.getElementById('schedCont');
+  var pm=data.mes.split('-'), y=parseInt(pm[0],10), m=parseInt(pm[1],10);
+  var ultimoDia=new Date(y,m,0).getDate();
+  var DS=['Do','Lu','Ma','Mi','Ju','Vi','Sa'], AREAS=['Recepcion','Camareria','Patio','Mantenimiento'];
+  var idx={}, personasPorArea={}, nombreDe={};
+  (data.cells||[]).forEach(function(c){
+    idx[c.area+'|'+c.staffId+'|'+c.fecha]=c;
+    if(!personasPorArea[c.area])personasPorArea[c.area]=[];
+    if(personasPorArea[c.area].indexOf(c.staffId)<0)personasPorArea[c.area].push(c.staffId);
+    nombreDe[c.staffId]=c.personName;
+  });
+  var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#555">'+
+    grillaLeyenda(GRILLA_COLORES.T1,'T1')+grillaLeyenda(GRILLA_COLORES.T2,'T2')+grillaLeyenda(GRILLA_COLORES.T3,'T3')+
+    grillaLeyenda(GRILLA_COLORES.DESCANSO,'Descanso')+grillaLeyenda(GRILLA_COLORES.VACACIONES,'Vacaciones')+
+    grillaLeyenda(GRILLA_COLORES.INCAPACIDAD,'Incapacidad')+grillaLeyenda(GRILLA_COLORES.PERMISO,'Permiso (propuesta)')+'</div>';
+  h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button> <span class="muted" style="font-size:11px">Vista beta de solo lectura desde la tabla nueva grilla.</span></div>';
+  AREAS.forEach(function(area){
+    var personas=personasPorArea[area]||[];
+    if(!personas.length)return;
+    h+='<div style="font-weight:600;margin:14px 0 6px">'+esc(area)+'</div>';
+    h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;min-width:150px">Persona</th>';
+    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#c00':'#888')+'">'+DS[dow]+'<br>'+d+'</th>';}
+    h+='</tr></thead><tbody>';
+    personas.forEach(function(sid){
+      h+='<tr><td style="position:sticky;left:0;background:#fff;padding:4px 8px;white-space:nowrap">'+esc(nombreDe[sid]||sid)+'</td>';
+      for(var d=1;d<=ultimoDia;d++){
+        var fecha=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        h+='<td style="padding:0;text-align:center">'+grillaCelda(idx[area+'|'+sid+'|'+fecha])+'</td>';
+      }
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+  });
+  cont.innerHTML=h;
 }
 
 function ncalRender(){
