@@ -6117,7 +6117,7 @@ function grillaRenderNueva(data){
     grillaLeyenda(GRILLA_COLORES.T1,'T1')+grillaLeyenda(GRILLA_COLORES.T2,'T2')+grillaLeyenda(GRILLA_COLORES.T3,'T3')+
     grillaLeyenda(GRILLA_COLORES.DESCANSO,'Descanso')+grillaLeyenda(GRILLA_COLORES.VACACIONES,'Vacaciones')+
     grillaLeyenda(GRILLA_COLORES.INCAPACIDAD,'Incapacidad')+grillaLeyenda(GRILLA_COLORES.PERMISO,'Permiso (propuesta)')+'</div>';
-  h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button> <span class="muted" style="font-size:11px">Vista beta de solo lectura desde la tabla nueva grilla.</span></div>';
+  h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button>'+(isAdmin?' <button class="btn bg sm" onclick="grillaAbrirVacaciones()">🌴 Vacaciones</button>':'')+' <span class="muted" style="font-size:11px">'+(isAdmin?'Tocá una celda para editarla':'Solo lectura')+' · beta desde la tabla grilla.</span></div>';
   AREAS.forEach(function(area){
     var personas=personasPorArea[area]||[];
     if(!personas.length)return;
@@ -6208,6 +6208,37 @@ function grillaAplicarEstado(estado){
     return;
   }
   grillaGuardarCeldaRPC({staffId:_gmCtx.sid,fecha:_gmCtx.fecha,estado:estado},'Celda actualizada');
+}
+
+// ---- Vacaciones por rango (Sub-etapa 3): pinta el rango ámbar + registra en Personal ----
+function grillaAbrirVacaciones(){
+  grillaCerrarMenu();
+  var lista=[];
+  if(typeof staffList!=='undefined' && staffList && staffList.length){
+    lista=staffList.filter(function(s){return (s.type||'nomina')!=='extra';}).map(function(s){return {id:s.id,name:s.name,area:s.area||''};});
+  } else { var nm=window._grillaNombre||{}; lista=Object.keys(nm).map(function(id){return {id:id,name:nm[id],area:''};}); }
+  var opts=lista.map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.name)+(s.area?(' ('+esc(s.area)+')'):'')+'</option>';}).join('');
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  ov.onclick=function(e){if(e.target===ov)grillaCerrarMenu();};
+  var h='<div style="background:#fff;border-radius:14px;padding:18px;max-width:360px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.3)">';
+  h+='<div style="font-weight:700;font-size:15px;margin-bottom:2px">🌴 Vacaciones por rango</div>';
+  h+='<div style="color:#888;font-size:11px;margin-bottom:12px">Pinta el rango en la grilla (ámbar) y registra la salida/reingreso en Personal.</div>';
+  h+='<label style="font-size:12px;color:#555">Persona</label><select id="gvPersona" style="width:100%;margin:4px 0 10px;padding:8px">'+opts+'</select>';
+  h+='<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#555">Primer día</label><input id="gvDesde" type="date" style="width:100%;margin-top:4px"></div><div style="flex:1"><label style="font-size:12px;color:#555">Último día</label><input id="gvHasta" type="date" style="width:100%;margin-top:4px"></div></div>';
+  h+='<button class="btn bg sm" style="width:100%;margin-top:12px" onclick="grillaGuardarVacaciones()">Guardar vacaciones</button>';
+  h+='<button class="btn bb sm" style="width:100%;margin-top:6px" onclick="grillaCerrarMenu()">Cancelar</button></div>';
+  ov.innerHTML=h;
+  document.body.appendChild(ov);
+  _grillaMenu=ov;
+}
+function grillaGuardarVacaciones(){
+  var sid=document.getElementById('gvPersona').value;
+  var desde=document.getElementById('gvDesde').value, hasta=document.getElementById('gvHasta').value;
+  if(!sid){toast('Elegí la persona','err');return;}
+  if(!desde||!hasta){toast('Poné primer y último día','err');return;}
+  if(hasta<desde){toast('El último día no puede ser antes del primero','err');return;}
+  rpc('grillaVacaciones',{token:sess.token,staffId:sid,desde:desde,hasta:hasta},function(d){toast('Vacaciones guardadas ('+(d.dias||'?')+' días) · registrado en Personal','ok');grillaCerrarMenu();grillaVerNueva();},function(e){toast(e.message||'Error','err');});
 }
 
 function ncalRender(){

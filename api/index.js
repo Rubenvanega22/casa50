@@ -542,6 +542,7 @@ module.exports = async function handler(req, res) {
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
       case 'grillaGetMes':      return await apiGrillaGetMes(payload, res);
       case 'grillaGuardarCelda': return await apiGrillaGuardarCelda(payload, res);
+      case 'grillaVacaciones':   return await apiGrillaVacaciones(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3212,6 +3213,49 @@ async function apiGrillaGuardarCelda(p, res) {
   const { error } = await supabase.from('grilla').upsert(row, { onConflict: 'motel_id,staff_id,fecha' });
   if (error) return err(res, 'No se pudo guardar la celda');
   return ok(res, { estado, fecha, staffId });
+}
+
+// ===== PIEZA 5a (Etapa 2 · sub-3) — VACACIONES por rango desde la grilla =====
+// Gate REAL requireAdmin. Pinta el rango [desde,hasta] como VACACIONES en `grilla` Y registra
+// la salida/reingreso en Personal (mismo efecto que apiSaveVacacionesEvent: historial +
+// staff.fecha_ingreso/fecha_vacaciones). reingreso = último día + 1. La ACCIÓN vive en la grilla;
+// el REGISTRO sigue en Personal (aparece solo en la ficha del colaborador).
+async function apiGrillaVacaciones(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  const desde = String(p.desde || '').trim();
+  const hasta = String(p.hasta || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) return err(res, 'Fechas invalidas');
+  if (hasta < desde) return err(res, 'El ultimo dia no puede ser antes del primero');
+  const { data: st } = await tSelect('staff', 'id,name,rol,area,fecha_ingreso').eq('id', staffId).maybeSingle();
+  if (!st) return err(res, 'Persona no encontrada');
+
+  // reingreso = ultimo dia + 1 ; proxima tentativa = reingreso + 1 año (igual que el flujo de Personal)
+  const rd = new Date(hasta + 'T00:00:00'); rd.setDate(rd.getDate() + 1);
+  const reingreso = rd.getFullYear() + '-' + String(rd.getMonth() + 1).padStart(2, '0') + '-' + String(rd.getDate()).padStart(2, '0');
+  const prox = new Date(reingreso + 'T00:00:00'); prox.setFullYear(prox.getFullYear() + 1);
+  const proxStr = prox.getFullYear() + '-' + String(prox.getMonth() + 1).padStart(2, '0') + '-' + String(prox.getDate()).padStart(2, '0');
+
+  const { data: vh } = await tInsert('staff_vacaciones_historial', {
+    staff_id: staffId, fecha_ingreso: st.fecha_ingreso, fecha_salida_vacaciones: desde, fecha_reingreso: reingreso
+  }).select('id').maybeSingle();
+  await tUpdate('staff', { fecha_ingreso: reingreso, fecha_vacaciones: proxStr }).eq('id', staffId);
+
+  // Pintar el rango en grilla (VACACIONES). shift/horas se preservan en updates (revert los restaura).
+  const area = areaGrillaDeStaff(st);
+  const now = Date.now();
+  const rows = [];
+  const cur = new Date(desde + 'T00:00:00'), end = new Date(hasta + 'T00:00:00');
+  while (cur <= end) {
+    const f = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0') + '-' + String(cur.getDate()).padStart(2, '0');
+    rows.push({ motel_id: MOTEL_ID, staff_id: staffId, person_name: st.name || '', fecha: f, area: area,
+      estado: 'VACACIONES', novedad_ref: (vh ? vh.id : null), anulado: false, editado_por: s.n || '', editado_ms: now });
+    cur.setDate(cur.getDate() + 1);
+  }
+  if (rows.length) await supabase.from('grilla').upsert(rows, { onConflict: 'motel_id,staff_id,fecha' });
+  return ok(res, { dias: rows.length, reingreso });
 }
 
 // ==================== CONFIG ====================
