@@ -549,6 +549,7 @@ module.exports = async function handler(req, res) {
       case 'staffConversacion':   return await apiStaffConversacion(payload, res);
       case 'staffResponder':      return await apiStaffResponder(payload, res);
       case 'resolverPermiso':     return await apiResolverPermiso(payload, res);
+      case 'verSoportePermiso':   return await apiVerSoportePermiso(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3389,6 +3390,19 @@ async function apiResolverPermiso(p, res) {
     } catch (e) { grillaAviso = 'El permiso se aprobó, pero no se pudo pintar la grilla.'; }
   }
   return ok(res, { estado: decision, grillaAviso });
+}
+
+// apiVerSoportePermiso: signed URL 60s de la foto de soporte del permiso (patron descargarDocumento).
+async function apiVerSoportePermiso(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const permisoId = Number(p.permisoId || 0);
+  if (!permisoId) return err(res, 'Falta el permiso');
+  const { data: perm } = await tSelect('staff_permisos', 'soporte_bucket,soporte_path').eq('id', permisoId).maybeSingle();
+  if (!perm || !perm.soporte_path) return err(res, 'Este permiso no tiene soporte');
+  const { data: signed, error } = await supabase.storage.from(perm.soporte_bucket || 'permisos').createSignedUrl(perm.soporte_path, 60);
+  if (error || !signed) return err(res, 'No se pudo generar el enlace');
+  return ok(res, { url: signed.signedUrl });
 }
 
 // ==================== CONFIG ====================

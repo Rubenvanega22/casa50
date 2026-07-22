@@ -9649,22 +9649,32 @@ function refreshChatBadges(){
   renderStaff();renderExtras();
   rpc('chatEstado',{token:sess.token},function(d){ window._chatBadges=d.porStaff||{}; window._chatEstado=d; renderStaff();renderExtras(); if(typeof renderAvisoGlobal==='function')renderAvisoGlobal(); },function(){});
 }
+var _chatPoll=null;
+function startChatPoll(staffId){ stopChatPoll(); _chatPoll=setInterval(function(){ var box=document.getElementById('chat-'+staffId); if(!box||box.style.display==='none'){ stopChatPoll(); return; } loadConversacionAdmin(staffId,true); },10000); }
+function stopChatPoll(){ if(_chatPoll){ clearInterval(_chatPoll); _chatPoll=null; } }
 function toggleChat(staffId){
   var box=document.getElementById('chat-'+staffId); if(!box)return;
   if(box.style.display==='none'){
     document.querySelectorAll('[id^="chat-"]').forEach(function(el){ if(el.id!=='chat-'+staffId) el.style.display='none'; });
-    box.style.display='block'; loadConversacionAdmin(staffId);
-  } else { box.style.display='none'; }
+    box.style.display='block'; loadConversacionAdmin(staffId); startChatPoll(staffId);
+  } else { box.style.display='none'; stopChatPoll(); }
 }
-function loadConversacionAdmin(staffId){
+function loadConversacionAdmin(staffId, silent){
   var box=document.getElementById('chat-'+staffId); if(!box)return;
-  box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">Cargando…</div>';
+  if(!silent) box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">Cargando…</div>';
   rpc('staffConversacion',{token:sess.token,staffId:staffId},function(d){
+    // en sondeo silencioso, no re-render si el admin está escribiendo (no perder foco ni texto)
+    var inp0=document.getElementById('chatinp-'+staffId);
+    if(silent && inp0 && document.activeElement===inp0) return;
     renderConversacionAdmin(staffId,d.mensajes||[]);
     var chip=document.getElementById('chatchip-'+staffId); if(chip){var b=chip.querySelector('span'); if(b)b.remove();}
     if(window._chatBadges) delete window._chatBadges[staffId];
-    if(typeof renderAvisoGlobal==='function') rpc('chatEstado',{token:sess.token},function(d2){window._chatEstado=d2;renderAvisoGlobal();},function(){});
-  },function(e){ box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">No se pudo cargar. '+esc(e.message||'')+'</div>'; });
+    if(!silent && typeof renderAvisoGlobal==='function') rpc('chatEstado',{token:sess.token},function(d2){window._chatEstado=d2;renderAvisoGlobal();},function(){});
+  },function(e){ if(!silent) box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">No se pudo cargar. '+esc(e.message||'')+'</div>'; });
+}
+function verSoportePermisoAdmin(permisoId){
+  toast('Abriendo soporte…','ok');
+  rpc('verSoportePermiso',{token:sess.token,permisoId:permisoId},function(d){ if(d.url) window.open(d.url,'_blank'); else toast('No disponible','err'); },function(e){ toast(e.message||'Error','err'); });
 }
 function horaCortaChat(ms){ if(!ms)return''; var d=new Date(Number(ms)); var H=d.getHours(),M=d.getMinutes(); var ap=H>=12?'p.m.':'a.m.'; H=H%12; if(H===0)H=12; return H+':'+String(M).padStart(2,'0')+' '+ap; }
 function permisoTipoLabel(t){ return {CITA_MEDICA:'Cita médica',CALAMIDAD:'Calamidad',DILIGENCIA:'Diligencia personal',LICENCIA:'Licencia',OTRO:'Otro'}[t]||t; }
@@ -9673,6 +9683,7 @@ function permisoCardAdmin(p,staffId){
   var h='<div style="align-self:flex-start;max-width:94%;background:#1a1a24;border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:10px 12px">';
   h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:5px">📋 Solicitud de permiso</div>';
   h+='<div style="font-size:12px;color:#c9cdd6;line-height:1.6">Tipo: <b style="color:#e5e7eb">'+esc(permisoTipoLabel(p.tipo))+'</b><br>Fecha: <b style="color:#e5e7eb">'+esc(p.fecha)+'</b> · '+esc(dur)+(p.motivo?('<br>Motivo: <span style="color:#9ca3af">'+esc(p.motivo)+'</span>'):'')+'</div>';
+  if(p.tieneSoporte) h+='<button class="btn xs" style="margin-top:7px;background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="verSoportePermisoAdmin('+p.id+')">👁 Ver soporte</button>';
   if(p.estado==='PENDIENTE'){
     h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">';
     h+='<button class="btn xs" style="background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e" onclick="resolverPermiso('+p.id+',\'APROBADO\',true,\''+esc(staffId)+'\')">✓ Aprobar · Remunerado</button>';
@@ -9688,6 +9699,9 @@ function permisoCardAdmin(p,staffId){
 }
 function renderConversacionAdmin(staffId,msgs){
   var box=document.getElementById('chat-'+staffId); if(!box)return;
+  var prevInp=document.getElementById('chatinp-'+staffId); var prevVal=prevInp?prevInp.value:'';
+  var prevSc=document.getElementById('chatscroll-'+staffId);
+  var nearBottom=!prevSc||(prevSc.scrollHeight-prevSc.scrollTop-prevSc.clientHeight<60); var prevTop=prevSc?prevSc.scrollTop:0;
   var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:10px;padding:10px">';
   h+='<div id="chatscroll-'+esc(staffId)+'" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:8px">';
   if(!msgs.length)h+='<div class="muted" style="font-size:12px;text-align:center;padding:10px">Sin mensajes todavía.</div>';
@@ -9700,7 +9714,8 @@ function renderConversacionAdmin(staffId,msgs){
   h+='<div style="display:flex;gap:6px"><input id="chatinp-'+esc(staffId)+'" placeholder="Escribe a la persona…" style="flex:1;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;color:#e5e7eb;font-size:12px" onkeydown="if(event.key===\'Enter\')enviarRespuestaAdmin(\''+esc(staffId)+'\')"><button class="btn bg sm" onclick="enviarRespuestaAdmin(\''+esc(staffId)+'\')">Enviar</button></div>';
   h+='</div>';
   box.innerHTML=h;
-  var sc=document.getElementById('chatscroll-'+staffId); if(sc)sc.scrollTop=sc.scrollHeight;
+  var sc=document.getElementById('chatscroll-'+staffId); if(sc)sc.scrollTop=nearBottom?sc.scrollHeight:prevTop;
+  var inp=document.getElementById('chatinp-'+staffId); if(inp&&prevVal)inp.value=prevVal;
 }
 function enviarRespuestaAdmin(staffId){
   var inp=document.getElementById('chatinp-'+staffId); if(!inp)return;
