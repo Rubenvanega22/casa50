@@ -9791,10 +9791,25 @@ function renderDocumentos(staffId,data){
   if(!inc.length) h+='<div class="muted" style="font-size:11px;padding:2px 0 8px">Sin incapacidades.</div>';
   inc.forEach(function(d){
     var est=d.estado==='VALIDADA'?'<span style="color:#22c55e">✓ Validada</span>':(d.estado==='RECHAZADA'?'<span style="color:#f87171">✕ Rechazada</span>':'<span style="color:#f59e0b">⏳ En revisión</span>');
-    h+='<div style="display:flex;align-items:center;gap:8px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
-    h+='<div style="flex:1"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+incRangoDoc(d.incDesde,d.incDias)+' · '+est+'</div></div>';
+    h+='<div style="background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+    h+='<div style="flex:1;min-width:120px"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+incRangoDoc(d.incDesde,d.incDias)+' · '+est+'</div></div>';
     h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">👁 Ver</button>';
-    if(d.estado==='EN_REVISION') h+='<span style="font-size:10px;color:#6b7280">validar: Parte 3</span>';
+    if(d.estado==='EN_REVISION'){
+      h+='<button class="btn xs" style="background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e" onclick="mostrarValInc('+d.id+')">✓ Validar</button>';
+      h+='<button class="btn xs" style="background:rgba(239,68,68,.13);border:1px solid #ef4444;color:#f87171" onclick="rechazarInc('+d.id+',\''+esc(staffId)+'\')">✕ Rechazar</button>';
+    }
+    h+='</div>';
+    if(d.estado==='EN_REVISION'){
+      h+='<div id="valinc-'+d.id+'" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #3a3a45">';
+      h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:5px">Corregí fecha/días si el colaborador los puso mal (esto pinta las celdas rojas):</div>';
+      h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+      h+='<label style="font-size:10px;color:#c9cdd6">Desde <input type="date" id="vd-'+d.id+'" value="'+esc(d.incDesde||'')+'" style="background:#161b26;border:1px solid #3a3a45;border-radius:6px;padding:5px;color:#e5e7eb;font-size:11px"></label>';
+      h+='<label style="font-size:10px;color:#c9cdd6">Días <input type="number" id="vn-'+d.id+'" value="'+(d.incDias||'')+'" min="1" max="365" style="width:60px;background:#161b26;border:1px solid #3a3a45;border-radius:6px;padding:5px;color:#e5e7eb;font-size:11px"></label>';
+      h+='<button class="btn bg xs" onclick="confirmarValInc('+d.id+',\''+esc(staffId)+'\')">Confirmar validación</button>';
+      h+='<button class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#9ca3af" onclick="mostrarValInc('+d.id+',true)">Cancelar</button>';
+      h+='</div></div>';
+    }
     h+='</div>';
   });
   h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin:10px 0 6px">📁 Documentos de empresa</div>';
@@ -9842,6 +9857,25 @@ function descargarDocAdmin(docId){
 }
 function toggleVisDoc(docId,visible,staffId){
   rpc('toggleVisibilidadDoc',{token:sess.token,docId:docId,visible:visible},function(){ loadDocumentos(staffId); },function(e){ toast(e.message||'Error','err'); });
+}
+// Validar incapacidad con corrección de fecha/días -> celdas rojas a la grilla (Parte 3)
+function mostrarValInc(docId,cerrar){
+  var f=document.getElementById('valinc-'+docId); if(!f)return;
+  f.style.display=cerrar?'none':(f.style.display==='none'?'block':'none');
+}
+function confirmarValInc(docId,staffId){
+  var vd=(document.getElementById('vd-'+docId)||{}).value, vn=(document.getElementById('vn-'+docId)||{}).value;
+  if(!vd){ toast('Poné la fecha inicio','err'); return; }
+  if(!vn||Number(vn)<1){ toast('Poné los días','err'); return; }
+  rpc('validarIncapacidad',{token:sess.token,docId:docId,decision:'VALIDADA',incDesde:vd,incDias:Number(vn)},function(d){
+    toast('✓ Incapacidad validada'+(d.grillaAviso?' — '+d.grillaAviso:''),'ok'); loadDocumentos(staffId);
+  },function(e){ toast(e.message||'Error','err'); });
+}
+function rechazarInc(docId,staffId){
+  var com=prompt('Motivo del rechazo (para el colaborador):','')||'';
+  rpc('validarIncapacidad',{token:sess.token,docId:docId,decision:'RECHAZADA',comentario:com},function(){
+    toast('Incapacidad rechazada','ok'); loadDocumentos(staffId);
+  },function(e){ toast(e.message||'Error','err'); });
 }
 
 // Pestañas Nómina / Extras del panel Personal
