@@ -6102,6 +6102,7 @@ function grillaRenderNueva(data){
   var pm=data.mes.split('-'), y=parseInt(pm[0],10), m=parseInt(pm[1],10);
   var ultimoDia=new Date(y,m,0).getDate();
   var DS=['Do','Lu','Ma','Mi','Ju','Vi','Sa'], AREAS=['Recepcion','Camareria','Patio','Mantenimiento'];
+  var isAdmin=sess&&sess.userRole==='ADMIN';
   var idx={}, personasPorArea={}, nombreDe={};
   (data.cells||[]).forEach(function(c){
     idx[c.area+'|'+c.staffId+'|'+c.fecha]=c;
@@ -6125,13 +6126,80 @@ function grillaRenderNueva(data){
       h+='<tr><td style="position:sticky;left:0;background:#fff;padding:4px 8px;white-space:nowrap">'+esc(nombreDe[sid]||sid)+'</td>';
       for(var d=1;d<=ultimoDia;d++){
         var fecha=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-        h+='<td style="padding:0;text-align:center">'+grillaCelda(idx[area+'|'+sid+'|'+fecha])+'</td>';
+        var tdAttr=isAdmin?(' onclick="grillaAbrirMenuCelda(\''+area+'\',\''+sid+'\',\''+fecha+'\')" style="padding:0;text-align:center;cursor:pointer"'):' style="padding:0;text-align:center"';
+        h+='<td'+tdAttr+'>'+grillaCelda(idx[area+'|'+sid+'|'+fecha])+'</td>';
       }
       h+='</tr>';
     });
     h+='</tbody></table></div>';
   });
+  window._grillaIdx=idx; window._grillaNombre=nombreDe;
   cont.innerHTML=h;
+}
+
+// ---- Menú de celda (Sub-etapa 2): tocar persona-día -> opciones con guardado POR CELDA ----
+var _gmCtx=null, _gmTurnoSel=null, _grillaMenu=null;
+var GM_DIAS=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+var GM_MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function grillaFechaLarga(f){var p=f.split('-');var d=new Date(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10));return GM_DIAS[d.getDay()]+' '+parseInt(p[2],10)+' '+GM_MESES[parseInt(p[1],10)-1];}
+function grillaEstadoLabel(e){return {TRABAJO:'Trabajo',DESCANSO:'Descanso',VACACIONES:'Vacaciones',INCAPACIDAD:'Incapacidad',PERMISO:'Permiso',NO_VINO:'No vino'}[e]||e;}
+function grillaCerrarMenu(){if(_grillaMenu){_grillaMenu.remove();_grillaMenu=null;}_gmCtx=null;_gmTurnoSel=null;}
+function grillaAbrirMenuCelda(area,sid,fecha){
+  grillaCerrarMenu();
+  var c=(window._grillaIdx||{})[area+'|'+sid+'|'+fecha]||null;
+  var nombre=(window._grillaNombre||{})[sid]||sid;
+  var est=c?c.estado:'DESCANSO';
+  _gmCtx={area:area,sid:sid,fecha:fecha,cell:c};
+  _gmTurnoSel=(c&&c.estado==='TRABAJO')?grillaTurnoCode(c.shiftId):null;
+  var detTurno=(c&&c.estado==='TRABAJO'&&c.shiftId)?(' ('+grillaTurnoCode(c.shiftId)+' '+esc(c.horaEntrada||'')+'-'+esc(c.horaSalida||'')+')'):'';
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  ov.onclick=function(e){if(e.target===ov)grillaCerrarMenu();};
+  var h='<div style="background:#fff;border-radius:14px;padding:18px;max-width:340px;width:92%;box-shadow:0 12px 40px rgba(0,0,0,.3)">';
+  h+='<div style="font-weight:700;font-size:15px">'+esc(nombre)+'</div>';
+  h+='<div style="color:#888;font-size:12px">'+esc(grillaFechaLarga(fecha))+' · '+esc(area)+'</div>';
+  h+='<div style="font-size:11px;color:#aaa;margin:2px 0 12px">Estado actual: <b>'+grillaEstadoLabel(est)+'</b>'+detTurno+'</div>';
+  h+='<div id="gmTurnoForm" style="display:none;margin-bottom:10px;padding:10px;background:#f5f5f5;border-radius:10px">';
+  h+='<div style="display:flex;gap:6px;margin-bottom:8px">'+['T1','T2','T3'].map(function(t){return '<button class="btn sm" id="gmT_'+t+'" style="flex:1;background:'+GRILLA_COLORES[t]+'22;border:1px solid '+GRILLA_COLORES[t]+'" onclick="grillaSetTurno(\''+t+'\')">'+t+'</button>';}).join('')+'</div>';
+  h+='<div style="display:flex;gap:6px"><input id="gmEnt" type="time" style="flex:1"><input id="gmSal" type="time" style="flex:1"></div>';
+  h+='<button class="btn bg sm" style="width:100%;margin-top:8px" onclick="grillaGuardarCeldaTrabajo()">Guardar turno</button></div>';
+  h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaMostrarTurnoForm()">🕐 Cambiar turno / horas</button>';
+  h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'DESCANSO\')">⚪ Descanso</button>';
+  h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'INCAPACIDAD\')">🔴 Incapacidad</button>';
+  h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'PERMISO\')">🟦 Permiso</button>';
+  if(est!=='TRABAJO')h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'TRABAJO_REVERT\')">↩️ Volver a trabajo normal</button>';
+  h+='<button class="btn bb sm" style="width:100%;margin-top:6px" onclick="grillaCerrarMenu()">Cerrar</button></div>';
+  ov.innerHTML=h;
+  document.body.appendChild(ov);
+  _grillaMenu=ov;
+}
+function grillaMostrarTurnoForm(){var f=document.getElementById('gmTurnoForm');if(f)f.style.display='block';if(_gmTurnoSel)grillaSetTurno(_gmTurnoSel);}
+function grillaSetTurno(t){
+  _gmTurnoSel=t;
+  ['T1','T2','T3'].forEach(function(x){var b=document.getElementById('gmT_'+x);if(b)b.style.outline=(x===t)?'2px solid #222':'';});
+  var def={T1:['06:00','14:00'],T2:['14:00','21:00'],T3:['21:00','06:00']}[t];
+  var e=document.getElementById('gmEnt'),s=document.getElementById('gmSal');
+  if(e)e.value=def[0]; if(s)s.value=def[1];
+}
+function grillaGuardarCeldaRPC(body,okmsg){
+  body.token=sess.token;
+  rpc('grillaGuardarCelda',body,function(){toast(okmsg||'Guardado','ok');grillaCerrarMenu();grillaVerNueva();},function(e){toast(e.message||'Error','err');});
+}
+function grillaGuardarCeldaTrabajo(){
+  if(!_gmTurnoSel){toast('Elegí el turno','err');return;}
+  var ent=document.getElementById('gmEnt').value,sal=document.getElementById('gmSal').value;
+  if(!ent||!sal){toast('Poné entrada y salida','err');return;}
+  var shift={T1:'SHIFT_1',T2:'SHIFT_2',T3:'SHIFT_3'}[_gmTurnoSel];
+  grillaGuardarCeldaRPC({staffId:_gmCtx.sid,fecha:_gmCtx.fecha,estado:'TRABAJO',shiftId:shift,horaEntrada:ent,horaSalida:sal},'Turno guardado');
+}
+function grillaAplicarEstado(estado){
+  if(estado==='TRABAJO_REVERT'){
+    var c=_gmCtx.cell;
+    if(c&&c.shiftId){grillaGuardarCeldaRPC({staffId:_gmCtx.sid,fecha:_gmCtx.fecha,estado:'TRABAJO',shiftId:c.shiftId,horaEntrada:c.horaEntrada,horaSalida:c.horaSalida},'Vuelto a trabajo');}
+    else{grillaMostrarTurnoForm();}
+    return;
+  }
+  grillaGuardarCeldaRPC({staffId:_gmCtx.sid,fecha:_gmCtx.fecha,estado:estado},'Celda actualizada');
 }
 
 function ncalRender(){

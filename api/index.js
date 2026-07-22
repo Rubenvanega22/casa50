@@ -541,6 +541,7 @@ module.exports = async function handler(req, res) {
       case 'getSchedule':       return await apiGetSchedule(payload, res);
       case 'saveSchedule':      return await apiSaveSchedule(payload, res);
       case 'grillaGetMes':      return await apiGrillaGetMes(payload, res);
+      case 'grillaGuardarCelda': return await apiGrillaGuardarCelda(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
@@ -3146,6 +3147,71 @@ async function apiGrillaGetMes(p, res) {
     novedadRef: r.novedad_ref || null
   }));
   return ok(res, { mes, cells });
+}
+
+// Area normalizada de la grilla a partir del rol (o el area libre como fallback).
+function areaGrillaDeStaff(st) {
+  const rol = String((st && st.rol) || '').toUpperCase();
+  if (rol === 'RECEPCION') return 'Recepcion';
+  if (rol === 'CAMARERA') return 'Camareria';
+  if (rol === 'PATIERO') return 'Patio';
+  if (rol === 'MANTENIMIENTO') return 'Mantenimiento';
+  const a = String((st && st.area) || '').toLowerCase();
+  if (a.startsWith('camarer')) return 'Camareria';
+  if (a.startsWith('patier') || a === 'patio') return 'Patio';
+  if (a.startsWith('recep')) return 'Recepcion';
+  if (a.startsWith('manten')) return 'Mantenimiento';
+  return String((st && st.area) || '');
+}
+
+// ===== PIEZA 5a (Etapa 2 · sub-2) — guardado POR CELDA (upsert individual + auditoria) =====
+// Gate REAL de admin (requireAdmin firmado, NO el userRole del body). Nunca reescribe el mes.
+// TRABAJO exige turno+horas; las novedades PRESERVAN shift/horas actuales (para poder revertir).
+async function apiGrillaGuardarCelda(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  const fecha = String(p.fecha || '').trim();
+  const estado = String(p.estado || '').trim().toUpperCase();
+  const ESTADOS = ['TRABAJO', 'DESCANSO', 'VACACIONES', 'INCAPACIDAD', 'PERMISO', 'NO_VINO'];
+  if (!staffId) return err(res, 'Falta la persona');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res, 'Fecha invalida');
+  if (ESTADOS.indexOf(estado) < 0) return err(res, 'Estado invalido');
+
+  const { data: st } = await tSelect('staff', 'id,name,rol,area').eq('id', staffId).maybeSingle();
+  if (!st) return err(res, 'Persona no encontrada');
+  const { data: actual } = await tSelect('grilla', '*').eq('staff_id', staffId).eq('fecha', fecha).maybeSingle();
+
+  let shiftId, he, hs;
+  if (estado === 'TRABAJO') {
+    shiftId = String(p.shiftId || '').trim();
+    he = String(p.horaEntrada || '').trim();
+    hs = String(p.horaSalida || '').trim();
+    if (!/^SHIFT_[123]$/.test(shiftId)) return err(res, 'Elegi el turno');
+    if (!/^\d{2}:\d{2}$/.test(he) || !/^\d{2}:\d{2}$/.test(hs)) return err(res, 'Pone entrada y salida');
+  } else {
+    // novedad: preserva el turno/horas actuales para que "volver a trabajo" los restaure
+    shiftId = actual ? (actual.shift_id || null) : null;
+    he = actual ? (actual.hora_entrada || '') : '';
+    hs = actual ? (actual.hora_salida || '') : '';
+  }
+
+  const now = Date.now();
+  const valorAnterior = actual ? {
+    estado: actual.estado, shift_id: actual.shift_id, hora_entrada: actual.hora_entrada,
+    hora_salida: actual.hora_salida, es_comodin: actual.es_comodin,
+    es_mantenimiento: actual.es_mantenimiento, novedad_ref: actual.novedad_ref
+  } : null;
+  const row = {
+    motel_id: MOTEL_ID, staff_id: staffId, person_name: st.name || '', fecha,
+    shift_id: shiftId, area: areaGrillaDeStaff(st), hora_entrada: he, hora_salida: hs,
+    estado, novedad_ref: null, anulado: false,
+    editado_por: s.n || '', editado_ms: now, valor_anterior: valorAnterior
+  };
+  if (!actual) { row.creado_por = s.n || ''; row.creado_ms = now; }
+  const { error } = await supabase.from('grilla').upsert(row, { onConflict: 'motel_id,staff_id,fecha' });
+  if (error) return err(res, 'No se pudo guardar la celda');
+  return ok(res, { estado, fecha, staffId });
 }
 
 // ==================== CONFIG ====================
