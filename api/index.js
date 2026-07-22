@@ -3079,7 +3079,48 @@ async function apiSaveSchedule(p, res) {
     const rows=entries.map(e=>({week_start:ws,shift_id:String(e.shiftId||''),area:String(e.area||''),person_name:String(e.personName||''),day_of_week:String(e.dayOfWeek||''),type:String(e.type||'normal'),hora_entrada:String(e.horaEntrada||''),hora_salida:String(e.horaSalida||''),extra_nombre:String(e.extraNombre||''),extra_turno:String(e.extraTurno||'')}));
     await tInsert('schedule',rows);
   }
-  return ok(res,{saved:entries.length,weekStart:ws});
+
+  // ===== ESPEJO a `grilla` (Pieza 5a) — read-model que lee la app colaborador =====
+  // Va en try/catch APARTE: si el espejo falla, el guardado de schedule (arriba, ya hecho)
+  // NO se afecta. Resuelve staff_id por nombre como la migracion; nombres sin persona se
+  // reportan (grillaAviso) pero NO bloquean. `grilla` no esta en TENANT_TABLES -> motel_id explicito.
+  let grillaAviso = null;
+  try {
+    const norm = x => String(x||'').trim().toLowerCase();
+    const normArea = a => { const x=norm(a);
+      if(x.startsWith('camarer'))return 'Camareria';
+      if(x.startsWith('patier')||x==='patio')return 'Patio';
+      if(x.startsWith('recep'))return 'Recepcion';
+      if(x.startsWith('manten'))return 'Mantenimiento';
+      return String(a||''); };
+    const { data: staffRows } = await tSelect('staff','id,name');
+    const nameToId = {}; (staffRows||[]).forEach(r => { nameToId[norm(r.name)] = r.id; });
+    const idOf = e => nameToId[norm(e.personName)];
+    // 1) borrar en grilla el MES de las personas afectadas (solo celdas TRABAJO: preserva novedades)
+    const primerDia = mesPrefix + '-01';
+    const [gy,gm] = mesPrefix.split('-').map(Number);
+    const mesSig = (gm===12) ? ((gy+1)+'-01-01') : (gy+'-'+String(gm+1).padStart(2,'0')+'-01');
+    const staffAfectados = [...new Set(entries.map(idOf).filter(Boolean))];
+    for (const sid of staffAfectados) {
+      await supabase.from('grilla').delete()
+        .eq('motel_id',MOTEL_ID).eq('staff_id',sid).eq('estado','TRABAJO').eq('anulado',false)
+        .gte('fecha',primerDia).lt('fecha',mesSig);
+    }
+    // 2) upsert de las celdas que resuelven persona y tienen fecha real (doble turno -> onConflict)
+    const gRows = entries
+      .filter(e => idOf(e) && /^\d{4}-\d{2}-\d{2}$/.test(String(e.dayOfWeek||'')))
+      .map(e => ({ motel_id:MOTEL_ID, staff_id:idOf(e), person_name:String(e.personName||''),
+        fecha:String(e.dayOfWeek), shift_id:String(e.shiftId||''), area:normArea(e.area),
+        hora_entrada:String(e.horaEntrada||''), hora_salida:String(e.horaSalida||''),
+        estado:'TRABAJO', creado_ms:Date.now() }));
+    if (gRows.length) await supabase.from('grilla').upsert(gRows,{onConflict:'motel_id,staff_id,fecha'});
+    const sinResolver = [...new Set(entries.map(e=>e.personName).filter(pn => !nameToId[norm(pn)]))];
+    if (sinResolver.length) { grillaAviso = 'Sin persona vinculada (no llegan a la app): ' + sinResolver.join(', '); console.warn('[grilla espejo] '+grillaAviso); }
+  } catch (e) {
+    grillaAviso = 'El espejo a grilla no se actualizo (el calendario SI se guardo).';
+    console.warn('[grilla espejo] fallo:', e && e.message);
+  }
+  return ok(res,{saved:entries.length,weekStart:ws,grillaAviso});
 }
 
 // ==================== CONFIG ====================
