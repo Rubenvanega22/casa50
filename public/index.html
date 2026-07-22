@@ -6086,7 +6086,26 @@ function grillaVerNueva(){
   var mes=ncalGetYM();
   var cont=document.getElementById('schedCont');
   cont.innerHTML='<div class="muted" style="padding:16px">Cargando grilla nueva…</div>';
-  rpc('grillaGetMes',{mes:mes},function(data){grillaRenderNueva(data);},function(e){cont.innerHTML='<div class="muted" style="padding:16px">No se pudo cargar. '+esc(e&&e.message||'')+' <button class="btn ba sm" onclick="grillaVerNueva()">Reintentar</button></div>';});
+  rpc('grillaGetMes',{mes:mes},function(data){
+    // Capacitaciones (P4): overlay 🎓 en el encabezado del día. Solo admin (endpoint admin-gated);
+    // si falla, la grilla se dibuja igual (la capacitación no debe romper la grilla).
+    var isAdmin=sess&&sess.userRole==='ADMIN';
+    if(!isAdmin){grillaSetCapsIdx(null);grillaRenderNueva(data);return;}
+    rpc('getCapacitaciones',{token:sess.token,mes:mes},function(cd){grillaSetCapsIdx(cd&&cd.capacitaciones);grillaRenderNueva(data);},function(){grillaSetCapsIdx(null);grillaRenderNueva(data);});
+  },function(e){cont.innerHTML='<div class="muted" style="padding:16px">No se pudo cargar. '+esc(e&&e.message||'')+' <button class="btn ba sm" onclick="grillaVerNueva()">Reintentar</button></div>';});
+}
+// Indexa las capacitaciones del mes por area+fecha. destino TODOS aplica a las 4 areas de la grilla;
+// un destino de area se mapea a su columna. SERVICIOS no tiene columna en la grilla (no se marca aca).
+function grillaSetCapsIdx(caps){
+  var AREAMAP={RECEPCION:'Recepcion',CAMARERA:'Camareria',PATIERO:'Patio',MANTENIMIENTO:'Mantenimiento'};
+  var AREAS=['Recepcion','Camareria','Patio','Mantenimiento'];
+  var idx={};
+  (caps||[]).forEach(function(c){
+    var destino=String(c.destino||'').toUpperCase();
+    var areas=(destino==='TODOS')?AREAS:(AREAMAP[destino]?[AREAMAP[destino]]:[]);
+    areas.forEach(function(a){var k=a+'|'+c.fecha;(idx[k]=idx[k]||[]).push({titulo:c.titulo,hora:c.hora});});
+  });
+  window._grillaCaps=idx;
 }
 // Descanso = BLANCO FANTASMA: translúcido azulado (ghost), integrado a las demás celdas translúcidas del tema.
 var GRILLA_DC_BG='rgba(220,230,255,.16)', GRILLA_DC_BD='rgba(255,255,255,.38)';
@@ -6128,7 +6147,7 @@ function grillaRenderNueva(data){
     if(!personas.length)return;
     h+='<div style="font-weight:600;margin:14px 0 6px">'+esc(area)+'</div>';
     h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#141c30;color:#e8edf5;text-align:left;padding:4px 8px;min-width:150px">Persona</th>';
-    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#f87171':'#8a93a8')+'">'+DS[dow]+'<br>'+d+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#0d1322;color:#cbd5e1;border-left:1px solid #2e3850;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
+    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();var fh=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');var capsD=(window._grillaCaps||{})[area+'|'+fh];var capMark='';if(capsD&&capsD.length){var tt=capsD.map(function(c){return '🎓 '+c.titulo+(c.hora?(' '+c.hora):'');}).join(' · ');capMark='<div style="font-size:10px;line-height:1" title="'+esc(tt)+'">🎓</div>';}h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#f87171':'#8a93a8')+'">'+DS[dow]+'<br>'+d+capMark+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#0d1322;color:#cbd5e1;border-left:1px solid #2e3850;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
     h+='<th style="padding:2px 6px;text-align:center;background:#141c30;color:#e8edf5;border-left:2px solid #4a5a7a;font-size:10px" title="Horas del mes">Σ<br>mes</th>';
     h+='</tr></thead><tbody>';
     personas.forEach(function(sid){
