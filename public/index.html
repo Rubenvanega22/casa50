@@ -6077,6 +6077,9 @@ function ncalGetPersonas(area){
 var GRILLA_COLORES = { T1:'#4ADE80', T2:'#3B82F6', T3:'#8B5CF6', DESCANSO:'#9CA3AF', VACACIONES:'#F59E0B', INCAPACIDAD:'#EF4444', PERMISO:'#06B6D4' };
 function grillaTurnoCode(sid){return {SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'}[sid]||'';}
 function grillaHoraCorta(h){h=(h||'').slice(0,5);if(!h)return'';var p=h.split(':');var H=parseInt(p[0]||0,10);return (parseInt(p[1]||0,10)===0)?String(H):h;}
+// Horas de una celda: solo TRABAJO cuenta; descanso/novedad = 0. Cruce de medianoche (T3) sumado.
+function grillaHorasCelda(c){if(!c||c.estado!=='TRABAJO'||!c.horaEntrada||!c.horaSalida)return 0;var e=c.horaEntrada.slice(0,5).split(':'),s=c.horaSalida.slice(0,5).split(':');var em=parseInt(e[0],10)*60+parseInt(e[1],10),sm=parseInt(s[0],10)*60+parseInt(s[1],10);var min=sm-em;if(min<=0)min+=1440;return min/60;}
+function grillaFmtHoras(h){var r=Math.round(h*10)/10;return (r===Math.floor(r)?String(r):r.toFixed(1))+'h';}
 function grillaLeyenda(color,txt){return '<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:10px;height:10px;border-radius:2px;background:'+color+';display:inline-block"></i>'+txt+'</span>';}
 function grillaVerNueva(){
   var mes=ncalGetYM();
@@ -6120,14 +6123,19 @@ function grillaRenderNueva(data){
     if(!personas.length)return;
     h+='<div style="font-weight:600;margin:14px 0 6px">'+esc(area)+'</div>';
     h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;min-width:150px">Persona</th>';
-    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#c00':'#888')+'">'+DS[dow]+'<br>'+d+'</th>';}
+    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#c00':'#888')+'">'+DS[dow]+'<br>'+d+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#f0f0f0;color:#555;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
     h+='</tr></thead><tbody>';
     personas.forEach(function(sid){
       h+='<tr><td style="position:sticky;left:0;background:#fff;padding:4px 8px;white-space:nowrap">'+esc(nombreDe[sid]||sid)+'</td>';
+      var wk=0;
       for(var d=1;d<=ultimoDia;d++){
         var fecha=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+        var dow=new Date(y,m-1,d).getDay();
+        var cc=idx[area+'|'+sid+'|'+fecha];
+        wk+=grillaHorasCelda(cc);
         var tdAttr=isAdmin?(' onclick="grillaAbrirMenuCelda(\''+area+'\',\''+sid+'\',\''+fecha+'\')" style="padding:0;text-align:center;cursor:pointer"'):' style="padding:0;text-align:center"';
-        h+='<td'+tdAttr+'>'+grillaCelda(idx[area+'|'+sid+'|'+fecha])+'</td>';
+        h+='<td'+tdAttr+'>'+grillaCelda(cc)+'</td>';
+        if(dow===0||d===ultimoDia){var ov=wk>42;h+='<td style="text-align:center;background:'+(ov?'#fde8e8':'#f0f0f0')+';font-size:10px;font-weight:700;color:'+(ov?'#c00':'#333')+';padding:2px 6px" title="Horas programadas de la semana'+(ov?' — supera 42h':'')+'">'+grillaFmtHoras(wk)+'</td>';wk=0;}
       }
       h+='</tr>';
     });
@@ -6165,8 +6173,8 @@ function grillaAbrirMenuCelda(area,sid,fecha){
   h+='<button class="btn bg sm" style="width:100%;margin-top:8px" onclick="grillaGuardarCeldaTrabajo()">Guardar turno</button></div>';
   h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaMostrarTurnoForm()">🕐 Cambiar turno / horas</button>';
   h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'DESCANSO\')">⚪ Descanso</button>';
-  h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'INCAPACIDAD\')">🔴 Incapacidad</button>';
-  h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'PERMISO\')">🟦 Permiso</button>';
+  // Incapacidad y Permiso NO son manuales: llegan AUTOMÁTICAS (incapacidad validada por admin,
+  // permiso aprobado en el chat). Por eso no están en este menú.
   if(est!=='TRABAJO')h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaAplicarEstado(\'TRABAJO_REVERT\')">↩️ Volver a trabajo normal</button>';
   h+='<button class="btn bb sm" style="width:100%;margin-top:6px" onclick="grillaCerrarMenu()">Cerrar</button></div>';
   ov.innerHTML=h;
