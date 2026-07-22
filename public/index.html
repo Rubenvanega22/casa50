@@ -9630,11 +9630,12 @@ function staffCardHtml(s, hoy){
   h+=chipBtn('✎ Editar',"editStaff('"+esc(s.id)+"')");
   if(!esExtra) h+=chipBtn('🌴 Vacaciones',"openVacacionesModal('"+esc(s.id)+"')");
   h+=chipBtn('🔑 PIN',"openResetPin('"+esc(s.id)+"')");
-  if(!esExtra) h+=chipBtn('📁 Documentos',"toast('Documentos: próximamente','ok')");
+  if(!esExtra) h+=chipBtn('📁 Documentos',"toggleDocs('"+esc(s.id)+"')");
   h+=chipChat(s.id,badge);
   if(!esExtra) h+=chipBtn('📤 Liquidar',"toast('Liquidar: próximamente','ok')");
   else h+=chipBtn('🗑 Eliminar',"toast('Eliminar: próximamente','ok')");
   h+='</div>';
+  h+='<div id="docs-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
   h+='<div id="chat-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
   h+='</div>';
   return h;
@@ -9765,6 +9766,82 @@ function stopAvisoGlobalPoll(){ if(_avisoGlobalPoll){ clearInterval(_avisoGlobal
 function checkChatGlobal(){
   if(!sess||sess.userRole!=='ADMIN'){ stopAvisoGlobalPoll(); var e0=document.getElementById('avisoGlobalChat'); if(e0)e0.style.display='none'; return; }
   rpc('chatEstado',{token:sess.token},function(d){ window._chatEstado=d; renderAvisoGlobal(); },function(){});
+}
+
+// ===== Panel Documentos DENTRO de la celda (Sub-etapa 2) =====
+function incRangoDoc(desde,dias){ if(!desde)return(dias?dias+(Number(dias)===1?' día':' días'):''); return esc(desde)+' · '+(dias||'?')+(Number(dias)===1?' día':' días'); }
+function fechaDocAdmin(ms){ if(!ms)return''; var d=new Date(Number(ms)); return d.getDate()+'/'+(d.getMonth()+1)+'/'+d.getFullYear(); }
+function toggleDocs(staffId){
+  var box=document.getElementById('docs-'+staffId); if(!box)return;
+  if(box.style.display==='none'){
+    document.querySelectorAll('[id^="docs-"]').forEach(function(el){ if(el.id!=='docs-'+staffId) el.style.display='none'; });
+    box.style.display='block'; loadDocumentos(staffId);
+  } else { box.style.display='none'; }
+}
+function loadDocumentos(staffId){
+  var box=document.getElementById('docs-'+staffId); if(!box)return;
+  box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">Cargando…</div>';
+  rpc('staffDocumentos',{token:sess.token,staffId:staffId},function(d){ renderDocumentos(staffId,d); },function(e){ box.innerHTML='<div class="muted" style="font-size:12px;padding:8px">No se pudo cargar. '+esc(e.message||'')+'</div>'; });
+}
+function renderDocumentos(staffId,data){
+  var box=document.getElementById('docs-'+staffId); if(!box)return;
+  var emp=data.empresa||[], inc=data.incapacidades||[];
+  var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:10px;padding:10px">';
+  h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:6px">🤒 Incapacidades</div>';
+  if(!inc.length) h+='<div class="muted" style="font-size:11px;padding:2px 0 8px">Sin incapacidades.</div>';
+  inc.forEach(function(d){
+    var est=d.estado==='VALIDADA'?'<span style="color:#22c55e">✓ Validada</span>':(d.estado==='RECHAZADA'?'<span style="color:#f87171">✕ Rechazada</span>':'<span style="color:#f59e0b">⏳ En revisión</span>');
+    h+='<div style="display:flex;align-items:center;gap:8px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    h+='<div style="flex:1"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+incRangoDoc(d.incDesde,d.incDias)+' · '+est+'</div></div>';
+    h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">👁 Ver</button>';
+    if(d.estado==='EN_REVISION') h+='<span style="font-size:10px;color:#6b7280">validar: Parte 3</span>';
+    h+='</div>';
+  });
+  h+='<div style="font-size:11px;font-weight:700;color:#a78bfa;margin:10px 0 6px">📁 Documentos de empresa</div>';
+  if(!emp.length) h+='<div class="muted" style="font-size:11px;padding:2px 0 8px">Sin documentos.</div>';
+  emp.forEach(function(d){
+    var esPdf=(d.mime||'').indexOf('pdf')>=0;
+    h+='<div style="display:flex;align-items:center;gap:8px;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    h+='<div style="flex:1"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+(esPdf?'PDF':'Imagen')+' · '+esc(fechaDocAdmin(d.createdMs))+'</div></div>';
+    h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">⬇</button>';
+    h+='<button class="btn xs" style="'+(d.visible?'background:rgba(34,197,94,.16);border:1px solid #22c55e;color:#22c55e':'background:#22222c;border:1px solid #3a3a45;color:#9ca3af')+'" onclick="toggleVisDoc('+d.id+','+(d.visible?'false':'true')+',\''+esc(staffId)+'\')">'+(d.visible?'👁 Lo ve':'🚫 Oculto')+'</button>';
+    h+='</div>';
+  });
+  h+='<div style="border:1.5px dashed rgba(167,139,250,.4);border-radius:8px;padding:8px;margin-top:6px">';
+  h+='<input id="doctit-'+esc(staffId)+'" placeholder="Título del documento (ej: Contrato)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;padding:7px 9px;color:#e5e7eb;font-size:12px;margin-bottom:6px">';
+  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  h+='<label class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6;cursor:pointer">📎 Archivo<input type="file" accept="image/*,application/pdf" hidden onchange="onDocFile(\''+esc(staffId)+'\',this)"></label>';
+  h+='<span id="docfn-'+esc(staffId)+'" style="font-size:10px;color:#9ca3af;flex:1;min-width:60px"></span>';
+  h+='<label style="font-size:11px;color:#c9cdd6;display:flex;align-items:center;gap:4px"><input type="checkbox" id="docvis-'+esc(staffId)+'" checked> Lo ve</label>';
+  h+='<button class="btn bg xs" onclick="subirDocAdmin(\''+esc(staffId)+'\')">⬆ Subir</button>';
+  h+='</div></div>';
+  h+='</div>';
+  box.innerHTML=h;
+}
+function onDocFile(staffId,input){
+  var f=input.files&&input.files[0]; if(!f)return;
+  if(f.size>10*1024*1024){ toast('El archivo es muy pesado (máx 10MB)','err'); return; }
+  var r=new FileReader();
+  r.onload=function(e){ window._docFiles=window._docFiles||{}; window._docFiles[staffId]={dataUrl:e.target.result,name:f.name}; var el=document.getElementById('docfn-'+staffId); if(el)el.textContent=f.name; };
+  r.readAsDataURL(f);
+}
+function subirDocAdmin(staffId){
+  var titEl=document.getElementById('doctit-'+staffId), visEl=document.getElementById('docvis-'+staffId);
+  var tit=(titEl?titEl.value:'').trim(), vis=visEl?visEl.checked:true;
+  var fobj=(window._docFiles||{})[staffId];
+  if(!tit){ toast('Poné un título','err'); return; }
+  if(!fobj){ toast('Elegí el archivo','err'); return; }
+  toast('Subiendo…','ok');
+  rpc('subirDocumento',{token:sess.token,staffId:staffId,titulo:tit,fileBase64:fobj.dataUrl,visible:vis},function(){
+    toast('Documento subido','ok'); if(window._docFiles) delete window._docFiles[staffId]; loadDocumentos(staffId);
+  },function(e){ toast(e.message||'Error','err'); });
+}
+function descargarDocAdmin(docId){
+  toast('Abriendo…','ok');
+  rpc('descargarDocumentoAdmin',{token:sess.token,docId:docId},function(d){ if(d.url)window.open(d.url,'_blank'); else toast('No disponible','err'); },function(e){ toast(e.message||'Error','err'); });
+}
+function toggleVisDoc(docId,visible,staffId){
+  rpc('toggleVisibilidadDoc',{token:sess.token,docId:docId,visible:visible},function(){ loadDocumentos(staffId); },function(e){ toast(e.message||'Error','err'); });
 }
 
 // Pestañas Nómina / Extras del panel Personal
