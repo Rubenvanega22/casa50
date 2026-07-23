@@ -1519,8 +1519,9 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 <div class="pnl" id="pnl-staff">
 <div style="display:flex;justify-content:space-between;margin-bottom:10px;align-items:center;gap:6px;flex-wrap:wrap">
 <h2 style="font-size:14px">Personal</h2>
-<div style="display:flex;gap:6px">
+<div style="display:flex;gap:6px;flex-wrap:wrap">
 <button class="btn bb sm" onclick="toggleComunicado('nomina')">💬 Comunicado</button>
+<button class="btn bk sm" onclick="openLiquidados()">📦 Liquidado</button>
 <button class="btn ba sm" onclick="openAddStaff()">+ Agregar</button>
 </div>
 </div>
@@ -9695,11 +9696,12 @@ function staffCardHtml(s, hoy){
   h+=chipBtn('🔑 PIN',"openResetPin('"+esc(s.id)+"')");
   if(!esExtra) h+=chipBtn('📁 Documentos',"toggleDocs('"+esc(s.id)+"')");
   h+=chipChat(s.id,badge);
-  if(!esExtra) h+=chipBtn('📤 Liquidar',"toast('Liquidar: próximamente','ok')");
+  if(!esExtra) h+=chipBtn('📤 Liquidar',"toggleLiquidar('"+esc(s.id)+"')");
   else h+=chipBtn('🗑 Eliminar',"eliminarExtraNomina('"+esc(s.id)+"')");
   h+='</div>';
   h+='<div id="docs-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
   h+='<div id="chat-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
+  h+='<div id="liq-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
   h+='</div>';
   return h;
 }
@@ -10037,6 +10039,119 @@ function eliminarExtraNomina(id){
     rpc('eliminarExtraNomina',{token:sess.token,staffId:id},function(){
       toast('🗑 Extra eliminado · historial preservado','ok');
       loadStaff();   // refetch + re-render (ya no aparece en la lista)
+    },function(e){ toast(e.message||'Error','err'); });
+  });
+}
+
+// ===== Liquidar nómina (Sub-etapa 3 · Pieza 2) =====
+var _liqMotivo={};
+function liqMotStyle(on){ return on?'background:rgba(239,68,68,.18);border:1px solid #ef4444;color:#f87171':'background:#22222c;border:1px solid #3a3a45;color:#c9cdd6'; }
+function toggleLiquidar(id){
+  var c=document.getElementById('liq-'+id); if(!c)return;
+  if(c.style.display==='block'){ c.style.display='none'; c.innerHTML=''; return; }
+  _liqMotivo[id]=''; if(window._liqCarta)delete window._liqCarta[id]; if(window._liqComps)delete window._liqComps[id];
+  c.innerHTML=liqFormHtml(id); c.style.display='block';
+}
+function liqFormHtml(id){
+  var mot=[['RENUNCIA','Renuncia'],['DESPIDO','Despido'],['FIN_CONTRATO','Fin de contrato']];
+  var h='<div style="border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:12px;background:rgba(239,68,68,.05)">';
+  h+='<div style="font-size:13px;font-weight:700;color:#f87171;margin-bottom:8px">📤 Liquidar</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:6px">Motivo (obligatorio)</div>';
+  h+='<div id="liqmot-'+esc(id)+'" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+  h+=mot.map(function(m){ return '<button type="button" class="btn xs" data-lm="'+m[0]+'" onclick="setLiqMotivo(\''+esc(id)+'\',\''+m[0]+'\')" style="'+liqMotStyle(false)+'">'+m[1]+'</button>'; }).join('');
+  h+='</div>';
+  h+='<div style="font-size:11px;color:#9ca3af;margin-bottom:3px">Fecha de salida</div>';
+  h+='<input type="date" id="liqfecha-'+esc(id)+'" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:6px;box-sizing:border-box;margin-bottom:8px">';
+  h+='<textarea id="liqobs-'+esc(id)+'" rows="2" placeholder="Motivo / observaciones de la salida (opcional)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:6px;color:#e5e7eb;padding:7px;font-size:12px;box-sizing:border-box;margin-bottom:8px"></textarea>';
+  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><label class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6;cursor:pointer">📄 Carta<input type="file" accept="image/*,application/pdf" hidden onchange="onLiqCarta(\''+esc(id)+'\',this)"></label><span id="liqcartafn-'+esc(id)+'" style="font-size:10px;color:#9ca3af;flex:1">Opcional</span></div>';
+  h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><label class="btn bk xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6;cursor:pointer">💰 Comprobantes<input type="file" accept="image/*,application/pdf" multiple hidden onchange="onLiqComps(\''+esc(id)+'\',this)"></label><span id="liqcompfn-'+esc(id)+'" style="font-size:10px;color:#9ca3af;flex:1">Opcional · uno o varios</span></div>';
+  h+='<div style="font-size:10px;color:#9ca3af;margin-bottom:9px">La carta y los comprobantes se pueden adjuntar después en su carpeta.</div>';
+  h+='<div style="display:flex;gap:6px"><button class="btn bk sm" style="flex:1" onclick="toggleLiquidar(\''+esc(id)+'\')">Cancelar</button><button class="btn br sm" style="flex:2" onclick="liquidarSubmit(\''+esc(id)+'\')">📤 Liquidar</button></div>';
+  h+='</div>';
+  return h;
+}
+function setLiqMotivo(id,tipo){ _liqMotivo[id]=tipo; var box=document.getElementById('liqmot-'+id); if(box)box.querySelectorAll('[data-lm]').forEach(function(b){ b.style.cssText=liqMotStyle(b.getAttribute('data-lm')===tipo); }); }
+function onLiqCarta(id,input){ var f=input.files&&input.files[0]; if(!f)return; if(f.size>10*1024*1024){ toast('Muy pesado (máx 10MB)','err'); return; } var r=new FileReader(); r.onload=function(e){ window._liqCarta=window._liqCarta||{}; window._liqCarta[id]={dataUrl:e.target.result,name:f.name}; var el=document.getElementById('liqcartafn-'+id); if(el)el.textContent=f.name; }; r.readAsDataURL(f); }
+function onLiqComps(id,input){
+  var fs=(input.files?Array.prototype.slice.call(input.files):[]).filter(function(f){ if(f.size>10*1024*1024){ toast(f.name+': muy pesado (máx 10MB)','err'); return false; } return true; });
+  if(!fs.length)return;
+  var arr=[], pend=fs.length;
+  fs.forEach(function(f){ var r=new FileReader(); r.onload=function(e){ arr.push({dataUrl:e.target.result,name:f.name}); if(--pend===0){ window._liqComps=window._liqComps||{}; window._liqComps[id]=arr; var el=document.getElementById('liqcompfn-'+id); if(el)el.textContent=arr.length+' archivo(s)'; } }; r.readAsDataURL(f); });
+}
+function subirLiqSeq(id,cola,i,done){
+  if(i>=cola.length){ done(); return; }
+  var d=cola[i];
+  rpc('subirDocumento',{token:sess.token,staffId:id,titulo:d.titulo,fileBase64:d.dataUrl,tipo:d.tipo,visible:false},
+    function(){ subirLiqSeq(id,cola,i+1,done); },
+    function(e){ toast('Un documento no se subió: '+(e.message||''),'err'); subirLiqSeq(id,cola,i+1,done); });  // no bloquea
+}
+function liquidarSubmit(id){
+  var motivo=_liqMotivo[id]||'';
+  if(!motivo){ toast('Elegí el motivo','err'); return; }
+  var s=(staffList||[]).find(function(x){return String(x.id)===String(id);});
+  var nombre=s?s.name:'esta persona';
+  var fecha=(document.getElementById('liqfecha-'+id)||{}).value||'';
+  var obs=((document.getElementById('liqobs-'+id)||{}).value||'').trim();
+  var carta=(window._liqCarta||{})[id];
+  var comps=(window._liqComps||{})[id]||[];
+  var motLabel={RENUNCIA:'Renuncia',DESPIDO:'Despido',FIN_CONTRATO:'Fin de contrato'}[motivo]||motivo;
+  conf('¿Liquidar a '+nombre+' ('+motLabel+')? Sale de la lista de activos, se le corta el acceso a la app, y su carpeta pasa a 📦 Personal liquidado.',function(){
+    toast('Liquidando…','ok');
+    var cola=[];
+    if(carta) cola.push({tipo:'liquidacion',titulo:'Carta de liquidación',dataUrl:carta.dataUrl});
+    comps.forEach(function(c,i){ cola.push({tipo:'liquidacion_comprobante',titulo:'Comprobante de liquidación'+(comps.length>1?(' '+(i+1)):''),dataUrl:c.dataUrl}); });
+    subirLiqSeq(id,cola,0,function(){
+      rpc('liquidar',{token:sess.token,staffId:id,tipo:motivo,fecha:fecha,observaciones:obs},function(){
+        toast('📤 '+nombre+' liquidado · en 📦 Personal liquidado','ok');
+        if(window._liqCarta)delete window._liqCarta[id]; if(window._liqComps)delete window._liqComps[id];
+        loadStaff();
+      },function(e){ toast(e.message||'Error al liquidar','err'); });
+    });
+  });
+}
+// ===== 📦 Personal liquidado (Sub-etapa 3 · Pieza 3) =====
+function openLiquidados(){ rpc('getLiquidados',{token:sess.token},function(d){ renderLiquidados(d.liquidados||[]); },function(e){ toast(e.message||'Error','err'); }); }
+function liqEtiqueta(t){ return t==='ELIMINADO_EXTRA' ? {ic:'🗑',txt:'Extra eliminado',col:'#f59e0b'} : {ic:'📤',txt:'Liquidado · '+({RENUNCIA:'Renuncia',DESPIDO:'Despido',FIN_CONTRATO:'Fin de contrato'}[t]||t),col:'#f87171'}; }
+function docIcono(t){ return t==='liquidacion'?'📄':(t==='liquidacion_comprobante'?'💰':(t==='incapacidad'?'🩺':'📄')); }
+function renderLiquidados(list){
+  window._liqList=list;
+  if(window._liqOv)window._liqOv.remove();
+  var ov=document.createElement('div'); ov.setAttribute('data-liqov','1');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto';
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:14px;padding:16px;max-width:640px;width:100%;max-height:90vh;overflow:auto">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:15px;font-weight:700;color:#e5e7eb">📦 Personal liquidado</div><button class="btn bk sm" onclick="if(window._liqOv)window._liqOv.remove()">✕</button></div>';
+  if(!list.length){ h+='<div style="color:#9ca3af;font-size:13px;padding:24px;text-align:center">Nadie liquidado ni eliminado todavía.</div>'; }
+  else list.forEach(function(p){
+    var et=liqEtiqueta(p.salidaTipo);
+    h+='<div style="border:1px solid #2e2e3a;border-radius:10px;padding:11px;margin-bottom:8px;background:#1a1a22">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
+    h+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#e5e7eb">'+esc(p.name)+'</div>';
+    h+='<div style="font-size:11px;color:'+et.col+';font-weight:700;margin-top:2px">'+et.ic+' '+esc(et.txt)+'</div>';
+    var meta=[]; if(p.salidaFecha)meta.push('salida '+p.salidaFecha); if(p.salidaPor)meta.push('por '+esc(p.salidaPor));
+    h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+meta.join(' · ')+'</div>';
+    if(p.salidaObs)h+='<div style="font-size:11px;color:#c9cdd6;margin-top:4px">"'+esc(p.salidaObs)+'"</div>';
+    h+='</div>';
+    h+='<button class="btn bk xs" onclick="reintegrarStaff(\''+esc(p.id)+'\')">↩︎ Reintegrar</button>';
+    h+='</div>';
+    if(p.docs&&p.docs.length){
+      h+='<div style="margin-top:8px;border-top:1px solid #2e2e3a;padding-top:8px"><div style="font-size:10px;color:#9ca3af;margin-bottom:5px">📁 Carpeta ('+p.docs.length+')</div>';
+      p.docs.forEach(function(dc){ h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0"><span style="font-size:11px;color:#e5e7eb">'+docIcono(dc.tipo)+' '+esc(dc.titulo)+'</span><button class="btn bk xs" onclick="descargarDocAdmin('+dc.id+')">⬇</button></div>'; });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+  ov.innerHTML=h; document.body.appendChild(ov); window._liqOv=ov;
+}
+function reintegrarStaff(id){
+  var p=(window._liqList||[]).find(function(x){return String(x.id)===String(id);});
+  var nombre=p?p.name:'esta persona';
+  conf('¿Reintegrar a '+nombre+' a la lista de activos? Vuelve a Personal. Su PIN de la app sigue revocado hasta que le hagas un reset.',function(){
+    rpc('reintegrarStaff',{token:sess.token,staffId:id},function(){
+      toast('↩︎ '+nombre+' reintegrado','ok');
+      if(window._liqOv)window._liqOv.remove();
+      loadStaff(); openLiquidados();
     },function(e){ toast(e.message||'Error','err'); });
   });
 }

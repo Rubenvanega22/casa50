@@ -649,6 +649,9 @@ module.exports = async function handler(req, res) {
       case 'getCapacitaciones':   return await apiGetCapacitaciones(payload, res);
       case 'crearComunicado':     return await apiCrearComunicado(payload, res);
       case 'eliminarExtraNomina': return await apiEliminarExtra(payload, res);
+      case 'liquidar':            return await apiLiquidar(payload, res);
+      case 'getLiquidados':       return await apiGetLiquidados(payload, res);
+      case 'reintegrarStaff':     return await apiReintegrar(payload, res);
       case 'getVapidPublic':      return await apiGetVapidPublic(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
@@ -3544,6 +3547,11 @@ async function apiSubirDocumento(p, res) {
   const staffId = String(p.staffId || '').trim();
   const titulo = String(p.titulo || '').trim();
   const visible = (p.visible === true || p.visible === 'true');
+  // tipo: 'empresa' (default) o docs de liquidación (Pieza 2). Los de liquidación son INTERNOS:
+  // visible=false forzado (el colaborador nunca los ve) y no disparan novedad.
+  const TIPOS_DOC = ['empresa', 'liquidacion', 'liquidacion_comprobante'];
+  const tipoDoc = TIPOS_DOC.indexOf(String(p.tipo || 'empresa')) >= 0 ? String(p.tipo || 'empresa') : 'empresa';
+  const visibleFinal = (tipoDoc === 'empresa') ? visible : false;
   const file = String(p.fileBase64 || '');
   if (!staffId) return err(res, 'Falta la persona');
   if (!titulo) return err(res, 'Falta el título');
@@ -3560,11 +3568,11 @@ async function apiSubirDocumento(p, res) {
   const up = await supabase.storage.from('staff-docs').upload(path, buffer, { contentType: mime, upsert: false });
   if (up.error) return err(res, 'No se pudo subir el archivo');
   await tInsert('staff_documentos', {
-    staff_id: staffId, tipo: 'empresa', titulo, bucket: 'staff-docs', path, mime,
-    visible, estado: null, subido_por: s.n || '', subido_rol: 'ADMIN', created_ms: now
+    staff_id: staffId, tipo: tipoDoc, titulo, bucket: 'staff-docs', path, mime,
+    visible: visibleFinal, estado: null, subido_por: s.n || '', subido_rol: 'ADMIN', created_ms: now
   });
   // Plan B: si es visible, novedad al colaborador (si está oculto no lo ve, no se avisa).
-  if (visible) await novedadColab(s, staffId, 'DOCUMENTO', 'Nuevo documento en tu expediente: ' + titulo, 'DOCUMENTO', null, 'Documento nuevo');
+  if (visibleFinal) await novedadColab(s, staffId, 'DOCUMENTO', 'Nuevo documento en tu expediente: ' + titulo, 'DOCUMENTO', null, 'Documento nuevo');
   return ok(res, {});
 }
 
@@ -3737,6 +3745,74 @@ async function apiEliminarExtra(p, res) {
     pin_version: (Number(st.pin_version) || 1) + 1   // revoca carnet/sesión de la app colaborador
   }).eq('id', staffId);
   return ok(res, { eliminado: true });
+}
+
+// ===== LIQUIDAR nómina (Sub-etapa 3 · Pieza 2) — soft, historial intacto, corta la app =====
+// Motivo obligatorio; carta/comprobantes son docs opcionales (se suben antes con apiSubirDocumento
+// tipo liquidacion/liquidacion_comprobante, o se adjuntan después en la carpeta). Sale de activos.
+async function apiLiquidar(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  const tipo = String(p.tipo || '').trim().toUpperCase();
+  const TIPOS = ['RENUNCIA', 'DESPIDO', 'FIN_CONTRATO'];
+  const obs = String(p.observaciones || '').trim();
+  const fecha = String(p.fecha || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  if (TIPOS.indexOf(tipo) < 0) return err(res, 'Motivo inválido');
+  if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return err(res, 'Fecha inválida');
+  const { data: st } = await tSelect('staff', 'id,type,salida_ms,pin_version').eq('id', staffId).maybeSingle();
+  if (!st) return err(res, 'No encontrado');
+  if ((st.type || 'nomina') === 'extra') return err(res, 'Los extras se eliminan, no se liquidan');
+  if (st.salida_ms) return err(res, 'Ya está liquidado');
+  const now = Date.now();
+  await tUpdate('staff', {
+    salida_tipo: tipo, salida_fecha: fecha || null, salida_obs: obs || null,
+    salida_por: s.n || '', salida_ms: now,
+    pin_version: (Number(st.pin_version) || 1) + 1   // corta el acceso a la app
+  }).eq('id', staffId);
+  return ok(res, { liquidado: true });
+}
+
+// ===== 📦 PERSONAL LIQUIDADO (Sub-etapa 3 · Pieza 3) — lista + carpeta =====
+// Trae liquidados (nómina) y extras eliminados JUNTOS (salida_ms != null), con su carpeta completa.
+async function apiGetLiquidados(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const { data } = await tSelect('staff', '*').not('salida_ms', 'is', null).order('salida_ms', { ascending: false });
+  const list = data || [];
+  const ids = list.map(r => r.id);
+  const docsByStaff = {};
+  if (ids.length) {
+    const { data: docs } = await tSelect('staff_documentos', 'id,staff_id,tipo,titulo,mime,created_ms')
+      .in('staff_id', ids).eq('anulado', false).order('created_ms', { ascending: false });
+    (docs || []).forEach(d => { (docsByStaff[d.staff_id] = docsByStaff[d.staff_id] || []).push({ id: d.id, tipo: d.tipo, titulo: d.titulo, mime: d.mime || '', createdMs: d.created_ms || null }); });
+  }
+  return ok(res, { liquidados: list.map(r => ({
+    id: r.id, name: r.name, area: r.area, type: r.type, rol: r.rol || '',
+    salidaTipo: r.salida_tipo || '', salidaFecha: r.salida_fecha || '', salidaObs: r.salida_obs || '',
+    salidaPor: r.salida_por || '', salidaMs: r.salida_ms || null,
+    cedula: r.cedula || '', celular: r.celular || '',
+    docs: docsByStaff[r.id] || []
+  })) });
+}
+
+// apiReintegrar: revierte la salida (por si fue error) -> vuelve a activos. Deja auditoría del reintegro.
+// El PIN de la app sigue revocado (pin_version se subió al liquidar): el admin le hace un reset si lo necesita.
+async function apiReintegrar(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  const { data: st } = await tSelect('staff', 'id,salida_ms').eq('id', staffId).maybeSingle();
+  if (!st) return err(res, 'No encontrado');
+  if (!st.salida_ms) return err(res, 'No está fuera de la lista');
+  const now = Date.now();
+  await tUpdate('staff', {
+    salida_tipo: null, salida_fecha: null, salida_obs: null, salida_por: null, salida_ms: null,
+    reintegrado_por: s.n || '', reintegrado_ms: now
+  }).eq('id', staffId);
+  return ok(res, { reintegrado: true });
 }
 
 // apiGetCapacitaciones: lista del mes (para el admin en la grilla).
