@@ -149,6 +149,24 @@ async function apiGetVapidPublic(p, res) {
   });
 }
 
+// Registra la suscripción Web Push de ESTE dispositivo admin (Sub-etapa 4). Gate REAL:
+// requireAdmin (token HMAC + rol ADMIN, rechazo seco) — NO el userRole del body.
+// role='admin' separa estas filas de las del colaborador; sendPushToAdmin (fork) filtra por
+// ese role, y sendPushToStaff (colab) filtra por staff_id real, así que nunca se pisan.
+async function apiSubscribePushAdmin(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const sub = p.subscription || {}, keys = sub.keys || {};
+  const endpoint = String(sub.endpoint || '').trim();
+  if (!endpoint || !keys.p256dh || !keys.auth) return err(res, 'Suscripción inválida');
+  await supabase.from('push_subscriptions').upsert({
+    motel_id: MOTEL_ID, staff_id: String(s.n || ''), role: 'admin',
+    endpoint, p256dh: keys.p256dh, auth: keys.auth,
+    ua: String(p.ua || '').slice(0, 300), created_ms: Date.now()
+  }, { onConflict: 'motel_id,endpoint' });
+  return ok(res, {});
+}
+
 // novedadColab (Plan B): registra UNA novedad para el colaborador (fila staff_mensajes ADMIN
 // no-leida, con destino para el flotante) + push. Puntería: llega SOLO a ese staffId.
 // El flotante lee no-leidas; la ✕ firma. (El armado inicial del mes NO llama esto: solo ajustes.)
@@ -653,6 +671,7 @@ module.exports = async function handler(req, res) {
       case 'getLiquidados':       return await apiGetLiquidados(payload, res);
       case 'reintegrarStaff':     return await apiReintegrar(payload, res);
       case 'getVapidPublic':      return await apiGetVapidPublic(payload, res);
+      case 'subscribePushAdmin':  return await apiSubscribePushAdmin(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);

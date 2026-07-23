@@ -2083,6 +2083,7 @@ actualizarBtnCaja();
     var mdDayEl=document.getElementById('mdDay');if(mdDayEl)mdDayEl.value=sess.businessDay||'';
     setDefWk();loadM();loadMP();loadStaff();
     rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];}});
+    initPushAdmin(sess);   // Sub-etapa 4: suscribir este dispositivo para recibir avisos del colaborador
   }
   if(sess.userRole==='RECEPTION'){loadExtra();loadLoans();loadCuadre();loadVentas();setDefWk();loadHor();}
   if(sess.userRole==='MAID'){
@@ -16996,6 +16997,29 @@ if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('/sw.js').catch(function(e){console.warn('SW:',e)});
   });
+}
+
+// ===== Web Push admin (Sub-etapa 4) — suscribir este dispositivo del admin =====
+// Debe COINCIDIR con VAPID_PUBLIC del backend (el que firma el envío). Misma llave que usa
+// el fork colaborador (par regenerado 23jul26).
+var VAPID_PUBLIC = 'BKGEZXlr_0bOz3shNlEpZsxJaiFJPeFSzNoU5CfJp8rHV9wJEmF0mUaHmx8vdxR2SJUc1LFewsxYAZsRJKcrmCY';
+function urlB64ToU8(b64){ var pad='='.repeat((4-b64.length%4)%4); var s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/'); var raw=atob(s); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }
+async function initPushAdmin(session){
+  if(!session || session.userRole!=='ADMIN' || !session.token) return;   // gate cliente (el server revalida con requireAdmin)
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)) return;
+  try {
+    var reg = await navigator.serviceWorker.register('/sw.js');
+    var perm = Notification.permission;
+    if(perm==='default'){ try { perm = await Notification.requestPermission(); } catch(e){ return; } }
+    if(perm!=='granted') return;
+    var sub = await reg.pushManager.getSubscription();
+    // Rotación de llaves: una suscripción atada a la pública vieja NUNCA recibe el push
+    // firmado con la nueva. Si la key cambió (guardada en localStorage), re-suscribir.
+    if(sub && localStorage.getItem('vapidKeyAdmin')!==VAPID_PUBLIC){ try{ await sub.unsubscribe(); }catch(e){} sub=null; }
+    if(!sub){ sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToU8(VAPID_PUBLIC) }); }
+    try { localStorage.setItem('vapidKeyAdmin', VAPID_PUBLIC); } catch(e){}
+    rpc('subscribePushAdmin', { token: session.token, subscription: sub.toJSON(), ua: navigator.userAgent }, function(){}, function(){});
+  } catch(e){}
 }
 </script>
 </body>

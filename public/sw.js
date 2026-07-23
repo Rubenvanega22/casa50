@@ -6,7 +6,7 @@
 //
 // Subir versión ('casa50-v2', etc.) en cambios que requieran invalidar caché.
 
-const CACHE = 'casa50-v1';
+const CACHE = 'casa50-v2';   // ↑ fuerza update del SW para instalar los handlers de push (Sub-etapa 4)
 const HTML_TIMEOUT_MS = 3000;
 
 const PRECACHE = [
@@ -118,4 +118,28 @@ self.addEventListener('fetch', function(e){
     e.respondWith(staleWhileRevalidate(e.request));
     return;
   }
+});
+
+// ===== Web Push (Sub-etapa 4) — recibir avisos del colaborador con el POS cerrado =====
+// Espejo de los handlers del fork colaborador (ya probados). El envío lo firma el fork
+// (tanda 2) con la misma llave VAPID; aquí solo se muestra y se enfoca la app al tocar.
+self.addEventListener('push', function(e){
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) {}
+  var opts = {
+    body: data.body || '', tag: data.tag || 'casa50-admin',
+    renotify: true, requireInteraction: true, silent: false,
+    vibrate: [200,100,200,100,200], icon: '/icon-192.png',
+    data: { url: data.url || '/' }
+  };
+  e.waitUntil(self.registration.showNotification(data.title || 'Casa 50', opts));
+});
+self.addEventListener('notificationclick', function(e){
+  e.notification.close();
+  var url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(self.clients.matchAll({ type:'window', includeUncontrolled:true }).then(function(list){
+    for (var i=0;i<list.length;i++){ var c=list[i];
+      if (c.url.indexOf(self.location.origin)===0){ c.focus(); if('navigate' in c){ try{ c.navigate(url); }catch(er){} } return; } }
+    return self.clients.openWindow(url);
+  }));
 });
