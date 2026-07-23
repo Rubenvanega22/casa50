@@ -113,10 +113,14 @@ async function sendPushToStaff(staffId, payload) {
       return;
     }
     const body = JSON.stringify(payload);
+    // urgency:'high' -> header Urgency del protocolo Web Push: FCM entrega YA y despierta al equipo
+    // (sin esto va en 'normal' y Android/Doze la encola y la suelta recién al abrir Chrome = "se destranca").
+    // TTL 24h: si el equipo estuvo apagado, FCM la retiene hasta un día (chat: más viejo que eso ya se ve in-app).
+    const pushOpts = { urgency: 'high', TTL: 86400 };
     for (const sub of subs) {
       try {
-        await wp.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body);
-        console.log('[push] OK staff=' + staffId + ' sub=' + sub.id);
+        await wp.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body, pushOpts);
+        console.log('[push] OK staff=' + staffId + ' sub=' + sub.id + ' urgency=high');
       } catch (e) {
         // 410/404 = suscripcion muerta -> se borra. Cualquier otro (403 mismatch de llaves, 401, etc.)
         // se LOGUEA con statusCode+body para diagnosticar (antes se tragaba en silencio).
