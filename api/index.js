@@ -149,6 +149,30 @@ async function apiGetVapidPublic(p, res) {
   });
 }
 
+// Envía push a TODOS los dispositivos admin del motel (role='admin'). Espejo de
+// sendPushToStaff; tSelect/tDelete ya scopean por motel_id. Suscripciones vencidas
+// (410/404) se borran. Lo usará la tanda 2 (fork) y sirve para el push de prueba.
+async function sendPushToAdmin(payload) {
+  try {
+    const wp = getWebPush();
+    if (!wp) { console.warn('[push-admin] web-push no disponible'); return; }
+    const { data: subs } = await tSelect('push_subscriptions', 'id,endpoint,p256dh,auth').eq('role', 'admin');
+    if (!subs || !subs.length) { console.warn('[push-admin] sin suscripciones admin'); return; }
+    const body = JSON.stringify(payload);
+    const pushOpts = { urgency: 'high', TTL: 86400 };
+    for (const sub of subs) {
+      try {
+        await wp.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body, pushOpts);
+        console.log('[push-admin] OK sub=' + sub.id + ' urgency=high');
+      } catch (e) {
+        const sc = e && e.statusCode;
+        console.warn('[push-admin] FALLO sub=' + sub.id + ' status=' + sc + ' body=' + String((e && e.body) || (e && e.message) || e).slice(0, 200));
+        if (sc === 410 || sc === 404) { try { await tDelete('push_subscriptions').eq('id', sub.id); } catch (er) {} }
+      }
+    }
+  } catch (e) { console.warn('[push-admin] error inesperado: ' + (e && e.message)); }
+}
+
 // Registra la suscripción Web Push de ESTE dispositivo admin (Sub-etapa 4). Gate REAL:
 // requireAdmin (token HMAC + rol ADMIN, rechazo seco) — NO el userRole del body.
 // role='admin' separa estas filas de las del colaborador; sendPushToAdmin (fork) filtra por
@@ -164,6 +188,9 @@ async function apiSubscribePushAdmin(p, res) {
     endpoint, p256dh: keys.p256dh, auth: keys.auth,
     ua: String(p.ua || '').slice(0, 300), created_ms: Date.now()
   }, { onConflict: 'motel_id,endpoint' });
+  // TEMPORAL (diagnóstico tanda 1): confirma la entrega real disparando un push a los
+  // dispositivos admin. Prueba el camino end-to-end con el POS cerrado. QUITAR al validar.
+  await sendPushToAdmin({ title: 'Casa 50 · Prueba', body: 'Push admin funcionando ✅ (POS cerrado)', tag: 'test-admin', url: '/' });
   return ok(res, {});
 }
 
