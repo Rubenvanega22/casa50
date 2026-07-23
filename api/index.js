@@ -102,23 +102,36 @@ function getWebPush() {
 async function sendPushToStaff(staffId, payload) {
   try {
     const wp = getWebPush();
-    if (!wp) return;
+    if (!wp) { console.warn('[push] web-push no disponible (¿falta VAPID_PUBLIC/PRIVATE o el paquete?)'); return; }
     const { data: subs } = await tSelect('push_subscriptions', 'id,endpoint,p256dh,auth').eq('staff_id', staffId);
     if (!subs || !subs.length) {
       // TODO Etapa D (fallback WhatsApp): sin suscripcion push activa -> encolar aviso por bot.
+      console.warn('[push] staff ' + staffId + ' sin suscripciones');
       return;
     }
     const body = JSON.stringify(payload);
     for (const sub of subs) {
       try {
         await wp.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body);
+        console.log('[push] OK staff=' + staffId + ' sub=' + sub.id);
       } catch (e) {
-        if (e && (e.statusCode === 410 || e.statusCode === 404)) {
+        // 410/404 = suscripcion muerta -> se borra. Cualquier otro (403 mismatch de llaves, 401, etc.)
+        // se LOGUEA con statusCode+body para diagnosticar (antes se tragaba en silencio).
+        const sc = e && e.statusCode;
+        console.warn('[push] FALLO staff=' + staffId + ' sub=' + sub.id + ' status=' + sc + ' body=' + String((e && e.body) || (e && e.message) || e).slice(0, 200));
+        if (sc === 410 || sc === 404) {
           try { await tDelete('push_subscriptions').eq('id', sub.id); } catch (er) {}
         }
       }
     }
-  } catch (e) { /* nunca romper el flujo que dispara el push */ }
+  } catch (e) { console.warn('[push] error inesperado: ' + (e && e.message)); /* nunca romper el flujo que dispara el push */ }
+}
+
+// getVapidPublic: devuelve SOLO la clave publica VAPID (es publica por diseno: ya viaja al navegador).
+// Fuente unica de verdad para que el cliente colaborador suscriba con la MISMA clave que firma el envio,
+// y no se desincronicen (causa clasica de "push nunca llega": la suscripcion quedo atada a otra clave).
+async function apiGetVapidPublic(p, res) {
+  return ok(res, { publicKey: String(process.env.VAPID_PUBLIC || '') });
 }
 
 // novedadColab (Plan B): registra UNA novedad para el colaborador (fila staff_mensajes ADMIN
@@ -619,6 +632,7 @@ module.exports = async function handler(req, res) {
       case 'toggleCarpeta':       return await apiToggleCarpeta(payload, res);
       case 'crearCapacitacion':   return await apiCrearCapacitacion(payload, res);
       case 'getCapacitaciones':   return await apiGetCapacitaciones(payload, res);
+      case 'getVapidPublic':      return await apiGetVapidPublic(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
       case 'setDailyGoal':      return await apiSetGoal(payload, res);
