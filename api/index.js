@@ -90,11 +90,14 @@ function getWebPush() {
   _webpushTried = true;
   try {
     const wp = require('web-push');
-    const pub = String(process.env.VAPID_PUBLIC || ''), priv = String(process.env.VAPID_PRIVATE || '');
+    // .trim(): un espacio/salto pegado al pegar la env var en Vercel corrompe la clave base64url
+    // -> la firma no coincide con la applicationServerKey de la suscripcion -> FCM 403 -> push nunca llega.
+    // (Fue exactamente el bug: VAPID_PUBLIC venia con un espacio inicial.) Blindaje permanente.
+    const pub = String(process.env.VAPID_PUBLIC || '').trim(), priv = String(process.env.VAPID_PRIVATE || '').trim();
     if (!pub || !priv) return null;
-    wp.setVapidDetails(String(process.env.VAPID_SUBJECT || 'mailto:admin@casa50.co'), pub, priv);
+    wp.setVapidDetails(String(process.env.VAPID_SUBJECT || 'mailto:admin@casa50.co').trim(), pub, priv);
     _webpush = wp;
-  } catch (e) { _webpush = null; }
+  } catch (e) { console.warn('[push] getWebPush falló (¿clave VAPID inválida?): ' + (e && e.message)); _webpush = null; }
   return _webpush;
 }
 // Envia push a todos los dispositivos de un colaborador. Suscripciones vencidas (410/404) se borran.
@@ -131,7 +134,7 @@ async function sendPushToStaff(staffId, payload) {
 // Fuente unica de verdad para que el cliente colaborador suscriba con la MISMA clave que firma el envio,
 // y no se desincronicen (causa clasica de "push nunca llega": la suscripcion quedo atada a otra clave).
 async function apiGetVapidPublic(p, res) {
-  return ok(res, { publicKey: String(process.env.VAPID_PUBLIC || '') });
+  return ok(res, { publicKey: String(process.env.VAPID_PUBLIC || '').trim() });
 }
 
 // novedadColab (Plan B): registra UNA novedad para el colaborador (fila staff_mensajes ADMIN
