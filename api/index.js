@@ -152,15 +152,15 @@ async function apiGetVapidPublic(p, res) {
 // novedadColab (Plan B): registra UNA novedad para el colaborador (fila staff_mensajes ADMIN
 // no-leida, con destino para el flotante) + push. Puntería: llega SOLO a ese staffId.
 // El flotante lee no-leidas; la ✕ firma. (El armado inicial del mes NO llama esto: solo ajustes.)
-async function novedadColab(s, staffId, tipo, cuerpo, destino, destinoRef, pushTitle) {
+async function novedadColab(s, staffId, tipo, cuerpo, destino, destinoRef, pushTitle, extra) {
   try {
     const now = Date.now();
-    await tInsert('staff_mensajes', {
+    await tInsert('staff_mensajes', Object.assign({
       staff_id: staffId, origen: 'ADMIN', tipo: tipo, cuerpo: cuerpo,
       destino: destino, destino_ref: (destinoRef != null ? String(destinoRef) : null),
       autor: (s && s.n) || 'Administración', leido_admin: true, leido_admin_ms: now,
       leido_colab: false, created_ms: now
-    });
+    }, extra || {}));   // extra: campos opcionales (p.ej. { comunicado_id } para Comunicados)
     await sendPushToStaff(staffId, { title: pushTitle || 'Casa 50', body: String(cuerpo || '').slice(0, 120), url: '/?abrir=chat', tag: tipo + '-' + staffId });
   } catch (e) { /* la novedad no debe romper el flujo que la dispara */ }
 }
@@ -647,6 +647,7 @@ module.exports = async function handler(req, res) {
       case 'toggleCarpeta':       return await apiToggleCarpeta(payload, res);
       case 'crearCapacitacion':   return await apiCrearCapacitacion(payload, res);
       case 'getCapacitaciones':   return await apiGetCapacitaciones(payload, res);
+      case 'crearComunicado':     return await apiCrearComunicado(payload, res);
       case 'getVapidPublic':      return await apiGetVapidPublic(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
@@ -3683,6 +3684,35 @@ async function apiCrearCapacitacion(p, res) {
     await novedadColab(s, st.id, 'CAPACITACION', cuerpo, 'CALENDARIO', fecha, 'Capacitación');
   }
   return ok(res, { creada: (cap && cap.id) || null, destinatarios: targets.length });
+}
+
+// ===== COMUNICADOS (Sub-etapa 3 · Pieza 1) — crear + fan-out (novedad + push) =====
+// Padre en staff_comunicados + 1 fila staff_mensajes tipo COMUNICADO por destinatario (con comunicado_id).
+// El colaborador YA pinta tipo COMUNICADO en su chat (📢). destino EXTRAS = pestaña ⚡ Extras.
+async function apiCrearComunicado(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const cuerpo = String(p.cuerpo || '').trim();
+  const destino = String(p.destino || '').trim().toUpperCase();
+  const DESTINOS = ['TODOS', 'RECEPCION', 'CAMARERA', 'PATIERO', 'MANTENIMIENTO', 'SERVICIOS', 'EXTRAS'];
+  if (!cuerpo) return err(res, 'Escribe el comunicado');
+  if (cuerpo.length > 2000) return err(res, 'Comunicado muy largo');
+  if (DESTINOS.indexOf(destino) < 0) return err(res, 'Destinatarios inválidos');
+  const now = Date.now();
+  const { data: com } = await tInsert('staff_comunicados', {
+    destino, cuerpo, autor: s.n || '', created_ms: now
+  }).select('id').maybeSingle();
+  const comId = (com && com.id) || null;
+  // fan-out: activos; EXTRAS -> extras aprobados; resto -> nomina por rol (o TODOS). Puntería por persona.
+  const { data: staffAll } = await tSelect('staff', 'id,rol,type,active,estado_registro,salida_ms');
+  const targets = (staffAll || []).filter(st => st.active !== false && !st.salida_ms && (
+    destino === 'EXTRAS'
+      ? ((st.type || '') === 'extra' && st.estado_registro === 'APROBADO')
+      : ((st.type || 'nomina') !== 'extra' && (destino === 'TODOS' || String(st.rol || '').toUpperCase() === destino))));
+  for (const st of targets) {
+    await novedadColab(s, st.id, 'COMUNICADO', cuerpo, 'CHAT', null, '📢 Comunicado', { comunicado_id: comId });
+  }
+  return ok(res, { creado: comId, destinatarios: targets.length });
 }
 
 // apiGetCapacitaciones: lista del mes (para el admin en la grilla).

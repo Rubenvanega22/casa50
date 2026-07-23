@@ -1517,16 +1517,30 @@ td{padding:5px 7px;border-bottom:1px solid rgba(46,46,58,.4);font-size:12px;vert
 </div>
 <!-- PERSONAL (admin) -->
 <div class="pnl" id="pnl-staff">
-<div style="display:flex;justify-content:space-between;margin-bottom:10px;align-items:center">
+<div style="display:flex;justify-content:space-between;margin-bottom:10px;align-items:center;gap:6px;flex-wrap:wrap">
 <h2 style="font-size:14px">Personal</h2>
+<div style="display:flex;gap:6px">
+<button class="btn bb sm" onclick="toggleComunicado('nomina')">💬 Comunicado</button>
 <button class="btn ba sm" onclick="openAddStaff()">+ Agregar</button>
+</div>
+</div>
+<!-- Comunicado por área (Sub-etapa 3 · Pieza 1): fan-out push + 📢 en el chat del colaborador -->
+<div id="comunicadoPanel" style="display:none;background:rgba(59,130,246,.06);border:1px solid #3b82f6;border-radius:10px;padding:12px;margin-bottom:12px">
+  <div style="font-size:13px;font-weight:700;color:#93c5fd;margin-bottom:2px">💬 Enviar comunicado</div>
+  <div style="font-size:11px;color:#9ca3af;margin-bottom:10px">Les llega push + 📢 en su chat.</div>
+  <div id="comDests" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+  <textarea id="comCuerpo" rows="2" placeholder="Escribe el comunicado… (ej: Reunión el viernes 8am, asistencia obligatoria)" style="width:100%;background:#22222c;border:1px solid #3a3a45;border-radius:8px;color:#e5e7eb;padding:8px;font-size:13px;box-sizing:border-box"></textarea>
+  <div style="display:flex;gap:6px;margin-top:8px">
+    <button class="btn bk sm" style="flex:1" onclick="toggleComunicado('cerrar')">Cancelar</button>
+    <button class="btn bg sm" style="flex:2" onclick="enviarComunicado()">Enviar comunicado</button>
+  </div>
 </div>
 <div class="staffTabs" style="display:flex;gap:6px;margin-bottom:12px">
 <button id="stabNomina" class="btn ba sm" style="flex:1" onclick="staffTab('nomina')">👥 Nómina</button>
 <button id="stabExtras" class="btn bk sm" style="flex:1" onclick="staffTab('extras')">⚡ Extras</button>
 </div>
 <div id="staffTabNomina"><div id="staffCont"></div></div>
-<div id="staffTabExtras" style="display:none"><div id="extrasPendCont"></div><div id="staffExtrasCont"></div></div>
+<div id="staffTabExtras" style="display:none"><button class="btn bb sm" style="margin-bottom:10px" onclick="toggleComunicado('extras')">💬 Comunicado a extras</button><div id="extrasPendCont"></div><div id="staffExtrasCont"></div></div>
 </div>
 <!-- CALENDARIO (admin) -->
 <div class="pnl" id="pnl-sched">
@@ -9985,6 +9999,35 @@ function staffTab(t){
   document.getElementById('staffTabExtras').style.display=nom?'none':'block';
   document.getElementById('stabNomina').className='btn sm '+(nom?'ba':'bk');
   document.getElementById('stabExtras').className='btn sm '+(nom?'bk':'ba');
+}
+// ===== Comunicados por área (Sub-etapa 3 · Pieza 1) =====
+var _comDest='TODOS';
+function toggleComunicado(modo){
+  var panel=document.getElementById('comunicadoPanel');
+  if(modo==='cerrar'){ panel.style.display='none'; return; }
+  // si ya está abierto en el mismo modo, togglear cerrado
+  if(panel.style.display==='block' && panel.getAttribute('data-modo')===modo){ panel.style.display='none'; return; }
+  panel.setAttribute('data-modo',modo);
+  var dests = (modo==='extras')
+    ? [['EXTRAS','⚡ Todos los extras']]
+    : [['TODOS','Todos'],['RECEPCION','Recepción'],['CAMARERA','Camareras'],['PATIERO','Patio'],['MANTENIMIENTO','Mantenimiento']];
+  _comDest = dests[0][0];
+  document.getElementById('comDests').innerHTML = dests.map(function(d){
+    return '<button type="button" class="btn xs" data-cd="'+d[0]+'" onclick="setComDest(\''+d[0]+'\')" style="'+comDestStyle(d[0]===_comDest)+'">'+esc(d[1])+'</button>';
+  }).join('');
+  document.getElementById('comCuerpo').value='';
+  panel.style.display='block';
+  document.getElementById('comCuerpo').focus();
+}
+function comDestStyle(on){ return on?'background:rgba(59,130,246,.18);border:1px solid #3b82f6;color:#93c5fd':'background:#22222c;border:1px solid #3a3a45;color:#c9cdd6'; }
+function setComDest(d){ _comDest=d; document.querySelectorAll('#comDests [data-cd]').forEach(function(b){ b.style.cssText=comDestStyle(b.getAttribute('data-cd')===d); }); }
+function enviarComunicado(){
+  var cuerpo=(document.getElementById('comCuerpo').value||'').trim();
+  if(!cuerpo){ toast('Escribe el comunicado','err'); return; }
+  rpc('crearComunicado',{token:sess.token,cuerpo:cuerpo,destino:_comDest},function(d){
+    toast('📢 Comunicado enviado · '+(d.destinatarios||0)+' persona(s)','ok');
+    document.getElementById('comunicadoPanel').style.display='none';
+  },function(e){ toast(e.message||'Error','err'); });
 }
 
 // NÓMINA: cumpleaños del mes + listado por las áreas de siempre (sin extras)
