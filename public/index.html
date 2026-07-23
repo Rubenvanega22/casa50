@@ -10119,30 +10119,91 @@ function renderLiquidados(list){
   var ov=document.createElement('div'); ov.setAttribute('data-liqov','1');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto';
   ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  var nomina=list.filter(function(p){return p.salidaTipo!=='ELIMINADO_EXTRA';});
+  var extras=list.filter(function(p){return p.salidaTipo==='ELIMINADO_EXTRA';});
   var h='<div style="background:#161b26;border:1px solid #2e2e3a;border-radius:14px;padding:16px;max-width:640px;width:100%;max-height:90vh;overflow:auto">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:15px;font-weight:700;color:#e5e7eb">📦 Personal liquidado</div><button class="btn bk sm" onclick="if(window._liqOv)window._liqOv.remove()">✕</button></div>';
   if(!list.length){ h+='<div style="color:#9ca3af;font-size:13px;padding:24px;text-align:center">Nadie liquidado ni eliminado todavía.</div>'; }
-  else list.forEach(function(p){
-    var et=liqEtiqueta(p.salidaTipo);
-    h+='<div style="border:1px solid #2e2e3a;border-radius:10px;padding:11px;margin-bottom:8px;background:#1a1a22">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
-    h+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#e5e7eb">'+esc(p.name)+'</div>';
-    h+='<div style="font-size:11px;color:'+et.col+';font-weight:700;margin-top:2px">'+et.ic+' '+esc(et.txt)+'</div>';
-    var meta=[]; if(p.salidaFecha)meta.push('salida '+p.salidaFecha); if(p.salidaPor)meta.push('por '+esc(p.salidaPor));
-    h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+meta.join(' · ')+'</div>';
-    if(p.salidaObs)h+='<div style="font-size:11px;color:#c9cdd6;margin-top:4px">"'+esc(p.salidaObs)+'"</div>';
-    h+='</div>';
-    h+='<button class="btn bg xs" style="white-space:nowrap" onclick="reintegrarStaff(\''+esc(p.id)+'\')">↩️ Reintegrar</button>';
-    h+='</div>';
-    if(p.docs&&p.docs.length){
-      h+='<div style="margin-top:8px;border-top:1px solid #2e2e3a;padding-top:8px"><div style="font-size:10px;color:#9ca3af;margin-bottom:5px">📁 Carpeta ('+p.docs.length+')</div>';
-      p.docs.forEach(function(dc){ h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0"><span style="font-size:11px;color:#e5e7eb">'+docIcono(dc.tipo)+' '+esc(dc.titulo)+'</span><button class="btn bk xs" onclick="descargarDocAdmin('+dc.id+')">⬇</button></div>'; });
-      h+='</div>';
-    }
-    h+='</div>';
-  });
+  else { h+=liqSeccion('📤 Liquidados (nómina)', nomina); h+=liqSeccion('🗑 Extras eliminados', extras); }
   h+='</div>';
   ov.innerHTML=h; document.body.appendChild(ov); window._liqOv=ov;
+}
+function liqSeccion(titulo, arr){
+  var h='<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#e5e7eb;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #2e2e3a">'+esc(titulo)+' ('+arr.length+')</div>';
+  if(!arr.length) h+='<div style="font-size:11px;color:#9ca3af;padding:2px 0 6px">Ninguno.</div>';
+  else arr.forEach(function(p){ h+=liqPersonaRow(p); });
+  h+='</div>';
+  return h;
+}
+function liqPersonaRow(p){
+  var et=liqEtiqueta(p.salidaTipo);
+  var h='<div style="border:1px solid #2e2e3a;border-radius:10px;padding:11px;margin-bottom:8px;background:#1a1a22">';
+  h+='<div style="font-size:13px;font-weight:700;color:#e5e7eb">'+esc(p.name)+'</div>';
+  h+='<div style="font-size:11px;color:'+et.col+';font-weight:700;margin-top:2px">'+et.ic+' '+esc(et.txt)+'</div>';
+  var meta=[]; if(p.salidaFecha)meta.push('salida '+p.salidaFecha); if(p.salidaPor)meta.push('por '+esc(p.salidaPor));
+  h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+meta.join(' · ')+'</div>';
+  if(p.salidaObs)h+='<div style="font-size:11px;color:#c9cdd6;margin-top:4px">"'+esc(p.salidaObs)+'"</div>';
+  h+='<div style="display:flex;gap:6px;margin-top:9px">';
+  h+='<button class="btn bk xs" onclick="verFichaLiq(\''+esc(p.id)+'\')">👁 Ver ficha</button>';
+  h+='<button class="btn bg xs" style="white-space:nowrap" onclick="reintegrarStaff(\''+esc(p.id)+'\')">↩️ Reintegrar</button>';
+  h+='</div>';
+  h+='<div id="ficha-liq-'+esc(p.id)+'" style="display:none"></div>';
+  h+='</div>';
+  return h;
+}
+// Ficha de CONSULTA (solo lectura) dentro del 📦 — no saca a la persona de liquidados.
+function verFichaLiq(id){
+  var c=document.getElementById('ficha-liq-'+id); if(!c)return;
+  if(c.style.display==='block'){ c.style.display='none'; c.innerHTML=''; return; }
+  var p=(window._liqList||[]).find(function(x){return String(x.id)===String(id);});
+  if(!p)return;
+  c.innerHTML=liqFichaHtml(p); c.style.display='block';
+}
+function liqFechaCortaMs(ms){ if(!ms)return''; try{ return new Date(Number(ms)).toLocaleDateString('es-CO'); }catch(e){ return ''; } }
+function liqDocGrupo(titulo, docs){
+  var h='<div style="margin-bottom:6px"><div style="font-size:11px;color:#e5e7eb;margin-bottom:2px">'+esc(titulo)+'</div>';
+  docs.forEach(function(d){ h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:2px 0 2px 12px"><span style="font-size:10px;color:#9ca3af">'+(d.mime==='application/pdf'?'PDF':'imagen')+(d.createdMs?(' · '+liqFechaCortaMs(d.createdMs)):'')+'</span><button class="btn bk xs" onclick="descargarDocAdmin('+d.id+')">⬇</button></div>'; });
+  h+='</div>';
+  return h;
+}
+function liqFichaHtml(p){
+  var h='<div style="background:#12121a;border:1px solid #2e2e3a;border-radius:8px;padding:10px;margin-top:9px">';
+  // datos personales (solo lectura)
+  h+='<div style="font-size:11px;font-weight:700;color:#93c5fd;margin-bottom:6px">👤 Datos personales</div>';
+  h+='<div style="font-size:11px;color:#c9cdd6;line-height:1.7">';
+  if(p.cedula)h+='CC: <b>'+esc(p.cedula)+'</b><br>';
+  if(p.celular)h+='📱 <b>'+esc(p.celular)+'</b><br>';
+  if(p.direccion)h+='📍 '+esc(p.direccion)+'<br>';
+  if(p.fechaNacimiento)h+='Nacimiento: '+esc(p.fechaNacimiento)+'<br>';
+  if(p.fechaIngreso)h+='Ingreso: '+esc(p.fechaIngreso)+'<br>';
+  var emerg=p.contactoEmergenciaNombre||p.contactoEmergencia||'';
+  if(emerg)h+='🚨 '+esc(emerg)+(p.contactoEmergenciaTelefono?(' · '+esc(p.contactoEmergenciaTelefono)):'')+'<br>';
+  if(p.correo)h+='✉ '+esc(p.correo)+'<br>';
+  if(p.eps)h+='EPS: '+esc(p.eps)+'<br>';
+  if(p.arl)h+='ARL: '+esc(p.arl)+'<br>';
+  h+='</div>';
+  var docs=p.docs||[];
+  var empresa=docs.filter(function(d){return d.tipo==='empresa';});
+  var incaps=docs.filter(function(d){return d.tipo==='incapacidad';});
+  var carta=docs.filter(function(d){return d.tipo==='liquidacion';});
+  var comps=docs.filter(function(d){return d.tipo==='liquidacion_comprobante';});
+  // expediente (documentos de empresa por carpeta + incapacidades)
+  h+='<div style="font-size:11px;font-weight:700;color:#93c5fd;margin:10px 0 6px">📁 Expediente</div>';
+  if(!empresa.length && !incaps.length){ h+='<div style="font-size:11px;color:#9ca3af">Sin documentos.</div>'; }
+  else {
+    var byTit={}; empresa.forEach(function(d){ (byTit[d.titulo]=byTit[d.titulo]||[]).push(d); });
+    Object.keys(byTit).forEach(function(tit){ h+=liqDocGrupo('📄 '+tit, byTit[tit]); });
+    if(incaps.length) h+=liqDocGrupo('🩺 Incapacidades', incaps);
+  }
+  // papeles de liquidación (carta + comprobantes + observaciones)
+  if(carta.length || comps.length || p.salidaObs){
+    h+='<div style="font-size:11px;font-weight:700;color:#f87171;margin:10px 0 6px">📤 Papeles de liquidación</div>';
+    if(carta.length) h+=liqDocGrupo('📄 Carta de liquidación', carta);
+    if(comps.length) h+=liqDocGrupo('💰 Comprobantes', comps);
+    if(p.salidaObs) h+='<div style="font-size:11px;color:#c9cdd6;margin-top:4px">📝 Observaciones: "'+esc(p.salidaObs)+'"</div>';
+  }
+  h+='</div>';
+  return h;
 }
 function reintegrarStaff(id){
   var p=(window._liqList||[]).find(function(x){return String(x.id)===String(id);});

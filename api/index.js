@@ -3794,7 +3794,10 @@ async function apiGetLiquidados(p, res) {
     id: r.id, name: r.name, area: r.area, type: r.type, rol: r.rol || '',
     salidaTipo: r.salida_tipo || '', salidaFecha: r.salida_fecha || '', salidaObs: r.salida_obs || '',
     salidaPor: r.salida_por || '', salidaMs: r.salida_ms || null,
-    cedula: r.cedula || '', celular: r.celular || '',
+    cedula: r.cedula || '', celular: r.celular || '', direccion: r.direccion || '',
+    fechaNacimiento: r.fecha_nacimiento || '', fechaIngreso: r.fecha_ingreso || '',
+    contactoEmergenciaNombre: r.contacto_emergencia_nombre || '', contactoEmergenciaTelefono: r.contacto_emergencia_telefono || '',
+    contactoEmergencia: r.contacto_emergencia || '', correo: r.correo || '', eps: r.eps || '', arl: r.arl || '',
     docs: docsByStaff[r.id] || []
   })) });
 }
