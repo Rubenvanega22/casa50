@@ -10132,7 +10132,7 @@ function renderLiquidados(list){
     h+='<div style="font-size:10px;color:#9ca3af;margin-top:3px">'+meta.join(' · ')+'</div>';
     if(p.salidaObs)h+='<div style="font-size:11px;color:#c9cdd6;margin-top:4px">"'+esc(p.salidaObs)+'"</div>';
     h+='</div>';
-    h+='<button class="btn bk xs" onclick="reintegrarStaff(\''+esc(p.id)+'\')">↩︎ Reintegrar</button>';
+    h+='<button class="btn bg xs" style="white-space:nowrap" onclick="reintegrarStaff(\''+esc(p.id)+'\')">↩️ Reintegrar</button>';
     h+='</div>';
     if(p.docs&&p.docs.length){
       h+='<div style="margin-top:8px;border-top:1px solid #2e2e3a;padding-top:8px"><div style="font-size:10px;color:#9ca3af;margin-bottom:5px">📁 Carpeta ('+p.docs.length+')</div>';
@@ -10147,7 +10147,7 @@ function renderLiquidados(list){
 function reintegrarStaff(id){
   var p=(window._liqList||[]).find(function(x){return String(x.id)===String(id);});
   var nombre=p?p.name:'esta persona';
-  conf('¿Reintegrar a '+nombre+' a la lista de activos? Vuelve a Personal. Su PIN de la app sigue revocado hasta que le hagas un reset.',function(){
+  conf('¿Devolver a '+nombre+' a la lista de activos? Vuelve a Personal y recupera el acceso a la app con su MISMO PIN de siempre.',function(){
     rpc('reintegrarStaff',{token:sess.token,staffId:id},function(){
       toast('↩︎ '+nombre+' reintegrado','ok');
       if(window._liqOv)window._liqOv.remove();

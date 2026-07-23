@@ -3742,7 +3742,8 @@ async function apiEliminarExtra(p, res) {
   const now = Date.now();
   await tUpdate('staff', {
     salida_tipo: 'ELIMINADO_EXTRA', salida_por: s.n || '', salida_ms: now,
-    pin_version: (Number(st.pin_version) || 1) + 1   // revoca carnet/sesión de la app colaborador
+    active: false,                                   // bloquea el LOGIN (el colaborador chequea active===false)
+    pin_version: (Number(st.pin_version) || 1) + 1   // + mata la sesión activa (carnet viejo inválido)
   }).eq('id', staffId);
   return ok(res, { eliminado: true });
 }
@@ -3769,7 +3770,8 @@ async function apiLiquidar(p, res) {
   await tUpdate('staff', {
     salida_tipo: tipo, salida_fecha: fecha || null, salida_obs: obs || null,
     salida_por: s.n || '', salida_ms: now,
-    pin_version: (Number(st.pin_version) || 1) + 1   // corta el acceso a la app
+    active: false,                                   // bloquea el LOGIN (el colaborador chequea active===false)
+    pin_version: (Number(st.pin_version) || 1) + 1   // + mata la sesión activa (carnet viejo inválido)
   }).eq('id', staffId);
   return ok(res, { liquidado: true });
 }
@@ -3797,8 +3799,10 @@ async function apiGetLiquidados(p, res) {
   })) });
 }
 
-// apiReintegrar: revierte la salida (por si fue error) -> vuelve a activos. Deja auditoría del reintegro.
-// El PIN de la app sigue revocado (pin_version se subió al liquidar): el admin le hace un reset si lo necesita.
+// apiReintegrar: revierte la salida (por si fue error o vuelve al motel) -> vuelve a activos Y recupera
+// el acceso a la app. active:true reabre el LOGIN; como el pin_hash NUNCA se tocó, entra con su MISMO
+// PIN de siempre (el pin_version quedó subido = los carnets viejos siguen muertos, pero un login fresco
+// emite uno nuevo). No hace falta ponerle un PIN nuevo con 🔑, salvo que el colaborador lo haya olvidado.
 async function apiReintegrar(p, res) {
   const s = requireAdmin(p);
   if (!s) return err(res, 'No autorizado', 403);
@@ -3810,6 +3814,7 @@ async function apiReintegrar(p, res) {
   const now = Date.now();
   await tUpdate('staff', {
     salida_tipo: null, salida_fecha: null, salida_obs: null, salida_por: null, salida_ms: null,
+    active: true,                                    // reabre el login, con su PIN original
     reintegrado_por: s.n || '', reintegrado_ms: now
   }).eq('id', staffId);
   return ok(res, { reintegrado: true });
