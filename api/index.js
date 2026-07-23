@@ -134,7 +134,15 @@ async function sendPushToStaff(staffId, payload) {
 // Fuente unica de verdad para que el cliente colaborador suscriba con la MISMA clave que firma el envio,
 // y no se desincronicen (causa clasica de "push nunca llega": la suscripcion quedo atada a otra clave).
 async function apiGetVapidPublic(p, res) {
-  return ok(res, { publicKey: String(process.env.VAPID_PUBLIC || '').trim() });
+  // webpushReady: booleano no-sensible (¿web-push inicializó con las llaves VAPID?). Si es false,
+  // la PRIVADA falta o está malformada -> sendPushToStaff no-opea. privLen: solo la LONGITUD de la
+  // privada (no su valor) para detectar espacios/pegado incompleto sin exponer el secreto.
+  const priv = String(process.env.VAPID_PRIVATE || '');
+  return ok(res, {
+    publicKey: String(process.env.VAPID_PUBLIC || '').trim(),
+    webpushReady: !!getWebPush(),
+    privLen: priv.length, privTrimLen: priv.trim().length
+  });
 }
 
 // novedadColab (Plan B): registra UNA novedad para el colaborador (fila staff_mensajes ADMIN
