@@ -9696,7 +9696,7 @@ function staffCardHtml(s, hoy){
   if(!esExtra) h+=chipBtn('📁 Documentos',"toggleDocs('"+esc(s.id)+"')");
   h+=chipChat(s.id,badge);
   if(!esExtra) h+=chipBtn('📤 Liquidar',"toast('Liquidar: próximamente','ok')");
-  else h+=chipBtn('🗑 Eliminar',"toast('Eliminar: próximamente','ok')");
+  else h+=chipBtn('🗑 Eliminar',"eliminarExtraNomina('"+esc(s.id)+"')");
   h+='</div>';
   h+='<div id="docs-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
   h+='<div id="chat-'+esc(s.id)+'" style="display:none;margin-top:10px"></div>';
@@ -10029,6 +10029,17 @@ function enviarComunicado(){
     document.getElementById('comunicadoPanel').style.display='none';
   },function(e){ toast(e.message||'Error','err'); });
 }
+// ===== Eliminar extra (Sub-etapa 3 · Pieza 4) — soft, historial intacto =====
+function eliminarExtraNomina(id){
+  var s=(staffList||[]).find(function(x){return String(x.id)===String(id);});
+  var nombre=s?s.name:'este extra';
+  conf('¿Eliminar a '+nombre+' de la lista de extras? Su historial de asistencias y pagos queda guardado, y se le corta el acceso a la app.',function(){
+    rpc('eliminarExtraNomina',{token:sess.token,staffId:id},function(){
+      toast('🗑 Extra eliminado · historial preservado','ok');
+      loadStaff();   // refetch + re-render (ya no aparece en la lista)
+    },function(e){ toast(e.message||'Error','err'); });
+  });
+}
 
 // NÓMINA: cumpleaños del mes + listado por las áreas de siempre (sin extras)
 function renderStaff(){
@@ -10039,6 +10050,7 @@ function renderStaff(){
 
   var cumples=staffList.filter(function(s){
     if(s.type==='extra')return false;
+    if(s.salidaMs)return false;
     if(!s.fechaNacimiento)return false;
     var mes=Number(s.fechaNacimiento.split('-')[1]);
     return mes===mesActual;
@@ -10067,7 +10079,7 @@ function renderStaff(){
   }
 
   areas.forEach(function(area){
-    var members=staffList.filter(function(s){return String(s.area||'')===area && s.type!=='extra';});
+    var members=staffList.filter(function(s){return String(s.area||'')===area && s.type!=='extra' && !s.salidaMs;});
     if(!members.length)return;
     h+='<div class="cfg"><h3>'+area+'</h3>';
     members.forEach(function(s){ h+=staffCardHtml(s,hoy); });
@@ -10080,7 +10092,7 @@ function renderStaff(){
 // primero (id='S'+timestamp); a futuro, por actividad reciente cuando haya asistencia.
 function renderExtras(){
   var hoy=new Date();
-  var extras=staffList.filter(function(s){return s.type==='extra' && s.estadoRegistro==='APROBADO';})
+  var extras=staffList.filter(function(s){return s.type==='extra' && s.estadoRegistro==='APROBADO' && !s.salidaMs;})
     .sort(function(a,b){return String(b.id).localeCompare(String(a.id));});
   var el=document.getElementById('staffExtrasCont');
   if(!el)return;

@@ -648,6 +648,7 @@ module.exports = async function handler(req, res) {
       case 'crearCapacitacion':   return await apiCrearCapacitacion(payload, res);
       case 'getCapacitaciones':   return await apiGetCapacitaciones(payload, res);
       case 'crearComunicado':     return await apiCrearComunicado(payload, res);
+      case 'eliminarExtraNomina': return await apiEliminarExtra(payload, res);
       case 'getVapidPublic':      return await apiGetVapidPublic(payload, res);
       case 'setMultiMaidMode':  return await apiSetMultiMaidMode(payload, res);
       case 'getMultiMaidMode':  return await apiGetMultiMaidMode(payload, res);
@@ -3030,6 +3031,8 @@ async function apiGetStaff(p, res) {
     fechaIngreso:r.fecha_ingreso||'', fechaVacaciones:r.fecha_vacaciones||'',
     estadoRegistro:r.estado_registro||'', tienePin: !!r.pin_hash,
     pinResetPor:r.pin_reset_por||'', pinResetMs:r.pin_reset_ms||null,
+    salidaMs:r.salida_ms||null, salidaTipo:r.salida_tipo||'', salidaFecha:r.salida_fecha||'',
+    salidaObs:r.salida_obs||'', salidaPor:r.salida_por||'',
     vacacionesHistorial: histByStaff[r.id] || []
   })) });
 }
@@ -3713,6 +3716,27 @@ async function apiCrearComunicado(p, res) {
     await novedadColab(s, st.id, 'COMUNICADO', cuerpo, 'CHAT', null, '📢 Comunicado', { comunicado_id: comId });
   }
   return ok(res, { creado: comId, destinatarios: targets.length });
+}
+
+// ===== ELIMINAR EXTRA (Sub-etapa 3 · Pieza 4) — soft, historial intacto =====
+// El extra (staff type='extra') que ya no se va a llamar: sale de la lista pero su fila NUNCA se borra
+// (asistencias/pagos quedan). Regla de Oro: marca salida_* + auditoría. Corta la app (pin_version+1).
+// OJO: NO es apiDeleteExtra (esa opera sobre extra_staff, extras de TURNO).
+async function apiEliminarExtra(p, res) {
+  const s = requireAdmin(p);
+  if (!s) return err(res, 'No autorizado', 403);
+  const staffId = String(p.staffId || '').trim();
+  if (!staffId) return err(res, 'Falta la persona');
+  const { data: st } = await tSelect('staff', 'id,type,salida_ms,pin_version').eq('id', staffId).maybeSingle();
+  if (!st) return err(res, 'No encontrado');
+  if ((st.type || '') !== 'extra') return err(res, 'Solo aplica a extras');
+  if (st.salida_ms) return err(res, 'Ya está fuera de la lista');
+  const now = Date.now();
+  await tUpdate('staff', {
+    salida_tipo: 'ELIMINADO_EXTRA', salida_por: s.n || '', salida_ms: now,
+    pin_version: (Number(st.pin_version) || 1) + 1   // revoca carnet/sesión de la app colaborador
+  }).eq('id', staffId);
+  return ok(res, { eliminado: true });
 }
 
 // apiGetCapacitaciones: lista del mes (para el admin en la grilla).
