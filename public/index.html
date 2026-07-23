@@ -1883,6 +1883,11 @@ function clearSess(){
 
 // ---- INICIO ----
 window.onload=function(){
+  // Deep-link del push admin: capturar y GUARDAR el destino. NO aplicar aquí: la app abre en el
+  // LOGIN y las pantallas admin recién existen en startApp. Se aplica post-login (aplicarDeepLink).
+  try { var _q=new URLSearchParams(location.search);
+    if(_q.get('abrir')){ window._deepLink={abrir:_q.get('abrir'),staff:_q.get('staff')||'',permiso:_q.get('permiso')||'',doc:_q.get('doc')||''}; }
+  } catch(e){}
   var saved=loadSess();
   rpc('bootstrap',null,function(d){
     if(d){BS=d;rooms=d.rooms||[];
@@ -2081,7 +2086,11 @@ actualizarBtnCaja();
   if(sess.userRole==='ADMIN'){
     var mDayEl=document.getElementById('mDay');if(mDayEl)mDayEl.value=sess.businessDay||'';
     var mdDayEl=document.getElementById('mdDay');if(mdDayEl)mdDayEl.value=sess.businessDay||'';
-    setDefWk();loadM();loadMP();loadStaff();
+    setDefWk();loadM();loadMP();
+    // Deep-link del push: aplicarDeepLink toma el control (un ÚNICO sw('staff')->loadStaff que abre
+    // el chat/doc) y devuelve true. Si no hay destino (o cualquier salida temprana) devuelve false
+    // y cae en la precarga normal -> Personal NUNCA queda en blanco. Un solo loadStaff, cero timing.
+    if(!aplicarDeepLink()) loadStaff();
     rpc('getRooms',null,function(d){if(d){rooms=d.rooms||[];}});
     initPushAdmin(sess);   // Sub-etapa 4: suscribir este dispositivo para recibir avisos del colaborador
   }
@@ -9719,6 +9728,9 @@ function refreshChatBadges(){
     window._chatBadges=d.porStaff||{}; window._chatEstado=d; renderStaff();renderExtras();
     if(typeof renderAvisoGlobal==='function')renderAvisoGlobal();
     if(window._pendingOpenChat){ var sid=window._pendingOpenChat; window._pendingOpenChat=null; var box=document.getElementById('chat-'+sid); if(box){ toggleChat(sid); box.scrollIntoView({behavior:'smooth',block:'center'}); } }
+    // Deep-link a incapacidad: abrir los documentos de ESE colaborador. renderDocumentos consume
+    // _pendingScrollInc y hace scroll/resalte de inccard-<doc>. Si no hay box (liquidado): no-op.
+    if(window._pendingOpenDocs){ var od=window._pendingOpenDocs; window._pendingOpenDocs=null; var dbox=document.getElementById('docs-'+od.staff); if(dbox){ window._pendingScrollInc={staff:od.staff,doc:od.doc||''}; toggleDocs(od.staff); dbox.scrollIntoView({behavior:'smooth',block:'center'}); } }
   },function(){});
 }
 var _chatPoll=null;
@@ -9752,7 +9764,7 @@ function horaCortaChat(ms){ if(!ms)return''; var d=new Date(Number(ms)); var H=d
 function permisoTipoLabel(t){ return {CITA_MEDICA:'Cita médica',CALAMIDAD:'Calamidad',DILIGENCIA:'Diligencia personal',LICENCIA:'Licencia',OTRO:'Otro'}[t]||t; }
 function permisoCardAdmin(p,staffId){
   var dur=p.diaCompleto?'Día completo':((p.horaDesde||'').slice(0,5)+'-'+(p.horaHasta||'').slice(0,5));
-  var h='<div style="align-self:flex-start;max-width:94%;background:#1a1a24;border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:10px 12px">';
+  var h='<div id="permcard-'+esc(String(p.id))+'" style="align-self:flex-start;max-width:94%;background:#1a1a24;border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:10px 12px">';
   h+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:5px">📋 Solicitud de permiso</div>';
   h+='<div style="font-size:12px;color:#c9cdd6;line-height:1.6">Tipo: <b style="color:#e5e7eb">'+esc(permisoTipoLabel(p.tipo))+'</b><br>Fecha: <b style="color:#e5e7eb">'+esc(p.fecha)+'</b> · '+esc(dur)+(p.motivo?('<br>Motivo: <span style="color:#9ca3af">'+esc(p.motivo)+'</span>'):'')+'</div>';
   if(p.tieneSoporte) h+='<button class="btn xs" style="margin-top:7px;background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="verSoportePermisoAdmin('+p.id+')">👁 Ver soporte</button>';
@@ -9786,6 +9798,9 @@ function renderConversacionAdmin(staffId,msgs){
   h+='<div style="display:flex;gap:6px"><input id="chatinp-'+esc(staffId)+'" placeholder="Escribe a la persona…" style="flex:1;background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;color:#e5e7eb;font-size:12px" onkeydown="if(event.key===\'Enter\')enviarRespuestaAdmin(\''+esc(staffId)+'\')"><button class="btn bg sm" onclick="enviarRespuestaAdmin(\''+esc(staffId)+'\')">Enviar</button></div>';
   h+='</div>';
   box.innerHTML=h;
+  // Deep-link a permiso: scroll/resalte de ESA solicitud, validando que sea del staff de esta
+  // conversación (simétrico a _pendingScrollInc). Si ya se resolvió y no está la card: no-op.
+  if(window._pendingScrollPerm && window._pendingScrollPerm.staff===staffId){ var pid=window._pendingScrollPerm.permiso; window._pendingScrollPerm=null; var pc=pid&&document.getElementById('permcard-'+pid); if(pc){ pc.scrollIntoView({behavior:'smooth',block:'center'}); pc.style.boxShadow='0 0 0 2px #f59e0b'; setTimeout(function(){pc.style.boxShadow='';},2500); } }
   var sc=document.getElementById('chatscroll-'+staffId); if(sc)sc.scrollTop=nearBottom?sc.scrollHeight:prevTop;
   var inp=document.getElementById('chatinp-'+staffId); if(inp&&prevVal)inp.value=prevVal;
 }
@@ -9871,9 +9886,12 @@ function renderDocumentos(staffId,data){
   else if(openF) h+=carpetaContenidoHtml(staffId,openF);
   h+='</div>';
   box.innerHTML=h;
+  // Deep-link a incapacidad: scroll/resalte de ESE documento en "por revisar", validando que sea
+  // del staff abierto (simétrico a _pendingScrollPerm). Si ya se validó y no está la card: no-op.
+  if(window._pendingScrollInc && window._pendingScrollInc.staff===staffId){ var did=window._pendingScrollInc.doc; window._pendingScrollInc=null; var iv=did&&document.getElementById('inccard-'+did); if(iv){ iv.scrollIntoView({behavior:'smooth',block:'center'}); iv.style.boxShadow='0 0 0 2px #22c55e'; setTimeout(function(){iv.style.boxShadow='';},2500); } }
 }
 function incRevHtml(d,staffId){
-  var h='<div style="background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+  var h='<div id="inccard-'+esc(String(d.id))+'" style="background:#22222c;border:1px solid #3a3a45;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
   h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
   h+='<div style="flex:1;min-width:120px"><div style="font-size:12px;color:#e5e7eb">'+esc(d.titulo)+'</div><div style="font-size:10px;color:#9ca3af">'+incRangoDoc(d.incDesde,d.incDias)+' · ⏳ En revisión</div></div>';
   h+='<button class="btn xs" style="background:#22222c;border:1px solid #3a3a45;color:#c9cdd6" onclick="descargarDocAdmin('+d.id+')">👁 Ver</button>';
@@ -17026,6 +17044,22 @@ async function initPushAdmin(session){
       function(){},   // éxito silencioso: no molestar en cada apertura del POS
       function(e){ toast('Push: el servidor rechazó la suscripción ('+((e&&e.message)||'?')+')','err'); });
   } catch(e){ toast('Push: fallo al suscribir — '+((e&&e.message)||e),'err'); }
+}
+
+// Aplica el destino de un push admin (deep-link). Devuelve true SOLO si tomó el control de la
+// navegación (llegó a un sw('staff')); en startApp: if(!aplicarDeepLink()) loadStaff(). Cualquier
+// salida temprana (sin deep-link, no-admin) devuelve false y cae en la carga normal -> Personal
+// NUNCA queda en blanco. Limpia variable + URL apenas se aplica (si queda, cada login saltaría al
+// mismo lugar). Es el ÚNICO loadStaff del login cuando hay deep-link (vía sw('staff')): un solo render.
+function aplicarDeepLink(){
+  var d=window._deepLink; if(!d) return false;
+  window._deepLink=null;
+  try { history.replaceState(null,'',location.pathname); } catch(e){}
+  if(!sess || sess.userRole!=='ADMIN') return false;   // gate: solo admin
+  if(d.abrir==='chat' && d.staff){ window._pendingOpenChat=d.staff; sw('staff'); return true; }
+  if(d.abrir==='permiso' && d.staff){ window._pendingOpenChat=d.staff; window._pendingScrollPerm={staff:d.staff,permiso:d.permiso||''}; sw('staff'); return true; }
+  if(d.abrir==='incapacidad' && d.staff){ window._pendingOpenDocs={staff:d.staff,doc:d.doc||''}; sw('staff'); return true; }
+  sw('staff'); return true;   // deep-link presente pero sin staff válido: igual mostrar Personal (nunca en blanco)
 }
 </script>
 </body>
