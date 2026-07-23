@@ -17006,20 +17006,25 @@ var VAPID_PUBLIC = 'BKGEZXlr_0bOz3shNlEpZsxJaiFJPeFSzNoU5CfJp8rHV9wJEmF0mUaHmx8v
 function urlB64ToU8(b64){ var pad='='.repeat((4-b64.length%4)%4); var s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/'); var raw=atob(s); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }
 async function initPushAdmin(session){
   if(!session || session.userRole!=='ADMIN' || !session.token) return;   // gate cliente (el server revalida con requireAdmin)
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)) return;
+  // Señales visibles TEMPORALES (diagnóstico tanda 1): cada rama avisa por toast el motivo
+  // exacto por el que no se pudo suscribir. Se quitan cuando quede confirmado el flujo.
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){ toast('Push: este navegador no soporta notificaciones','err'); return; }
   try {
-    var reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.register('/sw.js');
+    var reg = await navigator.serviceWorker.ready;   // espera a que el SW esté ACTIVO antes de suscribir
     var perm = Notification.permission;
-    if(perm==='default'){ try { perm = await Notification.requestPermission(); } catch(e){ return; } }
-    if(perm!=='granted') return;
+    if(perm==='default'){ try { perm = await Notification.requestPermission(); } catch(e){ toast('Push: no se pudo pedir permiso','err'); return; } }
+    if(perm!=='granted'){ toast('Push: permiso '+perm+' (actívalo en el navegador)','err'); return; }
     var sub = await reg.pushManager.getSubscription();
     // Rotación de llaves: una suscripción atada a la pública vieja NUNCA recibe el push
     // firmado con la nueva. Si la key cambió (guardada en localStorage), re-suscribir.
     if(sub && localStorage.getItem('vapidKeyAdmin')!==VAPID_PUBLIC){ try{ await sub.unsubscribe(); }catch(e){} sub=null; }
     if(!sub){ sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToU8(VAPID_PUBLIC) }); }
     try { localStorage.setItem('vapidKeyAdmin', VAPID_PUBLIC); } catch(e){}
-    rpc('subscribePushAdmin', { token: session.token, subscription: sub.toJSON(), ua: navigator.userAgent }, function(){}, function(){});
-  } catch(e){}
+    rpc('subscribePushAdmin', { token: session.token, subscription: sub.toJSON(), ua: navigator.userAgent },
+      function(){ toast('✅ Notificaciones activadas en este dispositivo','ok'); },
+      function(e){ toast('Push: el servidor rechazó la suscripción ('+((e&&e.message)||'?')+')','err'); });
+  } catch(e){ toast('Push: fallo al suscribir — '+((e&&e.message)||e),'err'); }
 }
 </script>
 </body>
