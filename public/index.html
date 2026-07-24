@@ -4015,7 +4015,7 @@ function loadVentas(){
     var taxiList=(m.taxiList||[]);
     var t=m.totals||{};
     var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0;}).sort(function(a,b){return (a.tsMs||a.checkInMs)-(b.tsMs||b.checkInMs);});
-    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoColor=SALES_SHIFT_COLORES;
     var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     var resumen={SHIFT_1:{count:0,total:0},SHIFT_2:{count:0,total:0},SHIFT_3:{count:0,total:0}};
     sl.forEach(function(s){var sid=s.shiftId||'SHIFT_1';if(resumen[sid]){resumen[sid].count++;resumen[sid].total+=Number(s.total||0);}});
@@ -6100,7 +6100,26 @@ function ncalGetPersonas(area){
 // ===== GRILLA NUEVA (Pieza 5a · Etapa 2 sub-1) — render de SOLO LECTURA desde `grilla` =====
 // Preview: NO toca la grilla vieja (Paola sigue editando ahí). Colores = sistema de la app.
 // PERMISO = cian #06B6D4 (propuesta, no choca con T3 morado). Vacaciones ámbar, incapacidad rojo.
-var GRILLA_COLORES = { T1:'#4ADE80', T2:'#3B82F6', T3:'#8B5CF6', DESCANSO:'#9CA3AF', VACACIONES:'#F59E0B', INCAPACIDAD:'#EF4444', PERMISO:'#06B6D4' };
+// Fuente única de colores de ESTADO (grilla POS + app colaborador comparten esta MISMA paleta).
+// Render preservado (fondo oscuro): relleno = tint del color (bg+ESTADO_TINT), borde sólido, sigla
+// BRILLANTE (fg) — antes la sigla era #222, casi invisible sobre el tint oscuro; fg lo arregla.
+// bg de estados de color = sólido base (sirve leyenda, punto de permiso y color de turno de ventas).
+// DESCANSO es translúcido (celda propia, NO se le agrega alpha). Permiso lleva borde blanco (aro).
+// NO se cambia ninguna sigla (letra): esta pieza es SOLO de color.
+var ESTADO_TINT = '57';   // ~.34 alpha (igual al aspecto aprobado de la app; el POS sube a igualarla)
+var ESTADO_COLORES = {
+  T1:          { bg:'#3B82F6', bd:'#3B82F6', fg:'#60A5FA' },   // relleno / borde / sigla
+  T2:          { bg:'#22C55E', bd:'#22C55E', fg:'#4ADE80' },
+  T3:          { bg:'#F97316', bd:'#F97316', fg:'#FB923C' },
+  DESCANSO:    { bg:'rgba(255,255,255,.08)', bd:'rgba(255,255,255,.5)', fg:'#E8EDF5' },
+  VACACIONES:  { bg:'#F59E0B', bd:'#F59E0B', fg:'#FBBF24' },
+  INCAPACIDAD: { bg:'#EF4444', bd:'#EF4444', fg:'#F87171' },
+  PERMISO:     { bg:'#A9B6C7', bd:'#FFFFFF', fg:'#CBD5E1' },
+  CAPACITACION:{ bg:'#8B5CF6', bd:'#8B5CF6', fg:'#A78BFA' }
+};
+// Color de turno de VENTAS/CUADRE: deriva del sólido base de la grilla -> una sola identidad de
+// turno. Valores {#3B82F6,#22C55E,#F97316} = idénticos a hoy, así ventas/cuadre no cambian.
+var SALES_SHIFT_COLORES = { SHIFT_1:ESTADO_COLORES.T1.bg, SHIFT_2:ESTADO_COLORES.T2.bg, SHIFT_3:ESTADO_COLORES.T3.bg };
 function grillaTurnoCode(sid){return {SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'}[sid]||'';}
 function grillaHoraCorta(h){h=(h||'').slice(0,5);if(!h)return'';var p=h.split(':');var H=parseInt(p[0]||0,10);return (parseInt(p[1]||0,10)===0)?String(H):h;}
 // Horas de una celda: solo TRABAJO cuenta; descanso/novedad = 0. Cruce de medianoche (T3) sumado.
@@ -6132,22 +6151,21 @@ function grillaSetCapsIdx(caps){
   });
   window._grillaCaps=idx;
 }
-// Descanso = BLANCO FANTASMA: translúcido azulado (ghost), integrado a las demás celdas translúcidas del tema.
-var GRILLA_DC_BG='rgba(220,230,255,.16)', GRILLA_DC_BD='rgba(255,255,255,.38)';
-function grillaCeldaDC(txt){ return '<div style="width:34px;min-height:30px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';color:#eef2ff;box-shadow:inset 0 0 6px rgba(255,255,255,.06)">'+(txt?'<b style="font-size:8px">'+txt+'</b>':'')+'</div>'; }
+// Descanso = blanco translúcido (celda propia). Valores en ESTADO_COLORES.DESCANSO (unificado con la app).
+function grillaCeldaDC(txt){ var d=ESTADO_COLORES.DESCANSO; return '<div style="width:34px;min-height:30px;background:'+d.bg+';border:1px solid '+d.bd+';color:'+d.fg+';box-shadow:inset 0 0 6px rgba(255,255,255,.06)">'+(txt?'<b style="font-size:8px">'+txt+'</b>':'')+'</div>'; }
 function grillaCelda(c){
   if(!c) return grillaCeldaDC('');            // sin celda = descanso
   if(c.estado==='TRABAJO'){
-    var t=grillaTurnoCode(c.shiftId), col=GRILLA_COLORES[t]||'#ccc';
-    var horas=(c.area!=='Recepcion'&&c.horaEntrada)?('<div style="font-size:8px;line-height:1.1">'+esc(grillaHoraCorta(c.horaEntrada))+'-'+esc(grillaHoraCorta(c.horaSalida))+'</div>'):'';
-    var dotPerm=c.novedadRef?'<div style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:'+GRILLA_COLORES.PERMISO+'"></div>':'';
+    var t=grillaTurnoCode(c.shiftId), e=ESTADO_COLORES[t]||ESTADO_COLORES.T1;
+    var horas=(c.area!=='Recepcion'&&c.horaEntrada)?('<div style="font-size:8px;line-height:1.1;color:'+e.fg+'">'+esc(grillaHoraCorta(c.horaEntrada))+'-'+esc(grillaHoraCorta(c.horaSalida))+'</div>'):'';
+    var dotPerm=c.novedadRef?'<div style="position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:'+ESTADO_COLORES.PERMISO.bg+';box-shadow:0 0 0 1px '+ESTADO_COLORES.PERMISO.bd+'"></div>':'';
     var badge=c.esComodin?'<div style="font-size:7px;color:#3B82F6;font-weight:700">C</div>':(c.esMantenimiento?'<div style="font-size:7px;color:#F59E0B;font-weight:700">M</div>':'');
-    return '<div style="position:relative;width:34px;min-height:30px;background:'+col+'33;border:1px solid '+col+';color:#222;padding:1px"><b style="font-size:9px">'+t+'</b>'+horas+badge+dotPerm+'</div>';
+    return '<div style="position:relative;width:34px;min-height:30px;background:'+e.bg+ESTADO_TINT+';border:1px solid '+e.bd+';color:'+e.fg+';padding:1px"><b style="font-size:9px">'+t+'</b>'+horas+badge+dotPerm+'</div>';
   }
   if(c.estado==='DESCANSO') return grillaCeldaDC('DC');
   var mapEst={VACACIONES:['VAC','VACACIONES'],INCAPACIDAD:['INC','INCAPACIDAD'],PERMISO:['PER','PERMISO'],NO_VINO:['✕','INCAPACIDAD']};
-  var me=mapEst[c.estado]||['?','VACACIONES'], col=GRILLA_COLORES[me[1]]||'#9CA3AF';
-  return '<div style="width:34px;min-height:30px;background:'+col+'33;border:1px solid '+col+';color:#222"><b style="font-size:8px">'+me[0]+'</b></div>';
+  var me=mapEst[c.estado]||['?','VACACIONES'], e=ESTADO_COLORES[me[1]]||ESTADO_COLORES.VACACIONES;
+  return '<div style="width:34px;min-height:30px;background:'+e.bg+ESTADO_TINT+';border:1px solid '+e.bd+';color:'+e.fg+'"><b style="font-size:8px">'+me[0]+'</b></div>';
 }
 function grillaRenderNueva(data){
   var cont=document.getElementById('schedCont');
@@ -6163,16 +6181,16 @@ function grillaRenderNueva(data){
     nombreDe[c.staffId]=c.personName;
   });
   var h='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#555">'+
-    grillaLeyenda(GRILLA_COLORES.T1,'T1')+grillaLeyenda(GRILLA_COLORES.T2,'T2')+grillaLeyenda(GRILLA_COLORES.T3,'T3')+
-    '<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:10px;height:10px;border-radius:2px;background:'+GRILLA_DC_BG+';border:1px solid '+GRILLA_DC_BD+';display:inline-block"></i>Descanso</span>'+grillaLeyenda(GRILLA_COLORES.VACACIONES,'Vacaciones')+
-    grillaLeyenda(GRILLA_COLORES.INCAPACIDAD,'Incapacidad')+grillaLeyenda(GRILLA_COLORES.PERMISO,'Permiso (propuesta)')+grillaLeyenda('#F97316','Capacitación (CP)')+'</div>';
+    grillaLeyenda(ESTADO_COLORES.T1.bg,'T1')+grillaLeyenda(ESTADO_COLORES.T2.bg,'T2')+grillaLeyenda(ESTADO_COLORES.T3.bg,'T3')+
+    '<span style="display:inline-flex;align-items:center;gap:4px"><i style="width:10px;height:10px;border-radius:2px;background:'+ESTADO_COLORES.DESCANSO.bg+';border:1px solid '+ESTADO_COLORES.DESCANSO.bd+';display:inline-block"></i>Descanso</span>'+grillaLeyenda(ESTADO_COLORES.VACACIONES.bg,'Vacaciones')+
+    grillaLeyenda(ESTADO_COLORES.INCAPACIDAD.bg,'Incapacidad')+grillaLeyenda(ESTADO_COLORES.PERMISO.bg,'Permiso (propuesta)')+grillaLeyenda(ESTADO_COLORES.CAPACITACION.bg,'Capacitación (CP)')+'</div>';
   h+='<div style="margin-bottom:8px"><button class="btn ba sm" onclick="loadSched()">← Volver a la grilla actual</button>'+(isAdmin?' <button class="btn bg sm" onclick="grillaAbrirVacaciones()">🌴 Vacaciones</button> <button class="btn bg sm" onclick="grillaAbrirCapacitacion()">🎓 Capacitaciones</button>':'')+' <span class="muted" style="font-size:11px">'+(isAdmin?'Tocá una celda para editarla':'Solo lectura')+' · beta desde la tabla grilla.</span></div>';
   AREAS.forEach(function(area){
     var personas=personasPorArea[area]||[];
     if(!personas.length)return;
     h+='<div style="font-weight:600;margin:14px 0 6px">'+esc(area)+'</div>';
     h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#141c30;color:#e8edf5;text-align:left;padding:4px 8px;min-width:150px">Persona</th>';
-    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();var fh=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');var capsD=(window._grillaCaps||{})[area+'|'+fh];var capMark='';if(capsD&&capsD.length){var tt=capsD.map(function(c){return '🎓 '+c.titulo+(c.hora?(' '+c.hora):'');}).join(' · ');capMark='<div style="font-size:9px;line-height:1;font-weight:800;color:#F97316" title="'+esc(tt)+'">CP</div>';}h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#f87171':'#8a93a8')+'">'+DS[dow]+'<br>'+d+capMark+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#0d1322;color:#cbd5e1;border-left:1px solid #2e3850;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
+    for(var d=1;d<=ultimoDia;d++){var dow=new Date(y,m-1,d).getDay();var fh=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');var capsD=(window._grillaCaps||{})[area+'|'+fh];var capMark='';if(capsD&&capsD.length){var tt=capsD.map(function(c){return '🎓 '+c.titulo+(c.hora?(' '+c.hora):'');}).join(' · ');capMark='<div style="font-size:9px;line-height:1;font-weight:800;color:'+ESTADO_COLORES.CAPACITACION.fg+'" title="'+esc(tt)+'">CP</div>';}h+='<th style="padding:2px 4px;text-align:center;color:'+(dow===0?'#f87171':'#8a93a8')+'">'+DS[dow]+'<br>'+d+capMark+'</th>';if(dow===0||d===ultimoDia)h+='<th style="padding:2px 4px;text-align:center;background:#0d1322;color:#cbd5e1;border-left:1px solid #2e3850;font-size:10px" title="Horas de la semana">Σ<br>sem</th>';}
     h+='<th style="padding:2px 6px;text-align:center;background:#141c30;color:#e8edf5;border-left:2px solid #4a5a7a;font-size:10px" title="Horas del mes">Σ<br>mes</th>';
     h+='</tr></thead><tbody>';
     personas.forEach(function(sid){
@@ -6219,7 +6237,7 @@ function grillaAbrirMenuCelda(area,sid,fecha){
   h+='<div style="color:#888;font-size:12px">'+esc(grillaFechaLarga(fecha))+' · '+esc(area)+'</div>';
   h+='<div style="font-size:11px;color:#aaa;margin:2px 0 12px">Estado actual: <b>'+grillaEstadoLabel(est)+'</b>'+detTurno+'</div>';
   h+='<div id="gmTurnoForm" style="display:none;margin-bottom:10px;padding:10px;background:#f5f5f5;border-radius:10px">';
-  h+='<div style="display:flex;gap:6px;margin-bottom:8px">'+['T1','T2','T3'].map(function(t){return '<button class="btn sm" id="gmT_'+t+'" style="flex:1;background:'+GRILLA_COLORES[t]+'22;border:1px solid '+GRILLA_COLORES[t]+'" onclick="grillaSetTurno(\''+t+'\')">'+t+'</button>';}).join('')+'</div>';
+  h+='<div style="display:flex;gap:6px;margin-bottom:8px">'+['T1','T2','T3'].map(function(t){return '<button class="btn sm" id="gmT_'+t+'" style="flex:1;background:'+ESTADO_COLORES[t].bg+'22;border:1px solid '+ESTADO_COLORES[t].bd+'" onclick="grillaSetTurno(\''+t+'\')">'+t+'</button>';}).join('')+'</div>';
   h+='<div style="display:flex;gap:6px"><input id="gmEnt" type="time" style="flex:1"><input id="gmSal" type="time" style="flex:1"></div>';
   h+='<button class="btn bg sm" style="width:100%;margin-top:8px" onclick="grillaGuardarCeldaTrabajo()">Guardar turno</button></div>';
   h+='<button class="btn ba sm" style="width:100%;margin-bottom:6px;text-align:left" onclick="grillaMostrarTurnoForm()">🕐 Cambiar turno / horas</button>';
@@ -10705,7 +10723,7 @@ h+='<thead><tr><th style="width:22%;text-align:left;padding:4px 6px;background:#
     });h+='</div>';
 h+='</div>';
     // LISTADO DE VENTAS DETALLADO
-    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoColor=SALES_SHIFT_COLORES;
     var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     var todasVentas=[];
     ms.forEach(function(m,i){
@@ -11685,7 +11703,7 @@ function renderDashboard(m,hourly,maid,month,day,barEf,barTj,barNq){
   var metaPct=m&&m.goalProgress!=null?Math.min(100,m.goalProgress):null;
 
   var sn={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
-  var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+  var turnoColor=SALES_SHIFT_COLORES;
 
   var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">';
   h+='<div><span style="font-size:18px;font-weight:900;color:#a78bfa">📊 Dashboard</span> <span style="font-size:12px;color:#6b7280">'+day+'</span></div>';
@@ -13916,7 +13934,7 @@ function loadListadoMaid(){
   var sl=(m.allSalesList||[]).filter(function(s){return !s.anulada&&(s.type==='SALE'||s.type==='RENEWAL')&&s.durationHrs>0;});
     sl.sort(function(a,b){return a.checkInMs-b.checkInMs;});
     if(!sl.length){el.innerHTML='<p style="color:#9ca3af">Sin ventas hoy.</p>';return;}
-    var turnoColor={SHIFT_1:'#3b82f6',SHIFT_2:'#22c55e',SHIFT_3:'#f97316'};
+    var turnoColor=SALES_SHIFT_COLORES;
     var turnoLabel={SHIFT_1:'T1',SHIFT_2:'T2',SHIFT_3:'T3'};
     // Resumen
     var cnt={SHIFT_1:0,SHIFT_2:0,SHIFT_3:0};
